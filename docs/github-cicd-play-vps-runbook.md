@@ -78,6 +78,23 @@ Optional `hostinger-production` secrets:
 - `HOSTINGER_SMOKE_LOGIN_USERNAME`
 - `HOSTINGER_SMOKE_LOGIN_PASSWORD`
 
+## Secret Preflight
+
+The release workflow now checks the required secrets before build/upload/deploy
+work continues:
+
+- `play-closed-testing`: verifies the 6 Play/Android secrets are present,
+  validates the production Flutter JSON shape, validates the Google service
+  account JSON shape, decodes the keystore, verifies the alias/store password,
+  and signs a temporary local jar to prove the key password is correct.
+- `hostinger-production`: verifies the 7 VPS secrets are present, validates the
+  URL/path/fingerprint formats, scans the live ED25519 host key, compares it to
+  `HOSTINGER_EXPECTED_ED25519_SHA256`, and runs a non-mutating SSH command to
+  prove the key, user, remote root, and Docker Compose are usable.
+
+No secret values are printed. If a required secret is missing, the workflow
+prints only the missing secret names and stops before deployment.
+
 ## Release Flow
 
 1. Bump `pubspec.yaml` to a versionCode greater than the current Google Play

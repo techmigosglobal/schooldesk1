@@ -37,8 +37,227 @@ env:
   RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }}
 
 jobs:
+  validate-play-secrets:
+    name: Preflight Play and Android secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: play-closed-testing
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Check Play, Android, and Flutter release secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SCHOOLDESK_HOSTINGER_ENV_JSON: ${{ secrets.SCHOOLDESK_HOSTINGER_ENV_JSON }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -Eeuo pipefail
+          missing=()
+          for name in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD \
+            SCHOOLDESK_HOSTINGER_ENV_JSON \
+            GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            {
+              echo "Missing required play-closed-testing secret(s):"
+              printf ' - %s\n' "${missing[@]}"
+            } >&2
+            exit 1
+          fi
+
+          release_env="$RUNNER_TEMP/env.hostinger.json"
+          printf '%s\n' "$SCHOOLDESK_HOSTINGER_ENV_JSON" > "$release_env"
+          jq -e '
+            type == "object"
+            and (.API_BASE_URL | type == "string" and startswith("https://"))
+            and (.APP_ENV == "production")
+            and ((.ENABLE_LOGGING | tostring) == "false")
+          ' "$release_env" >/dev/null || {
+            echo "SCHOOLDESK_HOSTINGER_ENV_JSON must be production JSON with an HTTPS API_BASE_URL and ENABLE_LOGGING=false." >&2
+            exit 1
+          }
+
+          play_json="$RUNNER_TEMP/google-play-service-account.json"
+          printf '%s\n' "$GOOGLE_PLAY_SERVICE_ACCOUNT_JSON" > "$play_json"
+          jq -e '
+            .type == "service_account"
+            and (.project_id | type == "string" and length > 0)
+            and (.client_email | type == "string" and test("@.+\\.iam\\.gserviceaccount\\.com$"))
+            and (.private_key | type == "string" and startswith("-----BEGIN PRIVATE KEY-----"))
+          ' "$play_json" >/dev/null || {
+            echo "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON must be a valid Google service-account JSON key." >&2
+            exit 1
+          }
+
+          keystore="$RUNNER_TEMP/upload-keystore.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore" || {
+            echo "ANDROID_KEYSTORE_BASE64 is not valid base64." >&2
+            exit 1
+          }
+          keytool -list \
+            -keystore "$keystore" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -alias "$ANDROID_KEY_ALIAS" >/dev/null || {
+            echo "Android keystore password or alias validation failed." >&2
+            exit 1
+          }
+
+          dummy_dir="$RUNNER_TEMP/android-signing-preflight"
+          mkdir -p "$dummy_dir"
+          printf 'schooldesk signing preflight\n' > "$dummy_dir/preflight.txt"
+          jar --create --file "$dummy_dir/preflight.jar" -C "$dummy_dir" preflight.txt
+          jarsigner \
+            -keystore "$keystore" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            "$dummy_dir/preflight.jar" \
+            "$ANDROID_KEY_ALIAS" >/dev/null || {
+            echo "Android key password validation failed." >&2
+            exit 1
+          }
+
+          {
+            echo "## Secret preflight"
+            echo
+            echo "- \`play-closed-testing\`: 6 required secrets are present."
+            echo "- Production Flutter env JSON shape verified."
+            echo "- Google Play service-account JSON shape verified."
+            echo "- Android keystore, alias, store password, and key password verified."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate-vps-secrets:
+    name: Preflight Hostinger VPS secrets
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_vps_deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: hostinger-production
+    steps:
+      - name: Check Hostinger deployment secrets
+        env:
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_EXPECTED_ED25519_SHA256: ${{ secrets.HOSTINGER_EXPECTED_ED25519_SHA256 }}
+          HOSTINGER_REMOTE_ROOT: ${{ secrets.HOSTINGER_REMOTE_ROOT }}
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+          HOSTINGER_API_LOGIN_URL: ${{ secrets.HOSTINGER_API_LOGIN_URL }}
+          HOSTINGER_SMOKE_LOGIN_USERNAME: ${{ secrets.HOSTINGER_SMOKE_LOGIN_USERNAME }}
+          HOSTINGER_SMOKE_LOGIN_PASSWORD: ${{ secrets.HOSTINGER_SMOKE_LOGIN_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          missing=()
+          for name in \
+            HOSTINGER_SSH_PRIVATE_KEY \
+            HOSTINGER_SSH_HOST \
+            HOSTINGER_SSH_USER \
+            HOSTINGER_EXPECTED_ED25519_SHA256 \
+            HOSTINGER_REMOTE_ROOT \
+            HOSTINGER_API_HEALTH_URL \
+            HOSTINGER_API_LOGIN_URL
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            {
+              echo "Missing required hostinger-production secret(s):"
+              printf ' - %s\n' "${missing[@]}"
+            } >&2
+            exit 1
+          fi
+
+          if { [[ -n "${HOSTINGER_SMOKE_LOGIN_USERNAME:-}" ]] && [[ -z "${HOSTINGER_SMOKE_LOGIN_PASSWORD:-}" ]]; } || \
+             { [[ -z "${HOSTINGER_SMOKE_LOGIN_USERNAME:-}" ]] && [[ -n "${HOSTINGER_SMOKE_LOGIN_PASSWORD:-}" ]]; }; then
+            echo "HOSTINGER_SMOKE_LOGIN_USERNAME and HOSTINGER_SMOKE_LOGIN_PASSWORD must be set together or both omitted." >&2
+            exit 1
+          fi
+
+          [[ "$HOSTINGER_EXPECTED_ED25519_SHA256" =~ ^SHA256:[A-Za-z0-9+/=]+$ ]] || {
+            echo "HOSTINGER_EXPECTED_ED25519_SHA256 must look like SHA256:..." >&2
+            exit 1
+          }
+          [[ "$HOSTINGER_REMOTE_ROOT" == /* && "$HOSTINGER_REMOTE_ROOT" != "/" ]] || {
+            echo "HOSTINGER_REMOTE_ROOT must be an absolute path and cannot be /." >&2
+            exit 1
+          }
+          [[ "$HOSTINGER_API_HEALTH_URL" == https://* && "$HOSTINGER_API_HEALTH_URL" == */health ]] || {
+            echo "HOSTINGER_API_HEALTH_URL must be an HTTPS /health URL." >&2
+            exit 1
+          }
+          [[ "$HOSTINGER_API_LOGIN_URL" == https://* && "$HOSTINGER_API_LOGIN_URL" == */api/v1/auth/login ]] || {
+            echo "HOSTINGER_API_LOGIN_URL must be the HTTPS /api/v1/auth/login URL." >&2
+            exit 1
+          }
+
+          key_path="$RUNNER_TEMP/hostinger_ssh_key"
+          known_hosts="$RUNNER_TEMP/hostinger_known_hosts"
+          printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > "$key_path"
+          chmod 600 "$key_path"
+          ssh-keygen -y -f "$key_path" >/dev/null || {
+            echo "HOSTINGER_SSH_PRIVATE_KEY is not a usable private SSH key." >&2
+            exit 1
+          }
+
+          ssh-keyscan -t ed25519 -T 10 "$HOSTINGER_SSH_HOST" > "$known_hosts" 2>/dev/null || {
+            echo "Unable to read the Hostinger ED25519 host key." >&2
+            exit 1
+          }
+          [[ -s "$known_hosts" ]] || {
+            echo "Hostinger ED25519 host key scan returned no keys." >&2
+            exit 1
+          }
+          actual_fingerprint="$(ssh-keygen -lf "$known_hosts" -E sha256 | awk '{print $2; exit}')"
+          [[ "$actual_fingerprint" == "$HOSTINGER_EXPECTED_ED25519_SHA256" ]] || {
+            echo "Hostinger ED25519 fingerprint mismatch." >&2
+            echo "Expected: $HOSTINGER_EXPECTED_ED25519_SHA256" >&2
+            echo "Actual:   $actual_fingerprint" >&2
+            exit 1
+          }
+
+          remote_root_quoted="$(printf '%q' "$HOSTINGER_REMOTE_ROOT")"
+          ssh \
+            -i "$key_path" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" \
+            "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST" \
+            "test -d $remote_root_quoted && test -r $remote_root_quoted && docker compose version >/dev/null" || {
+            echo "Hostinger SSH preflight failed: key/user/remote root/docker compose check did not pass." >&2
+            exit 1
+          }
+
+          {
+            echo "## Secret preflight"
+            echo
+            echo "- \`hostinger-production\`: 7 required secrets are present."
+            echo "- SSH private key can authenticate to the VPS."
+            echo "- Host ED25519 fingerprint matches the expected fingerprint."
+            echo "- Remote root and Docker Compose are reachable."
+            echo "- Health and login URL formats verified."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   verify:
     name: Pre-release verification
+    needs:
+      - validate-play-secrets
+      - validate-vps-secrets
+    if: ${{ always() && needs.validate-play-secrets.result == 'success' && (needs.validate-vps-secrets.result == 'success' || needs.validate-vps-secrets.result == 'skipped') }}
     uses: ./.github/workflows/local-docker-ci.yml
 
   build-and-upload-play:
@@ -232,8 +451,10 @@ jobs:
 
   deploy-vps:
     name: Deploy Hostinger VPS backend
-    needs: build-and-upload-play
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_vps_deploy }}
+    needs:
+      - build-and-upload-play
+      - validate-vps-secrets
+    if: ${{ always() && (github.event_name != 'workflow_dispatch' || inputs.run_vps_deploy) && needs.build-and-upload-play.result == 'success' && needs.validate-vps-secrets.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: hostinger-production
