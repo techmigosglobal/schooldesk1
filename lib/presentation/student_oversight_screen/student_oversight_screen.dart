@@ -415,7 +415,15 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            PopupMenuButton<String>(
+              tooltip: 'Export',
+              icon: const Icon(Icons.file_download_outlined, size: 22),
+              onSelected: _requestStudentReportExport,
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'pdf', child: Text('PDF')),
+                PopupMenuItem(value: 'csv', child: Text('CSV')),
+              ],
+            ),
           ],
         ),
       ),
@@ -526,6 +534,42 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
     if (value.startsWith('/')) return '${EnvConfig.apiOrigin}$value';
     return '${EnvConfig.apiOrigin}/$value';
+  }
+
+  Future<void> _requestStudentReportExport(String format) async {
+    try {
+      final export = await api.BackendApiClient.instance.createReportExport(
+        '/student-reports/exports',
+        reportTitle: 'Student directory',
+        format: format,
+        scope: 'principal',
+        parameters: {
+          'source_screen': 'student_oversight',
+          'class': _selectedClass,
+          'status': _selectedStatus,
+          'search': _searchQuery,
+          'filtered_count': _filteredStudents.length,
+          'total_count': _allStudents.length,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Student directory export ${export['status'] ?? 'requested'}',
+          ),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Student directory export failed: $error'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
   }
 
   Future<void> _openAddStudentForm() async {

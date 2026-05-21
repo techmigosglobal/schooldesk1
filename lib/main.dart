@@ -78,11 +78,14 @@ class MyApp extends StatelessWidget {
           themeMode: themeProvider.themeMode,
           builder: (context, child) {
             final mediaQuery = MediaQuery.of(context);
+            final effectiveTextScale = mediaQuery.textScaler.scale(
+              appSettingsProvider.appTextScaleFactor,
+            );
             return MediaQuery(
               data: mediaQuery.copyWith(
                 textScaler: TextScaler.linear(
-                  appSettingsProvider.appTextScaleFactor,
-                ),
+                  effectiveTextScale,
+                ).clamp(maxScaleFactor: 1.35),
               ),
               child: child!,
             );
