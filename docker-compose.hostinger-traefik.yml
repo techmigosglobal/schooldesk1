@@ -1,0 +1,112 @@
+name: schooldesk-hostinger
+
+services:
+  go-api:
+    build:
+      context: ./school-backend
+      dockerfile: Dockerfile
+    container_name: schooldesk-go-api
+    env_file:
+      - ${SCHOOLDESK_ENV_FILE:-.env}
+    environment:
+      PORT: 8080
+      APP_MODE: api
+      ENVIRONMENT: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      USE_POSTGRES_ONLY: ${USE_POSTGRES_ONLY:-true}
+      DISABLE_PUBLIC_REGISTRATION: ${DISABLE_PUBLIC_REGISTRATION:-true}
+      SEED_ON_START: ${SEED_ON_START:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.schooldesk-api.rule=Host(`${API_HOST}`)
+      - traefik.http.routers.schooldesk-api.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.schooldesk-api.tls=true
+      - traefik.http.routers.schooldesk-api.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+      - traefik.http.services.schooldesk-api.loadbalancer.server.port=8080
+    networks:
+      - internal
+    volumes:
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  notification-worker:
+    profiles:
+      - push
+    build:
+      context: ./school-backend
+      dockerfile: Dockerfile
+    container_name: schooldesk-notification-worker
+    env_file:
+      - ${SCHOOLDESK_ENV_FILE:-.env}
+    environment:
+      APP_MODE: worker
+      ENVIRONMENT: production
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      USE_POSTGRES_ONLY: ${USE_POSTGRES_ONLY:-true}
+      DISABLE_PUBLIC_REGISTRATION: ${DISABLE_PUBLIC_REGISTRATION:-true}
+      SEED_ON_START: "false"
+      ENABLE_FCM_PUSH: ${ENABLE_FCM_PUSH:-false}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/run/secrets/firebase-service-account.json}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    volumes:
+      - uploads_data:/app/uploads
+      - ${FIREBASE_SERVICE_ACCOUNT_FILE:-/opt/schooldesk-secrets/firebase-service-account.json}:/run/secrets/firebase-service-account.json:ro
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: schooldesk-postgres
+    env_file:
+      - ${SCHOOLDESK_ENV_FILE:-.env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - internal
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: schooldesk-redis
+    env_file:
+      - ${SCHOOLDESK_ENV_FILE:-.env}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - internal
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+
+networks:
+  internal:
+    driver: bridge

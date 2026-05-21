@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "815142590948",
+    "project_id": "schooldesk1-509e0",
+    "storage_bucket": "schooldesk1-509e0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:815142590948:android:29d1a4aeb48f413c660ff1",
+        "android_client_info": {
+          "package_name": "com.techmigos.schooldesk1"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjBh9QZhinZbWwMsZfZfYmG7EAjKFuRDo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

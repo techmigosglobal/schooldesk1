@@ -1,0 +1,386 @@
+name: Release Android AAB and VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_vps_deploy:
+        description: Deploy the Hostinger VPS backend after Play upload
+        required: true
+        type: boolean
+        default: true
+      run_migrations:
+        description: Run MIGRATE_ON_START=true only for this VPS deployment
+        required: true
+        type: boolean
+        default: false
+      play_track:
+        description: Google Play track for the AAB upload; use alpha unless your Closed testing track has a custom name
+        required: true
+        type: string
+        default: alpha
+  push:
+    tags:
+      - schooldesk-v*
+
+concurrency:
+  group: release-android-vps-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE_NAME: com.techmigos.schooldesk1
+  AAB_PATH: build/app/outputs/bundle/release/app-release.aab
+  PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.play_track || 'alpha' }}
+  RUN_VPS_DEPLOY: ${{ github.event_name != 'workflow_dispatch' || inputs.run_vps_deploy }}
+  RUN_MIGRATIONS: ${{ github.event_name == 'workflow_dispatch' && inputs.run_migrations || false }}
+
+jobs:
+  verify:
+    name: Pre-release verification
+    uses: ./.github/workflows/local-docker-ci.yml
+
+  build-and-upload-play:
+    name: Build signed AAB and upload to Play
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    environment: play-closed-testing
+    outputs:
+      package_name: ${{ steps.evidence.outputs.package_name }}
+      version_name: ${{ steps.evidence.outputs.version_name }}
+      version_code: ${{ steps.evidence.outputs.version_code }}
+      aab_sha256: ${{ steps.evidence.outputs.aab_sha256 }}
+      aab_size_bytes: ${{ steps.evidence.outputs.aab_size_bytes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Validate required release secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SCHOOLDESK_HOSTINGER_ENV_JSON: ${{ secrets.SCHOOLDESK_HOSTINGER_ENV_JSON }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -Eeuo pipefail
+          missing=()
+          for name in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD \
+            SCHOOLDESK_HOSTINGER_ENV_JSON \
+            GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'Missing required GitHub Environment secret(s): %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Write production Flutter env
+        env:
+          SCHOOLDESK_HOSTINGER_ENV_JSON: ${{ secrets.SCHOOLDESK_HOSTINGER_ENV_JSON }}
+        run: |
+          set -Eeuo pipefail
+          printf '%s\n' "$SCHOOLDESK_HOSTINGER_ENV_JSON" > env.hostinger.json
+          jq -e '.API_BASE_URL and .APP_ENV == "production"' env.hostinger.json >/dev/null
+
+      - name: Write Android signing files
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -Eeuo pipefail
+          signing_dir="$RUNNER_TEMP/schooldesk-signing"
+          mkdir -p "$signing_dir"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$signing_dir/upload-keystore.jks"
+          cat > "$signing_dir/key.properties" <<EOF
+          storeFile=$signing_dir/upload-keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+          chmod 600 "$signing_dir/upload-keystore.jks" "$signing_dir/key.properties"
+          echo "SCHOOLDESK_KEY_PROPERTIES=$signing_dir/key.properties" >> "$GITHUB_ENV"
+
+      - name: Flutter dependencies
+        run: flutter pub get
+
+      - name: Build signed release AAB
+        run: flutter build appbundle --release --dart-define-from-file=env.hostinger.json
+
+      - name: Verify AAB identity, signature, and checksum
+        id: evidence
+        run: |
+          set -Eeuo pipefail
+          [[ -f "$AAB_PATH" ]] || {
+            echo "AAB not found at $AAB_PATH" >&2
+            exit 1
+          }
+
+          metadata="build/app/outputs/bundle/release/output-metadata.json"
+          [[ -f "$metadata" ]] || {
+            echo "Gradle output metadata not found at $metadata" >&2
+            exit 1
+          }
+
+          package_name="$(jq -r '.applicationId // .elements[0].applicationId // empty' "$metadata")"
+          version_code="$(jq -r '.elements[0].versionCode // .versionCode // empty' "$metadata")"
+          version_name="$(jq -r '.elements[0].versionName // .versionName // empty' "$metadata")"
+          pubspec_version="$(awk '/^version:/{print $2; exit}' pubspec.yaml)"
+          expected_version_name="${pubspec_version%%+*}"
+          expected_version_code="${pubspec_version##*+}"
+
+          [[ "$package_name" == "$PACKAGE_NAME" ]] || {
+            echo "Unexpected package name: $package_name (expected $PACKAGE_NAME)" >&2
+            exit 1
+          }
+          [[ "$version_code" == "$expected_version_code" ]] || {
+            echo "Unexpected versionCode: $version_code (expected $expected_version_code)" >&2
+            exit 1
+          }
+          [[ "$version_name" == "$expected_version_name" ]] || {
+            echo "Unexpected versionName: $version_name (expected $expected_version_name)" >&2
+            exit 1
+          }
+
+          jarsigner -verify -verbose -certs "$AAB_PATH" >/tmp/schooldesk-jarsigner.txt
+          keytool -printcert -jarfile "$AAB_PATH" >/tmp/schooldesk-cert.txt
+          aab_sha256="$(sha256sum "$AAB_PATH" | awk '{print $1}')"
+          aab_size_bytes="$(stat -c '%s' "$AAB_PATH")"
+
+          mkdir -p build/release-evidence
+          cp "$metadata" build/release-evidence/output-metadata.json
+          cp /tmp/schooldesk-jarsigner.txt build/release-evidence/jarsigner.txt
+          cp /tmp/schooldesk-cert.txt build/release-evidence/signing-cert.txt
+          cat > build/release-evidence/aab-summary.env <<EOF
+          PACKAGE_NAME=$package_name
+          VERSION_NAME=$version_name
+          VERSION_CODE=$version_code
+          AAB_PATH=$AAB_PATH
+          AAB_SIZE_BYTES=$aab_size_bytes
+          AAB_SHA256=$aab_sha256
+          PLAY_TRACK=$PLAY_TRACK
+          EOF
+
+          {
+            echo "package_name=$package_name"
+            echo "version_name=$version_name"
+            echo "version_code=$version_code"
+            echo "aab_sha256=$aab_sha256"
+            echo "aab_size_bytes=$aab_size_bytes"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Android AAB evidence"
+            echo
+            echo "- Package: \`$package_name\`"
+            echo "- Version: \`$version_name+$version_code\`"
+            echo "- Size: \`$aab_size_bytes\` bytes"
+            echo "- SHA-256: \`$aab_sha256\`"
+            echo "- Play track: \`$PLAY_TRACK\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload release evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-aab-release-evidence
+          path: |
+            ${{ env.AAB_PATH }}
+            build/release-evidence/
+          retention-days: 30
+
+      - name: Upload AAB to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.PACKAGE_NAME }}
+          releaseFiles: ${{ env.AAB_PATH }}
+          tracks: ${{ env.PLAY_TRACK }}
+          status: completed
+
+      - name: Summarize Play upload
+        run: |
+          {
+            echo "## Google Play upload"
+            echo
+            echo "- Uploaded \`${{ steps.evidence.outputs.version_name }}+${{ steps.evidence.outputs.version_code }}\` to \`${PLAY_TRACK}\`."
+            echo "- Promotion to production remains manual unless \`play_track=production\` is explicitly selected."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy-vps:
+    name: Deploy Hostinger VPS backend
+    needs: build-and-upload-play
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_vps_deploy }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: hostinger-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install deploy dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openssh-client rsync curl jq
+
+      - name: Validate VPS secrets
+        env:
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_EXPECTED_ED25519_SHA256: ${{ secrets.HOSTINGER_EXPECTED_ED25519_SHA256 }}
+          HOSTINGER_REMOTE_ROOT: ${{ secrets.HOSTINGER_REMOTE_ROOT }}
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+          HOSTINGER_API_LOGIN_URL: ${{ secrets.HOSTINGER_API_LOGIN_URL }}
+        run: |
+          set -Eeuo pipefail
+          missing=()
+          for name in \
+            HOSTINGER_SSH_PRIVATE_KEY \
+            HOSTINGER_SSH_HOST \
+            HOSTINGER_SSH_USER \
+            HOSTINGER_EXPECTED_ED25519_SHA256 \
+            HOSTINGER_REMOTE_ROOT \
+            HOSTINGER_API_HEALTH_URL \
+            HOSTINGER_API_LOGIN_URL
+          do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} )); then
+            printf 'Missing required GitHub Environment secret(s): %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Prepare SSH key
+        env:
+          HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/ssh/schooldesk_hostinger_vps"
+          chmod 600 "$RUNNER_TEMP/ssh/schooldesk_hostinger_vps"
+          echo "HOSTINGER_SSH_KEY=$RUNNER_TEMP/ssh/schooldesk_hostinger_vps" >> "$GITHUB_ENV"
+          echo "HOSTINGER_KNOWN_HOSTS_FILE=$RUNNER_TEMP/ssh/known_hosts" >> "$GITHUB_ENV"
+
+      - name: Pre-deploy VPS check
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_EXPECTED_ED25519_SHA256: ${{ secrets.HOSTINGER_EXPECTED_ED25519_SHA256 }}
+          HOSTINGER_REMOTE_ROOT: ${{ secrets.HOSTINGER_REMOTE_ROOT }}
+          HOSTINGER_COMPOSE_FILE: ${{ secrets.HOSTINGER_COMPOSE_FILE }}
+          HOSTINGER_COMPOSE_SERVICE: ${{ secrets.HOSTINGER_COMPOSE_SERVICE }}
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+          HOSTINGER_API_LOGIN_URL: ${{ secrets.HOSTINGER_API_LOGIN_URL }}
+          HOSTINGER_BACKUP_ROOT: ${{ secrets.HOSTINGER_BACKUP_ROOT }}
+          HOSTINGER_SMOKE_LOGIN_USERNAME: ${{ secrets.HOSTINGER_SMOKE_LOGIN_USERNAME }}
+          HOSTINGER_SMOKE_LOGIN_PASSWORD: ${{ secrets.HOSTINGER_SMOKE_LOGIN_PASSWORD }}
+        run: scripts/deploy-hostinger-backend.sh --check-only | tee deploy-check.log
+
+      - name: VPS deploy dry-run
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_EXPECTED_ED25519_SHA256: ${{ secrets.HOSTINGER_EXPECTED_ED25519_SHA256 }}
+          HOSTINGER_REMOTE_ROOT: ${{ secrets.HOSTINGER_REMOTE_ROOT }}
+          HOSTINGER_COMPOSE_FILE: ${{ secrets.HOSTINGER_COMPOSE_FILE }}
+          HOSTINGER_COMPOSE_SERVICE: ${{ secrets.HOSTINGER_COMPOSE_SERVICE }}
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+          HOSTINGER_API_LOGIN_URL: ${{ secrets.HOSTINGER_API_LOGIN_URL }}
+          HOSTINGER_BACKUP_ROOT: ${{ secrets.HOSTINGER_BACKUP_ROOT }}
+        run: scripts/deploy-hostinger-backend.sh --dry-run --skip-tests | tee deploy-dry-run.log
+
+      - name: Execute VPS deploy
+        env:
+          HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          HOSTINGER_EXPECTED_ED25519_SHA256: ${{ secrets.HOSTINGER_EXPECTED_ED25519_SHA256 }}
+          HOSTINGER_REMOTE_ROOT: ${{ secrets.HOSTINGER_REMOTE_ROOT }}
+          HOSTINGER_COMPOSE_FILE: ${{ secrets.HOSTINGER_COMPOSE_FILE }}
+          HOSTINGER_COMPOSE_SERVICE: ${{ secrets.HOSTINGER_COMPOSE_SERVICE }}
+          HOSTINGER_COMPOSE_EXTRA_SERVICES: ${{ secrets.HOSTINGER_COMPOSE_EXTRA_SERVICES }}
+          HOSTINGER_COMPOSE_PROFILES: ${{ secrets.HOSTINGER_COMPOSE_PROFILES }}
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+          HOSTINGER_API_LOGIN_URL: ${{ secrets.HOSTINGER_API_LOGIN_URL }}
+          HOSTINGER_BACKUP_ROOT: ${{ secrets.HOSTINGER_BACKUP_ROOT }}
+          HOSTINGER_SMOKE_LOGIN_USERNAME: ${{ secrets.HOSTINGER_SMOKE_LOGIN_USERNAME }}
+          HOSTINGER_SMOKE_LOGIN_PASSWORD: ${{ secrets.HOSTINGER_SMOKE_LOGIN_PASSWORD }}
+          RUN_MIGRATIONS: ${{ env.RUN_MIGRATIONS }}
+        run: |
+          set -Eeuo pipefail
+          args=(--execute --yes --skip-tests)
+          if [[ "$RUN_MIGRATIONS" == "true" ]]; then
+            args+=(--migrate)
+          fi
+          scripts/deploy-hostinger-backend.sh "${args[@]}" | tee deploy-execute.log
+          backup_path="$(grep -Eo '/[^ ]*/schooldesk-backups/deploy-[0-9-]+' deploy-execute.log | tail -n1 || true)"
+          echo "BACKUP_PATH=$backup_path" >> "$GITHUB_ENV"
+
+      - name: Verify VPS readiness and metrics
+        env:
+          HOSTINGER_API_HEALTH_URL: ${{ secrets.HOSTINGER_API_HEALTH_URL }}
+        run: |
+          set -Eeuo pipefail
+          api_base="${HOSTINGER_API_HEALTH_URL%/health}"
+          curl -fsS "$HOSTINGER_API_HEALTH_URL" | tee deploy-health.json
+          curl -fsS "$api_base/ready" | tee deploy-ready.json
+          curl -fsS "$api_base/metrics" | tee deploy-metrics.txt
+
+      - name: Upload VPS deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-vps-deploy-evidence
+          path: |
+            deploy-check.log
+            deploy-dry-run.log
+            deploy-execute.log
+            deploy-health.json
+            deploy-ready.json
+            deploy-metrics.txt
+          retention-days: 30
+
+      - name: Summarize VPS deployment and rollback
+        if: always()
+        run: |
+          {
+            echo "## Hostinger VPS deployment"
+            echo
+            echo "- Package: \`${{ needs.build-and-upload-play.outputs.package_name }}\`"
+            echo "- Version: \`${{ needs.build-and-upload-play.outputs.version_name }}+${{ needs.build-and-upload-play.outputs.version_code }}\`"
+            echo "- AAB SHA-256: \`${{ needs.build-and-upload-play.outputs.aab_sha256 }}\`"
+            echo "- Migration run requested: \`${RUN_MIGRATIONS}\`"
+            echo "- Backup path: \`${BACKUP_PATH:-not captured}\`"
+            echo
+            echo "Rollback:"
+            echo
+            echo "1. SSH to the VPS with the production deploy key."
+            echo "2. Restore the compose/env/source snapshot from \`${BACKUP_PATH:-the backup path printed in deploy-execute.log}\`."
+            echo "3. Re-run \`docker compose -f docker-compose.hostinger-traefik.yml up -d --build go-api\` from the remote root."
+            echo "4. Verify \`/health\`, \`/ready\`, and \`/metrics\` before promoting the Play release beyond closed testing."
+          } >> "$GITHUB_STEP_SUMMARY"

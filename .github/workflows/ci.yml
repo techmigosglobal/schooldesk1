@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-docker-verification:
+    name: Local Docker verification
+    uses: ./.github/workflows/local-docker-ci.yml

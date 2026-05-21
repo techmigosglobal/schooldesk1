@@ -1,0 +1,78 @@
+name: Local Docker CI Reusable
+
+on:
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: school-backend/go.mod
+          cache-dependency-path: school-backend/go.sum
+
+      - name: Prepare local Docker env
+        run: |
+          cat > .env <<'ENV'
+          PORT=8080
+          APP_MODE=api
+          ENVIRONMENT=development
+          JWT_SECRET=local-ci-secret-must-be-at-least-32-characters
+          DATABASE_URL=postgres://schooldesk:schooldesk@postgres:5432/schooldesk?sslmode=disable
+          ALLOWED_ORIGINS=http://localhost:45123,http://127.0.0.1:45123
+          REDIS_URL=redis://redis:6379/0
+          REDIS_PASSWORD=
+          REDIS_DB=0
+          MIGRATE_ON_START=true
+          SEED_ON_START=false
+          USE_POSTGRES_ONLY=true
+          POSTGRES_DB=schooldesk
+          POSTGRES_USER=schooldesk
+          POSTGRES_PASSWORD=schooldesk
+          PGADMIN_DEFAULT_EMAIL=admin@example.com
+          PGADMIN_DEFAULT_PASSWORD=admin
+          ENV
+          cat > env.json <<'JSON'
+          {
+            "API_BASE_URL": "http://127.0.0.1:8080/api",
+            "APP_ENV": "development",
+            "ENABLE_LOGGING": "true"
+          }
+          JSON
+
+      - name: Flutter dependencies
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter tests
+        run: flutter test
+
+      - name: Go tests
+        working-directory: school-backend
+        run: go test ./...
+
+      - name: Compose validation
+        run: docker compose config >/tmp/schooldesk-compose.yml
+
+      - name: Local Docker API verifier
+        run: |
+          docker compose down -v --remove-orphans
+          scripts/verify-local-docker-api.sh
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans

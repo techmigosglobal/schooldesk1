@@ -1,0 +1,63 @@
+package handlers
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"school-backend/internal/database"
+	"school-backend/internal/models"
+
+	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+)
+
+func TestFrontendRecordHandlerPersistsResourceRecords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	database.DB = db
+	if err := db.AutoMigrate(&models.FrontendRecord{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("school_id", "school-test")
+		c.Set("user_id", "user-test")
+		c.Next()
+	})
+	handler := NewFrontendRecordHandler("documents/requests")
+	router.GET("/documents/requests", handler.List)
+	router.POST("/documents/requests", handler.Create)
+	router.PUT("/documents/requests/:id", handler.Update)
+
+	create := httptest.NewRecorder()
+	router.ServeHTTP(
+		create,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/documents/requests",
+			strings.NewReader(`{"title":"Transfer certificate","status":"pending"}`),
+		),
+	)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	if !strings.Contains(create.Body.String(), `"title":"Transfer certificate"`) {
+		t.Fatalf("create body missing payload: %s", create.Body.String())
+	}
+
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/documents/requests", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), `"title":"Transfer certificate"`) {
+		t.Fatalf("list body missing record: %s", list.Body.String())
+	}
+}

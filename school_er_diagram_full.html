@@ -1,0 +1,889 @@
+
+<h2 class="sr-only">School Management System — Complete Entity Relationship Diagram across 14 domain modules. Use the domain tabs to navigate each module's tables and relationships.</h2>
+<style>
+.nav-wrap{display:flex;flex-wrap:wrap;gap:5px;padding:0 0 12px}
+.dn-btn{padding:4px 11px;border-radius:20px;border:0.5px solid var(--color-border-secondary);cursor:pointer;font-size:11px;font-family:var(--font-mono);background:transparent;color:var(--color-text-secondary);transition:all .14s}
+.dn-btn:hover{background:var(--color-background-secondary)}
+.dn-btn.active{background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)}
+.panel{display:none;overflow-x:auto;overflow-y:visible}
+.panel.active{display:block}
+.panel svg{max-width:100%;height:auto}
+.loading{color:var(--color-text-tertiary);font-size:12px;padding:28px 0;text-align:center}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:10px 0 0;font-size:11px;color:var(--color-text-secondary);border-top:0.5px solid var(--color-border-tertiary);margin-top:10px}
+.leg{display:flex;align-items:center;gap:5px}
+.leg svg{flex-shrink:0}
+.domain-desc{font-size:11px;color:var(--color-text-tertiary);padding:0 0 10px;font-family:var(--font-mono)}
+</style>
+
+<div class="nav-wrap" id="nav"></div>
+<div class="domain-desc" id="desc"></div>
+<div id="panels"></div>
+<div class="legend">
+  <div class="leg"><svg width="22" height="10"><line x1="2" y1="5" x2="20" y2="5" stroke="var(--color-text-secondary)" stroke-width="1.5"/><text x="0" y="9" font-size="8" fill="var(--color-text-secondary)">||</text><text x="14" y="9" font-size="8" fill="var(--color-text-secondary)">{</text></svg> one-to-many</div>
+  <div class="leg"><svg width="22" height="10"><line x1="2" y1="5" x2="20" y2="5" stroke="var(--color-text-secondary)" stroke-width="1.5"/></svg> one-to-one</div>
+  <div class="leg">PK = primary key</div>
+  <div class="leg">FK = foreign key</div>
+  <div class="leg" style="margin-left:auto;font-style:italic">click a tab to explore each domain</div>
+</div>
+
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad:false,theme:'base',fontFamily:'"Anthropic Sans",sans-serif',
+  er:{diagramPadding:24,layoutDirection:'TB',minEntityWidth:110,minEntityHeight:36,entityPadding:15,useMaxWidth:true},
+  themeVariables:{darkMode:dark,fontSize:'12px',fontFamily:'"Anthropic Sans",sans-serif',
+    lineColor:dark?'#9c9a92':'#888780',textColor:dark?'#c2c0b6':'#3d3d3a',
+    primaryColor:dark?'#26252a':'#f5f4f0',primaryBorderColor:dark?'#444441':'#c4c2b8',
+    primaryTextColor:dark?'#c2c0b6':'#3d3d3a',edgeLabelBackground:dark?'#26252a':'#f5f4f0',
+    attributeBackgroundColorOdd:dark?'#2a292e':'#fafaf8',
+    attributeBackgroundColorEven:dark?'#222128':'#f1f0eb'}
+});
+
+const DOMAINS=[
+{id:'overview',name:'Overview',desc:'High-level cross-domain entity flow — all 14 domains in one map',diagram:`
+erDiagram
+  SCHOOL ||--o{ ACADEMIC_YEAR : "session"
+  SCHOOL ||--o{ GRADE : "offers"
+  SCHOOL ||--o{ STAFF : "employs"
+  SCHOOL ||--o{ STUDENT : "admits"
+  ACADEMIC_YEAR ||--o{ TERM : "split into"
+  ACADEMIC_YEAR ||--o{ SECTION : "scoped to"
+  GRADE ||--o{ SECTION : "divided"
+  GRADE ||--o{ GRADE_SUBJECT : "maps"
+  SECTION ||--o{ ENROLLMENT : "holds"
+  STUDENT ||--o{ ENROLLMENT : "assigned"
+  ENROLLMENT ||--o{ STUDENT_ATTENDANCE : "tracked"
+  SECTION ||--o{ TIMETABLE_SLOT : "scheduled"
+  TIMETABLE_SLOT ||--o{ ATTENDANCE_SESSION : "records"
+  ATTENDANCE_SESSION ||--o{ STUDENT_ATTENDANCE : "marks"
+  EXAM ||--o{ EXAM_SCHEDULE : "subject slot"
+  EXAM_SCHEDULE ||--o{ STUDENT_MARK : "result"
+  STUDENT_MARK ||--o{ REPORT_CARD : "compiled"
+  STUDENT ||--o{ FEE_INVOICE : "billed"
+  FEE_INVOICE ||--o{ PAYMENT : "settled"
+  ROUTE ||--o{ ROUTE_STOP : "stops"
+  STUDENT ||--o{ STUDENT_TRANSPORT : "rides"
+  STAFF ||--o{ PAYROLL : "monthly"
+  STAFF ||--o{ LEAVE_APPLICATION : "requests"
+  USER }o--|| ROLE : "granted"
+  ROLE ||--o{ PERMISSION : "defines"
+  USER ||--o{ AUDIT_LOG : "traced"
+  USER ||--o{ USER_SESSION : "active"
+`},
+{id:'foundation',name:'Foundation',desc:'School identity · academic year · terms · holidays · working day config',diagram:`
+erDiagram
+  SCHOOL {
+    uuid id PK
+    varchar name
+    enum school_type
+    varchar affiliation_board
+    varchar email
+    varchar phone
+    varchar city
+    varchar state
+    varchar timezone
+    char currency
+    timestamp created_at
+  }
+  ACADEMIC_YEAR {
+    uuid id PK
+    uuid school_id FK
+    varchar year_label
+    date start_date
+    date end_date
+    boolean is_current
+    enum status
+  }
+  TERM {
+    uuid id PK
+    uuid academic_year_id FK
+    tinyint term_number
+    varchar term_name
+    date start_date
+    date end_date
+    boolean is_current
+  }
+  HOLIDAY {
+    uuid id PK
+    uuid school_id FK
+    uuid academic_year_id FK
+    varchar holiday_name
+    date from_date
+    date to_date
+    enum type
+  }
+  WORKING_DAY_CONFIG {
+    uuid id PK
+    uuid school_id FK
+    tinyint day_of_week
+    boolean is_working
+    tinyint periods_per_day
+    smallint period_duration_min
+    time school_start_time
+    time school_end_time
+  }
+  SCHOOL ||--o{ ACADEMIC_YEAR : "has"
+  ACADEMIC_YEAR ||--o{ TERM : "divided into"
+  SCHOOL ||--o{ HOLIDAY : "declares"
+  SCHOOL ||--|{ WORKING_DAY_CONFIG : "7 rows"
+  ACADEMIC_YEAR ||--o{ HOLIDAY : "in year"
+`},
+{id:'academic',name:'Academic',desc:'Departments · grades · sections · subjects · grade-subject mapping · rooms',diagram:`
+erDiagram
+  DEPARTMENT {
+    uuid id PK
+    uuid school_id FK
+    varchar department_name
+    uuid hod_staff_id FK
+    text description
+  }
+  SUBJECT {
+    uuid id PK
+    uuid school_id FK
+    uuid department_id FK
+    varchar subject_name
+    varchar subject_code
+    enum subject_type
+    decimal credit_hours
+  }
+  GRADE {
+    uuid id PK
+    uuid school_id FK
+    tinyint grade_number
+    varchar grade_name
+  }
+  GRADE_SUBJECT {
+    uuid id PK
+    uuid grade_id FK
+    uuid subject_id FK
+    tinyint periods_per_week
+    smallint max_marks
+    smallint pass_marks
+    boolean is_mandatory
+  }
+  SECTION {
+    uuid id PK
+    uuid grade_id FK
+    uuid academic_year_id FK
+    char section_name
+    uuid class_teacher_id FK
+    uuid room_id FK
+    smallint capacity
+  }
+  ROOM {
+    uuid id PK
+    uuid school_id FK
+    varchar room_number
+    enum room_type
+    varchar block
+    tinyint floor
+    smallint capacity
+  }
+  DEPARTMENT ||--o{ SUBJECT : "owns"
+  GRADE ||--o{ GRADE_SUBJECT : "curriculum"
+  SUBJECT ||--o{ GRADE_SUBJECT : "taught in"
+  GRADE ||--o{ SECTION : "sections"
+  SECTION }o--|| ROOM : "assigned"
+`},
+{id:'staff',name:'Staff',desc:'Staff profiles · qualifications · subject assignments · documents',diagram:`
+erDiagram
+  STAFF {
+    uuid id PK
+    uuid school_id FK
+    varchar staff_code
+    varchar first_name
+    varchar last_name
+    varchar email
+    varchar phone
+    date date_of_birth
+    enum gender
+    uuid department_id FK
+    varchar designation
+    enum employment_type
+    date join_date
+    date exit_date
+    decimal basic_salary
+    enum status
+  }
+  STAFF_QUALIFICATION {
+    uuid id PK
+    uuid staff_id FK
+    varchar degree
+    varchar institution
+    smallint year_of_passing
+    varchar grade_division
+    text doc_url
+  }
+  STAFF_SUBJECT {
+    uuid id PK
+    uuid staff_id FK
+    uuid subject_id FK
+    uuid grade_id FK
+    boolean is_primary
+  }
+  STAFF_DOCUMENT {
+    uuid id PK
+    uuid staff_id FK
+    enum doc_type
+    text file_url
+    date expiry_date
+    boolean verified
+    timestamp uploaded_at
+  }
+  STAFF ||--o{ STAFF_QUALIFICATION : "holds"
+  STAFF ||--o{ STAFF_SUBJECT : "teaches"
+  STAFF ||--o{ STAFF_DOCUMENT : "has docs"
+`},
+{id:'student',name:'Student',desc:'Student profiles · guardians · medical records · documents',diagram:`
+erDiagram
+  STUDENT {
+    uuid id PK
+    uuid school_id FK
+    varchar student_code
+    varchar admission_number
+    varchar first_name
+    varchar last_name
+    date date_of_birth
+    enum gender
+    enum caste_category
+    varchar nationality
+    date admission_date
+    uuid current_section_id FK
+    text aadhar_number
+    enum status
+    timestamp created_at
+  }
+  GUARDIAN {
+    uuid id PK
+    uuid student_id FK
+    varchar full_name
+    enum relationship
+    varchar phone
+    varchar email
+    varchar occupation
+    decimal annual_income
+    boolean is_primary
+    boolean can_pickup
+  }
+  MEDICAL_RECORD {
+    uuid id PK
+    uuid student_id FK
+    text conditions
+    text allergies
+    text medications
+    varchar doctor_name
+    varchar doctor_phone
+    timestamp updated_at
+  }
+  STUDENT_DOCUMENT {
+    uuid id PK
+    uuid student_id FK
+    enum doc_type
+    text file_url
+    boolean verified
+    timestamp uploaded_at
+  }
+  STUDENT ||--o{ GUARDIAN : "has"
+  STUDENT ||--|| MEDICAL_RECORD : "health"
+  STUDENT ||--o{ STUDENT_DOCUMENT : "uploads"
+`},
+{id:'enrollment',name:'Enrollment',desc:'Year-wise section assignment · transfer history · promotion rules',diagram:`
+erDiagram
+  STUDENT {
+    uuid id PK
+    varchar admission_number
+    enum status
+  }
+  ENROLLMENT {
+    uuid id PK
+    uuid student_id FK
+    uuid section_id FK
+    uuid academic_year_id FK
+    varchar roll_number
+    date enrollment_date
+    enum status
+    uuid promoted_from_id FK
+  }
+  TRANSFER_RECORD {
+    uuid id PK
+    uuid student_id FK
+    enum transfer_type
+    varchar from_school
+    varchar to_school
+    date transfer_date
+    varchar transfer_cert_number
+    uuid last_grade_id FK
+    text reason
+    uuid issued_by FK
+  }
+  PROMOTION_RULE {
+    uuid id PK
+    uuid school_id FK
+    uuid academic_year_id FK
+    uuid from_grade_id FK
+    uuid to_grade_id FK
+    decimal min_attendance_pct
+    decimal min_pass_percentage
+    smallint subjects_must_pass
+  }
+  STUDENT ||--o{ ENROLLMENT : "enrolled"
+  ENROLLMENT ||--o| ENROLLMENT : "promoted from"
+  STUDENT ||--o{ TRANSFER_RECORD : "transferred"
+`},
+{id:'timetable',name:'Timetable',desc:'Period scheduling · room & staff conflict guards · substitutions',diagram:`
+erDiagram
+  TIMETABLE_SLOT {
+    uuid id PK
+    uuid section_id FK
+    uuid academic_year_id FK
+    uuid term_id FK
+    tinyint day_of_week
+    tinyint period_number
+    time start_time
+    time end_time
+    uuid subject_id FK
+    uuid staff_id FK
+    uuid room_id FK
+    enum slot_type
+  }
+  SUBSTITUTION {
+    uuid id PK
+    uuid timetable_slot_id FK
+    date date
+    uuid original_staff_id FK
+    uuid substitute_staff_id FK
+    text reason
+    uuid approved_by FK
+    timestamp created_at
+  }
+  TIMETABLE_SLOT ||--o{ SUBSTITUTION : "overridden by"
+`},
+{id:'attendance',name:'Attendance',desc:'Session-based student tracking · staff attendance · pre-computed summaries',diagram:`
+erDiagram
+  ATTENDANCE_SESSION {
+    uuid id PK
+    uuid section_id FK
+    uuid timetable_slot_id FK
+    uuid subject_id FK
+    uuid staff_id FK
+    date date
+    tinyint period_number
+    smallint total_students
+    smallint present_count
+    boolean is_finalized
+    timestamp created_at
+  }
+  STUDENT_ATTENDANCE {
+    uuid id PK
+    uuid session_id FK
+    uuid student_id FK
+    uuid enrollment_id FK
+    enum status
+    varchar reason
+    timestamp marked_at
+    uuid marked_by FK
+  }
+  STAFF_ATTENDANCE {
+    uuid id PK
+    uuid staff_id FK
+    date date
+    timestamp check_in
+    timestamp check_out
+    enum status
+    varchar biometric_id
+    uuid approved_by FK
+  }
+  ATTENDANCE_SUMMARY {
+    uuid id PK
+    uuid student_id FK
+    uuid section_id FK
+    uuid academic_year_id FK
+    uuid term_id FK
+    smallint total_days
+    smallint present_days
+    smallint absent_days
+    smallint late_count
+    decimal attendance_pct
+    timestamp updated_at
+  }
+  ATTENDANCE_SESSION ||--o{ STUDENT_ATTENDANCE : "records per student"
+  STUDENT_ATTENDANCE }o--|| ATTENDANCE_SUMMARY : "aggregated into"
+`},
+{id:'exam',name:'Examination',desc:'Exam types · schedules · mark entry · grading scale · report cards',diagram:`
+erDiagram
+  EXAM_TYPE {
+    uuid id PK
+    uuid school_id FK
+    varchar name
+    decimal weightage_percent
+    boolean is_board_exam
+  }
+  EXAM {
+    uuid id PK
+    uuid school_id FK
+    uuid academic_year_id FK
+    uuid term_id FK
+    uuid exam_type_id FK
+    varchar exam_name
+    date start_date
+    date end_date
+    boolean is_published
+  }
+  EXAM_SCHEDULE {
+    uuid id PK
+    uuid exam_id FK
+    uuid grade_id FK
+    uuid section_id FK
+    uuid subject_id FK
+    date exam_date
+    time start_time
+    time end_time
+    smallint max_marks
+    smallint pass_marks
+    uuid room_id FK
+  }
+  STUDENT_MARK {
+    uuid id PK
+    uuid exam_schedule_id FK
+    uuid student_id FK
+    uuid enrollment_id FK
+    decimal marks_obtained
+    char grade_label
+    boolean is_absent
+    boolean is_exempted
+    uuid entered_by FK
+    uuid verified_by FK
+  }
+  GRADING_SCALE {
+    uuid id PK
+    uuid school_id FK
+    char grade_label
+    decimal min_percent
+    decimal max_percent
+    decimal gpa_points
+    varchar description
+  }
+  REPORT_CARD {
+    uuid id PK
+    uuid student_id FK
+    uuid exam_id FK
+    uuid enrollment_id FK
+    decimal total_obtained
+    decimal percentage
+    char overall_grade
+    decimal overall_gpa
+    smallint class_rank
+    smallint section_rank
+    timestamp published_at
+  }
+  EXAM_TYPE ||--o{ EXAM : "categorizes"
+  EXAM ||--o{ EXAM_SCHEDULE : "per subject"
+  EXAM_SCHEDULE ||--o{ STUDENT_MARK : "result"
+  EXAM ||--o{ REPORT_CARD : "produces"
+  STUDENT_MARK }o--|| REPORT_CARD : "compiled into"
+`},
+{id:'fee',name:'Fee Mgmt',desc:'Fee categories · structures · concessions · invoices · line items · payments',diagram:`
+erDiagram
+  FEE_CATEGORY {
+    uuid id PK
+    uuid school_id FK
+    varchar category_name
+    enum frequency
+    boolean is_refundable
+  }
+  FEE_STRUCTURE {
+    uuid id PK
+    uuid school_id FK
+    uuid academic_year_id FK
+    uuid grade_id FK
+    uuid fee_category_id FK
+    decimal amount
+    tinyint due_day
+    decimal late_fine_per_day
+  }
+  FEE_CONCESSION {
+    uuid id PK
+    uuid student_id FK
+    uuid fee_category_id FK
+    uuid academic_year_id FK
+    enum concession_type
+    decimal value
+    text reason
+    uuid approved_by FK
+  }
+  FEE_INVOICE {
+    uuid id PK
+    uuid student_id FK
+    uuid academic_year_id FK
+    varchar invoice_number
+    date invoice_date
+    date due_date
+    decimal total_amount
+    decimal discount_amount
+    decimal net_amount
+    decimal paid_amount
+    decimal balance
+    enum status
+  }
+  FEE_INVOICE_ITEM {
+    uuid id PK
+    uuid invoice_id FK
+    uuid fee_category_id FK
+    decimal amount
+    varchar description
+  }
+  PAYMENT {
+    uuid id PK
+    uuid invoice_id FK
+    varchar receipt_number
+    decimal amount_paid
+    date payment_date
+    enum payment_mode
+    varchar transaction_id
+    uuid received_by FK
+    timestamp created_at
+  }
+  FEE_CATEGORY ||--o{ FEE_STRUCTURE : "structured"
+  FEE_CATEGORY ||--o{ FEE_INVOICE_ITEM : "line item"
+  FEE_CATEGORY ||--o{ FEE_CONCESSION : "discounted"
+  FEE_INVOICE ||--o{ FEE_INVOICE_ITEM : "contains"
+  FEE_INVOICE ||--o{ PAYMENT : "settled by"
+`},
+{id:'library',name:'Library',desc:'Book catalog · categories · issue & return lifecycle · fines',diagram:`
+erDiagram
+  BOOK_CATEGORY {
+    uuid id PK
+    uuid school_id FK
+    varchar category_name
+    text description
+  }
+  BOOK {
+    uuid id PK
+    uuid school_id FK
+    uuid category_id FK
+    varchar isbn
+    varchar title
+    varchar author
+    varchar publisher
+    varchar edition
+    smallint publication_year
+    varchar language
+    smallint total_copies
+    smallint available_copies
+    decimal price
+    varchar location_code
+  }
+  BOOK_ISSUE {
+    uuid id PK
+    uuid book_id FK
+    enum borrower_type
+    uuid borrower_id
+    date issued_date
+    date due_date
+    date return_date
+    decimal fine_per_day
+    decimal fine_amount
+    boolean fine_paid
+    enum condition_on_return
+    uuid issued_by FK
+    uuid returned_to FK
+  }
+  BOOK_CATEGORY ||--o{ BOOK : "categorizes"
+  BOOK ||--o{ BOOK_ISSUE : "issued to"
+`},
+{id:'transport',name:'Transport',desc:'Fleet · named routes · stops · student assignment per year',diagram:`
+erDiagram
+  VEHICLE {
+    uuid id PK
+    uuid school_id FK
+    varchar vehicle_number
+    enum vehicle_type
+    smallint capacity
+    varchar make_model
+    enum fuel_type
+    date fitness_expiry
+    date insurance_expiry
+    varchar driver_name
+    varchar driver_phone
+    varchar gps_device_id
+    enum status
+  }
+  ROUTE {
+    uuid id PK
+    uuid school_id FK
+    varchar route_name
+    varchar route_code
+    uuid vehicle_id FK
+    decimal total_distance_km
+    time morning_start_time
+    time afternoon_start_time
+  }
+  ROUTE_STOP {
+    uuid id PK
+    uuid route_id FK
+    varchar stop_name
+    tinyint sequence_number
+    time pickup_time
+    time drop_time
+    varchar landmark
+    decimal latitude
+    decimal longitude
+  }
+  STUDENT_TRANSPORT {
+    uuid id PK
+    uuid student_id FK
+    uuid academic_year_id FK
+    uuid route_id FK
+    uuid stop_id FK
+    enum transport_direction
+    decimal fee_amount
+    boolean is_active
+  }
+  VEHICLE ||--o{ ROUTE : "assigned to"
+  ROUTE ||--o{ ROUTE_STOP : "has stops"
+  ROUTE ||--o{ STUDENT_TRANSPORT : "serves"
+  ROUTE_STOP ||--o{ STUDENT_TRANSPORT : "boarded at"
+`},
+{id:'comms',name:'Communication',desc:'Announcements · events · PTM slots · notification delivery log',diagram:`
+erDiagram
+  ANNOUNCEMENT {
+    uuid id PK
+    uuid school_id FK
+    varchar title
+    text content
+    enum target_audience
+    uuid target_grade_id FK
+    uuid target_section_id FK
+    boolean is_urgent
+    uuid created_by FK
+    timestamp published_at
+    timestamp expires_at
+    text attachment_url
+  }
+  EVENT_CALENDAR {
+    uuid id PK
+    uuid school_id FK
+    uuid academic_year_id FK
+    varchar event_title
+    enum event_type
+    timestamp start_datetime
+    timestamp end_datetime
+    varchar location
+    boolean is_holiday
+    uuid created_by FK
+  }
+  PARENT_TEACHER_MEETING {
+    uuid id PK
+    uuid event_id FK
+    uuid section_id FK
+    date slot_date
+    time slot_time
+    tinyint duration_min
+    uuid teacher_id FK
+    uuid guardian_id FK
+    uuid student_id FK
+    enum status
+    text notes
+  }
+  NOTIFICATION_LOG {
+    uuid id PK
+    uuid school_id FK
+    uuid recipient_user_id FK
+    enum channel
+    varchar title
+    text body
+    varchar reference_type
+    uuid reference_id
+    boolean is_read
+    timestamp sent_at
+    enum delivery_status
+  }
+  EVENT_CALENDAR ||--o{ PARENT_TEACHER_MEETING : "hosts slots"
+`},
+{id:'hr',name:'HR Payroll',desc:'Leave types · balances · applications · monthly payroll slips',diagram:`
+erDiagram
+  LEAVE_TYPE {
+    uuid id PK
+    uuid school_id FK
+    varchar leave_name
+    tinyint max_days_per_year
+    tinyint carry_forward_days
+    boolean is_paid
+    enum applicable_to
+  }
+  LEAVE_BALANCE {
+    uuid id PK
+    uuid staff_id FK
+    uuid leave_type_id FK
+    uuid academic_year_id FK
+    tinyint total_entitled
+    decimal used_days
+    decimal pending_days
+    decimal remaining_days
+  }
+  LEAVE_APPLICATION {
+    uuid id PK
+    uuid staff_id FK
+    uuid leave_type_id FK
+    date from_date
+    date to_date
+    boolean half_day
+    decimal total_days
+    text reason
+    enum status
+    timestamp applied_at
+    uuid approved_by FK
+    text rejection_reason
+  }
+  PAYROLL {
+    uuid id PK
+    uuid staff_id FK
+    uuid academic_year_id FK
+    tinyint month
+    smallint year
+    decimal basic_salary
+    decimal hra
+    decimal da
+    decimal gross_salary
+    decimal pf_deduction
+    decimal esi_deduction
+    decimal tds_deduction
+    decimal net_salary
+    date payment_date
+    enum payment_mode
+    enum status
+    text payslip_url
+  }
+  LEAVE_TYPE ||--o{ LEAVE_BALANCE : "tracks"
+  LEAVE_TYPE ||--o{ LEAVE_APPLICATION : "applied for"
+  LEAVE_APPLICATION }o--|| LEAVE_BALANCE : "deducts from"
+`},
+{id:'auth',name:'Auth System',desc:'Roles · permissions · users · sessions · OTP · full audit trail',diagram:`
+erDiagram
+  ROLE {
+    uuid id PK
+    uuid school_id FK
+    varchar role_name
+    text description
+    boolean is_system_role
+  }
+  PERMISSION {
+    uuid id PK
+    uuid role_id FK
+    varchar module
+    boolean can_read
+    boolean can_create
+    boolean can_update
+    boolean can_delete
+    boolean can_export
+  }
+  USER {
+    uuid id PK
+    uuid school_id FK
+    varchar email
+    varchar phone
+    text password_hash
+    uuid role_id FK
+    enum linked_type
+    uuid linked_id
+    boolean is_active
+    boolean is_verified
+    timestamp last_login
+    tinyint failed_attempts
+    timestamp locked_until
+    timestamp created_at
+  }
+  USER_SESSION {
+    uuid id PK
+    uuid user_id FK
+    text refresh_token_hash
+    jsonb device_info
+    varchar ip_address
+    text user_agent
+    timestamp issued_at
+    timestamp expires_at
+    boolean is_revoked
+  }
+  OTP_VERIFICATION {
+    uuid id PK
+    varchar identifier
+    text otp_hash
+    enum purpose
+    timestamp expires_at
+    boolean is_used
+    tinyint attempts
+  }
+  AUDIT_LOG {
+    uuid id PK
+    uuid user_id FK
+    enum action
+    varchar module
+    varchar table_name
+    uuid record_id
+    jsonb old_value
+    jsonb new_value
+    varchar ip_address
+    timestamp created_at
+  }
+  ROLE ||--o{ PERMISSION : "grants"
+  ROLE ||--o{ USER : "assigned to"
+  USER ||--o{ USER_SESSION : "active on"
+  USER ||--o{ AUDIT_LOG : "every action"
+`}
+];
+
+const nav=document.getElementById('nav');
+const panelsEl=document.getElementById('panels');
+const descEl=document.getElementById('desc');
+const rendered={};
+
+async function showDomain(id){
+  document.querySelectorAll('.dn-btn').forEach(b=>b.classList.toggle('active',b.dataset.id===id));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.dataset.id===id));
+  const d=DOMAINS.find(x=>x.id===id);
+  descEl.textContent=d.desc;
+  if(rendered[id]) return;
+  const panel=document.querySelector(`.panel[data-id="${id}"]`);
+  panel.innerHTML='<div class="loading">Rendering diagram…</div>';
+  try{
+    const uid='erd-'+id+'-'+Math.random().toString(36).slice(2);
+    const {svg}=await mermaid.render(uid,d.diagram.trim());
+    panel.innerHTML=svg;
+    panel.querySelectorAll('svg').forEach(s=>{
+      s.removeAttribute('height');s.style.maxWidth='100%';s.style.height='auto';
+    });
+    panel.querySelectorAll('.node').forEach(node=>{
+      const fp=node.querySelector('path[d]');
+      if(!fp)return;
+      const pts=fp.getAttribute('d').match(/-?[\d.]+/g)?.map(Number);
+      if(!pts||pts.length<8)return;
+      const xs=[pts[0],pts[2],pts[4],pts[6]],ys=[pts[1],pts[3],pts[5],pts[7]];
+      if(!xs.every(Number.isFinite))return;
+      const x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;
+      const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+      r.setAttribute('x',x);r.setAttribute('y',y);r.setAttribute('width',w);r.setAttribute('height',h);r.setAttribute('rx','8');
+      for(const a of['fill','stroke','stroke-width','class','style']){if(fp.hasAttribute(a))r.setAttribute(a,fp.getAttribute(a));}
+      fp.replaceWith(r);
+    });
+    panel.querySelectorAll('.row-rect-odd path,.row-rect-even path').forEach(p=>p.setAttribute('stroke','none'));
+    rendered[id]=true;
+  }catch(e){
+    panel.innerHTML='<div class="loading">Could not render — try another domain.</div>';
+    console.error(e);
+  }
+}
+
+DOMAINS.forEach(d=>{
+  const btn=document.createElement('button');
+  btn.className='dn-btn';btn.dataset.id=d.id;btn.textContent=d.name;
+  btn.onclick=()=>showDomain(d.id);
+  nav.appendChild(btn);
+  const panel=document.createElement('div');
+  panel.className='panel';panel.dataset.id=d.id;
+  panelsEl.appendChild(panel);
+});
+
+showDomain('overview');
+</script>

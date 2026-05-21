@@ -1,0 +1,11 @@
+.env
+.git/
+.gocache/
+.DS_Store
+internal/.DS_Store
+school.db
+school-backend
+test-report/
+*.db
+*.sqlite
+*.log
