@@ -7,6 +7,7 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
 READY_URL="${READY_URL:-${HEALTH_URL%/health}/ready}"
 METRICS_URL="${METRICS_URL:-${HEALTH_URL%/health}/metrics}"
 VERIFY_MODE="${VERIFY_MODE:-mutating}"
+HEALTH_ATTEMPTS="${HEALTH_ATTEMPTS:-240}"
 
 case "$API_BASE_URL" in
   http://127.0.0.1:*|http://localhost:*|http://go-api:*|http://schooldesk-go-api:*) ;;
@@ -41,14 +42,19 @@ cd "$ROOT_DIR"
 
 docker compose up -d postgres redis go-api
 
-for _ in $(seq 1 60); do
-  if curl -fsS "$HEALTH_URL" >/dev/null; then
+for _ in $(seq 1 "$HEALTH_ATTEMPTS"); do
+  if curl -fsS "$HEALTH_URL" >/dev/null 2>/dev/null; then
     break
   fi
   sleep 1
 done
 
-curl -fsS "$HEALTH_URL" >/dev/null
+if ! curl -fsS "$HEALTH_URL" >/dev/null; then
+  echo "Local Docker API did not become healthy within ${HEALTH_ATTEMPTS}s" >&2
+  docker compose ps >&2 || true
+  docker compose logs --tail=160 go-api >&2 || true
+  exit 1
+fi
 curl -fsS "$READY_URL" >/dev/null
 curl -fsS "$METRICS_URL" >/dev/null
 

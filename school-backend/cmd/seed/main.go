@@ -73,6 +73,9 @@ func seedPrincipal() (principalCredentials, error) {
 	}).Error; err != nil {
 		return principalCredentials{}, err
 	}
+	if err := seedAcademicFixtures(schoolID, yearID); err != nil {
+		return principalCredentials{}, err
+	}
 	roles, err := seedRoles(schoolID, roleID)
 	if err != nil {
 		return principalCredentials{}, err
@@ -137,6 +140,76 @@ func seedPrincipal() (principalCredentials, error) {
 		"updated_at": now,
 	}).Error
 	return principalCredentials{Email: email, Password: password}, nil
+}
+
+func seedAcademicFixtures(schoolID, yearID string) error {
+	term := models.Term{
+		BaseModel:      models.BaseModel{ID: "term-default-1"},
+		AcademicYearID: yearID,
+		TermNumber:     1,
+		TermName:       "Term 1",
+		StartDate:      time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC),
+		IsCurrent:      true,
+	}
+	if err := database.DB.Where("id = ?", term.ID).FirstOrCreate(&term).Error; err != nil {
+		return err
+	}
+
+	department := models.Department{
+		BaseModel:      models.BaseModel{ID: "department-default-science"},
+		SchoolID:       schoolID,
+		DepartmentName: "Science",
+		Description:    "Default local verification department",
+	}
+	if err := database.DB.Where("id = ?", department.ID).FirstOrCreate(&department).Error; err != nil {
+		return err
+	}
+
+	grade := models.Grade{
+		BaseModel:   models.BaseModel{ID: "grade-default-10"},
+		SchoolID:    schoolID,
+		GradeNumber: 10,
+		GradeName:   "Grade 10",
+	}
+	if err := database.DB.Where("id = ?", grade.ID).FirstOrCreate(&grade).Error; err != nil {
+		return err
+	}
+
+	subject := models.Subject{
+		BaseModel:    models.BaseModel{ID: "subject-default-math"},
+		SchoolID:     schoolID,
+		DepartmentID: department.ID,
+		SubjectName:  "Mathematics",
+		SubjectCode:  "MATH",
+		SubjectType:  "core",
+		CreditHours:  4,
+	}
+	if err := database.DB.Where("id = ?", subject.ID).FirstOrCreate(&subject).Error; err != nil {
+		return err
+	}
+
+	gradeSubject := models.GradeSubject{
+		BaseModel:      models.BaseModel{ID: "grade-subject-default-math"},
+		GradeID:        grade.ID,
+		SubjectID:      subject.ID,
+		PeriodsPerWeek: 5,
+		MaxMarks:       100,
+		PassMarks:      35,
+		IsMandatory:    true,
+	}
+	if err := database.DB.Where("id = ?", gradeSubject.ID).FirstOrCreate(&gradeSubject).Error; err != nil {
+		return err
+	}
+
+	section := models.Section{
+		BaseModel:      models.BaseModel{ID: "section-default-10a"},
+		GradeID:        grade.ID,
+		AcademicYearID: yearID,
+		SectionName:    "A",
+		Capacity:       40,
+	}
+	return database.DB.Where("id = ?", section.ID).FirstOrCreate(&section).Error
 }
 
 func envOr(key, fallback string) string {
