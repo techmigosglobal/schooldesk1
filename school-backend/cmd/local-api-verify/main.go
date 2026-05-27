@@ -153,6 +153,7 @@ func (v *verifier) run() {
 		return
 	}
 	v.expect("Principal profile restore", http.MethodGet, "/auth/me", "Principal", "Principal", nil, http.StatusOK)
+	v.expect("Principal current school profile", http.MethodGet, "/schools/current", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal dashboard", http.MethodGet, "/dashboard/principal", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal registers notification device token", http.MethodPost, "/notifications/device-tokens", "Principal", "Principal", map[string]any{
 		"token":       "local-verifier-" + v.suffix,
@@ -241,6 +242,7 @@ func (v *verifier) runMutating() {
 
 	v.expectDataID("Principal creates Admin staff login", http.MethodPost, "/staff", "Principal", "Principal", map[string]any{
 		"staff_code":      strings.ToUpper(v.suffix) + "-ADM",
+		"username":        v.suffix + "_admin_staff",
 		"first_name":      "QA",
 		"last_name":       "Admin " + v.suffix,
 		"email":           adminEmail,
@@ -256,6 +258,7 @@ func (v *verifier) runMutating() {
 
 	v.expectDataID("Principal creates Teacher staff login", http.MethodPost, "/staff", "Principal", "Principal", map[string]any{
 		"staff_code":      strings.ToUpper(v.suffix) + "-TCH",
+		"username":        v.suffix + "_teacher_staff",
 		"first_name":      "QA",
 		"last_name":       "Teacher " + v.suffix,
 		"email":           teacherEmail,

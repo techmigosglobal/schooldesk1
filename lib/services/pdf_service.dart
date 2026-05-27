@@ -54,6 +54,151 @@ class PdfService {
     }();
   }
 
+  // ─── Student Directory ───────────────────────────────────────────────────
+
+  Future<Uint8List> generateStudentDirectoryReport({
+    required String title,
+    required List<Map<String, String>> students,
+    Map<String, String> filters = const {},
+    DateTime? generatedAt,
+  }) async {
+    final pdf = await _createDocument();
+    final generated = generatedAt ?? DateTime.now();
+    final tableRows = students.isEmpty
+        ? <List<String>>[
+            ['No students found', '', '', '', '', '', ''],
+          ]
+        : students
+              .map(
+                (student) => [
+                  student['name'] ?? '',
+                  student['admission'] ?? '',
+                  student['systemId'] ?? '',
+                  student['classSection'] ?? '',
+                  student['gender'] ?? '',
+                  student['dateOfBirth'] ?? '',
+                  student['status'] ?? '',
+                ],
+              )
+              .toList();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(28),
+        build: (context) => [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    title,
+                    style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _primaryColor,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Generated ${DateFormat('dd MMM yyyy, hh:mm a').format(generated)}',
+                    style: const pw.TextStyle(fontSize: 9, color: _mutedText),
+                  ),
+                ],
+              ),
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: pw.BoxDecoration(
+                  color: _lightGray,
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Text(
+                  '${students.length} student${students.length == 1 ? '' : 's'}',
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _darkText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (filters.isNotEmpty) ...[
+            pw.SizedBox(height: 14),
+            pw.Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: filters.entries
+                  .map(
+                    (entry) => pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: _lightGray),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text(
+                        '${entry.key}: ${entry.value}',
+                        style: const pw.TextStyle(
+                          fontSize: 8,
+                          color: _darkText,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+          pw.SizedBox(height: 16),
+          pw.Table.fromTextArray(
+            headers: const [
+              'Student',
+              'Admission / Roll',
+              'System ID',
+              'Class / Section',
+              'Gender',
+              'DOB',
+              'Status',
+            ],
+            data: tableRows,
+            border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            headerDecoration: const pw.BoxDecoration(color: _primaryColor),
+            headerStyle: pw.TextStyle(
+              color: PdfColors.white,
+              fontWeight: pw.FontWeight.bold,
+              fontSize: 8,
+            ),
+            cellStyle: const pw.TextStyle(fontSize: 8, color: _darkText),
+            cellPadding: const pw.EdgeInsets.symmetric(
+              horizontal: 5,
+              vertical: 6,
+            ),
+            cellAlignment: pw.Alignment.centerLeft,
+            columnWidths: const {
+              0: pw.FlexColumnWidth(2.1),
+              1: pw.FlexColumnWidth(1.5),
+              2: pw.FlexColumnWidth(1.3),
+              3: pw.FlexColumnWidth(2),
+              4: pw.FlexColumnWidth(1),
+              5: pw.FlexColumnWidth(1.2),
+              6: pw.FlexColumnWidth(1),
+            },
+          ),
+        ],
+      ),
+    );
+
+    return pdf.save();
+  }
+
   // ─── Fee Receipt ─────────────────────────────────────────────────────────
 
   Future<Uint8List> generateFeeReceipt({

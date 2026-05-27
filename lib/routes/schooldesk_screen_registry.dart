@@ -98,6 +98,48 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/guardian-directory-screen',
+      title: 'Parents & Guardians',
+      module: 'People',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-classes-screen',
+      title: 'Class Hub',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-attendance-screen',
+      title: SchoolDeskGlossary.attendance,
+      module: SchoolDeskGlossary.attendance,
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-subjects-screen',
+      title: 'Subjects',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-timetable-screen',
+      title: SchoolDeskGlossary.timetableRecords,
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-exams-screen',
+      title: SchoolDeskGlossary.examRecords,
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-results-screen',
+      title: 'Results',
+      module: SchoolDeskGlossary.reports,
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-user-management-screen/create',
       title: 'Create Account',
       module: 'Governance',
@@ -433,8 +475,14 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-attendance-screen',
-      title: 'Attendance',
+      title: 'Student Attendance',
       module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/teacher-my-attendance-screen',
+      title: 'My Attendance',
+      module: 'Today',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
@@ -456,13 +504,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-lesson-planner-screen',
-      title: 'Lesson Planner',
-      module: 'Academics',
-      portal: 'teacher',
-      feature: SchoolDeskFeature.teacherLessonPlanner,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-performance-screen',
       title: 'Student Performance',
       module: 'Academics',
@@ -473,13 +514,6 @@ class SchoolDeskScreenRegistry {
       title: 'Student Notes',
       module: 'Academics',
       portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-resources-screen',
-      title: 'Resources',
-      module: 'Academics',
-      portal: 'teacher',
-      feature: SchoolDeskFeature.teacherResources,
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-communication-screen',

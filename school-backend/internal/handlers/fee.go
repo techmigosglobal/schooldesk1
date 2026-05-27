@@ -60,6 +60,44 @@ func (h *FeeHandler) CreateFeeCategory(c *gin.Context) {
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: cat})
 }
 
+func (h *FeeHandler) DeleteFeeCategory(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Fee category id is required"})
+		return
+	}
+
+	var category models.FeeCategory
+	if err := database.DB.Where("id = ? AND school_id = ?", id, schoolID).First(&category).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Fee category not found"})
+		return
+	}
+
+	var structureCount, invoiceItemCount, concessionCount int64
+	database.DB.Model(&models.FeeStructure{}).Where("fee_category_id = ?", id).Count(&structureCount)
+	database.DB.Model(&models.FeeInvoiceItem{}).Where("fee_category_id = ?", id).Count(&invoiceItemCount)
+	database.DB.Model(&models.FeeConcession{}).Where("fee_category_id = ?", id).Count(&concessionCount)
+	if structureCount > 0 || invoiceItemCount > 0 || concessionCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{
+			"error": fmt.Sprintf(
+				"Cannot delete fee element while linked records exist (structures: %d, invoice items: %d, concessions: %d). Remove linked records first.",
+				structureCount,
+				invoiceItemCount,
+				concessionCount,
+			),
+		})
+		return
+	}
+
+	if err := database.DB.Delete(&category).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete fee category"})
+		return
+	}
+	auditAction(c, "fees", "delete", "fee_categories", &id)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}})
+}
+
 func (h *FeeHandler) GetFeeStructures(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	yearID := c.Query("academic_year_id")

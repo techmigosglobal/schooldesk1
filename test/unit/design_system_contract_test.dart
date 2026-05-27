@@ -43,15 +43,15 @@ void main() {
 
   test('feature availability keeps incomplete backend actions honest', () {
     final unavailable = FeatureAvailabilityService.stateFor(
-      SchoolDeskFeature.teacherResources,
+      SchoolDeskFeature.reportsExports,
     );
     final available = FeatureAvailabilityService.stateFor(
       SchoolDeskFeature.adminStudents,
     );
 
-    expect(unavailable.isAvailable, isFalse);
-    expect(unavailable.reason, contains('Backend'));
-    expect(unavailable.recommendedAction, contains('Track'));
+    expect(unavailable.isAvailable, isTrue);
+    expect(unavailable.reason, contains('backend'));
+    expect(unavailable.recommendedAction, contains('coverage'));
     expect(available.isAvailable, isTrue);
     expect(available.reason, isNull);
   });

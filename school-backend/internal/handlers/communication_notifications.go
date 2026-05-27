@@ -148,6 +148,45 @@ func createEventNotifications(row models.EventCalendar) {
 	}
 }
 
+func notifyHomeworkCreatedFromRecord(row HomeworkRecord) {
+	schoolID := strings.TrimSpace(row.SchoolID)
+	homeworkID := strings.TrimSpace(row.ID)
+	if schoolID == "" || homeworkID == "" {
+		return
+	}
+	users, err := parentUsersForHomeworkRecordTx(database.DB, row)
+	if err != nil || len(users) == 0 {
+		return
+	}
+	title := strings.TrimSpace(row.Title)
+	if title == "" {
+		title = "New homework assigned"
+	} else {
+		title = "Homework: " + title
+	}
+	body := strings.TrimSpace(row.Description)
+	if body == "" {
+		body = "A homework assignment has been posted."
+	}
+	if !row.DueDate.IsZero() {
+		body = strings.TrimSpace(body + " Due " + row.DueDate.Format("2 Jan 2006") + ".")
+	}
+	logs, err := createNotificationLogsForUsersTx(
+		database.DB,
+		schoolID,
+		users,
+		title,
+		body,
+		"homework",
+		"medium",
+		"homework",
+		homeworkID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}
+
 func notifyHomeworkCreated(row models.Homework) {
 	schoolID := strings.TrimSpace(row.SchoolID)
 	homeworkID := strings.TrimSpace(row.ID)
@@ -453,6 +492,29 @@ func usersForAnnouncement(row models.Announcement) []models.User {
 		filtered = append(filtered, user)
 	}
 	return filtered
+}
+
+func parentUsersForHomeworkRecordTx(tx *gorm.DB, row HomeworkRecord) ([]models.User, error) {
+	schoolID := strings.TrimSpace(row.SchoolID)
+	if schoolID == "" {
+		return nil, nil
+	}
+	var groups [][]models.User
+	if studentID := strings.TrimSpace(row.StudentID); studentID != "" {
+		users, err := parentUsersForStudentIDsTx(tx, schoolID, []string{studentID})
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, users)
+	}
+	if sectionID := strings.TrimSpace(row.SectionID); sectionID != "" {
+		users, err := parentUsersForSectionTx(tx, schoolID, sectionID)
+		if err != nil {
+			return nil, err
+		}
+		groups = append(groups, users)
+	}
+	return mergeNotificationUsers(groups...), nil
 }
 
 func parentUsersForHomeworkTx(tx *gorm.DB, row models.Homework) ([]models.User, error) {

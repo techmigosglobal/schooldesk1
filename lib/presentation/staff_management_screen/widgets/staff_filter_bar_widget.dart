@@ -25,6 +25,11 @@ class StaffFilterBarWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statuses = ['All', 'Active', 'On Leave', 'Absent'];
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final departmentChipHeight = (36.0 * textScale)
+        .clamp(38.0, 56.0)
+        .toDouble();
+    final statusChipHeight = (32.0 * textScale).clamp(36.0, 52.0).toDouble();
 
     return Column(
       children: [
@@ -63,7 +68,7 @@ class StaffFilterBarWidget extends StatelessWidget {
         const SizedBox(height: 10),
         // Department filter chips
         SizedBox(
-          height: 36,
+          height: departmentChipHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: departments.length,
@@ -91,6 +96,8 @@ class StaffFilterBarWidget extends StatelessWidget {
                   ),
                   child: Text(
                     dept,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -107,7 +114,7 @@ class StaffFilterBarWidget extends StatelessWidget {
         const SizedBox(height: 8),
         // Status filter chips
         SizedBox(
-          height: 32,
+          height: statusChipHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: statuses.length,
@@ -140,6 +147,8 @@ class StaffFilterBarWidget extends StatelessWidget {
                   ),
                   child: Text(
                     status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,

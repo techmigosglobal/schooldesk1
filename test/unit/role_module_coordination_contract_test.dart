@@ -165,7 +165,7 @@ void main() {
       expect(
         main,
         contains(
-          'fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin")',
+          'fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal")',
         ),
       );
       expect(feeHandler, contains('CreateParentPaymentRequest'));
@@ -418,7 +418,7 @@ void main() {
   );
 
   test(
-    'advanced transport and library status is backend-present and frontend-gap documented',
+    'advanced transport and library are retired from current route exposure',
     () {
       final main = File('school-backend/main.go').readAsStringSync();
       final studentHandler = File(
@@ -432,10 +432,9 @@ void main() {
         'docs/production-readiness-testcase-sheet-2026-05-16.md',
       ).readAsStringSync();
 
-      expect(main, contains('transport := api.Group("/transport")'));
-      expect(main, contains('transport.POST("/student-assignments"'));
-      expect(main, contains('library := api.Group("/library")'));
-      expect(main, contains('library.POST("/issues"'));
+      expect(main, isNot(contains('transport := api.Group("/transport")')));
+      expect(main, isNot(contains('library := api.Group("/library")')));
+      expect(main, isNot(contains('GetStudentTransport')));
       expect(
         studentHandler,
         contains('func (h *StudentHandler) GetStudentTransport'),
@@ -448,19 +447,9 @@ void main() {
       expect(appRoutes, isNot(contains('/transport-')));
       expect(appRoutes, isNot(contains('/library-')));
       expect(docs, contains('ADV-015'));
-      expect(
-        docs,
-        contains(
-          'Transport is backend-present but Flutter UI is still a release gap',
-        ),
-      );
+      expect(docs, contains('Transport is out of the current product scope'));
       expect(docs, contains('ADV-016'));
-      expect(
-        docs,
-        contains(
-          'Library is backend-present but Flutter UI is still a release gap',
-        ),
-      );
+      expect(docs, contains('Library is out of the current product scope'));
     },
   );
 }

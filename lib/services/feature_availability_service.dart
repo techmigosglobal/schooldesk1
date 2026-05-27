@@ -4,8 +4,6 @@ enum SchoolDeskFeature {
   adminFees,
   syllabusRecords,
   principalAnalytics,
-  teacherResources,
-  teacherLessonPlanner,
   teacherParentMeetings,
   parentStudentLeave,
   documents,
@@ -61,29 +59,14 @@ class FeatureAvailabilityService {
       label: 'Principal analytics',
       isAvailable: true,
     ),
-    SchoolDeskFeature.teacherResources: FeatureAvailabilityState(
-      feature: SchoolDeskFeature.teacherResources,
-      label: 'Teacher resources',
-      isAvailable: false,
-      reason: 'Backend not ready for resource storage and role-scoped files.',
-      recommendedAction:
-          'Track as backend hardening before enabling upload or publish actions.',
-    ),
-    SchoolDeskFeature.teacherLessonPlanner: FeatureAvailabilityState(
-      feature: SchoolDeskFeature.teacherLessonPlanner,
-      label: 'Lesson planner',
-      isAvailable: false,
-      reason: 'Backend lesson-plan contract is still partially verified.',
-      recommendedAction:
-          'Track the workflow until create, update, and parent visibility are verified.',
-    ),
     SchoolDeskFeature.teacherParentMeetings: FeatureAvailabilityState(
       feature: SchoolDeskFeature.teacherParentMeetings,
       label: 'Parent-teacher meetings',
-      isAvailable: false,
-      reason: 'Backend not ready for the full PTM slot lifecycle in the UI.',
+      isAvailable: true,
+      reason:
+          'PTM slots, booking, chat conversations, and messages use backend routes.',
       recommendedAction:
-          'Track create, book, cancel, and readback before enabling live booking.',
+          'Keep Parent and Teacher chat/PTM readback in release verification.',
     ),
     SchoolDeskFeature.parentStudentLeave: FeatureAvailabilityState(
       feature: SchoolDeskFeature.parentStudentLeave,
@@ -96,10 +79,11 @@ class FeatureAvailabilityService {
     SchoolDeskFeature.documents: FeatureAvailabilityState(
       feature: SchoolDeskFeature.documents,
       label: 'Documents and certificates',
-      isAvailable: false,
-      reason: 'Backend not ready for complete document request/export flows.',
+      isAvailable: true,
+      reason:
+          'Parent documents use student document records, access requests, certificate requests, and report exports.',
       recommendedAction:
-          'Track storage, download, and role-scoped visibility before enabling.',
+          'Keep document access and certificate request flows in role-wise verification.',
     ),
     SchoolDeskFeature.reportsExports: FeatureAvailabilityState(
       feature: SchoolDeskFeature.reportsExports,

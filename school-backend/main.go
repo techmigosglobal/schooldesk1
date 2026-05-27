@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -71,6 +72,7 @@ func main() {
 
 	r.Use(
 		middleware.RequestIDMiddleware(),
+		middleware.MetricsMiddleware(),
 		middleware.RequestLogMiddleware(),
 		middleware.CORSMiddleware(),
 	)
@@ -101,8 +103,21 @@ func main() {
 		if payload["redis"] == "ok" {
 			redisUp = 1
 		}
+		metrics := strings.Builder{}
+		metrics.WriteString("# HELP schooldesk_backend_up Backend process health.\n")
+		metrics.WriteString("# TYPE schooldesk_backend_up gauge\n")
+		metrics.WriteString("schooldesk_backend_up 1\n")
+		metrics.WriteString("# HELP schooldesk_database_up Database readiness.\n")
+		metrics.WriteString("# TYPE schooldesk_database_up gauge\n")
+		metrics.WriteString(fmt.Sprintf("schooldesk_database_up %d\n", dbUp))
+		metrics.WriteString("# HELP schooldesk_redis_up Redis readiness.\n")
+		metrics.WriteString("# TYPE schooldesk_redis_up gauge\n")
+		metrics.WriteString(fmt.Sprintf("schooldesk_redis_up %d\n", redisUp))
+		metrics.WriteString(prometheusDatabaseMetrics())
+		metrics.WriteString(prometheusQueueMetrics())
+		metrics.WriteString(middleware.PrometheusHTTPMetrics())
 		c.Header("Content-Type", "text/plain; version=0.0.4")
-		c.String(200, "schooldesk_backend_up 1\nschooldesk_database_up %d\nschooldesk_redis_up %d\n", dbUp, redisUp)
+		c.String(200, metrics.String())
 	})
 	r.Static("/uploads", "./uploads")
 
@@ -110,6 +125,7 @@ func main() {
 	schoolHandler := handlers.NewSchoolHandler()
 	staffHandler := handlers.NewStaffHandler()
 	studentHandler := handlers.NewStudentHandler()
+	guardianHandler := handlers.NewGuardianHandler()
 	attendanceHandler := handlers.NewAttendanceHandler()
 	examHandler := handlers.NewExamHandler()
 	feeHandler := handlers.NewFeeHandler()
@@ -126,8 +142,27 @@ func main() {
 	studentApprovalHandler := handlers.NewStudentApprovalHandler()
 	auditLogHandler := handlers.NewAuditLogHandler()
 	dashboardHandler := handlers.NewDashboardHandler()
+	principalClassesHandler := handlers.NewPrincipalClassesHandler()
+	principalSubjectsHandler := handlers.NewPrincipalSubjectsHandler()
+	principalAcademicCommandHandler := handlers.NewPrincipalAcademicCommandHandler()
 	reportExportHandler := handlers.NewReportExportHandler()
 	compatHandler := handlers.NewCompatibilityHandler()
+	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
+		resource, ok := handlers.TablesMDResourceFor(table)
+		if !ok {
+			log.Fatalf("Tables.md resource %s is not configured", table)
+		}
+		return handlers.NewTablesMDCRUDHandler(resource)
+	}
+	registerTableCRUD := func(group *gin.RouterGroup, table string, readRoles []string, writeRoles []string) {
+		handler := tableCRUD(table)
+		group.GET("", middleware.RBACMiddleware(readRoles...), handler.List)
+		group.GET("/:id", middleware.RBACMiddleware(readRoles...), handler.Get)
+		group.POST("", middleware.RBACMiddleware(writeRoles...), handler.Create)
+		group.PUT("/:id", middleware.RBACMiddleware(writeRoles...), handler.Update)
+		group.PATCH("/:id", middleware.RBACMiddleware(writeRoles...), handler.Update)
+		group.DELETE("/:id", middleware.RBACMiddleware(writeRoles...), handler.Delete)
+	}
 
 	api := r.Group("/api/v1")
 	{
@@ -154,10 +189,30 @@ func main() {
 			dashboard.GET("/parent", middleware.RBACMiddleware("Parent"), middleware.PermissionMiddleware("dashboard", "read"), dashboardHandler.Parent)
 		}
 
+		principal := api.Group("/principal")
+		principal.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Principal"))
+		{
+			principal.GET("/classes", principalClassesHandler.Overview)
+			principal.POST("/classes", middleware.RateLimitMiddleware("principal_class_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalClassesHandler.CreateClass)
+			principal.POST("/classes/:section_id/instructions", middleware.RateLimitMiddleware("principal_class_instruction", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalClassesHandler.CreateInstruction)
+			principal.GET("/subjects", principalSubjectsHandler.Overview)
+			principal.POST("/subjects/:subject_id/mappings", middleware.RateLimitMiddleware("principal_subject_mapping", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalSubjectsHandler.SaveMapping)
+			principal.POST("/subjects/:subject_id/actions", middleware.RateLimitMiddleware("principal_subject_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalSubjectsHandler.CreateAction)
+			principal.GET("/timetable", principalAcademicCommandHandler.TimetableOverview)
+			principal.POST("/timetable/actions", middleware.RateLimitMiddleware("principal_timetable_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveTimetableAction)
+			principal.GET("/exams", principalAcademicCommandHandler.ExamsOverview)
+			principal.POST("/exams/actions", middleware.RateLimitMiddleware("principal_exam_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveExamAction)
+			principal.GET("/results", principalAcademicCommandHandler.ResultsOverview)
+			principal.POST("/results/actions", middleware.RateLimitMiddleware("principal_result_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveResultAction)
+		}
+
 		schools := api.Group("/schools")
 		schools.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			schools.GET("", middleware.CacheMiddleware("schools_list", time.Duration(cfg.CacheTTLSeconds)*time.Second), schoolHandler.GetSchools)
+			schools.GET("/current", schoolHandler.GetCurrentSchool)
+			schools.PATCH("/current", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.UpdateCurrentSchool)
+			schools.POST("/current/logo", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.UploadCurrentSchoolLogo)
 			schools.GET("/:id", middleware.CacheMiddleware("schools_detail", time.Duration(cfg.CacheTTLSeconds)*time.Second), schoolHandler.GetSchool)
 			schools.POST("", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.CreateSchool)
 		}
@@ -196,6 +251,12 @@ func main() {
 			sections.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.DeleteSection)
 		}
 
+		classes := api.Group("/classes")
+		classes.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(classes, "classes", []string{"Admin", "Principal", "Teacher", "Parent"}, []string{"Admin", "Principal"})
+		}
+
 		departments := api.Group("/departments")
 		departments.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
@@ -211,6 +272,18 @@ func main() {
 			subjects.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.UpdateSubject)
 			subjects.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.UpdateSubject)
 			subjects.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.DeleteSubject)
+		}
+
+		gradeSubjects := api.Group("/grade-subjects")
+		gradeSubjects.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			h := handlers.NewCRUDHandler[models.GradeSubject]("grade_subjects", "grade_subjects", []string{"grade_id", "subject_id"}, false, "Grade", "Subject")
+			gradeSubjects.GET("", middleware.RBACMiddleware("Admin", "Principal"), h.List)
+			gradeSubjects.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Get)
+			gradeSubjects.POST("", middleware.RBACMiddleware("Admin", "Principal"), h.Create)
+			gradeSubjects.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+			gradeSubjects.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+			gradeSubjects.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Delete)
 		}
 
 		rooms := api.Group("/rooms")
@@ -229,6 +302,7 @@ func main() {
 			staff.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("staff_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), staffHandler.UpdateStaff)
 			staff.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("staff_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), staffHandler.DeleteStaff)
 			staff.POST("/:id/photo", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("staff_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), staffHandler.UploadStaffPhoto)
+			staff.POST("/:id/documents", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("staff_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), staffHandler.UploadStaffDocument)
 			staff.GET("/:id/leave-balances", staffHandler.GetStaffLeaveBalance)
 			staff.GET("/:id/attendance", staffHandler.GetStaffAttendance)
 		}
@@ -242,13 +316,16 @@ func main() {
 			students.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.UpdateStudent)
 			students.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.DeleteStudent)
 			students.POST("/:id/photo", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.UploadStudentPhoto)
+			students.POST("/:id/documents", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.UploadStudentDocument)
 			students.PUT("/:id/parent", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), parentLinkHandler.SetStudentParent)
 			students.GET("/:id/enrollments", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), studentHandler.GetStudentEnrollments)
 			students.POST("/enrollments", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.CreateEnrollment)
 			students.GET("/:id/attendance", studentHandler.GetStudentAttendance)
 			students.GET("/:id/fees", studentHandler.GetStudentFees)
 			students.GET("/:id/marks", studentHandler.GetStudentMarks)
-			students.GET("/:id/transport", studentHandler.GetStudentTransport)
+			students.GET("/:id/progress", studentHandler.GetStudentProgress)
+			students.POST("/:id/guardians", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), guardianHandler.LinkGuardianToStudent)
+			students.GET("/:id/guardians", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), guardianHandler.GetGuardiansByStudent)
 		}
 
 		studentApprovals := api.Group("/student-approvals")
@@ -267,10 +344,21 @@ func main() {
 			attendance.POST("/sessions", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.CreateAttendanceSession)
 			attendance.POST("/sessions/:session_id/mark", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStudentAttendance)
 			attendance.GET("/summary", attendanceHandler.GetStudentAttendanceSummary)
+			attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.ListStaffAttendance)
+			attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.GetStaffQRToken)
+			attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ScanStaffQR)
+			attendance.GET("/staff/me/today", middleware.RBACMiddleware("Teacher"), attendanceHandler.GetMyStaffAttendanceToday)
 			attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStaffAttendance)
 			attendance.GET("/reports/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.List("attendance_reports"))
 			attendance.POST("/reports/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.Create("attendance_reports"))
 			attendance.GET("/reports/exports/:id", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.Get)
+			attendanceTable := tableCRUD("attendance")
+			attendance.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceTable.List)
+			attendance.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceTable.Create)
+			attendance.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceTable.Get)
+			attendance.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceTable.Update)
+			attendance.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceTable.Update)
+			attendance.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), attendanceTable.Delete)
 		}
 
 		exams := api.Group("/exams")
@@ -278,18 +366,21 @@ func main() {
 		{
 			exams.GET("/types", examHandler.GetExamTypes)
 			exams.POST("/types", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamType)
-			exams.GET("", examHandler.GetExams)
-			exams.GET("/:id", examHandler.GetExam)
-			exams.POST("", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExam)
-			exams.PUT("/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.UpdateExam)
-			exams.PATCH("/:id/publish", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.PublishExam)
-			exams.POST("/schedules", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamSchedule)
-			exams.GET("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Teacher"), examHandler.GetScheduleMarks)
-			exams.POST("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.EnterMarks)
-			exams.GET("/report-cards", examHandler.GetReportCards)
-			exams.GET("/report-cards/exports", middleware.RBACMiddleware("Admin", "Teacher", "Parent"), reportExportHandler.List("report_cards"))
-			exams.POST("/report-cards/exports", middleware.RBACMiddleware("Admin", "Teacher", "Parent"), reportExportHandler.Create("report_cards"))
-			exams.GET("/report-cards/exports/:id", middleware.RBACMiddleware("Admin", "Teacher", "Parent"), reportExportHandler.Get)
+			exams.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetExams)
+			exams.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetExam)
+			exams.GET("/:id/rankings", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.GetClassRanking)
+			exams.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExam)
+			exams.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.UpdateExam)
+			exams.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.UpdateExam)
+			exams.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.DeleteExam)
+			exams.PATCH("/:id/publish", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.PublishExam)
+			exams.POST("/schedules", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamSchedule)
+			exams.GET("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.GetScheduleMarks)
+			exams.POST("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.EnterMarks)
+			exams.GET("/report-cards", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetReportCards)
+			exams.GET("/report-cards/exports", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), reportExportHandler.List("report_cards"))
+			exams.POST("/report-cards/exports", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), reportExportHandler.Create("report_cards"))
+			exams.GET("/report-cards/exports/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), reportExportHandler.Get)
 			exams.GET("/grading-scale", examHandler.GetGradingScale)
 		}
 
@@ -297,25 +388,33 @@ func main() {
 		fees.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			fees.GET("/categories", feeHandler.GetFeeCategories)
-			fees.POST("/categories", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateFeeCategory)
+			fees.POST("/categories", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateFeeCategory)
+			fees.DELETE("/categories/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DeleteFeeCategory)
 			fees.GET("/structures", feeHandler.GetFeeStructures)
-			fees.POST("/structures", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateFeeStructure)
-			fees.PUT("/structures/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
-			fees.PATCH("/structures/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
-			fees.DELETE("/structures/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DeleteFeeStructure)
+			fees.POST("/structures", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateFeeStructure)
+			fees.PUT("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
+			fees.PATCH("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
+			fees.DELETE("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DeleteFeeStructure)
 			fees.GET("/invoices", feeHandler.GetInvoices)
-			fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.GenerateInvoices)
-			fees.POST("/invoices", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateInvoice)
-			fees.POST("/payments", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.RecordPayment)
+			fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.GenerateInvoices)
+			fees.POST("/invoices", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateInvoice)
+			fees.POST("/payments", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.RecordPayment)
 			fees.GET("/payment-requests", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeHandler.GetPaymentRequests)
 			fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateParentPaymentRequest)
-			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
-			fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
+			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
+			fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
 			fees.GET("/concessions", feeHandler.GetConcessions)
-			fees.POST("/reminders", middleware.RBACMiddleware("Admin"), compatHandler.QueueFeeReminders)
+			fees.POST("/reminders", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.QueueFeeReminders)
 			fees.GET("/reports/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.List("fee_reports"))
 			fees.POST("/reports/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.Create("fee_reports"))
 			fees.GET("/reports/exports/:id", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.Get)
+			feeTable := tableCRUD("fees")
+			fees.GET("", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeTable.List)
+			fees.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeTable.Create)
+			fees.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeTable.Get)
+			fees.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeTable.Update)
+			fees.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeTable.Update)
+			fees.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeTable.Delete)
 		}
 
 		reports := api.Group("/reports")
@@ -355,15 +454,21 @@ func main() {
 			studentLeave.PATCH("/applications/:id/decision", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("leave_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), leaveHandler.DecideStudentLeaveApplication)
 		}
 
+		leaves := api.Group("/leaves")
+		leaves.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(leaves, "leaves", []string{"Admin", "Principal", "Teacher", "Parent"}, []string{"Admin", "Principal", "Teacher", "Parent"})
+		}
+
 		timetable := api.Group("/timetable")
 		timetable.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			timetable.GET("/slots", timetableHandler.GetTimetableSlots)
 			timetable.POST("/suggestions", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SuggestTimetableSlots)
-			timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.GenerateTimetableSlots)
-			timetable.POST("/slots", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableSlot)
-			timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdateTimetableSlot)
-			timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableSlot)
+			timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.GenerateTimetableSlots)
+			timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableSlot)
+			timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdateTimetableSlot)
+			timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableSlot)
 			timetable.GET("/substitutions", timetableHandler.GetSubstitutions)
 			timetable.POST("/substitutions", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateSubstitution)
 			timetable.GET("/section/:section_id", timetableHandler.GetTimetableBySection)
@@ -379,18 +484,34 @@ func main() {
 		events := api.Group("/events")
 		events.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
-			events.GET("", announcementHandler.GetEvents)
-			events.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("event_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), announcementHandler.CreateEvent)
-			events.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), announcementHandler.DeleteEvent)
+			eventTable := tableCRUD("events")
+			events.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventTable.List)
+			events.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventTable.Get)
+			events.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("event_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), eventTable.Create)
+			events.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("event_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), eventTable.Update)
+			events.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("event_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), eventTable.Update)
+			events.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), eventTable.Delete)
 		}
 
 		notifications := api.Group("/notifications")
 		notifications.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
-			notifications.GET("", announcementHandler.GetNotifications)
+			notificationTable := tableCRUD("notifications")
+			notifications.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), announcementHandler.GetNotifications)
+			notifications.POST("", middleware.RBACMiddleware("Admin", "Principal"), announcementHandler.CreateNotification)
 			notifications.POST("/device-tokens", middleware.RateLimitMiddleware("notification_device_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), notificationDeviceHandler.UpsertDeviceToken)
 			notifications.DELETE("/device-tokens", middleware.RateLimitMiddleware("notification_device_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), notificationDeviceHandler.RevokeDeviceToken)
 			notifications.PUT("/:id/read", announcementHandler.MarkNotificationRead)
+			notifications.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), notificationTable.Get)
+			notifications.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), notificationTable.Update)
+			notifications.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), notificationTable.Update)
+			notifications.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), notificationTable.Delete)
+		}
+
+		holidays := api.Group("/holidays")
+		holidays.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(holidays, "holidays", []string{"Admin", "Principal", "Teacher", "Parent"}, []string{"Admin", "Principal"})
 		}
 
 		parents := api.Group("/parents")
@@ -410,12 +531,18 @@ func main() {
 		users.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			users.GET("", middleware.RBACMiddleware("Admin", "Principal"), userHandler.GetUsers)
+			users.POST("", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.CreateUser)
+			users.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.GetUser)
+			users.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.PatchUser)
+			users.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.PatchUser)
+			users.POST("/:id/avatar", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("user_avatar_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), userHandler.UploadUserAvatar)
+			users.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.DeleteUser)
 		}
 
 		guardians := api.Group("/guardians")
 		guardians.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
-			h := handlers.NewCRUDHandler[models.Guardian]("guardians", "guardians", []string{"student_id", "full_name"}, false, "Student")
+			h := handlers.NewCRUDHandler[models.Guardian]("guardians", "guardians", []string{"full_name"}, true, "Students")
 			guardians.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("guardians", "read"), h.List)
 			guardians.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("guardians", "read"), h.Get)
 			guardians.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("guardians", "create"), h.Create)
@@ -459,7 +586,7 @@ func main() {
 		staffSubjects := api.Group("/staff-subjects")
 		staffSubjects.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
-			h := handlers.NewCRUDHandler[models.StaffSubject]("staff_subjects", "staff_subjects", []string{"staff_id", "subject_id", "grade_id"}, false, "Staff", "Subject", "Grade")
+			h := handlers.NewCRUDHandler[models.StaffSubject]("staff_subjects", "staff_subjects", []string{"staff_id", "subject_id", "grade_id"}, false, "Staff", "Subject", "Grade", "Section")
 			staffSubjects.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("staff_subjects", "read"), h.List)
 			staffSubjects.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("staff_subjects", "read"), h.Get)
 			staffSubjects.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("staff_subjects", "create"), h.Create)
@@ -478,57 +605,9 @@ func main() {
 			staffQualifications.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("staff_qualifications", "delete"), h.Delete)
 		}
 
-		transport := api.Group("/transport")
-		transport.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("transport", "read"))
-		{
-			vehicles := handlers.NewCRUDHandler[models.Vehicle]("vehicles", "vehicles", []string{"vehicle_number", "vehicle_type"}, true)
-			routes := handlers.NewCRUDHandler[models.Route]("routes", "routes", []string{"route_name"}, true, "Vehicle", "Stops")
-			stops := handlers.NewCRUDHandler[models.RouteStop]("route_stops", "route_stops", []string{"route_id", "stop_name"}, false, "Route")
-			studentTransport := handlers.NewCRUDHandler[models.StudentTransport]("student_transport", "student_transports", []string{"student_id", "academic_year_id", "route_id", "stop_id"}, false, "Student", "Route", "Stop")
-			transport.GET("/vehicles", vehicles.List)
-			transport.GET("/vehicles/:id", vehicles.Get)
-			transport.POST("/vehicles", middleware.PermissionMiddleware("transport", "create"), vehicles.Create)
-			transport.PUT("/vehicles/:id", middleware.PermissionMiddleware("transport", "update"), vehicles.Update)
-			transport.DELETE("/vehicles/:id", middleware.PermissionMiddleware("transport", "delete"), vehicles.Delete)
-			transport.GET("/routes", routes.List)
-			transport.GET("/routes/:id", routes.Get)
-			transport.POST("/routes", middleware.PermissionMiddleware("transport", "create"), routes.Create)
-			transport.PUT("/routes/:id", middleware.PermissionMiddleware("transport", "update"), routes.Update)
-			transport.DELETE("/routes/:id", middleware.PermissionMiddleware("transport", "delete"), routes.Delete)
-			transport.GET("/stops", stops.List)
-			transport.GET("/stops/:id", stops.Get)
-			transport.POST("/stops", middleware.PermissionMiddleware("transport", "create"), stops.Create)
-			transport.PUT("/stops/:id", middleware.PermissionMiddleware("transport", "update"), stops.Update)
-			transport.DELETE("/stops/:id", middleware.PermissionMiddleware("transport", "delete"), stops.Delete)
-			transport.GET("/student-assignments", studentTransport.List)
-			transport.GET("/student-assignments/:id", studentTransport.Get)
-			transport.POST("/student-assignments", middleware.PermissionMiddleware("transport", "create"), studentTransport.Create)
-			transport.PUT("/student-assignments/:id", middleware.PermissionMiddleware("transport", "update"), studentTransport.Update)
-			transport.DELETE("/student-assignments/:id", middleware.PermissionMiddleware("transport", "delete"), studentTransport.Delete)
-		}
-
-		library := api.Group("/library")
-		library.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("library", "read"))
-		{
-			categories := handlers.NewCRUDHandler[models.BookCategory]("book_categories", "book_categories", []string{"category_name"}, true)
-			books := handlers.NewCRUDHandler[models.Book]("books", "books", []string{"category_id", "title"}, true, "Category")
-			issues := handlers.NewCRUDHandler[models.BookIssue]("book_issues", "book_issues", []string{"book_id", "borrower_type", "borrower_id"}, false, "Book")
-			library.GET("/categories", categories.List)
-			library.GET("/categories/:id", categories.Get)
-			library.POST("/categories", middleware.PermissionMiddleware("library", "create"), categories.Create)
-			library.PUT("/categories/:id", middleware.PermissionMiddleware("library", "update"), categories.Update)
-			library.DELETE("/categories/:id", middleware.PermissionMiddleware("library", "delete"), categories.Delete)
-			library.GET("/books", books.List)
-			library.GET("/books/:id", books.Get)
-			library.POST("/books", middleware.PermissionMiddleware("library", "create"), books.Create)
-			library.PUT("/books/:id", middleware.PermissionMiddleware("library", "update"), books.Update)
-			library.DELETE("/books/:id", middleware.PermissionMiddleware("library", "delete"), books.Delete)
-			library.GET("/issues", issues.List)
-			library.GET("/issues/:id", issues.Get)
-			library.POST("/issues", middleware.PermissionMiddleware("library", "create"), issues.Create)
-			library.PUT("/issues/:id", middleware.PermissionMiddleware("library", "update"), issues.Update)
-			library.DELETE("/issues/:id", middleware.PermissionMiddleware("library", "delete"), issues.Delete)
-		}
+		// Library and transport route groups are intentionally not registered in
+		// the current product scope. Historical schema models remain for data
+		// preservation, but no active API surface is exposed.
 
 		payroll := api.Group("/payroll")
 		payroll.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
@@ -563,12 +642,13 @@ func main() {
 		homework := api.Group("/homework")
 		homework.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
-			h := handlers.NewCRUDHandler[models.Homework]("homework", "homework", []string{"title"}, true)
-			homework.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), h.List)
-			homework.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), h.Get)
-			homework.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "create"), h.Create)
-			homework.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "update"), h.Update)
-			homework.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "delete"), h.Delete)
+			homeworkTable := tableCRUD("homework")
+			homework.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), homeworkTable.List)
+			homework.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), homeworkTable.Get)
+			homework.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "create"), homeworkTable.Create)
+			homework.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "update"), homeworkTable.Update)
+			homework.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "update"), homeworkTable.Update)
+			homework.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "delete"), homeworkTable.Delete)
 			homework.GET("/:id/submissions", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), homeworkSubmissionHandler.List)
 			homework.POST("/:id/submissions", middleware.RBACMiddleware("Parent"), homeworkSubmissionHandler.Submit)
 			homework.PUT("/:id/submissions/:submission_id/review", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.PermissionMiddleware("homework", "update"), homeworkSubmissionHandler.Review)
@@ -606,6 +686,24 @@ func main() {
 			messages.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("messages", "update"), h.Update)
 			messages.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("messages", "delete"), h.Delete)
 		}
+
+		approvalRequests := api.Group("/approval-requests")
+		approvalRequests.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(approvalRequests, "approval_requests", []string{"Admin", "Principal", "Teacher"}, []string{"Admin", "Principal", "Teacher"})
+		}
+
+		communications := api.Group("/communications")
+		communications.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(communications, "communications", []string{"Admin", "Principal", "Teacher", "Parent"}, []string{"Admin", "Principal", "Teacher", "Parent"})
+		}
+
+		principalReports := api.Group("/principal-reports")
+		principalReports.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			registerTableCRUD(principalReports, "principal_reports", []string{"Admin", "Principal"}, []string{"Admin", "Principal"})
+		}
 	}
 
 	compatAPI := r.Group("/api")
@@ -632,12 +730,30 @@ func main() {
 				users.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.GetUser)
 				users.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.PatchUser)
 				users.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.PatchUser)
+				users.POST("/:id/avatar", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("user_avatar_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), userHandler.UploadUserAvatar)
 				users.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.DeleteUser)
 			}
 
 			me := protected.Group("/me")
 			{
 				me.GET("/students", parentLinkHandler.GetMyStudents)
+			}
+
+			principalCompat := protected.Group("/principal")
+			principalCompat.Use(middleware.RBACMiddleware("Principal"))
+			{
+				principalCompat.GET("/classes", principalClassesHandler.Overview)
+				principalCompat.POST("/classes", middleware.RateLimitMiddleware("principal_class_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalClassesHandler.CreateClass)
+				principalCompat.POST("/classes/:section_id/instructions", middleware.RateLimitMiddleware("principal_class_instruction", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalClassesHandler.CreateInstruction)
+				principalCompat.GET("/subjects", principalSubjectsHandler.Overview)
+				principalCompat.POST("/subjects/:subject_id/mappings", middleware.RateLimitMiddleware("principal_subject_mapping", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalSubjectsHandler.SaveMapping)
+				principalCompat.POST("/subjects/:subject_id/actions", middleware.RateLimitMiddleware("principal_subject_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalSubjectsHandler.CreateAction)
+				principalCompat.GET("/timetable", principalAcademicCommandHandler.TimetableOverview)
+				principalCompat.POST("/timetable/actions", middleware.RateLimitMiddleware("principal_timetable_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveTimetableAction)
+				principalCompat.GET("/exams", principalAcademicCommandHandler.ExamsOverview)
+				principalCompat.POST("/exams/actions", middleware.RateLimitMiddleware("principal_exam_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveExamAction)
+				principalCompat.GET("/results", principalAcademicCommandHandler.ResultsOverview)
+				principalCompat.POST("/results/actions", middleware.RateLimitMiddleware("principal_result_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveResultAction)
 			}
 
 			schoolsCompat := protected.Group("/schools")
@@ -671,12 +787,16 @@ func main() {
 				students.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.UpdateStudent)
 				students.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.DeleteStudent)
 				students.POST("/:id/photo", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.UploadStudentPhoto)
+				students.POST("/:id/documents", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.UploadStudentDocument)
 				students.PUT("/:id/parent", middleware.RBACMiddleware("Principal"), parentLinkHandler.SetStudentParent)
 				students.GET("/:id/enrollments", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), studentHandler.GetStudentEnrollments)
 				students.GET("/:id/attendance", studentHandler.GetStudentAttendance)
 				students.GET("/:id/grades", compatHandler.GetStudentGrades)
 				students.GET("/:id/marks", compatHandler.GetStudentGrades)
 				students.GET("/:id/fees", studentHandler.GetStudentFees)
+				students.GET("/:id/progress", studentHandler.GetStudentProgress)
+				students.POST("/:id/guardians", middleware.RBACMiddleware("Admin", "Principal"), guardianHandler.LinkGuardianToStudent)
+				students.GET("/:id/guardians", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), guardianHandler.GetGuardiansByStudent)
 			}
 
 			teachers := protected.Group("/teachers")
@@ -688,6 +808,7 @@ func main() {
 				teachers.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UpdateStaff)
 				teachers.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.DeleteStaff)
 				teachers.POST("/:id/photo", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UploadStaffPhoto)
+				teachers.POST("/:id/documents", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UploadStaffDocument)
 				teachers.GET("/:id/timetable", compatHandler.GetTeacherTimetable)
 			}
 
@@ -700,6 +821,40 @@ func main() {
 				staffCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UpdateStaff)
 				staffCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.DeleteStaff)
 				staffCompat.POST("/:id/photo", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UploadStaffPhoto)
+				staffCompat.POST("/:id/documents", middleware.RBACMiddleware("Admin", "Principal"), staffHandler.UploadStaffDocument)
+			}
+
+			staffSubjectsCompat := protected.Group("/staff-subjects")
+			{
+				h := handlers.NewCRUDHandler[models.StaffSubject]("staff_subjects", "staff_subjects", []string{"staff_id", "subject_id", "grade_id"}, false, "Staff", "Subject", "Grade", "Section")
+				staffSubjectsCompat.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.List)
+				staffSubjectsCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.Get)
+				staffSubjectsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), h.Create)
+				staffSubjectsCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				staffSubjectsCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				staffSubjectsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Delete)
+			}
+
+			staffDocumentsCompat := protected.Group("/staff-documents")
+			{
+				h := handlers.NewCRUDHandler[models.StaffDocument]("staff_documents", "staff_documents", []string{"staff_id", "doc_type", "file_url"}, false, "Staff")
+				staffDocumentsCompat.GET("", middleware.RBACMiddleware("Admin", "Principal"), h.List)
+				staffDocumentsCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Get)
+				staffDocumentsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), h.Create)
+				staffDocumentsCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				staffDocumentsCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				staffDocumentsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Delete)
+			}
+
+			guardiansCompat := protected.Group("/guardians")
+			{
+				h := handlers.NewCRUDHandler[models.Guardian]("guardians", "guardians", []string{"full_name"}, true, "Students")
+				guardiansCompat.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), h.List)
+				guardiansCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), h.Get)
+				guardiansCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), h.Create)
+				guardiansCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				guardiansCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				guardiansCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Delete)
 			}
 
 			classes := protected.Group("/classes")
@@ -728,6 +883,10 @@ func main() {
 				attendance.GET("/sessions", attendanceHandler.GetAttendanceSessions)
 				attendance.POST("/sessions", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceHandler.CreateAttendanceSession)
 				attendance.POST("/sessions/:session_id/mark", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), attendanceHandler.MarkStudentAttendance)
+				attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.ListStaffAttendance)
+				attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.GetStaffQRToken)
+				attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher"), attendanceHandler.ScanStaffQR)
+				attendance.GET("/staff/me/today", middleware.RBACMiddleware("Teacher"), attendanceHandler.GetMyStaffAttendanceToday)
 				attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.MarkStaffAttendance)
 				attendance.GET("/summary", compatHandler.GetAttendanceSummary)
 				attendance.POST("/mark", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), compatHandler.MarkAttendance)
@@ -740,10 +899,10 @@ func main() {
 			{
 				timetable.GET("/slots", compatHandler.ListTimetable)
 				timetable.POST("/suggestions", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.SuggestTimetableSlots)
-				timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin"), timetableHandler.GenerateTimetableSlots)
-				timetable.POST("/slots", middleware.RBACMiddleware("Admin"), timetableHandler.CreateTimetableSlot)
-				timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin"), timetableHandler.UpdateTimetableSlot)
-				timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin"), timetableHandler.DeleteTimetableSlot)
+				timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.GenerateTimetableSlots)
+				timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.CreateTimetableSlot)
+				timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.UpdateTimetableSlot)
+				timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.DeleteTimetableSlot)
 				timetable.GET("/substitutions", timetableHandler.GetSubstitutions)
 				timetable.POST("/substitutions", middleware.RBACMiddleware("Admin"), timetableHandler.CreateSubstitution)
 				timetable.GET("/class/:classId", compatHandler.GetClassTimetable)
@@ -768,16 +927,17 @@ func main() {
 			examsCompat := protected.Group("/exams")
 			{
 				examsCompat.GET("", examHandler.GetExams)
-				examsCompat.POST("", middleware.RBACMiddleware("Admin"), examHandler.CreateExam)
-				examsCompat.PUT("/:id", middleware.RBACMiddleware("Admin"), examHandler.UpdateExam)
-				examsCompat.PATCH("/:id/publish", middleware.RBACMiddleware("Admin"), examHandler.PublishExam)
+				examsCompat.GET("/:id/rankings", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.GetClassRanking)
+				examsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), examHandler.CreateExam)
+				examsCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), examHandler.UpdateExam)
+				examsCompat.PATCH("/:id/publish", middleware.RBACMiddleware("Admin", "Principal"), examHandler.PublishExam)
 				examsCompat.GET("/types", examHandler.GetExamTypes)
 				examsCompat.POST("/types", middleware.RBACMiddleware("Admin"), examHandler.CreateExamType)
 				examsCompat.GET("/schedules", compatHandler.ListExamSchedules)
-				examsCompat.POST("/schedules", middleware.RBACMiddleware("Admin"), examHandler.CreateExamSchedule)
-				examsCompat.GET("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Teacher"), examHandler.GetScheduleMarks)
-				examsCompat.POST("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Teacher"), examHandler.EnterMarks)
-				examsCompat.GET("/report-cards", examHandler.GetReportCards)
+				examsCompat.POST("/schedules", middleware.RBACMiddleware("Admin", "Principal"), examHandler.CreateExamSchedule)
+				examsCompat.GET("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.GetScheduleMarks)
+				examsCompat.POST("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.EnterMarks)
+				examsCompat.GET("/report-cards", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetReportCards)
 			}
 
 			fees := protected.Group("/fees")
@@ -785,25 +945,26 @@ func main() {
 				fees.GET("", compatHandler.ListFees)
 				fees.GET("/invoices", feeHandler.GetInvoices)
 				fees.GET("/categories", feeHandler.GetFeeCategories)
-				fees.POST("/categories", middleware.RBACMiddleware("Admin"), feeHandler.CreateFeeCategory)
+				fees.POST("/categories", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.CreateFeeCategory)
+				fees.DELETE("/categories/:id", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.DeleteFeeCategory)
 				fees.GET("/structures", feeHandler.GetFeeStructures)
-				fees.POST("/structures", middleware.RBACMiddleware("Admin"), feeHandler.CreateFeeStructure)
-				fees.PUT("/structures/:id", middleware.RBACMiddleware("Admin"), feeHandler.UpdateFeeStructure)
-				fees.PATCH("/structures/:id", middleware.RBACMiddleware("Admin"), feeHandler.UpdateFeeStructure)
-				fees.DELETE("/structures/:id", middleware.RBACMiddleware("Admin"), feeHandler.DeleteFeeStructure)
-				fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin"), feeHandler.GenerateInvoices)
-				fees.POST("/invoices", middleware.RBACMiddleware("Admin"), feeHandler.CreateInvoice)
-				fees.POST("/assign", middleware.RBACMiddleware("Admin"), compatHandler.AssignFee)
-				fees.POST("/payments", middleware.RBACMiddleware("Admin"), feeHandler.RecordPayment)
+				fees.POST("/structures", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.CreateFeeStructure)
+				fees.PUT("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.UpdateFeeStructure)
+				fees.PATCH("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.UpdateFeeStructure)
+				fees.DELETE("/structures/:id", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.DeleteFeeStructure)
+				fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.GenerateInvoices)
+				fees.POST("/invoices", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.CreateInvoice)
+				fees.POST("/assign", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.AssignFee)
+				fees.POST("/payments", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.RecordPayment)
 				fees.GET("/payment-requests", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeHandler.GetPaymentRequests)
 				fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), feeHandler.CreateParentPaymentRequest)
-				fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin"), feeHandler.DecideParentPaymentRequest)
-				fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin"), feeHandler.DecideParentPaymentRequest)
+				fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.DecideParentPaymentRequest)
+				fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), feeHandler.DecideParentPaymentRequest)
 				fees.GET("/student/:studentId", compatHandler.GetStudentFees)
 				fees.PATCH("/:id/pay", middleware.RBACMiddleware("Admin"), compatHandler.PayFee)
 				fees.GET("/overdue", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.GetOverdueFees)
 				fees.GET("/stats", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.GetFeeStats)
-				fees.POST("/reminders", middleware.RBACMiddleware("Admin"), compatHandler.QueueFeeReminders)
+				fees.POST("/reminders", middleware.RBACMiddleware("Admin", "Principal"), compatHandler.QueueFeeReminders)
 			}
 
 			leaveCompat := protected.Group("/leave")
@@ -832,14 +993,19 @@ func main() {
 
 			eventsCompat := protected.Group("/events")
 			{
-				eventsCompat.GET("", announcementHandler.GetEvents)
-				eventsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), announcementHandler.CreateEvent)
-				eventsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), announcementHandler.DeleteEvent)
+				eventTable := tableCRUD("events")
+				eventsCompat.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventTable.List)
+				eventsCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventTable.Get)
+				eventsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), eventTable.Create)
+				eventsCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), eventTable.Update)
+				eventsCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), eventTable.Update)
+				eventsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), eventTable.Delete)
 			}
 
 			notificationsCompat := protected.Group("/notifications")
 			{
 				notificationsCompat.GET("", announcementHandler.GetNotifications)
+				notificationsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), announcementHandler.CreateNotification)
 				notificationsCompat.POST("/device-tokens", middleware.RateLimitMiddleware("notification_device_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), notificationDeviceHandler.UpsertDeviceToken)
 				notificationsCompat.DELETE("/device-tokens", middleware.RateLimitMiddleware("notification_device_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), notificationDeviceHandler.RevokeDeviceToken)
 				notificationsCompat.PUT("/:id/read", announcementHandler.MarkNotificationRead)
@@ -880,14 +1046,14 @@ func main() {
 			}
 
 			homeworkCompat := protected.Group("/homework")
+			homeworkCompatTables := tableCRUD("homework")
 			{
-				h := handlers.NewCRUDHandler[models.Homework]("homework", "homework", []string{"title"}, true)
-				homeworkCompat.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), h.List)
-				homeworkCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), h.Get)
-				homeworkCompat.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.Create)
-				homeworkCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.Update)
-				homeworkCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.Update)
-				homeworkCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), h.Delete)
+				homeworkCompat.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), homeworkCompatTables.List)
+				homeworkCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), homeworkCompatTables.Get)
+				homeworkCompat.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), homeworkCompatTables.Create)
+				homeworkCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), homeworkCompatTables.Update)
+				homeworkCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), homeworkCompatTables.Update)
+				homeworkCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), homeworkCompatTables.Delete)
 				homeworkCompat.GET("/:id/submissions", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), homeworkSubmissionHandler.List)
 				homeworkCompat.POST("/:id/submissions", middleware.RBACMiddleware("Parent"), homeworkSubmissionHandler.Submit)
 				homeworkCompat.PUT("/:id/submissions/:submission_id/review", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), homeworkSubmissionHandler.Review)
@@ -966,6 +1132,17 @@ func main() {
 				subjectsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), schoolHandler.DeleteSubject)
 			}
 
+			gradeSubjectsCompat := protected.Group("/grade-subjects")
+			{
+				h := handlers.NewCRUDHandler[models.GradeSubject]("grade_subjects", "grade_subjects", []string{"grade_id", "subject_id"}, false, "Grade", "Subject")
+				gradeSubjectsCompat.GET("", middleware.RBACMiddleware("Admin", "Principal"), h.List)
+				gradeSubjectsCompat.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Get)
+				gradeSubjectsCompat.POST("", middleware.RBACMiddleware("Admin", "Principal"), h.Create)
+				gradeSubjectsCompat.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				gradeSubjectsCompat.PATCH("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Update)
+				gradeSubjectsCompat.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), h.Delete)
+			}
+
 			termsCompat := protected.Group("/terms")
 			{
 				h := handlers.NewCRUDHandler[models.Term]("terms", "terms", []string{"academic_year_id", "term_number", "term_name"}, false, "AcademicYear")
@@ -1040,10 +1217,9 @@ func main() {
 			protected.PATCH("/fees/concessions/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), feeConcessionsCompat.Update)
 			protected.DELETE("/fees/concessions/:id", middleware.RBACMiddleware("Admin", "Principal"), feeConcessionsCompat.Delete)
 			reportExportResource("/fees/reports/exports", "fee_reports", "Admin", "Principal")
-			reportExportResource("/exams/report-cards/exports", "report_cards", "Admin", "Teacher", "Parent")
+			reportExportResource("/exams/report-cards/exports", "report_cards", "Admin", "Principal", "Teacher", "Parent")
 			protected.POST("/documents/requests/:id/prints", middleware.RBACMiddleware("Admin", "Principal"), handlers.NewFrontendRecordHandler("documents/requests/prints").Create)
 			protected.POST("/homework/:id/attachment-requests", middleware.RBACMiddleware("Parent"), handlers.NewFrontendRecordHandler("homework/attachment-requests").Create)
-			protected.POST("/notifications", middleware.RBACMiddleware("Admin", "Teacher"), handlers.NewFrontendRecordHandler("notifications").Create)
 
 			notices := protected.Group("/notices")
 			{
@@ -1139,4 +1315,71 @@ func readinessPayload(cfg *config.Config) (gin.H, int) {
 	}
 
 	return payload, status
+}
+
+func prometheusDatabaseMetrics() string {
+	var b strings.Builder
+	b.WriteString("# HELP schooldesk_db_open_connections Current open database connections.\n")
+	b.WriteString("# TYPE schooldesk_db_open_connections gauge\n")
+	b.WriteString("# HELP schooldesk_db_in_use_connections Current in-use database connections.\n")
+	b.WriteString("# TYPE schooldesk_db_in_use_connections gauge\n")
+	b.WriteString("# HELP schooldesk_db_idle_connections Current idle database connections.\n")
+	b.WriteString("# TYPE schooldesk_db_idle_connections gauge\n")
+	b.WriteString("# HELP schooldesk_db_wait_count_total Total waits for a database connection.\n")
+	b.WriteString("# TYPE schooldesk_db_wait_count_total counter\n")
+	b.WriteString("# HELP schooldesk_db_wait_duration_seconds_total Total time blocked waiting for database connections.\n")
+	b.WriteString("# TYPE schooldesk_db_wait_duration_seconds_total counter\n")
+	if database.DB == nil {
+		b.WriteString("schooldesk_db_open_connections 0\n")
+		b.WriteString("schooldesk_db_in_use_connections 0\n")
+		b.WriteString("schooldesk_db_idle_connections 0\n")
+		b.WriteString("schooldesk_db_wait_count_total 0\n")
+		b.WriteString("schooldesk_db_wait_duration_seconds_total 0\n")
+		return b.String()
+	}
+	sqlDB, err := database.DB.DB()
+	if err != nil {
+		b.WriteString("schooldesk_db_open_connections 0\n")
+		b.WriteString("schooldesk_db_in_use_connections 0\n")
+		b.WriteString("schooldesk_db_idle_connections 0\n")
+		b.WriteString("schooldesk_db_wait_count_total 0\n")
+		b.WriteString("schooldesk_db_wait_duration_seconds_total 0\n")
+		return b.String()
+	}
+	stats := sqlDB.Stats()
+	b.WriteString(fmt.Sprintf("schooldesk_db_open_connections %d\n", stats.OpenConnections))
+	b.WriteString(fmt.Sprintf("schooldesk_db_in_use_connections %d\n", stats.InUse))
+	b.WriteString(fmt.Sprintf("schooldesk_db_idle_connections %d\n", stats.Idle))
+	b.WriteString(fmt.Sprintf("schooldesk_db_wait_count_total %d\n", stats.WaitCount))
+	b.WriteString(fmt.Sprintf("schooldesk_db_wait_duration_seconds_total %.6f\n", stats.WaitDuration.Seconds()))
+	return b.String()
+}
+
+func prometheusQueueMetrics() string {
+	var b strings.Builder
+	queueConfigured := 0
+	if services.Queue != nil {
+		queueConfigured = 1
+	}
+	b.WriteString("# HELP schooldesk_queue_configured Redis-backed job queue availability.\n")
+	b.WriteString("# TYPE schooldesk_queue_configured gauge\n")
+	b.WriteString(fmt.Sprintf("schooldesk_queue_configured %d\n", queueConfigured))
+	b.WriteString("# HELP schooldesk_queue_pending_jobs Redis stream length by queue type.\n")
+	b.WriteString("# TYPE schooldesk_queue_pending_jobs gauge\n")
+	for _, queueType := range []string{"notifications", "fee_reminders"} {
+		pending := int64(0)
+		if services.Queue != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			count, err := services.Queue.PendingLength(ctx, queueType)
+			cancel()
+			if err == nil {
+				pending = count
+			}
+		}
+		b.WriteString(fmt.Sprintf("schooldesk_queue_pending_jobs{queue=%q} %d\n", queueType, pending))
+	}
+	b.WriteString("# HELP schooldesk_notification_worker_failures_total Notification worker delivery failures.\n")
+	b.WriteString("# TYPE schooldesk_notification_worker_failures_total counter\n")
+	b.WriteString(fmt.Sprintf("schooldesk_notification_worker_failures_total %d\n", services.NotificationWorkerFailures()))
+	return b.String()
 }

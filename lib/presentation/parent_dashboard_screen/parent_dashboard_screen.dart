@@ -37,6 +37,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     });
     try {
       final api = BackendApiClient.instance;
+      // Backend integration: keep this screen API-backed only. Do not seed
+      // local child metrics; leave missing fields as not published.
       final results = await Future.wait([
         api.getMyStudents(),
         api.getAnnouncements(),
@@ -60,6 +62,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         child['pending_fee_balance'] = feeRow['pending_fee_balance'];
         child['pending_invoices'] = feeRow['pending_invoices'];
       }
+      // Backend integration: add attendance, homeworkDue, classTeacher, and
+      // fee summary fields to the parent dashboard response when available.
       setState(() {
         _children = children;
         _notices = (results[1] as List).whereType<AnnouncementModel>().toList();
@@ -291,25 +295,23 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     final childName = _name(child, fallback: 'Student');
-    final classLabel = [
-      _text(child['class']),
-      _text(child['section']),
-    ].where((part) => part.isNotEmpty).join(' ');
-    final homeworkDue = _intValue(child['homeworkDue']);
+    final classLabel = _classLabel(child);
+    final attendanceLabel = _attendanceLabel(child);
+    final homeworkDue = _homeworkDueLabel(child);
+    final homeworkDueCount = _homeworkDueCount(child);
     final feeDue = _feeDueLabel(child);
+    final feeState = _feeStateLabel(child);
     final actions = [
       _ParentVisualActionSpec(
         label: 'Attendance',
-        value: _text(child['attendance']).isEmpty
-            ? 'View'
-            : _text(child['attendance']),
+        value: attendanceLabel,
         illustrationAsset: SchoolDeskUiIllustrations.attendance,
         color: parentColor,
         route: AppRoutes.parentAttendance,
       ),
       _ParentVisualActionSpec(
         label: 'Homework',
-        value: '$homeworkDue',
+        value: homeworkDue,
         illustrationAsset: SchoolDeskUiIllustrations.homework,
         color: theme.colorScheme.primary,
         route: AppRoutes.parentHomework,
@@ -323,21 +325,21 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
       ),
       _ParentVisualActionSpec(
         label: 'Fees',
-        value: feeDue == 'No pending dues' ? 'Paid' : 'Due',
+        value: feeState,
         illustrationAsset: SchoolDeskUiIllustrations.fees,
         color: theme.colorScheme.secondary,
         route: AppRoutes.parentFees,
       ),
       _ParentVisualActionSpec(
         label: 'Chat',
-        value: 'Teacher',
+        value: 'Open',
         illustrationAsset: SchoolDeskUiIllustrations.chat,
         color: parentColor,
         route: AppRoutes.parentTeacherChat,
       ),
       _ParentVisualActionSpec(
         label: 'Calendar',
-        value: 'Events',
+        value: 'Open',
         illustrationAsset: SchoolDeskUiIllustrations.calendar,
         color: theme.colorScheme.secondary,
         route: AppRoutes.parentCalendar,
@@ -349,7 +351,7 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
       children: [
         _ParentChildBanner(
           childName: childName,
-          classLabel: classLabel.isEmpty ? 'Class not assigned' : classLabel,
+          classLabel: classLabel,
           color: parentColor,
           child: _ChildSelector(
             children: children,
@@ -364,9 +366,7 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
         SchoolDeskVisualSummaryRecord(
           title: 'Attendance',
           subtitle: 'Daily record',
-          value: _text(child['attendance']).isEmpty
-              ? 'View'
-              : _text(child['attendance']),
+          value: attendanceLabel,
           icon: Icons.how_to_reg_rounded,
           color: parentColor,
           onTap: () => Navigator.pushNamed(context, AppRoutes.parentAttendance),
@@ -375,9 +375,9 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
         SchoolDeskVisualSummaryRecord(
           title: 'Homework',
           subtitle: 'Assignments due',
-          value: '$homeworkDue',
+          value: homeworkDue,
           icon: Icons.assignment_rounded,
-          color: homeworkDue > 0
+          color: (homeworkDueCount ?? 0) > 0
               ? theme.colorScheme.error
               : theme.colorScheme.primary,
           onTap: () => Navigator.pushNamed(context, AppRoutes.parentHomework),
@@ -386,7 +386,7 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
         SchoolDeskVisualSummaryRecord(
           title: 'Fee Dues',
           subtitle: feeDue,
-          value: feeDue == 'No pending dues' ? '₹0' : 'Due',
+          value: feeState,
           icon: Icons.account_balance_wallet_rounded,
           color: theme.colorScheme.secondary,
           onTap: () => Navigator.pushNamed(context, AppRoutes.parentFees),
@@ -570,34 +570,27 @@ class _ChildProfileCard extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     final name = _name(child, fallback: 'Student');
-    final classLabel = [
-      _text(child['class']),
-      _text(child['section']),
-    ].where((part) => part.isNotEmpty).join(' ');
+    final classLabel = _classLabel(child);
 
     return SchoolDeskSectionCard(
       title: name,
-      subtitle: classLabel.isEmpty ? 'Class not assigned' : classLabel,
+      subtitle: classLabel,
       child: Column(
         children: [
           _InfoRow(
             icon: Icons.badge_rounded,
             label: 'Roll / admission',
-            value: _text(child['rollNo']).isEmpty
-                ? 'Not available'
-                : _text(child['rollNo']),
+            value: _rollLabel(child),
           ),
           _InfoRow(
             icon: Icons.how_to_reg_rounded,
             label: 'Attendance',
-            value: _text(child['attendance']).isEmpty
-                ? 'Not available'
-                : _text(child['attendance']),
+            value: _attendanceLabel(child),
           ),
           _InfoRow(
             icon: Icons.assignment_turned_in_rounded,
             label: 'Homework due',
-            value: '${child['homeworkDue'] ?? 0}',
+            value: _homeworkDueLabel(child),
           ),
           _InfoRow(
             icon: Icons.account_balance_wallet_rounded,
@@ -607,9 +600,7 @@ class _ChildProfileCard extends StatelessWidget {
           _InfoRow(
             icon: Icons.person_rounded,
             label: 'Class teacher',
-            value: _text(child['classTeacher']).isEmpty
-                ? 'Not assigned'
-                : _text(child['classTeacher']),
+            value: _classTeacherLabel(child),
           ),
           SizedBox(height: tokens.spacing.sm),
           Align(
@@ -865,15 +856,94 @@ List<Map<String, dynamic>> _listMap(dynamic value) {
 }
 
 String _name(Map<String, dynamic> row, {required String fallback}) {
-  final name = _text(row['name']);
-  return name.isEmpty ? fallback : name;
+  for (final key in ['name', 'full_name', 'student_name']) {
+    final name = _text(row[key]);
+    if (name.isNotEmpty) return name;
+  }
+  final combined = [
+    _text(row['first_name']),
+    _text(row['last_name']),
+  ].where((part) => part.isNotEmpty).join(' ');
+  return combined.isEmpty ? fallback : combined;
+}
+
+String _classLabel(Map<String, dynamic> row) {
+  final grade = _firstText(row, ['class', 'class_name', 'grade_name']);
+  final section = _firstText(row, ['section', 'section_name']);
+  final label = [grade, section].where((part) => part.isNotEmpty).join(' ');
+  return label.isEmpty ? 'Class not assigned' : label;
+}
+
+String _rollLabel(Map<String, dynamic> row) {
+  final value = _firstText(row, [
+    'rollNo',
+    'roll_no',
+    'admission_no',
+    'student_code',
+  ]);
+  return value.isEmpty ? 'Not published' : value;
+}
+
+String _attendanceLabel(Map<String, dynamic> row) {
+  final raw = _firstExisting(row, [
+    'attendance',
+    'attendance_percentage',
+    'attendance_pct',
+  ]);
+  if (raw == null) return 'Not published';
+  if (raw is num) return '${raw.toStringAsFixed(0)}%';
+  final text = _text(raw);
+  return text.isEmpty ? 'Not published' : text;
+}
+
+String _homeworkDueLabel(Map<String, dynamic> row) {
+  final count = _homeworkDueCount(row);
+  return count == null ? 'Not published' : '$count';
+}
+
+int? _homeworkDueCount(Map<String, dynamic> row) {
+  final raw = _firstExisting(row, [
+    'homeworkDue',
+    'homework_due',
+    'pending_homework_count',
+  ]);
+  if (raw == null) return null;
+  if (raw is num) return raw.toInt();
+  return int.tryParse(_text(raw));
+}
+
+String _classTeacherLabel(Map<String, dynamic> row) {
+  final value = _firstText(row, [
+    'classTeacher',
+    'class_teacher',
+    'class_teacher_name',
+  ]);
+  return value.isEmpty ? 'Not published' : value;
 }
 
 String _feeDueLabel(Map<String, dynamic> child) {
+  final hasAmount = _hasExisting(child, 'pending_fee_balance');
+  final hasCount = _hasExisting(child, 'pending_invoices');
+  if (!hasAmount && !hasCount) return 'Not published';
   final amount = _numValue(child['pending_fee_balance']);
   final count = _intValue(child['pending_invoices']);
-  if (amount <= 0 || count <= 0) return 'No pending dues';
+  if (!hasAmount && count > 0) {
+    return '$count pending invoice${count == 1 ? '' : 's'}';
+  }
+  if (hasAmount && !hasCount) {
+    return amount <= 0
+        ? 'No pending dues'
+        : '₹${amount.toStringAsFixed(0)} due';
+  }
+  if (amount <= 0 && count <= 0) return 'No pending dues';
+  if (count <= 0) return '₹${amount.toStringAsFixed(0)} due';
   return '₹${amount.toStringAsFixed(0)} ($count invoice${count == 1 ? '' : 's'})';
+}
+
+String _feeStateLabel(Map<String, dynamic> child) {
+  final label = _feeDueLabel(child);
+  if (label == 'Not published') return 'Not published';
+  return label == 'No pending dues' ? 'Clear' : 'Due';
 }
 
 String _feeActionLabel(Map<String, dynamic> dashboard) {
@@ -892,6 +962,27 @@ double _numValue(dynamic value) {
 int _intValue(dynamic value) {
   if (value is num) return value.toInt();
   return int.tryParse('${value ?? ''}') ?? 0;
+}
+
+String _firstText(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    final text = _text(row[key]);
+    if (text.isNotEmpty) return text;
+  }
+  return '';
+}
+
+dynamic _firstExisting(Map<String, dynamic> row, List<String> keys) {
+  for (final key in keys) {
+    if (_hasExisting(row, key)) return row[key];
+  }
+  return null;
+}
+
+bool _hasExisting(Map<String, dynamic> row, String key) {
+  if (!row.containsKey(key) || row[key] == null) return false;
+  if (row[key] is String) return _text(row[key]).isNotEmpty;
+  return true;
 }
 
 String _initials(String name) {

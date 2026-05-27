@@ -36,30 +36,55 @@ void main() {
     expect(source, isNot(contains("c['date']")));
   });
 
-  test('fee monitoring mirrors admin read data without admin-only actions', () {
-    final source = File(
-      'lib/presentation/fee_monitoring_screen/fee_monitoring_screen.dart',
-    ).readAsStringSync();
+  test(
+    'fee monitoring exposes principal fee operations on backend contracts',
+    () {
+      final source = File(
+        'lib/presentation/fee_monitoring_screen/fee_monitoring_screen.dart',
+      ).readAsStringSync();
 
-    expect(source, contains('TabController(length: 5'));
-    expect(source, contains("Tab(text: 'Payments')"));
-    expect(
-      source,
-      contains('List<Map<String, dynamic>> _recentPayments = [];'),
-    );
-    expect(
-      source,
-      contains('feeStructures.map(_normalizeFeeStructure).toList()'),
-    );
-    expect(source, contains('studentFees.map(_normalizeInvoice).toList()'));
-    expect(source, contains('studentFees.expand(_normalizePayments).toList()'));
-    expect(
-      source,
-      contains('Payment recording and receipt generation are admin-managed'),
-    );
-    expect(source, isNot(contains('_showRecordPaymentDialog')));
-    expect(source, isNot(contains('_showGenerateInvoiceDialog')));
-  });
+      expect(source, contains('Fees Directory'));
+      expect(source, contains("String _selectedView = 'Student Fees'"));
+      expect(
+        source,
+        contains('List<Map<String, dynamic>> _recentPayments = [];'),
+      );
+      expect(
+        source,
+        contains('feeStructures.map(_normalizeFeeStructure).toList()'),
+      );
+      expect(source, contains('studentFees.map(_normalizeInvoice).toList()'));
+      expect(
+        source,
+        contains('studentFees.expand(_normalizePayments).toList()'),
+      );
+      expect(source, contains('PrincipalDirectoryScaffold'));
+      expect(source, contains('PrincipalDirectoryChip'));
+      expect(source, contains("createRaw('/fees/structures'"));
+      expect(source, contains("createRaw(\n        '/fees/invoices'"));
+      expect(source, contains('class _ManualFeeEntrySheet'));
+      expect(source, contains('class _PaymentEntryForm'));
+      expect(source, contains('Add Student Fee Entry'));
+      expect(source, contains("'discount_amount': _discount"));
+      expect(source, contains("'net_amount': _payable"));
+      expect(source, contains('Payment Received Now'));
+      expect(source, contains('Actual Fee'));
+      expect(source, contains('Discount Given'));
+      expect(source, contains('To Be Paid'));
+      expect(source, contains('Generate Records'));
+      expect(source, contains('BackendApiClient.instance.recordPayment'));
+      expect(source, contains('_printReceiptFromInvoice'));
+      expect(source, contains('Widget _buildDirectoryQuickActions()'));
+      expect(source, contains('Widget _buildDirectoryMetrics()'));
+      expect(source, contains('PrincipalDirectoryMetricStrip'));
+      expect(source, contains('for (final classValue in classes)'));
+      expect(source, contains('for (final status in _statusFilters)'));
+      expect(source, contains('PopupMenuButton<String>'));
+      expect(source, contains("tooltip: 'Fee options'"));
+      expect(source, contains('PrincipalInputPage'));
+      expect(source, contains('PrincipalDirectoryCard'));
+    },
+  );
 
   test(
     'fee monitoring class filters keep readable selected and unselected states',
@@ -68,13 +93,66 @@ void main() {
         'lib/presentation/fee_monitoring_screen/fee_monitoring_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Widget _buildClassFilterChip('));
-      expect(source, contains('selectedColor: AppTheme.primary'));
-      expect(source, contains('backgroundColor: AppTheme.surface'));
-      expect(source, contains('checkmarkColor: AppTheme.onPrimary'));
-      expect(source, contains('labelStyle: GoogleFonts.dmSans'));
+      expect(source, contains('PrincipalDirectoryChip'));
+      expect(source, contains('selected: _selectedClass == classValue'));
+      expect(source, contains('selected: _selectedStatus == status'));
+      expect(source, contains('setState(() => _selectedClass = classValue)'));
+      expect(source, contains('setState(() => _selectedStatus = status)'));
     },
   );
+
+  test('principal classes UI is HTML-backed and class APIs stay reusable', () {
+    final screenFile = File(
+      'lib/presentation/principal_classes_screen/principal_classes_screen.dart',
+    );
+    final screen = screenFile.readAsStringSync();
+    final client = File(
+      'lib/services/backend_api_client.dart',
+    ).readAsStringSync();
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
+
+    expect(screenFile.existsSync(), isTrue);
+    expect(screen, contains('Existing Classes'));
+    expect(screen, contains('Create New Class'));
+    expect(screen, contains('Classes Directory'));
+    expect(screen, contains('Approvals & Notes'));
+    expect(screen, contains('PrincipalPreviewBottomNav'));
+    expect(screen, contains('getPrincipalClassesOverview()'));
+    expect(client, contains('createPrincipalClass'));
+    expect(backendRoutes, contains('principal.POST("/classes"'));
+    expect(
+      backendRoutes,
+      contains('principal.GET("/classes", principalClassesHandler.Overview)'),
+    );
+  });
+
+  test('principal student module exposes backend summaries and web uploads', () {
+    final screen = File(
+      'lib/presentation/student_oversight_screen/student_oversight_screen.dart',
+    ).readAsStringSync();
+    final client = File(
+      'lib/services/backend_api_client.dart',
+    ).readAsStringSync();
+    final backend = File(
+      'school-backend/internal/handlers/student.go',
+    ).readAsStringSync();
+
+    expect(backend, contains('"attendance_summary"'));
+    expect(backend, contains('"fee_summary"'));
+    expect(backend, contains('"performance_summary"'));
+    expect(backend, contains('"parent_accounts"'));
+    expect(backend, contains('school_id = ? AND "+column+" = ?'));
+    expect(client, contains('Uint8List? fileBytes'));
+    expect(client, contains('MultipartFile.fromBytes'));
+    expect(client, contains('if ((admissionDate ?? \'\').trim().isNotEmpty)'));
+    expect(screen, contains('title: \'Parent / Guardian\''));
+    expect(screen, contains('title: \'Fee Position\''));
+    expect(screen, contains('title: \'Academic Performance\''));
+    expect(screen, contains('title: \'Documents\''));
+    expect(screen, contains('title: \'Medical Notes\''));
+    expect(screen, contains('share_plus.XFile.fromData'));
+    expect(screen, isNot(contains('Enter first and last name')));
+  });
 
   test('principal user management creates and manages linked staff accounts', () {
     final screen = File(
@@ -231,11 +309,367 @@ void main() {
     expect(dashboard, contains('banner_url'));
     expect(dashboard, contains('class _SchoolIdentityBanner'));
     expect(dashboard, contains('constraints.maxWidth < 370'));
-    expect(dashboard, contains('crossAxisCount: compact ? 2 : 3'));
-    expect(dashboard, contains('mainAxisExtent: compact ? 112 : 116'));
+    expect(dashboard, contains('final columns = compact ? 2 : 3'));
+    expect(dashboard, contains('crossAxisCount: columns'));
+    expect(dashboard, contains('final textScale = MediaQuery.textScalerOf'));
+    expect(dashboard, contains('final labelHeight ='));
+    expect(dashboard, contains('.toDouble()'));
+    expect(dashboard, contains('mainAxisExtent: tileExtent'));
+    expect(dashboard, contains('maxLines: 2'));
+    expect(dashboard, contains('SchoolDeskUiIllustrations.principalStudents'));
+    expect(dashboard, contains("label: 'Staff Management'"));
+    expect(dashboard, contains("label: 'Guardians'"));
+    expect(dashboard, contains("label: 'Class Hub'"));
+    expect(dashboard, contains('route: AppRoutes.principalClasses'));
+    expect(dashboard, contains("label: 'Attendance'"));
+    expect(dashboard, contains('route: AppRoutes.principalAttendance'));
+    expect(dashboard, contains("label: 'Subjects'"));
+    expect(dashboard, contains("label: 'Timetable'"));
+    expect(dashboard, contains("label: 'Exams'"));
+    expect(dashboard, contains("label: 'Results'"));
+    expect(dashboard, contains("label: 'Fees'"));
     expect(dashboard, contains('constraints.maxWidth < 340'));
     expect(dashboard, contains('SafeArea('));
     expect(dashboard, contains('height: 66'));
+
+    for (final asset in <String>[
+      'assets/images/ui/principal-students.svg',
+      'assets/images/ui/principal-staff-management.svg',
+      'assets/images/ui/principal-guardians.svg',
+      'assets/images/ui/principal-classes.svg',
+      'assets/images/ui/principal-subjects.svg',
+      'assets/images/ui/principal-timetable.svg',
+      'assets/images/ui/principal-exams.svg',
+      'assets/images/ui/principal-results.svg',
+      'assets/images/ui/principal-fees.svg',
+      'assets/images/ui/principal-events.svg',
+      'assets/images/ui/principal-inbox.svg',
+    ]) {
+      expect(File(asset).existsSync(), isTrue, reason: '$asset is missing');
+    }
+  });
+
+  test(
+    'principal academic cards include HTML-backed classes and attendance modules',
+    () {
+      final dashboard = File(
+        'lib/presentation/principal_dashboard_screen/principal_dashboard_screen.dart',
+      ).readAsStringSync();
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+
+      expect(dashboard, contains('AppRoutes.principalClasses'));
+      expect(routes, contains('static const String principalClasses'));
+      expect(routes, contains('PrincipalClassesScreen'));
+      expect(guard, contains("AppRoutes.principalClasses: {'principal'}"));
+
+      expect(
+        routes,
+        contains(
+          'principalTimetable: (context) => const PrincipalTimetableScreen()',
+        ),
+      );
+      expect(
+        routes,
+        contains('principalExams: (context) => const PrincipalExamsScreen()'),
+      );
+      expect(
+        routes,
+        contains(
+          'principalResults: (context) => const PrincipalResultsScreen()',
+        ),
+      );
+
+      expect(dashboard, contains('AppRoutes.principalAttendance'));
+      expect(routes, contains('static const String principalAttendance'));
+      expect(routes, contains('PrincipalAttendanceScreen'));
+      expect(guard, contains("AppRoutes.principalAttendance: {'principal'}"));
+
+      for (final route in <String>[
+        'principalTimetable',
+        'principalExams',
+        'principalResults',
+      ]) {
+        expect(dashboard, contains('AppRoutes.$route'));
+        expect(routes, contains('static const String $route'));
+        expect(guard, contains("AppRoutes.$route: {'principal'}"));
+      }
+
+      expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
+      expect(dashboard, contains('SchoolDeskUiIllustrations.principalFees'));
+      expect(dashboard, contains('route: AppRoutes.approvalCenter'));
+      expect(dashboard, contains('pendingApprovals'));
+    },
+  );
+
+  test(
+    'principal attendance UI uses directory workflow while backend remains wired',
+    () {
+      final screenFile = File(
+        'lib/presentation/principal_attendance_screen/principal_attendance_screen.dart',
+      );
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final client = File(
+        'lib/services/backend_api_client.dart',
+      ).readAsStringSync();
+      final backendRoutes = File('school-backend/main.go').readAsStringSync();
+
+      expect(screenFile.existsSync(), isTrue);
+      final screen = screenFile.readAsStringSync();
+      expect(screen, contains('Attendance Directory'));
+      expect(screen, contains('PrincipalDirectoryScaffold'));
+      expect(screen, contains('PrincipalDetailPage'));
+      expect(screen, contains('PrincipalInputPage'));
+      expect(screen, contains('Daily Staff QR'));
+      expect(screen, contains('Teacher / Staff Status'));
+      expect(screen, contains('Class-wise Students'));
+      expect(screen, contains('Attendance Reports'));
+      expect(screen, contains('Create Attendance Report'));
+      expect(screen, contains('QrImageView'));
+      expect(routes, contains('PrincipalAttendanceScreen'));
+      expect(routes, contains('principalAttendance'));
+      expect(client, contains('Future<List<AttendanceSessionModel>>'));
+      expect(client, contains('getStudentAttendanceRecords'));
+      expect(backendRoutes, contains('attendance.GET("/sessions"'));
+      expect(backendRoutes, contains('attendance.GET("/reports/exports"'));
+    },
+  );
+
+  test('principal staff and guardian compatibility routes match app calls', () {
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
+    final staffScreen = File(
+      'lib/presentation/staff_management_screen/staff_management_screen.dart',
+    ).readAsStringSync();
+    final guardianScreen = File(
+      'lib/presentation/guardian_directory_screen/guardian_directory_screen.dart',
+    ).readAsStringSync();
+
+    expect(staffScreen, contains("getRawList(\n        '/staff-subjects'"));
+    expect(guardianScreen, contains("getRawList(\n        '/guardians'"));
+    expect(
+      backendRoutes,
+      contains('staffSubjectsCompat := protected.Group("/staff-subjects")'),
+    );
+    expect(
+      backendRoutes,
+      contains('staffDocumentsCompat := protected.Group("/staff-documents")'),
+    );
+    expect(
+      backendRoutes,
+      contains('guardiansCompat := protected.Group("/guardians")'),
+    );
+  });
+
+  test('principal classes UI is routed and backend remains wired', () {
+    final screenFile = File(
+      'lib/presentation/principal_classes_screen/principal_classes_screen.dart',
+    );
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final client = File(
+      'lib/services/backend_api_client.dart',
+    ).readAsStringSync();
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
+    final backend = File(
+      'school-backend/internal/handlers/principal_classes.go',
+    ).readAsStringSync();
+
+    expect(screenFile.existsSync(), isTrue);
+    final screen = screenFile.readAsStringSync();
+    expect(screen, contains('PrincipalClassesScreen'));
+    expect(screen, contains('PrincipalPreviewBottomNav'));
+    expect(screen, contains('Create New Class'));
+    expect(screen, contains('Class Detail'));
+    expect(routes, contains('PrincipalClassesScreen'));
+    expect(routes, contains('principalClasses'));
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> getPrincipalClassesOverview'),
+    );
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> createPrincipalClass'),
+    );
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> createPrincipalClassInstruction'),
+    );
+    expect(
+      backendRoutes,
+      contains('principal.GET("/classes", principalClassesHandler.Overview)'),
+    );
+    expect(backendRoutes, contains('principal.POST("/classes",'));
+    expect(
+      backendRoutes,
+      contains('principal.POST("/classes/:section_id/instructions"'),
+    );
+    expect(backend, contains('const principalClassInstructionsResource'));
+    expect(backend, contains('type PrincipalClassesHandler struct{}'));
+    expect(backend, contains('"principal_role": "supervision"'));
+  });
+
+  test(
+    'principal class actions scope downstream screens by selected section',
+    () {
+      final students = File(
+        'lib/presentation/student_oversight_screen/student_oversight_screen.dart',
+      ).readAsStringSync();
+      final moduleScaffold = File(
+        'lib/widgets/erp_module_scaffold.dart',
+      ).readAsStringSync();
+
+      expect(students, contains('ModalRoute.of(context)?.settings.arguments'));
+      expect(students, contains("args['section_id'] ?? args['sectionId']"));
+      expect(
+        students,
+        contains(
+          'sectionId: _scopedSectionId.isEmpty ? null : _scopedSectionId',
+        ),
+      );
+      expect(moduleScaffold, contains("label: principal ? 'Inbox'"));
+      expect(moduleScaffold, contains('AppRoutes.approvalCenter'));
+    },
+  );
+
+  test('principal subjects screen is command-center supervision', () {
+    final screen = File(
+      'lib/presentation/principal_subjects_screen/principal_subjects_screen.dart',
+    ).readAsStringSync();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final client = File(
+      'lib/services/backend_api_client.dart',
+    ).readAsStringSync();
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
+    final backend = File(
+      'school-backend/internal/handlers/principal_subjects.go',
+    ).readAsStringSync();
+    final crud = File(
+      'school-backend/internal/handlers/crud.go',
+    ).readAsStringSync();
+
+    expect(routes, contains('PrincipalSubjectsScreen'));
+    expect(screen, contains('Subjects Directory'));
+    expect(screen, contains('Catalog, class mappings'));
+    expect(screen, contains('Create Subject'));
+    expect(screen, contains('Map Class / Teacher'));
+    expect(screen, contains('savePrincipalSubjectMapping'));
+    expect(screen, contains('PrincipalDirectoryScaffold'));
+    expect(screen, contains('PrincipalDirectoryCard'));
+    expect(screen, contains('PrincipalDetailPage'));
+    expect(screen, contains('PrincipalInputPage'));
+    expect(screen, contains('Mapped'));
+    expect(screen, contains('Classes Mapped'));
+    expect(screen, contains('Syllabus Pending'));
+    expect(screen, contains('Teacher Assignments'));
+    expect(screen, contains('Teacher Load'));
+    expect(screen, contains('Class / Grade'));
+    expect(screen, contains('teacher_class_coverage'));
+    expect(screen, contains('Map Subject to Class'));
+    expect(screen, contains('Subject-wise Topper List'));
+    expect(screen, contains('Weak Subject Detection'));
+    expect(screen, contains('Syllabus Completion Tracker'));
+    expect(screen, contains('Teacher Performance'));
+    expect(screen, contains('Homework Consistency'));
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> getPrincipalSubjectsOverview'),
+    );
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> savePrincipalSubjectMapping'),
+    );
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> createPrincipalSubjectAction'),
+    );
+    expect(
+      backendRoutes,
+      contains('principal.GET("/subjects", principalSubjectsHandler.Overview)'),
+    );
+    expect(
+      backendRoutes,
+      contains('principal.POST("/subjects/:subject_id/actions"'),
+    );
+    expect(
+      backendRoutes,
+      contains('principal.POST("/subjects/:subject_id/mappings"'),
+    );
+    expect(
+      backendRoutes,
+      contains('gradeSubjects := api.Group("/grade-subjects")'),
+    );
+    expect(backend, contains('type PrincipalSubjectsHandler struct{}'));
+    expect(backend, contains('"principal_role": "subject_supervision"'));
+    expect(backend, contains('upsertSubjectTeacherAssignment'));
+    expect(backend, contains('principalSubjectTeacherCoverageRows'));
+    expect(backend, contains('subjectTeacherCoverageAnalytics'));
+    expect(backend, contains('"section_name": teacher.SectionName'));
+    expect(crud, contains('validateGradeSubjectPolicy'));
+  });
+
+  test('principal timetable exams and results are command centers', () {
+    final screen = File(
+      'lib/presentation/principal_command_center_screens/principal_academic_command_screens.dart',
+    ).readAsStringSync();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final drawer = File('lib/widgets/app_navigation.dart').readAsStringSync();
+    final client = File(
+      'lib/services/backend_api_client.dart',
+    ).readAsStringSync();
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
+    final backend = File(
+      'school-backend/internal/handlers/principal_academic_command.go',
+    ).readAsStringSync();
+
+    expect(routes, contains('PrincipalTimetableScreen'));
+    expect(routes, contains('PrincipalExamsScreen'));
+    expect(routes, contains('PrincipalResultsScreen'));
+    expect(drawer, contains('route: AppRoutes.principalTimetable'));
+    expect(drawer, contains('route: AppRoutes.principalExams'));
+    expect(drawer, contains('route: AppRoutes.principalResults'));
+
+    expect(screen, contains('Timetable Command Center'));
+    expect(screen, contains('class _TimetableModePicker'));
+    expect(screen, contains('_TimetableMode.today'));
+    expect(screen, contains('Class-wise'));
+    expect(screen, contains('Teacher-wise'));
+    expect(screen, contains('Subject-wise'));
+    expect(screen, contains('Room-wise'));
+    expect(screen, contains('Conflict Alerts'));
+    expect(screen, contains('Ongoing Classes'));
+    expect(screen, contains('Emergency substitutions'));
+
+    expect(screen, contains('Exams Command Center'));
+    expect(screen, contains('Exam Dashboard'));
+    expect(screen, contains('Exam Creation'));
+    expect(screen, contains('Assign invigilators'));
+    expect(screen, contains('Monitoring Panel'));
+    expect(screen, contains('Evaluation Tracking'));
+
+    expect(screen, contains('Results Command Center'));
+    expect(screen, contains('Result Dashboard'));
+    expect(screen, contains('Toppers Section'));
+    expect(screen, contains('Weak Student Detection'));
+    expect(screen, contains('Export Options'));
+    expect(screen, contains('Generate improvement plans'));
+
+    expect(client, contains('getPrincipalTimetableOverview'));
+    expect(client, contains('createPrincipalTimetableAction'));
+    expect(client, contains('getPrincipalExamsOverview'));
+    expect(client, contains('createPrincipalExamAction'));
+    expect(client, contains('getPrincipalResultsOverview'));
+    expect(client, contains('createPrincipalResultAction'));
+
+    expect(backendRoutes, contains('principal.GET("/timetable"'));
+    expect(backendRoutes, contains('principal.GET("/exams"'));
+    expect(backendRoutes, contains('principal.GET("/results"'));
+    expect(backend, contains('principalTimetableActionsResource'));
+    expect(backend, contains('principalExamActionsResource'));
+    expect(backend, contains('principalResultActionsResource'));
+    expect(backend, contains('timetableConflictAlerts'));
+    expect(backend, contains('examEvaluationRows'));
+    expect(backend, contains('weakStudentRows'));
   });
 
   test('app uses controlled text scale instead of system display text scale', () {
@@ -295,6 +729,7 @@ void main() {
       final students = File(
         'lib/presentation/student_oversight_screen/student_oversight_screen.dart',
       ).readAsStringSync();
+      final backendRoutes = File('school-backend/main.go').readAsStringSync();
       final teachers = File(
         'lib/presentation/staff_management_screen/staff_management_screen.dart',
       ).readAsStringSync();
@@ -307,14 +742,26 @@ void main() {
       );
       expect(students, contains('Crop Student Photo'));
       expect(students, contains('_requiredFullName'));
-      expect(students, contains('BackendApiClient.instance.createStudent'));
+      expect(students, contains('client.createStudent('));
+      expect(students, contains('client.updateStudent('));
+      expect(students, contains('client.createUser('));
       expect(students, contains('setStudentParent'));
       expect(students, contains('uploadStudentPhoto'));
-      expect(teachers, contains('Crop Teacher Photo'));
+      expect(students, contains('uploadStudentDocument'));
+      expect(students, contains("createRaw('/fees/invoices/generate'"));
+      expect(students, contains("createRaw('/fees/concessions'"));
+      expect(
+        backendRoutes,
+        contains(
+          'fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin", "Principal")',
+        ),
+      );
+      expect(teachers, contains('Crop Staff Photo'));
       expect(teachers, contains('_requiredFullName'));
       expect(teachers, contains('_requiredPhone'));
       expect(teachers, contains('BackendApiClient.instance.createStaff'));
       expect(teachers, contains('uploadStaffPhoto'));
+      expect(teachers, contains('uploadStaffDocument'));
     },
   );
 
@@ -330,11 +777,16 @@ void main() {
     ).readAsStringSync();
 
     expect(students, contains('Student actions'));
+    expect(students, contains('Edit Student'));
     expect(students, contains('Remove Student'));
+    expect(students, contains('Edit Student Admission'));
     expect(
       students,
       contains('api.BackendApiClient.instance.deleteStudent(student.id)'),
     );
+    expect(client, contains('Future<void> updateStudent('));
+    expect(client, contains('Future<String> uploadStudentDocument'));
+    expect(backend, contains('UploadStudentDocument'));
     expect(students, contains('moved to inactive records'));
     expect(client, contains('Future<void> deleteStudent(String id)'));
     expect(backend, contains('Update("status", "inactive")'));
@@ -347,8 +799,13 @@ void main() {
     final teachers = File(
       'lib/presentation/staff_management_screen/staff_management_screen.dart',
     ).readAsStringSync();
+    final guardians = File(
+      'lib/presentation/guardian_directory_screen/guardian_directory_screen.dart',
+    ).readAsStringSync();
 
-    for (final source in [students, teachers]) {
+    for (final source in [students, teachers, guardians]) {
+      expect(source, contains('final chipRowHeight ='));
+      expect(source, contains('height: chipRowHeight'));
       expect(source, contains('class _ResponsiveFieldRow'));
       expect(source, contains('constraints.maxWidth < 330'));
       expect(source, contains('class _DetailRow'));

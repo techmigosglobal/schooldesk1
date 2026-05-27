@@ -44,9 +44,15 @@ class ApiConfig {
   }
 
   static String get legacyV1BaseUrl {
-    final root = baseUrl.endsWith('/api')
-        ? baseUrl.substring(0, baseUrl.length - 4)
-        : baseUrl;
+    return v1BaseUrlFrom(baseUrl);
+  }
+
+  static String v1BaseUrlFrom(String value) {
+    final clean = _withoutTrailingSlash(value);
+    if (clean.endsWith('/api/v1')) return clean;
+    final root = clean.endsWith('/api')
+        ? clean.substring(0, clean.length - 4)
+        : clean;
     return '$root/api/v1';
   }
 

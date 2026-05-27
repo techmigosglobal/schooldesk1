@@ -95,16 +95,19 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Map<String, dynamic> _mapHomeworkFromApi(Map<String, dynamic> h) {
     final dueDate = DateTime.tryParse('${h['due_date'] ?? ''}');
     final status = '${h['status'] ?? 'pending'}'.toLowerCase();
+    // Backend integration: subject and teacher labels should come from the
+    // homework API. Keep them empty here when absent; do not invent defaults.
     return {
       'id': h['id'],
       'title': h['title'] ?? '',
-      'subject': h['subject'] ?? 'General',
+      'subject': h['subject'] ?? h['subject_name'] ?? '',
       'class': h['class'] ?? h['class_name'] ?? '',
       'deadline': dueDate == null
           ? '${h['deadline'] ?? ''}'
           : '${dueDate.day}/${dueDate.month}/${dueDate.year}',
       'instructions': h['description'] ?? h['instructions'] ?? '',
-      'teacher': h['teacher_name'] ?? h['created_by'] ?? 'Teacher',
+      'teacher':
+          h['teacher_name'] ?? h['created_by_name'] ?? h['created_by'] ?? '',
       'status': status == 'submitted' || status == 'completed'
           ? 'submitted'
           : 'pending',
@@ -304,7 +307,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              'No homework here!',
+              'No homework published',
               style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
             ),
           ],
@@ -321,6 +324,18 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Widget _homeworkCard(Map<String, dynamic> hw) {
     final isPending = hw['status'] == 'pending';
     final isUrgent = hw['urgent'] == true;
+    final title = _text(
+      hw['title'],
+      fallback: 'Homework details not published',
+    );
+    final subject = _text(hw['subject']);
+    final deadline = _text(hw['deadline']);
+    final teacher = _text(hw['teacher']);
+    final instructions = _text(hw['instructions']);
+    final subtitleParts = <String>[
+      if (subject.isNotEmpty) subject,
+      if (deadline.isNotEmpty) 'Due: $deadline',
+    ];
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -357,7 +372,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           children: [
             Expanded(
               child: Text(
-                hw['title'],
+                title,
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -384,43 +399,52 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               ),
           ],
         ),
-        subtitle: Text(
-          '${hw['subject']} • Due: ${hw['deadline']}',
-          style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
-        ),
+        subtitle: subtitleParts.isEmpty
+            ? null
+            : Text(
+                subtitleParts.join(' • '),
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              ),
         children: [
           const Divider(height: 1),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(
-                Icons.person_outline_rounded,
-                size: 14,
-                color: AppTheme.muted,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Teacher: ${hw['teacher']}',
-                style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Instructions:',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          if (teacher.isNotEmpty) ...[
+            Row(
+              children: [
+                const Icon(
+                  Icons.person_outline_rounded,
+                  size: 14,
+                  color: AppTheme.muted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Teacher: $teacher',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: AppTheme.muted,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            hw['instructions'],
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+            const SizedBox(height: 8),
+          ],
+          if (instructions.isNotEmpty) ...[
+            Text(
+              'Instructions:',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
+            const SizedBox(height: 4),
+            Text(
+              instructions,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: AppTheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           if ('${hw['submission_status'] ?? ''}'.isNotEmpty) ...[
             const SizedBox(height: 10),
             _submissionStatusChip(hw),

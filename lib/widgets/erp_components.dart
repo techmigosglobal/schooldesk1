@@ -19,6 +19,18 @@ class SchoolDeskUiIllustrations {
   static const resources = 'assets/images/ui/illustration-resources.svg';
   static const lessonPlanner =
       'assets/images/ui/illustration-lesson-planner.svg';
+  static const principalStudents = 'assets/images/ui/principal-students.svg';
+  static const principalStaffManagement =
+      'assets/images/ui/principal-staff-management.svg';
+  static const principalGuardians = 'assets/images/ui/principal-guardians.svg';
+  static const principalClasses = 'assets/images/ui/principal-classes.svg';
+  static const principalSubjects = 'assets/images/ui/principal-subjects.svg';
+  static const principalTimetable = 'assets/images/ui/principal-timetable.svg';
+  static const principalExams = 'assets/images/ui/principal-exams.svg';
+  static const principalResults = 'assets/images/ui/principal-results.svg';
+  static const principalFees = 'assets/images/ui/principal-fees.svg';
+  static const principalEvents = 'assets/images/ui/principal-events.svg';
+  static const principalInbox = 'assets/images/ui/principal-inbox.svg';
 }
 
 class SchoolDeskSectionCard extends StatelessWidget {

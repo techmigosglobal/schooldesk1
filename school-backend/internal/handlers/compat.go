@@ -650,71 +650,28 @@ func (h *CompatibilityHandler) ListTimetable(c *gin.Context) {
 }
 
 func (h *CompatibilityHandler) CreateTimetable(c *gin.Context) {
-	var req struct {
-		ClassID   string `json:"class_id" binding:"required"`
-		SubjectID string `json:"subject_id" binding:"required"`
-		TeacherID string `json:"teacher_id" binding:"required"`
-		DayOfWeek int    `json:"day_of_week" binding:"required"`
-		StartTime string `json:"start_time"`
-		EndTime   string `json:"end_time"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, http.StatusBadRequest, err.Error())
-		return
-	}
-	yearID, termID := currentAcademicContext(scopedSchoolID(c))
-	slot := models.TimetableSlot{
-		SectionID:      req.ClassID,
-		AcademicYearID: yearID,
-		TermID:         termID,
-		SubjectID:      req.SubjectID,
-		StaffID:        req.TeacherID,
-		DayOfWeek:      req.DayOfWeek,
-		PeriodNumber:   1,
-		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
-		SlotType:       "regular",
-	}
-	if err := database.DB.Create(&slot).Error; err != nil {
-		fail(c, http.StatusInternalServerError, "Failed to create timetable")
-		return
-	}
-	auditAction(c, "timetable", "create", "timetable_slots", &slot.ID)
-	success(c, http.StatusCreated, slot, "Timetable created successfully")
+	c.JSON(http.StatusConflict, gin.H{
+		"error": "legacy timetable write routes are disabled",
+		"use":   "POST/PUT/DELETE /api/v1/timetable/slots instead",
+	})
 }
 
 func (h *CompatibilityHandler) PatchTimetable(c *gin.Context) {
-	var payload map[string]interface{}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		fail(c, http.StatusBadRequest, err.Error())
-		return
-	}
-	updates := map[string]interface{}{}
-	copyKey(payload, updates, "subject_id")
-	if value, ok := payload["teacher_id"]; ok {
-		updates["staff_id"] = value
-	}
-	copyKey(payload, updates, "day_of_week")
-	copyKey(payload, updates, "start_time")
-	copyKey(payload, updates, "end_time")
-	if err := database.DB.Model(&models.TimetableSlot{}).Where("id = ?", c.Param("id")).Updates(updates).Error; err != nil {
-		fail(c, http.StatusInternalServerError, "Failed to update timetable")
-		return
-	}
-	success(c, http.StatusOK, gin.H{"id": c.Param("id")}, "Timetable updated successfully")
+	c.JSON(http.StatusConflict, gin.H{
+		"error": "legacy timetable write routes are disabled",
+		"use":   "POST/PUT/DELETE /api/v1/timetable/slots instead",
+	})
 }
 
 func (h *CompatibilityHandler) DeleteTimetable(c *gin.Context) {
-	id := c.Param("id")
-	if err := database.DB.Delete(&models.TimetableSlot{}, "id = ?", id).Error; err != nil {
-		fail(c, http.StatusInternalServerError, "Failed to delete timetable")
-		return
-	}
-	auditAction(c, "timetable", "delete", "timetable_slots", &id)
-	success(c, http.StatusOK, gin.H{"id": id}, "Timetable deleted successfully")
+	c.JSON(http.StatusConflict, gin.H{
+		"error": "legacy timetable write routes are disabled",
+		"use":   "POST/PUT/DELETE /api/v1/timetable/slots instead",
+	})
 }
 
 func (h *CompatibilityHandler) BulkGrades(c *gin.Context) {
+	schoolID := currentSchoolID(c)
 	var req struct {
 		ExamScheduleID string `json:"exam_schedule_id"`
 		ScheduleID     string `json:"schedule_id"`
@@ -732,7 +689,13 @@ func (h *CompatibilityHandler) BulkGrades(c *gin.Context) {
 	}
 	scheduleID := firstNonEmpty(req.ExamScheduleID, req.ScheduleID, "compat-schedule")
 	created := make([]models.StudentMark, 0, len(req.Grades))
+	rejected := make([]gin.H, 0)
 	for _, row := range req.Grades {
+		enrollmentID := firstNonEmpty(row.EnrollmentID, lookupEnrollment(row.StudentID))
+		if !compatStudentEnrollmentInSchool(schoolID, row.StudentID, enrollmentID) {
+			rejected = append(rejected, gin.H{"student_id": row.StudentID, "reason": "not in school"})
+			continue
+		}
 		marks := row.MarksObtained
 		if marks == 0 {
 			marks = row.Marks
@@ -740,7 +703,7 @@ func (h *CompatibilityHandler) BulkGrades(c *gin.Context) {
 		mark := models.StudentMark{
 			ExamScheduleID: scheduleID,
 			StudentID:      row.StudentID,
-			EnrollmentID:   firstNonEmpty(row.EnrollmentID, lookupEnrollment(row.StudentID)),
+			EnrollmentID:   enrollmentID,
 			MarksObtained:  marks,
 			GradeLabel:     row.GradeLabel,
 		}
@@ -750,7 +713,11 @@ func (h *CompatibilityHandler) BulkGrades(c *gin.Context) {
 		}
 		created = append(created, mark)
 	}
-	success(c, http.StatusCreated, created, "Grades saved successfully")
+	success(c, http.StatusOK, gin.H{
+		"inserted": len(created),
+		"created":  created,
+		"rejected": rejected,
+	}, "Grades saved successfully")
 }
 
 func (h *CompatibilityHandler) GetGradesByStudent(c *gin.Context) {
@@ -759,9 +726,12 @@ func (h *CompatibilityHandler) GetGradesByStudent(c *gin.Context) {
 }
 
 func (h *CompatibilityHandler) GetGradesByClass(c *gin.Context) {
+	schoolID := currentSchoolID(c)
 	var marks []models.StudentMark
 	query := database.DB.Joins("JOIN enrollments ON enrollments.student_id = student_marks.student_id").
+		Joins("JOIN students s ON s.id = enrollments.student_id").
 		Where("enrollments.section_id = ?", c.Param("classId")).
+		Where("s.school_id = ?", schoolID).
 		Preload("ExamSchedule").Preload("Student")
 	if examType := c.Query("examType"); examType != "" {
 		query = query.Joins("JOIN exam_schedules ON exam_schedules.id = student_marks.exam_schedule_id JOIN exams ON exams.id = exam_schedules.exam_id JOIN exam_types ON exam_types.id = exams.exam_type_id").
@@ -775,6 +745,7 @@ func (h *CompatibilityHandler) GetGradesByClass(c *gin.Context) {
 }
 
 func (h *CompatibilityHandler) PatchGrade(c *gin.Context) {
+	schoolID := currentSchoolID(c)
 	var req struct {
 		MarksObtained float64 `json:"marks_obtained"`
 		Marks         float64 `json:"marks"`
@@ -793,11 +764,33 @@ func (h *CompatibilityHandler) PatchGrade(c *gin.Context) {
 	if req.GradeLabel != "" {
 		updates["grade_label"] = req.GradeLabel
 	}
+	var inSchool int64
+	if err := database.DB.Model(&models.StudentMark{}).
+		Joins("JOIN enrollments ON enrollments.id = student_marks.enrollment_id").
+		Joins("JOIN students ON students.id = enrollments.student_id").
+		Where("student_marks.id = ? AND student_marks.student_id = students.id AND students.school_id = ?", c.Param("id"), schoolID).
+		Count(&inSchool).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to verify grade ownership")
+		return
+	}
+	if inSchool == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "student not in your school"})
+		return
+	}
 	if err := database.DB.Model(&models.StudentMark{}).Where("id = ?", c.Param("id")).Updates(updates).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to update grade")
 		return
 	}
 	success(c, http.StatusOK, gin.H{"id": c.Param("id")}, "Grade updated successfully")
+}
+
+func compatStudentEnrollmentInSchool(schoolID, studentID, enrollmentID string) bool {
+	if strings.TrimSpace(schoolID) == "" || strings.TrimSpace(studentID) == "" || strings.TrimSpace(enrollmentID) == "" {
+		return false
+	}
+	return countRows(database.DB.Model(&models.Enrollment{}).
+		Joins("JOIN students ON students.id = enrollments.student_id").
+		Where("enrollments.id = ? AND enrollments.student_id = ? AND students.school_id = ?", enrollmentID, studentID, schoolID)) > 0
 }
 
 func (h *CompatibilityHandler) ListExamSchedules(c *gin.Context) {

@@ -30,7 +30,7 @@ func (h *HomeworkSubmissionHandler) List(c *gin.Context) {
 			fail(c, http.StatusForbidden, "Student access denied")
 			return
 		}
-		if !homeworkMatchesStudent(homework, studentID) {
+		if !homeworkRecordMatchesStudent(homework, studentID) {
 			fail(c, http.StatusForbidden, "Student is not assigned this homework")
 			return
 		}
@@ -85,7 +85,7 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 		fail(c, http.StatusForbidden, "Parent is not linked to this student")
 		return
 	}
-	if !homeworkMatchesStudent(homework, req.StudentID) {
+	if !homeworkRecordMatchesStudent(homework, req.StudentID) {
 		fail(c, http.StatusForbidden, "Student is not assigned this homework")
 		return
 	}
@@ -194,25 +194,20 @@ func (h *HomeworkSubmissionHandler) Review(c *gin.Context) {
 	success(c, http.StatusOK, row, "Homework submission reviewed")
 }
 
-func (h *HomeworkSubmissionHandler) loadAccessibleHomework(c *gin.Context) (models.Homework, bool) {
-	var homework models.Homework
-	if err := database.DB.First(
-		&homework,
-		"id = ? AND school_id = ?",
-		c.Param("id"),
-		scopedSchoolID(c),
-	).Error; err != nil {
+func (h *HomeworkSubmissionHandler) loadAccessibleHomework(c *gin.Context) (HomeworkRecord, bool) {
+	homework, err := loadHomeworkRecord(scopedSchoolID(c), c.Param("id"))
+	if err != nil {
 		fail(c, http.StatusNotFound, "Homework not found")
 		return homework, false
 	}
-	if !canAccessHomework(c, homework) {
+	if !canAccessHomeworkRecord(c, homework) {
 		fail(c, http.StatusForbidden, "Homework access denied")
 		return homework, false
 	}
 	return homework, true
 }
 
-func (h *HomeworkSubmissionHandler) scopedSubmissionQuery(c *gin.Context, homework models.Homework) *gorm.DB {
+func (h *HomeworkSubmissionHandler) scopedSubmissionQuery(c *gin.Context, homework HomeworkRecord) *gorm.DB {
 	query := database.DB.Model(&models.HomeworkSubmission{}).
 		Where("homework_submissions.school_id = ? AND homework_submissions.homework_id = ?", scopedSchoolID(c), homework.ID)
 	switch currentRole(c) {
@@ -229,8 +224,8 @@ func (h *HomeworkSubmissionHandler) scopedSubmissionQuery(c *gin.Context, homewo
 	}
 }
 
-func (h *HomeworkSubmissionHandler) submissionSummary(homework models.Homework) gin.H {
-	total := homeworkStudentCount(homework)
+func (h *HomeworkSubmissionHandler) submissionSummary(homework HomeworkRecord) gin.H {
+	total := homeworkRecordStudentCount(homework)
 	var submitted int64
 	database.DB.Model(&models.HomeworkSubmission{}).
 		Where("school_id = ? AND homework_id = ?", homework.SchoolID, homework.ID).
@@ -244,76 +239,6 @@ func (h *HomeworkSubmissionHandler) submissionSummary(homework models.Homework) 
 		"submitted": submitted,
 		"pending":   pending,
 	}
-}
-
-func canAccessHomework(c *gin.Context, homework models.Homework) bool {
-	if homework.SchoolID != scopedSchoolID(c) {
-		return false
-	}
-	switch currentRole(c) {
-	case "admin", "principal":
-		return true
-	case "teacher":
-		staffID := currentStaffID(c)
-		if staffID == "" {
-			return false
-		}
-		if strings.TrimSpace(homework.TeacherID) == staffID {
-			return true
-		}
-		if strings.TrimSpace(homework.SectionID) != "" && canAccessSection(c, homework.SectionID) {
-			return true
-		}
-		return strings.TrimSpace(homework.StudentID) != "" && canAccessStudent(c, homework.StudentID)
-	case "parent":
-		if strings.TrimSpace(homework.StudentID) != "" && canAccessStudent(c, homework.StudentID) {
-			return true
-		}
-		return strings.TrimSpace(homework.SectionID) != "" && canAccessSection(c, homework.SectionID)
-	default:
-		return false
-	}
-}
-
-func homeworkMatchesStudent(homework models.Homework, studentID string) bool {
-	studentID = strings.TrimSpace(studentID)
-	if studentID == "" {
-		return false
-	}
-	if strings.TrimSpace(homework.StudentID) != "" {
-		return strings.TrimSpace(homework.StudentID) == studentID
-	}
-	sectionID := strings.TrimSpace(homework.SectionID)
-	if sectionID == "" {
-		return true
-	}
-	return studentInSection(homework.SchoolID, studentID, sectionID)
-}
-
-func homeworkStudentCount(homework models.Homework) int64 {
-	if strings.TrimSpace(homework.StudentID) != "" {
-		return 1
-	}
-	sectionID := strings.TrimSpace(homework.SectionID)
-	if sectionID == "" {
-		return 0
-	}
-	var total int64
-	database.DB.Model(&models.Student{}).
-		Where("students.school_id = ?", homework.SchoolID).
-		Where(`
-		(
-			students.current_section_id = ?
-			OR EXISTS (
-				SELECT 1 FROM enrollments
-				WHERE enrollments.student_id = students.id
-					AND enrollments.section_id = ?
-			)
-		)
-	`, sectionID, sectionID).
-		Distinct("students.id").
-		Count(&total)
-	return total
 }
 
 func studentInSection(schoolID, studentID, sectionID string) bool {
@@ -333,7 +258,6 @@ func studentInSection(schoolID, studentID, sectionID string) bool {
 
 func preloadHomeworkSubmissionDetails(query *gorm.DB) *gorm.DB {
 	return query.
-		Preload("Homework").
 		Preload("Student").
 		Preload("ParentUser").
 		Preload("Reviewer")

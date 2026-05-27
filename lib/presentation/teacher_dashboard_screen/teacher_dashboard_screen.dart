@@ -38,6 +38,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   double _attendancePct = 0;
   int _attendancePresent = 0;
   int _attendanceMarked = 0;
+  StaffAttendanceModel? _myAttendance;
   List<Map<String, dynamic>> _timetable = const [];
   List<AnnouncementModel> _announcements = const [];
 
@@ -63,6 +64,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final results = await Future.wait([
         api.getDashboard('teacher'),
         api.getAnnouncements(),
+        _loadMyAttendanceSafely(api),
       ]);
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
       final metrics = Map<String, dynamic>.from(
@@ -86,6 +88,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _attendancePct = _doubleValue(attendance['attendance_pct']);
         _attendancePresent = _intValue(attendance['present']);
         _attendanceMarked = _intValue(attendance['marked']);
+        _myAttendance = results[2] as StaffAttendanceModel?;
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
             .toList();
@@ -97,6 +100,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _error = 'Unable to load teacher dashboard from backend.';
         _loading = false;
       });
+    }
+  }
+
+  Future<StaffAttendanceModel?> _loadMyAttendanceSafely(
+    BackendApiClient api,
+  ) async {
+    try {
+      return await api.getMyStaffAttendanceToday();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -141,16 +154,16 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           label: 'Home',
           icon: Icons.home_outlined,
           activeIcon: Icons.home_rounded,
-          route: AppRoutes.initial,
+          route: AppRoutes.teacherDashboard,
         ),
         SchoolDeskModuleBottomAction(
-          label: 'Classes',
-          icon: Icons.class_outlined,
-          activeIcon: Icons.class_rounded,
-          route: AppRoutes.teacherClasses,
+          label: 'Scan',
+          icon: Icons.qr_code_scanner_outlined,
+          activeIcon: Icons.qr_code_scanner_rounded,
+          route: AppRoutes.teacherMyAttendance,
         ),
         SchoolDeskModuleBottomAction(
-          label: 'Attend',
+          label: 'Students',
           icon: Icons.how_to_reg_outlined,
           activeIcon: Icons.how_to_reg_rounded,
           route: AppRoutes.teacherAttendance,
@@ -203,6 +216,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         attendancePct: _attendancePct,
         attendancePresent: _attendancePresent,
         attendanceMarked: _attendanceMarked,
+        myAttendance: _myAttendance,
         timetable: _timetable,
         announcements: _announcements,
       );
@@ -243,6 +257,7 @@ class _TeacherDashboardContent extends StatelessWidget {
   final double attendancePct;
   final int attendancePresent;
   final int attendanceMarked;
+  final StaffAttendanceModel? myAttendance;
   final List<Map<String, dynamic>> timetable;
   final List<AnnouncementModel> announcements;
 
@@ -258,6 +273,7 @@ class _TeacherDashboardContent extends StatelessWidget {
     required this.attendancePct,
     required this.attendancePresent,
     required this.attendanceMarked,
+    required this.myAttendance,
     required this.timetable,
     required this.announcements,
   });
@@ -281,6 +297,7 @@ class _TeacherDashboardContent extends StatelessWidget {
         attendancePct: attendancePct,
         attendancePresent: attendancePresent,
         attendanceMarked: attendanceMarked,
+        myAttendance: myAttendance,
         timetable: timetable,
         teacherColor: teacherColor,
       );
@@ -296,9 +313,15 @@ class _TeacherDashboardContent extends StatelessWidget {
           actions: [
             FilledButton.icon(
               onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.teacherMyAttendance),
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+              label: const Text('Scan QR'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () =>
                   Navigator.pushNamed(context, AppRoutes.teacherAttendance),
               icon: const Icon(Icons.how_to_reg_rounded, size: 18),
-              label: const Text('Mark attendance'),
+              label: const Text('Student Attendance'),
             ),
             OutlinedButton.icon(
               onPressed: () =>
@@ -314,6 +337,21 @@ class _TeacherDashboardContent extends StatelessWidget {
           minTileWidth: 210,
           mainAxisExtent: 118,
           children: [
+            SchoolDeskKpiCard(
+              title: 'My Attendance',
+              value: myAttendance?.checkedIn == true
+                  ? myAttendance!.checkInTimeLabel
+                  : 'Scan',
+              subtitle: myAttendance?.checkedIn == true
+                  ? 'Checked in'
+                  : 'Pending check-in',
+              icon: Icons.qr_code_scanner_rounded,
+              color: myAttendance?.checkedIn == true
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFD97706),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.teacherMyAttendance),
+            ),
             SchoolDeskKpiCard(
               title: 'My class',
               value: assignedClass,
@@ -340,7 +378,7 @@ class _TeacherDashboardContent extends StatelessWidget {
                   Navigator.pushNamed(context, AppRoutes.teacherClasses),
             ),
             SchoolDeskKpiCard(
-              title: 'Attendance',
+              title: 'Student Attendance',
               value: '${attendancePct.toStringAsFixed(0)}%',
               subtitle: '$attendancePresent/$attendanceMarked marked',
               icon: Icons.how_to_reg_rounded,
@@ -423,6 +461,7 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
   final double attendancePct;
   final int attendancePresent;
   final int attendanceMarked;
+  final StaffAttendanceModel? myAttendance;
   final List<Map<String, dynamic>> timetable;
   final Color teacherColor;
 
@@ -437,6 +476,7 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
     required this.attendancePct,
     required this.attendancePresent,
     required this.attendanceMarked,
+    required this.myAttendance,
     required this.timetable,
     required this.teacherColor,
   });
@@ -447,7 +487,21 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
     final tokens = theme.schoolDesk;
     final nextClass = timetable.isEmpty ? null : timetable.first;
     final pendingTasks = homeworkDue + unreadMessages;
+    final checkedIn = myAttendance?.checkedIn == true;
+    final myAttendanceValue = checkedIn
+        ? myAttendance!.checkInTimeLabel
+        : 'Scan';
+    final myAttendanceColor = checkedIn
+        ? const Color(0xFF16A34A)
+        : const Color(0xFFD97706);
     final actions = [
+      _TeacherVisualActionSpec(
+        label: 'Scan QR',
+        value: myAttendanceValue,
+        illustrationAsset: SchoolDeskUiIllustrations.attendance,
+        color: const Color(0xFF2563EB),
+        route: AppRoutes.teacherMyAttendance,
+      ),
       _TeacherVisualActionSpec(
         label: 'Routine',
         value: '${timetable.length}',
@@ -456,7 +510,7 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
         route: AppRoutes.teacherClasses,
       ),
       _TeacherVisualActionSpec(
-        label: 'Attendance',
+        label: 'Students',
         value: '${attendancePct.toStringAsFixed(0)}%',
         illustrationAsset: SchoolDeskUiIllustrations.attendance,
         color: theme.colorScheme.secondary,
@@ -475,20 +529,6 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
         illustrationAsset: SchoolDeskUiIllustrations.chat,
         color: theme.colorScheme.primary,
         route: AppRoutes.teacherCommunication,
-      ),
-      _TeacherVisualActionSpec(
-        label: 'Resources',
-        value: 'Open',
-        illustrationAsset: SchoolDeskUiIllustrations.resources,
-        color: teacherColor,
-        route: AppRoutes.teacherResources,
-      ),
-      _TeacherVisualActionSpec(
-        label: 'Planner',
-        value: '$leaveBalance',
-        illustrationAsset: SchoolDeskUiIllustrations.lessonPlanner,
-        color: theme.colorScheme.secondary,
-        route: AppRoutes.teacherLessonPlanner,
       ),
     ];
 
@@ -509,6 +549,18 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.sm),
         SchoolDeskVisualSummaryRecord(
+          title: 'My Attendance',
+          subtitle: checkedIn ? 'Checked in' : 'Pending check-in',
+          value: myAttendanceValue,
+          icon: checkedIn
+              ? Icons.check_circle_rounded
+              : Icons.qr_code_scanner_rounded,
+          color: myAttendanceColor,
+          onTap: () =>
+              Navigator.pushNamed(context, AppRoutes.teacherMyAttendance),
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        SchoolDeskVisualSummaryRecord(
           title: 'Pending Tasks',
           subtitle:
               '$homeworkDue homework, $unreadMessages messages, $homeworkTotal total',
@@ -521,7 +573,7 @@ class _TeacherMobileWireframeDashboard extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.sm),
         SchoolDeskVisualSummaryRecord(
-          title: 'Attendance',
+          title: 'Student Attendance',
           subtitle: '$attendancePresent/$attendanceMarked marked',
           value: '${attendancePct.toStringAsFixed(0)}%',
           icon: Icons.how_to_reg_rounded,
@@ -656,8 +708,15 @@ class _TeacherQuickActions extends StatelessWidget {
     final theme = Theme.of(context);
     final actions = [
       _TeacherAction(
-        'Take attendance',
-        'Mark today',
+        'Scan QR',
+        'My check-in',
+        SchoolDeskUiIllustrations.attendance,
+        AppRoutes.teacherMyAttendance,
+        const Color(0xFF2563EB),
+      ),
+      _TeacherAction(
+        'Student Attendance',
+        'Mark class',
         SchoolDeskUiIllustrations.attendance,
         AppRoutes.teacherAttendance,
         theme.colorScheme.secondary,
@@ -670,18 +729,32 @@ class _TeacherQuickActions extends StatelessWidget {
         teacherColor,
       ),
       _TeacherAction(
-        'Class communication',
+        'Messages',
         'Parents and notices',
         SchoolDeskUiIllustrations.chat,
         AppRoutes.teacherCommunication,
         theme.colorScheme.primary,
       ),
       _TeacherAction(
-        'Lesson planner',
-        'Plan classes',
+        'Diary',
+        'Class notes',
         SchoolDeskUiIllustrations.lessonPlanner,
-        AppRoutes.teacherLessonPlanner,
-        teacherColor,
+        AppRoutes.teacherDiary,
+        const Color(0xFF0E9384),
+      ),
+      _TeacherAction(
+        'Leave',
+        'Requests',
+        SchoolDeskUiIllustrations.calendar,
+        AppRoutes.teacherLeave,
+        const Color(0xFFD97706),
+      ),
+      _TeacherAction(
+        'Reports',
+        'Class data',
+        SchoolDeskUiIllustrations.resources,
+        AppRoutes.teacherReports,
+        const Color(0xFF475569),
       ),
     ];
 

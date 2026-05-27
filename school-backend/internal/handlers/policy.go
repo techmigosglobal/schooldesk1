@@ -129,8 +129,13 @@ func canAccessSection(c *gin.Context, sectionID string) bool {
 					WHERE timetable_slots.section_id = sections.id
 						AND timetable_slots.staff_id = ?
 				)
+				OR EXISTS (
+					SELECT 1 FROM staff_subjects
+					WHERE staff_subjects.section_id = sections.id
+						AND staff_subjects.staff_id = ?
+				)
 			)
-			`, staffID, staffID)) > 0
+			`, staffID, staffID, staffID)) > 0
 	case "parent":
 		return countRows(database.DB.Model(&models.ParentStudentLink{}).
 			Joins("JOIN students ON students.id = parent_student_links.student_id").
@@ -176,8 +181,13 @@ func canAccessGrade(c *gin.Context, gradeID string) bool {
 					WHERE timetable_slots.section_id = sections.id
 						AND timetable_slots.staff_id = ?
 				)
+				OR EXISTS (
+					SELECT 1 FROM staff_subjects
+					WHERE staff_subjects.grade_id = sections.grade_id
+						AND staff_subjects.staff_id = ?
+				)
 			)
-			`, staffID, staffID)) > 0
+			`, staffID, staffID, staffID)) > 0
 	case "parent":
 		return countRows(database.DB.Model(&models.ParentStudentLink{}).
 			Joins("JOIN students ON students.id = parent_student_links.student_id").
@@ -230,15 +240,20 @@ func canTeachSectionSubject(c *gin.Context, staffID, sectionID, subjectID, timet
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("sections.id = ? AND grades.school_id = ?", sectionID, schoolID).
 		Where(`
-		(
-			sections.class_teacher_id = ?
-			OR EXISTS (
-				SELECT 1 FROM timetable_slots
-				WHERE timetable_slots.section_id = sections.id
-					AND timetable_slots.staff_id = ?
+			(
+				sections.class_teacher_id = ?
+				OR EXISTS (
+					SELECT 1 FROM timetable_slots
+					WHERE timetable_slots.section_id = sections.id
+						AND timetable_slots.staff_id = ?
+				)
+				OR EXISTS (
+					SELECT 1 FROM staff_subjects
+					WHERE staff_subjects.section_id = sections.id
+						AND staff_subjects.staff_id = ?
+				)
 			)
-		)
-	`, staffID, staffID)) > 0
+	`, staffID, staffID, staffID)) > 0
 	if !sectionOwned {
 		return false
 	}
@@ -258,6 +273,11 @@ func canTeachSectionSubject(c *gin.Context, staffID, sectionID, subjectID, timet
 				WHERE staff_subjects.grade_id = sections.grade_id
 					AND staff_subjects.staff_id = ?
 					AND staff_subjects.subject_id = ?
+					AND (
+						staff_subjects.section_id IS NULL
+						OR staff_subjects.section_id = ''
+						OR staff_subjects.section_id = sections.id
+					)
 			)
 		)
 	`, staffID, subjectID, staffID, subjectID)) > 0
@@ -345,15 +365,20 @@ func teacherSectionSubquery(staffID, schoolID string) *gorm.DB {
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", schoolID).
 		Where(`
-		(
-			sections.class_teacher_id = ?
-			OR EXISTS (
-				SELECT 1 FROM timetable_slots
-				WHERE timetable_slots.section_id = sections.id
-					AND timetable_slots.staff_id = ?
+			(
+				sections.class_teacher_id = ?
+				OR EXISTS (
+					SELECT 1 FROM timetable_slots
+					WHERE timetable_slots.section_id = sections.id
+						AND timetable_slots.staff_id = ?
+				)
+				OR EXISTS (
+					SELECT 1 FROM staff_subjects
+					WHERE staff_subjects.section_id = sections.id
+						AND staff_subjects.staff_id = ?
+				)
 			)
-		)
-	`, staffID, staffID)
+	`, staffID, staffID, staffID)
 }
 
 func countRows(query *gorm.DB) int64 {

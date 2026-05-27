@@ -1,8 +1,14 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	cryptoRand "crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +23,30 @@ type AttendanceHandler struct{}
 
 func NewAttendanceHandler() *AttendanceHandler {
 	return &AttendanceHandler{}
+}
+
+const staffQRRefreshSeconds = 60
+
+var (
+	errInvalidStaffQRToken = errors.New("invalid staff qr token")
+	errExpiredStaffQRToken = errors.New("expired staff qr token")
+)
+
+type staffQRPayload struct {
+	SchoolID  string `json:"school_id"`
+	Date      string `json:"date"`
+	IssuedAt  int64  `json:"issued_at"`
+	ExpiresAt int64  `json:"expires_at"`
+	Nonce     string `json:"nonce"`
+}
+
+type staffQRTokenResponse struct {
+	Token               string    `json:"token"`
+	SchoolDate          string    `json:"school_date"`
+	IssuedAt            time.Time `json:"issued_at"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	ServerTime          time.Time `json:"server_time"`
+	RefreshAfterSeconds int       `json:"refresh_after_seconds"`
 }
 
 func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
@@ -222,6 +252,187 @@ func combineDateAndClock(date time.Time, clock string) (time.Time, error) {
 	), nil
 }
 
+func staffAttendanceLocation() *time.Location {
+	location, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		return time.UTC
+	}
+	return location
+}
+
+func staffAttendanceDate(now time.Time) (time.Time, string) {
+	dateText := now.In(staffAttendanceLocation()).Format("2006-01-02")
+	date, _ := time.Parse("2006-01-02", dateText)
+	return date, dateText
+}
+
+func staffAttendanceDayRange(date time.Time) (time.Time, time.Time) {
+	start := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+	return start, start.AddDate(0, 0, 1)
+}
+
+func staffQRSecret() []byte {
+	secret := strings.TrimSpace(os.Getenv("STAFF_QR_SECRET"))
+	if secret == "" {
+		secret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	}
+	if secret == "" {
+		secret = "dev-staff-qr-secret-change-me"
+	}
+	return []byte(secret)
+}
+
+func randomStaffQRNonce() (string, error) {
+	bytes := make([]byte, 12)
+	if _, err := cryptoRand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+func signStaffQRPayload(encodedPayload string) string {
+	mac := hmac.New(sha256.New, staffQRSecret())
+	mac.Write([]byte(encodedPayload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func newStaffQRToken(schoolID string, now time.Time) (string, staffQRPayload, error) {
+	_, dateText := staffAttendanceDate(now)
+	nonce, err := randomStaffQRNonce()
+	if err != nil {
+		return "", staffQRPayload{}, err
+	}
+	payload := staffQRPayload{
+		SchoolID:  schoolID,
+		Date:      dateText,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(time.Duration(staffQRRefreshSeconds) * time.Second).Unix(),
+		Nonce:     nonce,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", staffQRPayload{}, err
+	}
+	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
+	token := encodedPayload + "." + signStaffQRPayload(encodedPayload)
+	return token, payload, nil
+}
+
+func verifyStaffQRToken(token string, now time.Time) (staffQRPayload, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	expected := signStaffQRPayload(parts[0])
+	expectedBytes, err := base64.RawURLEncoding.DecodeString(expected)
+	if err != nil {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	actualBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	if !hmac.Equal(actualBytes, expectedBytes) {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	var payload staffQRPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	if payload.SchoolID == "" || payload.Date == "" || payload.IssuedAt == 0 || payload.ExpiresAt == 0 || payload.Nonce == "" {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	if _, err := time.Parse("2006-01-02", payload.Date); err != nil {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	if now.Unix() > payload.ExpiresAt {
+		return staffQRPayload{}, errExpiredStaffQRToken
+	}
+	if payload.IssuedAt > now.Add(2*time.Minute).Unix() || payload.ExpiresAt <= payload.IssuedAt {
+		return staffQRPayload{}, errInvalidStaffQRToken
+	}
+	return payload, nil
+}
+
+func attendanceStringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func upsertStaffAttendance(
+	tx *gorm.DB,
+	staffID string,
+	date time.Time,
+	status string,
+	checkIn *time.Time,
+	checkOut *time.Time,
+	source string,
+	biometricID string,
+	markedBy *string,
+) (models.StaffAttendance, bool, error) {
+	start, end := staffAttendanceDayRange(date)
+	status = strings.ToLower(strings.TrimSpace(status))
+	source = strings.ToLower(strings.TrimSpace(source))
+	biometricID = strings.TrimSpace(biometricID)
+
+	var attendance models.StaffAttendance
+	err := tx.Where("staff_id = ? AND date >= ? AND date < ?", staffID, start, end).First(&attendance).Error
+	if err == nil {
+		if status != "" {
+			attendance.Status = status
+		}
+		if checkIn != nil && attendance.CheckIn == nil {
+			attendance.CheckIn = checkIn
+		}
+		if checkOut != nil {
+			attendance.CheckOut = checkOut
+		}
+		if source != "" {
+			attendance.Source = source
+		}
+		if biometricID != "" {
+			attendance.BiometricID = biometricID
+		}
+		if markedBy != nil {
+			attendance.MarkedBy = markedBy
+			attendance.ApprovedBy = markedBy
+		}
+		if err := tx.Save(&attendance).Error; err != nil {
+			return attendance, false, err
+		}
+		return attendance, false, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return attendance, false, err
+	}
+
+	attendance = models.StaffAttendance{
+		StaffID:     staffID,
+		Date:        start,
+		CheckIn:     checkIn,
+		CheckOut:    checkOut,
+		Status:      status,
+		BiometricID: biometricID,
+		Source:      source,
+		MarkedBy:    markedBy,
+		ApprovedBy:  markedBy,
+	}
+	if attendance.Source == "" {
+		attendance.Source = "manual"
+	}
+	if err := tx.Create(&attendance).Error; err != nil {
+		return attendance, false, err
+	}
+	return attendance, true, nil
+}
+
 func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
 	studentID := c.Query("student_id")
 	yearID := c.Query("academic_year_id")
@@ -268,6 +479,15 @@ func (h *AttendanceHandler) MarkStaffAttendance(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if !validAttendanceStatus(req.Status) {
+		fail(c, http.StatusBadRequest, "Invalid attendance status")
+		return
+	}
+	schoolID := scopedSchoolID(c)
+	if schoolID != "" && !staffBelongsToSchool(req.StaffID, schoolID) {
+		fail(c, http.StatusForbidden, "staff access denied")
+		return
+	}
 
 	// Parse date
 	date, err := time.Parse("2006-01-02", req.Date)
@@ -276,34 +496,40 @@ func (h *AttendanceHandler) MarkStaffAttendance(c *gin.Context) {
 		return
 	}
 
-	attendance := models.StaffAttendance{
-		StaffID:     req.StaffID,
-		Date:        date,
-		Status:      req.Status,
-		BiometricID: req.BiometricID,
-	}
-
+	var checkIn *time.Time
 	// Parse check_in if provided
 	if req.CheckIn != "" {
-		checkIn, err := combineDateAndClock(date, req.CheckIn)
+		parsed, err := combineDateAndClock(date, req.CheckIn)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check_in format. Use HH:MM:SS"})
 			return
 		}
-		attendance.CheckIn = &checkIn
+		checkIn = &parsed
 	}
 
+	var checkOut *time.Time
 	// Parse check_out if provided
 	if req.CheckOut != "" {
-		checkOut, err := combineDateAndClock(date, req.CheckOut)
+		parsed, err := combineDateAndClock(date, req.CheckOut)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid check_out format. Use HH:MM:SS"})
 			return
 		}
-		attendance.CheckOut = &checkOut
+		checkOut = &parsed
 	}
 
-	if err := database.DB.Create(&attendance).Error; err != nil {
+	attendance, _, err := upsertStaffAttendance(
+		database.DB,
+		req.StaffID,
+		date,
+		req.Status,
+		checkIn,
+		checkOut,
+		"manual",
+		req.BiometricID,
+		attendanceStringPtr(currentUserID(c)),
+	)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark attendance"})
 		return
 	}
@@ -311,4 +537,167 @@ func (h *AttendanceHandler) MarkStaffAttendance(c *gin.Context) {
 	id := attendance.ID
 	auditAction(c, "attendance", "create", "staff_attendances", &id)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: attendance})
+}
+
+func (h *AttendanceHandler) GetStaffQRToken(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	if schoolID == "" {
+		fail(c, http.StatusForbidden, "school scope required")
+		return
+	}
+	now := time.Now().UTC()
+	token, payload, err := newStaffQRToken(schoolID, now)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to create staff QR token")
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Data: staffQRTokenResponse{
+			Token:               token,
+			SchoolDate:          payload.Date,
+			IssuedAt:            time.Unix(payload.IssuedAt, 0).UTC(),
+			ExpiresAt:           time.Unix(payload.ExpiresAt, 0).UTC(),
+			ServerTime:          now,
+			RefreshAfterSeconds: staffQRRefreshSeconds,
+		},
+	})
+}
+
+func (h *AttendanceHandler) ScanStaffQR(c *gin.Context) {
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	payload, err := verifyStaffQRToken(strings.TrimSpace(req.Token), time.Now().UTC())
+	if err != nil {
+		if errors.Is(err, errExpiredStaffQRToken) {
+			fail(c, http.StatusBadRequest, "QR code expired")
+			return
+		}
+		fail(c, http.StatusBadRequest, "Invalid QR code")
+		return
+	}
+
+	schoolID := scopedSchoolID(c)
+	if schoolID == "" || payload.SchoolID != schoolID {
+		fail(c, http.StatusForbidden, "QR code is not valid for this school")
+		return
+	}
+	staffID := currentStaffID(c)
+	if staffID == "" {
+		fail(c, http.StatusForbidden, "teacher account is not linked to a staff profile")
+		return
+	}
+	if !staffBelongsToSchool(staffID, schoolID) {
+		fail(c, http.StatusForbidden, "staff access denied")
+		return
+	}
+	date, err := time.Parse("2006-01-02", payload.Date)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "Invalid QR date")
+		return
+	}
+
+	now := time.Now().UTC()
+	attendance, created, err := upsertStaffAttendance(
+		database.DB,
+		staffID,
+		date,
+		"present",
+		&now,
+		nil,
+		"qr",
+		"qr:"+payload.Nonce,
+		attendanceStringPtr(currentUserID(c)),
+	)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to record staff attendance")
+		return
+	}
+	message := "Staff attendance recorded"
+	if !created {
+		message = "Staff attendance already recorded"
+	}
+	id := attendance.ID
+	auditAction(c, "attendance", "create", "staff_attendances", &id)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: message, Data: attendance})
+}
+
+func (h *AttendanceHandler) GetMyStaffAttendanceToday(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	if schoolID == "" {
+		fail(c, http.StatusForbidden, "school scope required")
+		return
+	}
+	staffID := currentStaffID(c)
+	if staffID == "" {
+		fail(c, http.StatusForbidden, "teacher account is not linked to a staff profile")
+		return
+	}
+	if !staffBelongsToSchool(staffID, schoolID) {
+		fail(c, http.StatusForbidden, "staff access denied")
+		return
+	}
+	date, dateText := staffAttendanceDate(time.Now().UTC())
+	start, end := staffAttendanceDayRange(date)
+	var attendance models.StaffAttendance
+	err := database.DB.Preload("Staff").
+		Where("staff_id = ? AND date >= ? AND date < ?", staffID, start, end).
+		First(&attendance).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{
+			"checked_in":  false,
+			"school_date": dateText,
+			"attendance":  nil,
+		}})
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load staff attendance")
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{
+		"checked_in":  attendance.CheckIn != nil,
+		"school_date": dateText,
+		"attendance":  attendance,
+	}})
+}
+
+func (h *AttendanceHandler) ListStaffAttendance(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	if schoolID == "" {
+		fail(c, http.StatusForbidden, "school scope required")
+		return
+	}
+	dateText := strings.TrimSpace(c.Query("date"))
+	var date time.Time
+	var err error
+	if dateText == "" {
+		date, dateText = staffAttendanceDate(time.Now().UTC())
+	} else {
+		date, err = time.Parse("2006-01-02", dateText)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+			return
+		}
+	}
+	start, end := staffAttendanceDayRange(date)
+	var attendances []models.StaffAttendance
+	if err := database.DB.Model(&models.StaffAttendance{}).
+		Joins("JOIN staffs ON staffs.id = staff_attendances.staff_id").
+		Where("staffs.school_id = ? AND staff_attendances.date >= ? AND staff_attendances.date < ?", schoolID, start, end).
+		Preload("Staff").
+		Order("staff_attendances.check_in DESC, staff_attendances.updated_at DESC").
+		Find(&attendances).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load staff attendance")
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{
+		"date":        dateText,
+		"attendances": attendances,
+	}})
 }

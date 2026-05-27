@@ -8,6 +8,7 @@ import '../../widgets/admin_navigation.dart';
 import '../../widgets/dashboard_fab_widget.dart';
 import '../../widgets/erp_components.dart';
 import '../../widgets/erp_module_scaffold.dart';
+import '../../widgets/operations_workspace.dart';
 
 @immutable
 class AdminFeeStructureFormArgs {
@@ -554,32 +555,31 @@ class _AdminInvoiceGenerationFormScreenState
                 }),
         ),
         const SizedBox(height: 12),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(
+        OpsModeSelector<String>(
+          selected: _scope,
+          enabled: !_generating,
+          options: const [
+            OpsModeOption(
               value: 'class',
-              icon: Icon(Icons.groups_rounded),
-              label: Text('Class'),
+              icon: Icons.groups_rounded,
+              label: 'Class',
             ),
-            ButtonSegment(
+            OpsModeOption(
               value: 'section',
-              icon: Icon(Icons.group_work_rounded),
-              label: Text('Section'),
+              icon: Icons.group_work_rounded,
+              label: 'Section',
             ),
-            ButtonSegment(
+            OpsModeOption(
               value: 'student',
-              icon: Icon(Icons.person_rounded),
-              label: Text('Student'),
+              icon: Icons.person_rounded,
+              label: 'Student',
             ),
           ],
-          selected: {_scope},
-          onSelectionChanged: _generating
-              ? null
-              : (values) => setState(() {
-                  _scope = values.first;
-                  _selectedSectionId = '';
-                  _selectedStudentId = '';
-                }),
+          onSelected: (value) => setState(() {
+            _scope = value;
+            _selectedSectionId = '';
+            _selectedStudentId = '';
+          }),
         ),
         if (_scope == 'section' || _scope == 'student') ...[
           const SizedBox(height: 12),

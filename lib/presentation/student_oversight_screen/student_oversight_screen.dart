@@ -1,18 +1,25 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart' as share_plus;
 
 import '../../core/config/env_config.dart';
 import '../../core/utils/image_cropper_helper.dart';
 import '../../services/backend_api_client.dart' as api;
+import '../../services/pdf_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_navigation.dart';
 import '../../widgets/empty_state_widget.dart';
 
 class StudentModel {
   final String id;
+  final String systemId;
   final String name;
   final String rollNumber;
   final String classSection;
@@ -21,13 +28,31 @@ class StudentModel {
   final String status;
   final String photoUrl;
   final String dateOfBirth;
+  final String admissionDate;
   final String gender;
   final String guardianName;
   final String guardianPhone;
   final String avatarInitials;
+  final double attendancePercent;
+  final String attendanceStatusLabel;
+  final double feeTotal;
+  final double feeDiscount;
+  final double feePaid;
+  final double feeBalance;
+  final int pendingInvoices;
+  final int overdueInvoices;
+  final String feeStatus;
+  final double performanceScore;
+  final String performanceGrade;
+  final int weakSubjects;
+  final int marksCount;
+  final List<Map<String, dynamic>> documents;
+  final List<Map<String, dynamic>> parentAccounts;
+  final Map<String, dynamic> medicalRecord;
 
   const StudentModel({
     required this.id,
+    required this.systemId,
     required this.name,
     required this.rollNumber,
     required this.classSection,
@@ -36,33 +61,64 @@ class StudentModel {
     required this.status,
     required this.photoUrl,
     required this.dateOfBirth,
+    required this.admissionDate,
     required this.gender,
     required this.guardianName,
     required this.guardianPhone,
     required this.avatarInitials,
+    required this.attendancePercent,
+    required this.attendanceStatusLabel,
+    required this.feeTotal,
+    required this.feeDiscount,
+    required this.feePaid,
+    required this.feeBalance,
+    required this.pendingInvoices,
+    required this.overdueInvoices,
+    required this.feeStatus,
+    required this.performanceScore,
+    required this.performanceGrade,
+    required this.weakSubjects,
+    required this.marksCount,
+    required this.documents,
+    required this.parentAccounts,
+    required this.medicalRecord,
   });
 
   String get directoryStatusLabel {
+    final attendance = attendanceStatusLabel.trim();
+    if (attendance.isNotEmpty) return attendance;
     switch (status.toLowerCase().trim()) {
       case 'inactive':
       case 'withdrawn':
-        return 'Absent';
+        return 'Inactive';
       case 'pending':
       case 'transfer':
       case 'transferred':
-        return 'Late';
+        return 'Pending';
       case 'active':
       default:
-        return 'Present';
+        return 'Not marked';
     }
   }
 
-  bool get hasAttendanceAlert => directoryStatusLabel != 'Present';
-  bool get hasFeeAlert => false;
-  double get attendancePercent => directoryStatusLabel == 'Present' ? 100 : 0;
-  String get feeStatus => 'N/A';
-  String get performanceGrade => 'N/A';
-  double get performanceScore => 0;
+  bool get hasAttendanceAlert =>
+      attendancePercent > 0 && attendancePercent < 75 ||
+      directoryStatusLabel == 'Absent' ||
+      directoryStatusLabel == 'Needs attention';
+  bool get hasFeeAlert => feeBalance > 0 || pendingInvoices > 0;
+  String get feeStatusLabel {
+    switch (feeStatus.toLowerCase().trim()) {
+      case 'overdue':
+        return 'Overdue';
+      case 'pending':
+        return 'Pending';
+      default:
+        return 'Clear';
+    }
+  }
+
+  bool get hasPerformanceAlert =>
+      marksCount > 0 && (performanceScore < 40 || weakSubjects > 0);
 }
 
 class StudentOversightScreen extends StatefulWidget {
@@ -79,27 +135,49 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   final List<StudentModel> _allStudents = [];
   final List<StudentModel> _filteredStudents = [];
   final ScrollController _scrollController = ScrollController();
+  final Set<String> _selectedStudentIds = <String>{};
 
   List<StudentModel> _displayedStudents = [];
   List<String> _classOptions = const ['All'];
   List<api.SectionModel> _sections = const [];
   List<api.GradeModel> _grades = const [];
+  List<api.AcademicYearModel> _academicYears = const [];
+  List<Map<String, dynamic>> _feeStructures = const [];
   List<api.UserAccountModel> _parents = const [];
 
   String _searchQuery = '';
   String _selectedClass = 'All';
   String _selectedStatus = 'All';
+  String _scopedSectionId = '';
+  String _scopedClassName = '';
+  bool _routeContextRead = false;
+  bool _dataLoadStarted = false;
+  bool _scopedClassFilterApplied = false;
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
   String? _loadError;
   int _currentPage = 0;
 
+  bool get _selectionMode => _selectedStudentIds.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
-    _loadData();
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_routeContextRead) {
+      _routeContextRead = true;
+      _readRouteScope();
+    }
+    if (!_dataLoadStarted) {
+      _dataLoadStarted = true;
+      _loadData();
+    }
   }
 
   @override
@@ -115,6 +193,17 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
   }
 
+  void _readRouteScope() {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+    _scopedSectionId = _argumentText(
+      args['section_id'] ?? args['sectionId'] ?? args['class_section_id'],
+    );
+    _scopedClassName = _argumentText(args['class_name'] ?? args['className']);
+  }
+
+  String _argumentText(Object? value) => value?.toString().trim() ?? '';
+
   Future<void> _loadData() async {
     setState(() {
       _loading = true;
@@ -126,6 +215,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       var page = 1;
       while (true) {
         final res = await api.BackendApiClient.instance.getStudents(
+          sectionId: _scopedSectionId.isEmpty ? null : _scopedSectionId,
           page: page,
           pageSize: 100,
         );
@@ -136,6 +226,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
       final sections = await api.BackendApiClient.instance.getSections();
       final grades = await api.BackendApiClient.instance.getGrades();
+      final academicYears = await api.BackendApiClient.instance
+          .getAcademicYears();
+      final feeStructures = await api.BackendApiClient.instance
+          .getFeeStructures();
       final parents = await _loadParentAccounts();
       final sectionMap = {for (final s in sections) s.id: s};
       final gradeMap = {for (final g in grades) g.id: g};
@@ -150,11 +244,20 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               .toSet()
               .toList()
             ..sort();
+      final classOptions = ['All', ...classes];
+      final scopedClassLabel = _routeClassFilterLabel(sectionMap, gradeMap);
+      if (scopedClassLabel.isNotEmpty &&
+          scopedClassLabel != 'Class not assigned' &&
+          !classOptions.contains(scopedClassLabel)) {
+        classOptions.insert(1, scopedClassLabel);
+      }
 
       if (!mounted) return;
       setState(() {
         _sections = sections;
         _grades = grades;
+        _academicYears = academicYears;
+        _feeStructures = feeStructures;
         _parents = parents;
         _allStudents
           ..clear()
@@ -162,8 +265,13 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _filteredStudents
           ..clear()
           ..addAll(loaded);
-        _classOptions = ['All', ...classes];
-        if (!_classOptions.contains(_selectedClass)) {
+        _classOptions = classOptions;
+        if (!_scopedClassFilterApplied &&
+            scopedClassLabel.isNotEmpty &&
+            scopedClassLabel != 'Class not assigned') {
+          _selectedClass = scopedClassLabel;
+          _scopedClassFilterApplied = true;
+        } else if (!_classOptions.contains(_selectedClass)) {
           _selectedClass = 'All';
         }
         _applyFilters(resetState: false);
@@ -176,6 +284,24 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _loadError = error.toString();
       });
     }
+  }
+
+  String _routeClassFilterLabel(
+    Map<String, api.SectionModel> sectionMap,
+    Map<String, api.GradeModel> gradeMap,
+  ) {
+    if (_scopedSectionId.isNotEmpty) {
+      final section = sectionMap[_scopedSectionId];
+      if (section != null) {
+        final grade = gradeMap[section.gradeId];
+        final gradeName = _gradeLabel(grade, section);
+        if (gradeName.isNotEmpty) {
+          return 'Class $gradeName / Section ${section.sectionName}';
+        }
+        return 'Section ${section.sectionName}';
+      }
+    }
+    return _scopedClassName;
   }
 
   Future<List<api.UserAccountModel>> _loadParentAccounts() async {
@@ -216,6 +342,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
     return StudentModel(
       id: student.id,
+      systemId: student.studentCode.trim(),
       name: name,
       rollNumber: student.admissionNumber.trim().isNotEmpty
           ? student.admissionNumber.trim()
@@ -226,11 +353,49 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       status: student.status,
       photoUrl: student.photoUrl,
       dateOfBirth: student.dateOfBirth ?? '',
+      admissionDate: student.admissionDate ?? '',
       gender: student.gender ?? '',
-      guardianName: 'Not assigned',
-      guardianPhone: '-',
+      guardianName: student.primaryGuardianName.isEmpty
+          ? 'Not assigned'
+          : student.primaryGuardianName,
+      guardianPhone: student.primaryGuardianPhone.isEmpty
+          ? '-'
+          : student.primaryGuardianPhone,
       avatarInitials: _extractInitials(name),
+      attendancePercent: student.attendancePercent,
+      attendanceStatusLabel: student.attendanceStatusLabel,
+      feeTotal: _doubleFromMap(student.feeSummary, 'total_amount'),
+      feeDiscount: _doubleFromMap(student.feeSummary, 'discount_amount'),
+      feePaid: _doubleFromMap(student.feeSummary, 'paid_amount'),
+      feeBalance: student.feeBalance,
+      pendingInvoices: student.pendingInvoices,
+      overdueInvoices: _intFromMap(student.feeSummary, 'overdue_invoices'),
+      feeStatus: student.feeStatus,
+      performanceScore: student.performanceScore,
+      performanceGrade: student.performanceGrade.isEmpty
+          ? 'N/A'
+          : student.performanceGrade,
+      weakSubjects: _intFromMap(student.performanceSummary, 'weak_subjects'),
+      marksCount: _intFromMap(student.performanceSummary, 'marks_count'),
+      documents: List<Map<String, dynamic>>.unmodifiable(student.documents),
+      parentAccounts: List<Map<String, dynamic>>.unmodifiable(
+        student.parentAccounts,
+      ),
+      medicalRecord: Map<String, dynamic>.unmodifiable(student.medicalRecord),
     );
+  }
+
+  static double _doubleFromMap(Map<String, dynamic> map, String key) {
+    final value = map[key];
+    if (value is num) return value.toDouble();
+    return double.tryParse('${value ?? ''}') ?? 0;
+  }
+
+  static int _intFromMap(Map<String, dynamic> map, String key) {
+    final value = map[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? 0;
   }
 
   String _gradeLabel(api.GradeModel? grade, api.SectionModel? section) {
@@ -240,6 +405,30 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     if (sectionGradeName.isNotEmpty) return sectionGradeName;
     final number = grade?.gradeNumber ?? 0;
     return number > 0 ? number.toString() : '';
+  }
+
+  api.SectionModel? _sectionById(String sectionId) {
+    for (final section in _sections) {
+      if (section.id == sectionId) return section;
+    }
+    return null;
+  }
+
+  String _sectionLabelForId(String sectionId) {
+    final section = _sectionById(sectionId);
+    if (section == null) return 'Class not assigned';
+    api.GradeModel? grade;
+    for (final item in _grades) {
+      if (item.id == section.gradeId) {
+        grade = item;
+        break;
+      }
+    }
+    final gradeName = _gradeLabel(grade, section);
+    if (gradeName.isNotEmpty) {
+      return 'Class $gradeName / Section ${section.sectionName}';
+    }
+    return 'Section ${section.sectionName}';
   }
 
   String _extractInitials(String name) {
@@ -306,19 +495,97 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     });
   }
 
+  void _toggleStudentSelection(StudentModel student) {
+    setState(() {
+      if (_selectedStudentIds.contains(student.id)) {
+        _selectedStudentIds.remove(student.id);
+      } else {
+        _selectedStudentIds.add(student.id);
+      }
+    });
+  }
+
+  void _clearStudentSelection() {
+    setState(_selectedStudentIds.clear);
+  }
+
+  void _selectAllDisplayedStudents() {
+    setState(() {
+      _selectedStudentIds
+        ..clear()
+        ..addAll(_displayedStudents.map((student) => student.id));
+    });
+  }
+
+  Future<void> _deleteSelectedStudents() async {
+    final selected = _allStudents
+        .where((student) => _selectedStudentIds.contains(student.id))
+        .toList();
+    if (selected.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove selected students'),
+        content: Text(
+          'Move ${selected.length} selected student${selected.length == 1 ? '' : 's'} to inactive records?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    var removed = 0;
+    final failures = <String>[];
+    for (final student in selected) {
+      try {
+        await api.BackendApiClient.instance.deleteStudent(student.id);
+        removed++;
+      } catch (error) {
+        failures.add(student.name);
+      }
+    }
+    if (!mounted) return;
+    _selectedStudentIds.clear();
+    await _loadData();
+    if (!mounted) return;
+    final message = failures.isEmpty
+        ? '$removed student${removed == 1 ? '' : 's'} removed'
+        : '$removed removed, ${failures.length} failed';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: failures.isEmpty ? AppTheme.success : AppTheme.warning,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _background,
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'add-student',
-        onPressed: _openAddStudentForm,
-        backgroundColor: const Color(0xFF0887F2),
-        foregroundColor: Colors.white,
-        elevation: 8,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded, size: 30),
-      ),
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton(
+              heroTag: 'add-student',
+              onPressed: _openAddStudentForm,
+              backgroundColor: const Color(0xFF0887F2),
+              foregroundColor: Colors.white,
+              elevation: 8,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add_rounded, size: 30),
+            ),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _loadData,
@@ -375,7 +642,11 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                         child: _StudentDirectoryCard(
                           student: student,
                           imageUrl: _absoluteImageUrl(student.photoUrl),
-                          onTap: () => _openStudentDetail(student),
+                          selected: _selectedStudentIds.contains(student.id),
+                          onTap: () => _selectionMode
+                              ? _toggleStudentSelection(student)
+                              : _openStudentDetail(student),
+                          onLongPress: () => _toggleStudentSelection(student),
                         ),
                       );
                     },
@@ -389,6 +660,46 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    if (_selectionMode) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: _clearStudentSelection,
+                icon: const Icon(Icons.close_rounded, size: 22),
+                tooltip: 'Clear selection',
+              ),
+              Expanded(
+                child: Text(
+                  '${_selectedStudentIds.length} selected',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF1A2A33),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _selectAllDisplayedStudents,
+                icon: const Icon(Icons.select_all_rounded, size: 22),
+                tooltip: 'Select visible',
+              ),
+              IconButton(
+                onPressed: _deleteSelectedStudents,
+                icon: const Icon(Icons.delete_outline_rounded, size: 22),
+                color: AppTheme.error,
+                tooltip: 'Remove selected',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
       child: ConstrainedBox(
@@ -431,6 +742,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   Widget _buildSearchAndFilters() {
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final chipRowHeight = (34.0 * textScale).clamp(38.0, 56.0).toDouble();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 4, 22, 4),
       child: Column(
@@ -444,7 +758,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           ),
           const SizedBox(height: 14),
           SizedBox(
-            height: 34,
+            height: chipRowHeight,
             child: ListView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
@@ -461,7 +775,6 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 const SizedBox(width: 8),
                 ..._classOptions
                     .where((value) => value != 'All')
-                    .take(4)
                     .map(
                       (value) => Padding(
                         padding: const EdgeInsets.only(right: 8),
@@ -475,7 +788,13 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                         ),
                       ),
                     ),
-                ...['Present', 'Absent', 'Late'].map(
+                ...[
+                  'Present',
+                  'Absent',
+                  'Late',
+                  'Not marked',
+                  'Needs attention',
+                ].map(
                   (value) => Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: _DirectoryChip(
@@ -537,27 +856,57 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   }
 
   Future<void> _requestStudentReportExport(String format) async {
+    final normalizedFormat = format.trim().toLowerCase();
+    final students = List<StudentModel>.unmodifiable(_filteredStudents);
+    if (students.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No students available for export'),
+          backgroundColor: AppTheme.warning,
+        ),
+      );
+      return;
+    }
+
     try {
-      final export = await api.BackendApiClient.instance.createReportExport(
-        '/student-reports/exports',
-        reportTitle: 'Student directory',
-        format: format,
-        scope: 'principal',
-        parameters: {
-          'source_screen': 'student_oversight',
-          'class': _selectedClass,
-          'status': _selectedStatus,
-          'search': _searchQuery,
-          'filtered_count': _filteredStudents.length,
-          'total_count': _allStudents.length,
-        },
+      await _recordStudentReportExport(normalizedFormat, students.length);
+      if (normalizedFormat == 'pdf') {
+        final pdfService = PdfService.getInstance();
+        final bytes = await pdfService.generateStudentDirectoryReport(
+          title: 'Student Directory',
+          generatedAt: DateTime.now(),
+          filters: _studentReportFilters(students.length),
+          students: students.map(_studentReportRow).toList(),
+        );
+        if (!mounted) return;
+        await pdfService.previewDocument(context, bytes, 'Student Directory');
+        return;
+      }
+
+      final fileName =
+          'student_directory_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final bytes = Uint8List.fromList(
+        utf8.encode(_buildStudentDirectoryCsv(students)),
+      );
+      await share_plus.SharePlus.instance.share(
+        share_plus.ShareParams(
+          title: 'Student Directory CSV',
+          subject: 'Student Directory CSV',
+          text: 'Student directory export generated from SchoolDesk.',
+          files: [
+            share_plus.XFile.fromData(
+              bytes,
+              mimeType: 'text/csv',
+              name: fileName,
+            ),
+          ],
+          fileNameOverrides: [fileName],
+        ),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Student directory export ${export['status'] ?? 'requested'}',
-          ),
+        const SnackBar(
+          content: Text('Student directory CSV generated'),
           backgroundColor: AppTheme.success,
         ),
       );
@@ -572,20 +921,116 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
   }
 
+  Future<void> _recordStudentReportExport(
+    String format,
+    int filteredCount,
+  ) async {
+    try {
+      await api.BackendApiClient.instance.createReportExport(
+        '/student-reports/exports',
+        reportTitle: 'Student directory',
+        format: format,
+        scope: 'principal',
+        parameters: {
+          'source_screen': 'student_oversight',
+          'class': _selectedClass,
+          'status': _selectedStatus,
+          'search': _searchQuery,
+          'filtered_count': filteredCount,
+          'total_count': _allStudents.length,
+        },
+      );
+    } catch (_) {
+      // The generated file is the user-facing export; backend audit is best-effort.
+    }
+  }
+
+  Map<String, String> _studentReportFilters(int filteredCount) {
+    return {
+      'Class': _selectedClass == 'All' ? 'All classes' : _selectedClass,
+      'Status': _selectedStatus == 'All' ? 'All statuses' : _selectedStatus,
+      'Search': _searchQuery.trim().isEmpty ? 'None' : _searchQuery.trim(),
+      'Rows': '$filteredCount of ${_allStudents.length}',
+    };
+  }
+
+  Map<String, String> _studentReportRow(StudentModel student) {
+    return {
+      'name': student.name,
+      'admission': student.rollNumber,
+      'systemId': student.systemId,
+      'classSection': student.classSection,
+      'gender': _formatStudentGender(student.gender),
+      'dateOfBirth': student.dateOfBirth.isEmpty
+          ? 'Not available'
+          : _formatStudentDate(student.dateOfBirth),
+      'status': student.directoryStatusLabel,
+      'guardian': student.guardianName.isEmpty
+          ? 'Not available'
+          : student.guardianName,
+      'guardianPhone': student.guardianPhone.isEmpty
+          ? 'Not available'
+          : student.guardianPhone,
+    };
+  }
+
+  String _buildStudentDirectoryCsv(List<StudentModel> students) {
+    final rows = <List<String>>[
+      [
+        'Name',
+        'Admission / Roll',
+        'System ID',
+        'Class / Section',
+        'Gender',
+        'Date of Birth',
+        'Status',
+        'Guardian',
+        'Guardian Phone',
+      ],
+      ...students.map((student) {
+        final row = _studentReportRow(student);
+        return [
+          row['name'] ?? '',
+          row['admission'] ?? '',
+          row['systemId'] ?? '',
+          row['classSection'] ?? '',
+          row['gender'] ?? '',
+          row['dateOfBirth'] ?? '',
+          row['status'] ?? '',
+          row['guardian'] ?? '',
+          row['guardianPhone'] ?? '',
+        ];
+      }),
+    ];
+    return rows.map((row) => row.map(_csvCell).join(',')).join('\n');
+  }
+
+  String _csvCell(String value) {
+    final escaped = value.replaceAll('"', '""');
+    if (escaped.contains(',') ||
+        escaped.contains('\n') ||
+        escaped.contains('"')) {
+      return '"$escaped"';
+    }
+    return escaped;
+  }
+
   Future<void> _openAddStudentForm() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _AddStudentPhotoFormPage(
           sections: _sections,
           grades: _grades,
+          academicYears: _academicYears,
+          feeStructures: _feeStructures,
           parents: _parents,
-          onSubmit: _createStudentFromForm,
+          onSubmit: _saveStudentFromForm,
         ),
       ),
     );
   }
 
-  Future<void> _createStudentFromForm(_AddStudentInput input) async {
+  Future<void> _saveStudentFromForm(_AddStudentInput input) async {
     final parts = input.studentName
         .trim()
         .split(RegExp(r'\s+'))
@@ -594,56 +1039,194 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final firstName = parts.isEmpty ? input.studentName.trim() : parts.first;
     final lastName = parts.length > 1 ? parts.skip(1).join(' ') : '';
 
-    final student = await api.BackendApiClient.instance.createStudent(
-      firstName: firstName,
-      lastName: lastName,
-      dateOfBirth: input.backendDateOfBirth,
-      gender: input.gender.toLowerCase(),
-      admissionNumber: input.admissionNumber,
-      studentCode: input.systemId,
-      currentSectionId: input.sectionId,
-      admissionDate: _backendDate(DateTime.now()),
-      status: 'active',
-    );
+    final client = api.BackendApiClient.instance;
+    final studentId = input.studentId;
+    late final String savedStudentId;
+    if (studentId == null || studentId.isEmpty) {
+      final student = await client.createStudent(
+        firstName: firstName,
+        lastName: lastName,
+        dateOfBirth: input.backendDateOfBirth,
+        gender: input.gender.toLowerCase(),
+        admissionNumber: input.admissionNumber,
+        studentCode: input.systemId,
+        currentSectionId: input.sectionId,
+        admissionDate: _backendDate(DateTime.now()),
+        status: 'active',
+      );
+      savedStudentId = student.id;
+    } else {
+      await client.updateStudent(
+        studentId,
+        firstName: firstName,
+        lastName: lastName,
+        dateOfBirth: input.backendDateOfBirth,
+        gender: input.gender.toLowerCase(),
+        admissionNumber: input.admissionNumber,
+        studentCode: input.systemId,
+        currentSectionId: input.sectionId,
+        status: 'active',
+      );
+      savedStudentId = studentId;
+    }
 
-    if ((input.parentUserId ?? '').isNotEmpty) {
-      await api.BackendApiClient.instance.setStudentParent(
-        studentId: student.id,
-        parentUserId: input.parentUserId,
+    var parentUserId = input.parentUserId;
+    if (input.shouldCreateParentLogin) {
+      final parent = await client.createUser(
+        username: input.parentUsername.trim(),
+        password: input.parentPassword.trim(),
+        role: 'Parent',
+        fullName: input.parentName.trim(),
+        email: input.parentEmail.trim(),
+        phone: input.parentPhone.trim(),
+        isActive: true,
+      );
+      parentUserId = parent.id;
+    }
+
+    if ((parentUserId ?? '').isNotEmpty) {
+      await client.setStudentParent(
+        studentId: savedStudentId,
+        parentUserId: parentUserId,
       );
     }
 
-    if ((input.photoPath ?? '').isNotEmpty) {
-      await api.BackendApiClient.instance.uploadStudentPhoto(
-        studentId: student.id,
-        filePath: input.photoPath!,
+    if ((input.photoPath ?? '').isNotEmpty ||
+        (input.photoBytes?.isNotEmpty ?? false)) {
+      await client.uploadStudentPhoto(
+        studentId: savedStudentId,
+        filePath: input.photoPath,
+        fileBytes: input.photoBytes,
+        fileName: input.photoName,
       );
+    }
+
+    for (final document in input.documents) {
+      await client.uploadStudentDocument(
+        studentId: savedStudentId,
+        filePath: document.filePath,
+        fileBytes: document.fileBytes,
+        fileName: document.fileName,
+        docType: document.docType,
+      );
+    }
+
+    if (input.assignFees) {
+      await _assignStudentFees(savedStudentId, input);
     }
 
     await _loadData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${input.studentName.trim()} added')),
-    );
-  }
-
-  Future<void> _openStudentDetail(StudentModel student) async {
-    final removed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute<bool>(
-        builder: (_) => _StudentDetailPage(
-          student: student,
-          imageUrl: _absoluteImageUrl(student.photoUrl),
-          onRemove: (detailContext) =>
-              _confirmAndRemoveStudent(detailContext, student),
+      SnackBar(
+        content: Text(
+          studentId == null || studentId.isEmpty
+              ? '${input.studentName.trim()} admission activated'
+              : '${input.studentName.trim()} updated',
         ),
       ),
     );
-    if (removed != true) return;
+  }
+
+  Future<void> _assignStudentFees(
+    String studentId,
+    _AddStudentInput input,
+  ) async {
+    final year = _academicYears.isEmpty
+        ? null
+        : _academicYears.firstWhere(
+            (item) => item.isCurrent,
+            orElse: () => _academicYears.first,
+          );
+    final section = _sectionById(input.sectionId);
+    if (year == null || section == null) return;
+
+    final hasStructure = _feeStructures.any(
+      (fee) =>
+          '${fee['academic_year_id'] ?? ''}' == year.id &&
+          '${fee['grade_id'] ?? ''}' == section.gradeId,
+    );
+    if (hasStructure) {
+      await api.BackendApiClient.instance.createRaw('/fees/invoices/generate', {
+        'academic_year_id': year.id,
+        'grade_id': section.gradeId,
+        'section_id': input.sectionId,
+        'student_id': studentId,
+        'invoice_label': 'Admission Fees ${year.yearLabel}',
+        'due_date': _backendDate(DateTime.now().add(const Duration(days: 30))),
+      });
+    }
+
+    if (input.concessionAmount > 0 ||
+        input.concessionReason.trim().isNotEmpty) {
+      await api.BackendApiClient.instance.createRaw('/fees/concessions', {
+        'student_id': studentId,
+        'student_name': input.studentName.trim(),
+        'class_section': _sectionLabelForId(input.sectionId),
+        'type': 'Admission concession',
+        'amount': input.concessionAmount,
+        'reason': input.concessionReason.trim(),
+        'status': 'approved',
+        'submitted_at': DateTime.now().toIso8601String(),
+      });
+    }
+  }
+
+  Future<void> _openStudentDetail(StudentModel student) async {
+    var detailStudent = student;
+    try {
+      final sectionMap = {for (final s in _sections) s.id: s};
+      final gradeMap = {for (final g in _grades) g.id: g};
+      final latest = await api.BackendApiClient.instance.getStudent(student.id);
+      detailStudent = _mapApiStudentToUi(latest, sectionMap, gradeMap);
+    } catch (_) {
+      detailStudent = student;
+    }
+
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => _StudentDetailPage(
+          student: detailStudent,
+          imageUrl: _absoluteImageUrl(detailStudent.photoUrl),
+          onEdit: (detailContext) =>
+              _openEditStudentForm(detailContext, detailStudent),
+          onRemove: (detailContext) =>
+              _confirmAndRemoveStudent(detailContext, detailStudent),
+        ),
+      ),
+    );
+    if (result == null) return;
     await _loadData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${student.name} moved to inactive records')),
+      SnackBar(
+        content: Text(
+          result == 'removed'
+              ? '${detailStudent.name} moved to inactive records'
+              : '${detailStudent.name} updated',
+        ),
+      ),
     );
+  }
+
+  Future<bool> _openEditStudentForm(
+    BuildContext detailContext,
+    StudentModel student,
+  ) async {
+    final updated = await Navigator.of(detailContext).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => _AddStudentPhotoFormPage(
+          sections: _sections,
+          grades: _grades,
+          academicYears: _academicYears,
+          feeStructures: _feeStructures,
+          parents: _parents,
+          initialStudent: student,
+          onSubmit: _saveStudentFromForm,
+        ),
+      ),
+    );
+    return updated == true;
   }
 
   Future<bool> _confirmAndRemoveStudent(
@@ -695,30 +1278,40 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 class _StudentDirectoryCard extends StatelessWidget {
   final StudentModel student;
   final String imageUrl;
+  final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   const _StudentDirectoryCard({
     required this.student,
     required this.imageUrl,
+    required this.selected,
     required this.onTap,
+    required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: selected ? const Color(0xFFE0F8FF) : Colors.white,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       shadowColor: const Color(0xFF8AAAC0).withAlpha(55),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(8),
         child: Container(
           constraints: const BoxConstraints(minHeight: 84),
           padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withAlpha(180)),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFF0887F2)
+                  : Colors.white.withAlpha(180),
+              width: selected ? 1.4 : 1,
+            ),
           ),
           child: Row(
             children: [
@@ -758,7 +1351,13 @@ class _StudentDirectoryCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              _StatusBadge(label: student.directoryStatusLabel),
+              selected
+                  ? const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF0887F2),
+                      size: 24,
+                    )
+                  : _StatusBadge(label: student.directoryStatusLabel),
             ],
           ),
         ),
@@ -843,6 +1442,9 @@ class _StatusBadge extends StatelessWidget {
     final colors = switch (label) {
       'Absent' => (const Color(0xFFFFECEC), const Color(0xFFDD4646)),
       'Late' => (const Color(0xFFFFF2CE), const Color(0xFFB78412)),
+      'Needs attention' => (const Color(0xFFFFF2CE), const Color(0xFFB78412)),
+      'Not marked' => (const Color(0xFFEAF2FF), const Color(0xFF2B5CAA)),
+      'Inactive' => (const Color(0xFFF0F2F4), const Color(0xFF64727E)),
       _ => (const Color(0xFFDFF8E7), const Color(0xFF3AB468)),
     };
     return Container(
@@ -960,6 +1562,7 @@ class _DirectoryChip extends StatelessWidget {
 }
 
 class _AddStudentInput {
+  final String? studentId;
   final String studentName;
   final String backendDateOfBirth;
   final String gender;
@@ -967,9 +1570,22 @@ class _AddStudentInput {
   final String systemId;
   final String admissionNumber;
   final String? parentUserId;
+  final bool shouldCreateParentLogin;
+  final String parentName;
+  final String parentUsername;
+  final String parentPassword;
+  final String parentEmail;
+  final String parentPhone;
   final String? photoPath;
+  final Uint8List? photoBytes;
+  final String? photoName;
+  final List<_StudentDocumentInput> documents;
+  final bool assignFees;
+  final double concessionAmount;
+  final String concessionReason;
 
   const _AddStudentInput({
+    this.studentId,
     required this.studentName,
     required this.backendDateOfBirth,
     required this.gender,
@@ -977,20 +1593,52 @@ class _AddStudentInput {
     required this.systemId,
     required this.admissionNumber,
     required this.parentUserId,
+    required this.shouldCreateParentLogin,
+    required this.parentName,
+    required this.parentUsername,
+    required this.parentPassword,
+    required this.parentEmail,
+    required this.parentPhone,
     required this.photoPath,
+    required this.photoBytes,
+    required this.photoName,
+    required this.documents,
+    required this.assignFees,
+    required this.concessionAmount,
+    required this.concessionReason,
+  });
+}
+
+class _StudentDocumentInput {
+  final String? filePath;
+  final Uint8List? fileBytes;
+  final String fileName;
+  final String docType;
+
+  const _StudentDocumentInput({
+    required this.filePath,
+    required this.fileBytes,
+    required this.fileName,
+    required this.docType,
   });
 }
 
 class _AddStudentPhotoFormPage extends StatefulWidget {
   final List<api.SectionModel> sections;
   final List<api.GradeModel> grades;
+  final List<api.AcademicYearModel> academicYears;
+  final List<Map<String, dynamic>> feeStructures;
   final List<api.UserAccountModel> parents;
+  final StudentModel? initialStudent;
   final Future<void> Function(_AddStudentInput input) onSubmit;
 
   const _AddStudentPhotoFormPage({
     required this.sections,
     required this.grades,
+    required this.academicYears,
+    required this.feeStructures,
     required this.parents,
+    this.initialStudent,
     required this.onSubmit,
   });
 
@@ -1007,23 +1655,66 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   late final TextEditingController _dobCtrl;
   late final TextEditingController _systemIdCtrl;
   late final TextEditingController _admissionCtrl;
+  late final TextEditingController _parentNameCtrl;
+  late final TextEditingController _parentUsernameCtrl;
+  late final TextEditingController _parentPasswordCtrl;
+  final _parentEmailCtrl = TextEditingController();
+  final _parentPhoneCtrl = TextEditingController();
+  final _documentTypeCtrl = TextEditingController(text: 'admission_document');
+  final _concessionAmountCtrl = TextEditingController();
+  final _concessionReasonCtrl = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
   DateTime _dob = DateTime(2010);
   String _gender = 'Female';
   String? _sectionId;
   String? _parentUserId;
+  bool _createParentLogin = false;
+  bool _assignFees = true;
   XFile? _photoFile;
+  final List<_StudentDocumentInput> _documents = [];
   bool _saving = false;
   String? _error;
+  bool get _isEdit => widget.initialStudent != null;
 
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialStudent;
+    if (initial != null) {
+      _nameCtrl.text = initial.name;
+      _dob = DateTime.tryParse(initial.dateOfBirth) ?? DateTime(2010);
+      final initialGender = _formatStudentGender(initial.gender);
+      _gender = const ['Female', 'Male', 'Other'].contains(initialGender)
+          ? initialGender
+          : 'Other';
+      _assignFees = false;
+    }
     _dobCtrl = TextEditingController(text: _displayDate(_dob));
-    _systemIdCtrl = TextEditingController(text: _generateSystemId());
-    _admissionCtrl = TextEditingController(text: _generateAdmissionNumber());
-    _sectionId = widget.sections.isNotEmpty ? widget.sections.first.id : null;
+    _systemIdCtrl = TextEditingController(
+      text: initial?.systemId.trim().isNotEmpty == true
+          ? initial!.systemId.trim()
+          : _generateSystemId(),
+    );
+    _admissionCtrl = TextEditingController(
+      text: initial?.rollNumber.trim().isNotEmpty == true
+          ? initial!.rollNumber.trim()
+          : _generateAdmissionNumber(),
+    );
+    _sectionId = initial?.sectionId.trim().isNotEmpty == true
+        ? initial!.sectionId
+        : widget.sections.isNotEmpty
+        ? widget.sections.first.id
+        : null;
+    _parentNameCtrl = TextEditingController(
+      text: initial == null ? '' : 'Parent of ${initial.name}',
+    );
+    _parentUsernameCtrl = TextEditingController(
+      text: _generateParentUsername(_admissionCtrl.text),
+    );
+    _parentPasswordCtrl = TextEditingController(
+      text: _generateParentPassword(_admissionCtrl.text),
+    );
   }
 
   @override
@@ -1032,6 +1723,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     _dobCtrl.dispose();
     _systemIdCtrl.dispose();
     _admissionCtrl.dispose();
+    _parentNameCtrl.dispose();
+    _parentUsernameCtrl.dispose();
+    _parentPasswordCtrl.dispose();
+    _parentEmailCtrl.dispose();
+    _parentPhoneCtrl.dispose();
+    _documentTypeCtrl.dispose();
+    _concessionAmountCtrl.dispose();
+    _concessionReasonCtrl.dispose();
     super.dispose();
   }
 
@@ -1049,6 +1748,38 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     );
     if (croppedPath == null || !mounted) return;
     setState(() => _photoFile = XFile(croppedPath));
+  }
+
+  Future<void> _pickAdmissionDocument() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+      allowMultiple: true,
+      withData: kIsWeb,
+    );
+    if (result == null || !mounted) return;
+    final docType = _documentTypeCtrl.text.trim().isEmpty
+        ? 'admission_document'
+        : _documentTypeCtrl.text.trim();
+    final documents = result.files
+        .where(
+          (file) =>
+              (file.path ?? '').trim().isNotEmpty ||
+              (file.bytes?.isNotEmpty ?? false),
+        )
+        .map(
+          (file) => _StudentDocumentInput(
+            filePath: (file.path ?? '').trim().isEmpty
+                ? null
+                : file.path!.trim(),
+            fileBytes: file.bytes,
+            fileName: file.name,
+            docType: docType,
+          ),
+        )
+        .toList();
+    if (documents.isEmpty) return;
+    setState(() => _documents.addAll(documents));
   }
 
   Future<void> _pickDate() async {
@@ -1080,6 +1811,16 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       setState(() => _error = 'System ID and admission number are required');
       return;
     }
+    if (_createParentLogin &&
+        (_parentNameCtrl.text.trim().isEmpty ||
+            _parentUsernameCtrl.text.trim().isEmpty ||
+            _parentPasswordCtrl.text.trim().length < 8)) {
+      setState(
+        () => _error =
+            'Parent name, username, and an 8+ character password are required',
+      );
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -1087,8 +1828,12 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     });
 
     try {
+      final photoBytes = _photoFile == null
+          ? null
+          : await _photoFile!.readAsBytes();
       await widget.onSubmit(
         _AddStudentInput(
+          studentId: widget.initialStudent?.id,
           studentName: _nameCtrl.text.trim(),
           backendDateOfBirth: _backendDate(_dob),
           gender: _gender,
@@ -1096,21 +1841,44 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           systemId: _systemIdCtrl.text.trim(),
           admissionNumber: _admissionCtrl.text.trim(),
           parentUserId: _parentUserId,
+          shouldCreateParentLogin: _createParentLogin,
+          parentName: _parentNameCtrl.text.trim(),
+          parentUsername: _parentUsernameCtrl.text.trim(),
+          parentPassword: _parentPasswordCtrl.text.trim(),
+          parentEmail: _parentEmailCtrl.text.trim(),
+          parentPhone: _parentPhoneCtrl.text.trim(),
           photoPath: _photoFile?.path,
+          photoBytes: photoBytes,
+          photoName: _photoFile?.name,
+          documents: List<_StudentDocumentInput>.unmodifiable(_documents),
+          assignFees: _assignFees,
+          concessionAmount:
+              double.tryParse(_concessionAmountCtrl.text.trim()) ?? 0,
+          concessionReason: _concessionReasonCtrl.text.trim(),
         ),
       );
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Add student failed: $error';
+        _error =
+            '${_isEdit ? 'Update' : 'Add'} student failed: ${_friendlyStudentSaveError(error)}';
       });
     }
   }
 
+  String _friendlyStudentSaveError(Object error) {
+    final message = '$error';
+    if (message.contains('NotFoundException')) {
+      return 'the server route or selected student was not found. Please retry after backend sync.';
+    }
+    return message;
+  }
+
   void _resetForm() {
+    if (_isEdit) return;
     setState(() {
       _nameCtrl.clear();
       _dob = DateTime(2010);
@@ -1118,9 +1886,20 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       _gender = 'Female';
       _sectionId = widget.sections.isNotEmpty ? widget.sections.first.id : null;
       _parentUserId = null;
+      _createParentLogin = false;
+      _assignFees = true;
       _photoFile = null;
+      _documents.clear();
       _systemIdCtrl.text = _generateSystemId();
       _admissionCtrl.text = _generateAdmissionNumber();
+      _parentNameCtrl.clear();
+      _parentUsernameCtrl.text = _generateParentUsername(_admissionCtrl.text);
+      _parentPasswordCtrl.text = _generateParentPassword(_admissionCtrl.text);
+      _parentEmailCtrl.clear();
+      _parentPhoneCtrl.clear();
+      _documentTypeCtrl.text = 'admission_document';
+      _concessionAmountCtrl.clear();
+      _concessionReasonCtrl.clear();
       _error = null;
     });
   }
@@ -1276,7 +2055,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                 _FieldLabel('Parent Association'),
                                 _DropdownInput<String?>(
                                   value: _parentUserId,
-                                  enabled: !_saving,
+                                  enabled: !_saving && !_createParentLogin,
                                   items: <String?>[
                                     null,
                                     ...widget.parents.map((p) => p.id),
@@ -1285,6 +2064,238 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   onChanged: (value) =>
                                       setState(() => _parentUserId = value),
                                   suffixIcon: Icons.search_rounded,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _FormCard(
+                      title: 'Parent Login',
+                      children: [
+                        SwitchListTile(
+                          value: _createParentLogin,
+                          onChanged: _saving
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _createParentLogin = value;
+                                    if (value) _parentUserId = null;
+                                  });
+                                },
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Create Parent Login with Password',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Use this when the parent account does not exist yet.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                        ),
+                        if (_createParentLogin) ...[
+                          const SizedBox(height: 12),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Parent Name'),
+                                  _TextInput(
+                                    controller: _parentNameCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Parent / Guardian name',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Login Username'),
+                                  _TextInput(
+                                    controller: _parentUsernameCtrl,
+                                    enabled: !_saving,
+                                    hint: 'parent-login-id',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Password'),
+                                  _TextInput(
+                                    controller: _parentPasswordCtrl,
+                                    enabled: !_saving,
+                                    hint: '8+ characters',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Parent Phone'),
+                                  _TextInput(
+                                    controller: _parentPhoneCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Mobile number',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _FieldLabel('Parent Email'),
+                          _TextInput(
+                            controller: _parentEmailCtrl,
+                            enabled: !_saving,
+                            hint: 'Optional email',
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _FormCard(
+                      title: 'Upload Documents if any',
+                      children: [
+                        _ResponsiveFieldRow(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('Document Type'),
+                                _TextInput(
+                                  controller: _documentTypeCtrl,
+                                  enabled: !_saving,
+                                  hint: 'admission_document',
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('Document File'),
+                                OutlinedButton.icon(
+                                  onPressed: _saving
+                                      ? null
+                                      : _pickAdmissionDocument,
+                                  icon: const Icon(
+                                    Icons.upload_file_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    _documents.isEmpty
+                                        ? 'PDF / Image'
+                                        : '${_documents.length} selected',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (_documents.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          ..._documents.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final document = entry.value;
+                            return ListTile(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(
+                                Icons.description_outlined,
+                                size: 20,
+                              ),
+                              title: Text(
+                                document.docType,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              subtitle: Text(
+                                document.fileName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: IconButton(
+                                tooltip: 'Remove document',
+                                onPressed: _saving
+                                    ? null
+                                    : () => setState(
+                                        () => _documents.removeAt(index),
+                                      ),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                            );
+                          }),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _FormCard(
+                      title: 'Fee Assignment',
+                      children: [
+                        SwitchListTile(
+                          value: _assignFees,
+                          onChanged: _saving
+                              ? null
+                              : (value) => setState(() => _assignFees = value),
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            'Assign fees after activation',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          subtitle: Text(
+                            widget.feeStructures.isEmpty
+                                ? 'No fee structures found yet. Student will still be activated.'
+                                : 'Uses the current academic year and matching class fee structure.',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _ResponsiveFieldRow(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('Concession Amount'),
+                                _TextInput(
+                                  controller: _concessionAmountCtrl,
+                                  enabled: !_saving,
+                                  hint: '0',
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('Concession Reason'),
+                                _TextInput(
+                                  controller: _concessionReasonCtrl,
+                                  enabled: !_saving,
+                                  hint: 'Optional',
                                 ),
                               ],
                             ),
@@ -1356,7 +2367,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                'Add Student with Photo Upload',
+                _isEdit ? 'Edit Student Admission' : 'New Admission',
                 maxLines: 1,
                 style: GoogleFonts.dmSans(
                   fontSize: 16,
@@ -1367,7 +2378,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
             ),
           ),
           PopupMenuButton<String>(
-            enabled: !_saving,
+            enabled: !_saving && !_isEdit,
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) {
               if (value == 'reset') _resetForm();
@@ -1459,7 +2470,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
               ),
             )
           : Text(
-              'Add Student',
+              _isEdit ? 'Save Student' : 'Activate Student',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
@@ -1519,6 +2530,24 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     return 'ADM-$suffix';
   }
 
+  static String _generateParentUsername(String admissionNumber) {
+    final clean = admissionNumber
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toLowerCase();
+    if (clean.isEmpty) {
+      return 'parent${DateTime.now().millisecondsSinceEpoch.remainder(90000)}';
+    }
+    return 'parent$clean';
+  }
+
+  static String _generateParentPassword(String admissionNumber) {
+    final clean = admissionNumber
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toUpperCase();
+    final suffix = clean.length > 4 ? clean.substring(clean.length - 4) : clean;
+    return 'Parent@$suffix${DateTime.now().second.toString().padLeft(2, '0')}';
+  }
+
   static String _displayDate(DateTime date) {
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -1534,9 +2563,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   static String? _requiredFullName(String? value) {
     final text = value?.trim() ?? '';
     if (text.isEmpty) return 'Student name is required';
-    final parts = text.split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    if (parts.length < 2) return 'Enter first and last name';
-    if (!RegExp(r"^[A-Za-z][A-Za-z .'-]{1,79}$").hasMatch(text)) {
+    if (!RegExp(r"^[A-Za-z][A-Za-z .'-]{0,79}$").hasMatch(text)) {
       return 'Use letters, spaces, dots, hyphens, or apostrophes only';
     }
     return null;
@@ -1824,11 +2851,13 @@ class _DropdownInput<T> extends StatelessWidget {
 class _StudentDetailPage extends StatelessWidget {
   final StudentModel student;
   final String imageUrl;
+  final Future<bool> Function(BuildContext context) onEdit;
   final Future<bool> Function(BuildContext context) onRemove;
 
   const _StudentDetailPage({
     required this.student,
     required this.imageUrl,
+    required this.onEdit,
     required this.onRemove,
   });
 
@@ -1845,13 +2874,30 @@ class _StudentDetailPage extends StatelessWidget {
             icon: const Icon(Icons.more_vert_rounded),
             tooltip: 'Student actions',
             onSelected: (value) async {
+              if (value == 'edit') {
+                final updated = await onEdit(context);
+                if (updated && context.mounted) {
+                  Navigator.of(context).pop('updated');
+                }
+                return;
+              }
               if (value != 'remove') return;
               final removed = await onRemove(context);
               if (removed && context.mounted) {
-                Navigator.of(context).pop(true);
+                Navigator.of(context).pop('removed');
               }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem<String>(
+                value: 'edit',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18),
+                    SizedBox(width: 10),
+                    Text('Edit Student'),
+                  ],
+                ),
+              ),
               PopupMenuItem<String>(
                 value: 'remove',
                 child: Row(
@@ -1890,6 +2936,12 @@ class _StudentDetailPage extends StatelessWidget {
                   value: student.rollNumber,
                 ),
                 _DetailRow(
+                  label: 'System ID',
+                  value: student.systemId.isEmpty
+                      ? 'Not available'
+                      : student.systemId,
+                ),
+                _DetailRow(
                   label: 'Status',
                   value: student.directoryStatusLabel,
                 ),
@@ -1905,10 +2957,251 @@ class _StudentDetailPage extends StatelessWidget {
                       ? 'Not available'
                       : _formatStudentGender(student.gender),
                 ),
+                _DetailRow(
+                  label: 'Admission Date',
+                  value: student.admissionDate.isEmpty
+                      ? 'Not available'
+                      : _formatStudentDate(student.admissionDate),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Principal Signals',
+              children: [
+                _ResponsiveMetricGrid(
+                  children: [
+                    _SignalTile(
+                      icon: Icons.fact_check_outlined,
+                      label: 'Attendance',
+                      value: student.attendancePercent <= 0
+                          ? student.directoryStatusLabel
+                          : '${student.attendancePercent.toStringAsFixed(0)}%',
+                      color: student.hasAttendanceAlert
+                          ? const Color(0xFFFFF2CE)
+                          : const Color(0xFFE6F6ED),
+                    ),
+                    _SignalTile(
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: 'Fees',
+                      value: student.feeStatusLabel,
+                      color: student.hasFeeAlert
+                          ? const Color(0xFFFFECEC)
+                          : const Color(0xFFE6F6ED),
+                    ),
+                    _SignalTile(
+                      icon: Icons.trending_up_rounded,
+                      label: 'Performance',
+                      value: student.performanceGrade,
+                      color: student.hasPerformanceAlert
+                          ? const Color(0xFFFFF2CE)
+                          : const Color(0xFFEAF2FF),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Parent / Guardian',
+              children: [
+                _DetailRow(label: 'Guardian', value: student.guardianName),
+                _DetailRow(label: 'Phone', value: student.guardianPhone),
+                _DetailRow(
+                  label: 'Parent Logins',
+                  value: student.parentAccounts.isEmpty
+                      ? 'Not linked'
+                      : student.parentAccounts
+                            .map(
+                              (parent) =>
+                                  '${parent['name'] ?? parent['username'] ?? 'Parent'}',
+                            )
+                            .join(', '),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Fee Position',
+              children: [
+                _DetailRow(
+                  label: 'Actual Fee',
+                  value: _formatMoney(student.feeTotal),
+                ),
+                _DetailRow(
+                  label: 'Discount',
+                  value: _formatMoney(student.feeDiscount),
+                ),
+                _DetailRow(label: 'Paid', value: _formatMoney(student.feePaid)),
+                _DetailRow(
+                  label: 'Balance',
+                  value: _formatMoney(student.feeBalance),
+                ),
+                _DetailRow(
+                  label: 'Pending Invoices',
+                  value:
+                      '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Academic Performance',
+              children: [
+                _DetailRow(
+                  label: 'Average',
+                  value: student.marksCount == 0
+                      ? 'No marks yet'
+                      : '${student.performanceScore.toStringAsFixed(1)}%',
+                ),
+                _DetailRow(label: 'Grade', value: student.performanceGrade),
+                _DetailRow(
+                  label: 'Weak Subjects',
+                  value: '${student.weakSubjects}',
+                ),
+                _DetailRow(
+                  label: 'Marks Entered',
+                  value: '${student.marksCount}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Documents',
+              children: student.documents.isEmpty
+                  ? const [_DetailRow(label: 'Files', value: 'No documents')]
+                  : student.documents
+                        .map(
+                          (document) => _DetailRow(
+                            label:
+                                '${document['doc_type'] ?? document['type'] ?? 'Document'}',
+                            value: _documentName(document),
+                          ),
+                        )
+                        .toList(),
+            ),
+            const SizedBox(height: 14),
+            _FormCard(
+              title: 'Medical Notes',
+              children: [
+                _DetailRow(
+                  label: 'Conditions',
+                  value: _medicalValue('conditions'),
+                ),
+                _DetailRow(
+                  label: 'Allergies',
+                  value: _medicalValue('allergies'),
+                ),
+                _DetailRow(
+                  label: 'Doctor',
+                  value: _medicalValue('doctor_name'),
+                ),
               ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _medicalValue(String key) {
+    final value = '${student.medicalRecord[key] ?? ''}'.trim();
+    return value.isEmpty ? 'Not recorded' : value;
+  }
+
+  static String _documentName(Map<String, dynamic> document) {
+    final url = '${document['file_url'] ?? document['url'] ?? ''}'.trim();
+    if (url.isEmpty) return 'Uploaded';
+    return url.split('/').where((part) => part.isNotEmpty).last;
+  }
+}
+
+class _ResponsiveMetricGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _ResponsiveMetricGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 420) {
+          return Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                children[i],
+                if (i != children.length - 1) const SizedBox(height: 10),
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              Expanded(child: children[i]),
+              if (i != children.length - 1) const SizedBox(width: 10),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SignalTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SignalTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: const Color(0xFF225B88)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: AppTheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1930,6 +3223,15 @@ String _formatStudentGender(String value) {
   if (lower == 'female') return 'Female';
   if (lower == 'other') return 'Other';
   return trimmed[0].toUpperCase() + trimmed.substring(1);
+}
+
+String _formatMoney(double value) {
+  final formatter = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: value.truncateToDouble() == value ? 0 : 2,
+  );
+  return formatter.format(value);
 }
 
 class _DetailRow extends StatelessWidget {

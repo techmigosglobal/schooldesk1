@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../routes/app_routes.dart';
 import '../../services/backend_api_client.dart';
 import '../../services/pdf_service.dart';
 import '../../theme/app_theme.dart';
-import '../../theme/design_tokens.dart';
 import '../../widgets/admin_navigation.dart';
 import '../../widgets/dashboard_fab_widget.dart';
-import '../../widgets/erp_components.dart';
 import '../../widgets/erp_module_scaffold.dart';
+import '../../widgets/operations_workspace.dart';
 import 'admin_fee_form_screens.dart';
+
+enum _FinanceView { structures, invoices, payments, concessions, reports }
 
 class AdminFeesScreen extends StatefulWidget {
   const AdminFeesScreen({super.key});
@@ -19,13 +19,16 @@ class AdminFeesScreen extends StatefulWidget {
   State<AdminFeesScreen> createState() => _AdminFeesScreenState();
 }
 
-class _AdminFeesScreenState extends State<AdminFeesScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _AdminFeesScreenState extends State<AdminFeesScreen> {
+  bool _loading = true;
+  String? _error;
+  _FinanceView _view = _FinanceView.invoices;
+
   List<Map<String, dynamic>> _feeStructures = [];
   List<Map<String, dynamic>> _pendingDues = [];
   List<Map<String, dynamic>> _recentPayments = [];
   List<Map<String, dynamic>> _feeCategories = [];
+  List<Map<String, dynamic>> _concessions = [];
   List<AcademicYearModel> _academicYears = [];
   List<GradeModel> _grades = [];
   List<SectionModel> _sections = [];
@@ -34,25 +37,30 @@ class _AdminFeesScreenState extends State<AdminFeesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final api = BackendApiClient.instance;
       final feeStructures = await api.getFeeStructures();
       final invoices = await api.getInvoices();
       final feeCategories = await api.getRawList('/fees/categories');
+      final concessions = await api.getRawList('/fees/concessions');
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
       final sections = await api.getSections();
-      final students = await api.getStudents(page: 1, pageSize: 100);
+      final students = await api.getStudents(page: 1, pageSize: 500);
       final normalizedInvoices = invoices.map(_normalizeInvoice).toList();
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
         _feeCategories = feeCategories;
+        _concessions = concessions;
         _academicYears = academicYears;
         _grades = grades;
         _sections = sections;
@@ -61,733 +69,348 @@ class _AdminFeesScreenState extends State<AdminFeesScreen>
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
         _recentPayments = invoices.expand(_normalizePayments).toList();
+        _loading = false;
       });
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
-      setState(
-        () => _feeStructures = [
-          {'error': e.toString()},
-        ],
-      );
+      setState(() {
+        _error = 'Unable to load finance workspace from backend. $error';
+        _loading = false;
+      });
     }
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Fees',
-      subtitle: 'Fee structures, dues, payments, receipts, and reports',
+      title: 'Finance Operations',
+      subtitle:
+          'Structures, invoices, payments, concessions, receipts, and reconciliation',
       drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
+      railBreakpoint: double.infinity,
+      navigationDrawerEnabled: false,
       floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      actions: _toolbarActions(context),
-      bottom: TabBar(
-        controller: _tabController,
-        isScrollable: true,
-        tabs: const [
-          Tab(text: 'Fee Structure'),
-          Tab(text: 'Pending Dues'),
-          Tab(text: 'Payments'),
-          Tab(text: 'Reports'),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildSummaryBar(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildFeeStructure(),
-                _buildPendingDues(),
-                _buildPayments(),
-                _buildFinanceReports(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _toolbarActions(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 600;
-    if (compact) {
-      return [
-        _compactToolbarButton(
-          tooltip: 'Refresh finance data',
-          icon: Icons.refresh_rounded,
-          onPressed: _loadData,
-        ),
-        _compactToolbarButton(
-          tooltip: 'Payment requests',
-          icon: Icons.fact_check_rounded,
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoutes.adminPaymentRequests,
-          ).then((_) => _loadData()),
-        ),
-        _compactToolbarButton(
-          tooltip: 'New structure',
-          icon: Icons.playlist_add_rounded,
+      actions: [
+        IconButton(
+          tooltip: 'Create fee structure',
+          icon: const Icon(Icons.add_card_outlined),
           onPressed: _openCreateFeeStructureForm,
         ),
-        _compactToolbarButton(
+        IconButton(
           tooltip: 'Generate invoices',
-          icon: Icons.receipt_long_rounded,
-          onPressed: _openGenerateInvoiceForm,
+          icon: const Icon(Icons.receipt_long_outlined),
+          onPressed: () => _openGenerateInvoiceForm(),
         ),
-        _compactToolbarButton(
-          tooltip: 'Record payment',
-          icon: Icons.payments_rounded,
-          onPressed: _openRecordPaymentForm,
+        IconButton(
+          tooltip: 'Refresh finance',
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loadData,
         ),
-      ];
-    }
+      ],
+      body: _buildBody(),
+    );
+  }
 
-    return [
-      IconButton(
-        tooltip: 'Refresh finance data',
-        icon: const Icon(Icons.refresh_rounded),
-        onPressed: _loadData,
-      ),
-      OutlinedButton.icon(
-        onPressed: () => Navigator.pushNamed(
-          context,
-          AppRoutes.adminPaymentRequests,
-        ).then((_) => _loadData()),
-        icon: const Icon(Icons.fact_check_rounded, size: 18),
+  Widget _buildBody() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return OpsEmptyState(
+        icon: Icons.account_balance_wallet_outlined,
+        title: 'Finance unavailable',
+        message: _error!,
+        actionLabel: 'Retry',
+        onAction: _loadData,
+      );
+    }
+    return OpsWorkspace(
+      children: [
+        OpsResponsiveGrid(
+          minTileWidth: 210,
+          children: [
+            OpsMetricCard(
+              label: 'Fee structures',
+              value: '${_feeStructures.length}',
+              icon: Icons.price_change_outlined,
+              color: Colors.indigo,
+              caption: '/fees/structures',
+            ),
+            OpsMetricCard(
+              label: 'Outstanding',
+              value: _money(_pendingTotal),
+              icon: Icons.pending_actions_outlined,
+              color: Colors.orange,
+              caption: '${_pendingDues.length} invoices',
+            ),
+            OpsMetricCard(
+              label: 'Collected',
+              value: _money(_collectedTotal),
+              icon: Icons.payments_outlined,
+              color: Colors.green,
+              caption: '${_recentPayments.length} payments',
+            ),
+            OpsMetricCard(
+              label: 'Concessions',
+              value: '${_concessions.length}',
+              icon: Icons.volunteer_activism_outlined,
+              color: Colors.deepPurple,
+              caption: '/fees/concessions',
+            ),
+          ],
+        ),
+        _buildViewPicker(),
+        _buildCurrentView(),
+      ],
+    );
+  }
+
+  Widget _buildViewPicker() {
+    return OpsPanel(
+      title: 'Admin Finance Workspace',
+      subtitle:
+          'Admin owns operational writes; Principal can monitor and decide requests',
+      trailing: TextButton.icon(
+        onPressed: () =>
+            Navigator.pushNamed(context, AppRoutes.adminPaymentRequests),
+        icon: const Icon(Icons.fact_check_outlined),
         label: const Text('Payment requests'),
       ),
-      OutlinedButton.icon(
+      child: OpsModeSelector<_FinanceView>(
+        selected: _view,
+        options: const [
+          OpsModeOption(
+            value: _FinanceView.structures,
+            icon: Icons.price_change_outlined,
+            label: 'Structures',
+          ),
+          OpsModeOption(
+            value: _FinanceView.invoices,
+            icon: Icons.receipt_long_outlined,
+            label: 'Invoices',
+          ),
+          OpsModeOption(
+            value: _FinanceView.payments,
+            icon: Icons.payments_outlined,
+            label: 'Payments',
+          ),
+          OpsModeOption(
+            value: _FinanceView.concessions,
+            icon: Icons.volunteer_activism_outlined,
+            label: 'Concessions',
+          ),
+          OpsModeOption(
+            value: _FinanceView.reports,
+            icon: Icons.summarize_outlined,
+            label: 'Reports',
+          ),
+        ],
+        onSelected: (value) => setState(() => _view = value),
+      ),
+    );
+  }
+
+  Widget _buildCurrentView() {
+    return switch (_view) {
+      _FinanceView.structures => _buildStructures(),
+      _FinanceView.invoices => _buildInvoices(),
+      _FinanceView.payments => _buildPayments(),
+      _FinanceView.concessions => _buildConcessions(),
+      _FinanceView.reports => _buildReports(),
+    };
+  }
+
+  Widget _buildStructures() {
+    return OpsPanel(
+      title: 'Fee Structures',
+      subtitle: 'Class/category/frequency rules used to generate invoices',
+      trailing: FilledButton.icon(
         onPressed: _openCreateFeeStructureForm,
-        icon: const Icon(Icons.playlist_add_rounded, size: 18),
-        label: const Text('New structure'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Create'),
       ),
-      FilledButton.icon(
-        onPressed: _openGenerateInvoiceForm,
-        icon: const Icon(Icons.receipt_long_rounded, size: 18),
-        label: const Text('Generate invoices'),
-      ),
-      FilledButton.icon(
-        onPressed: _openRecordPaymentForm,
-        icon: const Icon(Icons.payments_rounded, size: 18),
-        label: const Text('Record payment'),
-      ),
-    ];
-  }
-
-  Widget _compactToolbarButton({
-    required String tooltip,
-    required IconData icon,
-    required VoidCallback onPressed,
-  }) {
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon),
-      onPressed: onPressed,
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-    );
-  }
-
-  Widget _buildSummaryBar() {
-    final tokens = Theme.of(context).schoolDesk;
-    final collected = _recentPayments.fold<double>(
-      0,
-      (sum, payment) =>
-          sum + _numValue(payment['amount_paid'] ?? payment['amount']),
-    );
-    final pending = _pendingDues.fold<double>(
-      0,
-      (sum, invoice) =>
-          sum +
-          ((invoice['balance'] as num?)?.toDouble() ??
-              (invoice['amount'] as num?)?.toDouble() ??
-              0),
-    );
-    final now = DateTime.now();
-    final thisMonth = _recentPayments
-        .where((payment) {
-          final paidAt = DateTime.tryParse('${payment['payment_date'] ?? ''}');
-          return paidAt != null &&
-              paidAt.year == now.year &&
-              paidAt.month == now.month;
-        })
-        .fold<double>(
-          0,
-          (sum, payment) =>
-              sum + ((payment['amount_paid'] as num?)?.toDouble() ?? 0),
-        );
-    return Padding(
-      padding: EdgeInsets.all(tokens.spacing.md),
-      child: SchoolDeskResponsiveGrid(
-        minTileWidth: 180,
-        mainAxisExtent: 126,
-        children: [
-          SchoolDeskKpiCard(
-            title: 'Collected',
-            value: _money(collected),
-            subtitle: 'Total paid',
-            icon: Icons.check_circle_rounded,
-            color: AppTheme.success,
-          ),
-          SchoolDeskKpiCard(
-            title: 'Pending',
-            value: _money(pending),
-            subtitle: 'Outstanding dues',
-            icon: Icons.warning_rounded,
-            color: AppTheme.error,
-          ),
-          SchoolDeskKpiCard(
-            title: 'This Month',
-            value: _money(thisMonth),
-            subtitle: 'Payments received',
-            icon: Icons.calendar_month_rounded,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
-
-  Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> fee) {
-    final category = _mapValue(fee['fee_category']);
-    final grade = _mapValue(fee['grade']);
-    final amount = _numValue(fee['amount']);
-    return {
-      ...fee,
-      'class': _textValue(grade['grade_name'], fallback: fee['grade_id']),
-      'year': _textValue(yearLabel(fee), fallback: fee['academic_year_id']),
-      'category': _textValue(category['category_name'], fallback: 'Fee'),
-      'total': amount,
-      'tuition': amount,
-      'exam': 0,
-      'library': 0,
-      'sports': 0,
-      'due_day': fee['due_day'] ?? 0,
-      'late_fine_per_day': _numValue(fee['late_fine_per_day']),
-    };
-  }
-
-  Object? yearLabel(Map<String, dynamic> fee) {
-    final year = _mapValue(fee['academic_year']);
-    return year['year_label'];
-  }
-
-  Map<String, dynamic> _normalizeInvoice(Map<String, dynamic> invoice) {
-    final student = _mapValue(invoice['student']);
-    final section = _mapValue(student['current_section']);
-    final grade = _mapValue(section['grade']);
-    final payments = (invoice['payments'] as List? ?? const [])
-        .whereType<Map>()
-        .map((payment) => Map<String, dynamic>.from(payment))
-        .toList();
-    payments.sort(
-      (a, b) => '${b['payment_date'] ?? b['created_at'] ?? ''}'.compareTo(
-        '${a['payment_date'] ?? a['created_at'] ?? ''}',
-      ),
-    );
-    final latestPayment = payments.isEmpty
-        ? <String, dynamic>{}
-        : payments.first;
-    final balance = _numValue(invoice['balance']);
-    final amount = balance > 0 ? balance : _numValue(invoice['net_amount']);
-    final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
-    final overdueMonths = dueDate == null
-        ? 0
-        : ((DateTime.now().difference(dueDate).inDays / 30).ceil()).clamp(
-            0,
-            99,
-          );
-    final classLabel = [
-      _textValue(grade['grade_name'], fallback: ''),
-      _textValue(section['section_name'], fallback: ''),
-    ].where((part) => part.isNotEmpty).join(' ');
-    final name = [
-      _textValue(student['first_name'], fallback: ''),
-      _textValue(student['last_name'], fallback: ''),
-    ].where((part) => part.isNotEmpty).join(' ');
-    return {
-      ...invoice,
-      'name': name.isEmpty ? 'Student ${invoice['student_id'] ?? ''}' : name,
-      'class': classLabel.isEmpty ? 'Unassigned class' : classLabel,
-      'amount': amount,
-      'months': overdueMonths,
-      'lastPaid': latestPayment.isEmpty
-          ? 'No payment'
-          : _dateLabel(
-              latestPayment['payment_date'] ?? latestPayment['created_at'],
+      child: _feeStructures.isEmpty
+          ? OpsEmptyState(
+              icon: Icons.price_change_outlined,
+              title: 'No fee structures',
+              message: 'Create structures before generating student invoices.',
+            )
+          : Column(
+              children: [
+                for (final structure in _feeStructures)
+                  OpsListRow(
+                    icon: Icons.price_change_outlined,
+                    title:
+                        '${_textValue(structure['category'], fallback: 'Fee')} - ${_textValue(structure['class'], fallback: 'Class pending')}',
+                    subtitle:
+                        '${_money(_numValue(structure['amount']))} | ${_textValue(structure['frequency'], fallback: 'frequency pending')} | due day ${structure['due_day'] ?? '-'}',
+                    trailing: TextButton.icon(
+                      onPressed: () => _openEditFeeStructureForm(structure),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: const Text('Edit'),
+                    ),
+                  ),
+              ],
             ),
-      'receipt': latestPayment['receipt_number'] ?? '',
-      'mode': latestPayment['payment_mode'] ?? '',
-      'date': _dateLabel(invoice['due_date']),
-    };
-  }
-
-  Iterable<Map<String, dynamic>> _normalizePayments(
-    Map<String, dynamic> invoice,
-  ) {
-    final normalizedInvoice = _normalizeInvoice(invoice);
-    return (invoice['payments'] as List? ?? const []).whereType<Map>().map((
-      payment,
-    ) {
-      final item = Map<String, dynamic>.from(payment);
-      return {
-        'id': item['id'],
-        'invoice_id': invoice['id'],
-        'name': normalizedInvoice['name'],
-        'class': normalizedInvoice['class'],
-        'date': _dateLabel(item['payment_date'] ?? item['created_at']),
-        'mode': _textValue(item['payment_mode'], fallback: 'cash'),
-        'receipt': _textValue(item['receipt_number'], fallback: ''),
-        'amount': _numValue(item['amount_paid']),
-        'payment_date': item['payment_date'] ?? item['created_at'],
-        'amount_paid': _numValue(item['amount_paid']),
-      };
-    });
-  }
-
-  Map<String, dynamic> _mapValue(dynamic value) =>
-      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
-
-  double _numValue(dynamic value) =>
-      value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
-
-  String _textValue(dynamic value, {String fallback = ''}) {
-    final text = '${value ?? ''}'.trim();
-    return text.isEmpty || text == 'null' ? fallback : text;
-  }
-
-  String _dateLabel(dynamic value) {
-    final parsed = DateTime.tryParse('${value ?? ''}');
-    if (parsed == null) return 'Not recorded';
-    return parsed.toIso8601String().split('T').first;
-  }
-
-  Widget _buildFeeStructure() {
-    if (_feeStructures.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: SchoolDeskStatusPanel.empty(
-          title: 'No fee structures',
-          message: 'Backend fee structures will appear here once configured.',
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-      itemCount: _feeStructures.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final f = _feeStructures[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      _textValue(f['class'], fallback: 'Unassigned grade'),
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _money(_numValue(f['total'])),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 16),
-              _buildFeeRow('Category', _textValue(f['category'])),
-              _buildFeeRow('Amount', _money(_numValue(f['tuition']))),
-              _buildFeeRow('Due Day', '${f['due_day'] ?? 0}'),
-              _buildFeeRow(
-                'Late Fine / Day',
-                _money(_numValue(f['late_fine_per_day'])),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _openEditFeeStructureForm(f),
-                      icon: const Icon(Icons.edit_rounded, size: 14),
-                      label: Text(
-                        'Edit Structure',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _openGenerateInvoiceForm(seed: f),
-                      icon: const Icon(Icons.receipt_rounded, size: 14),
-                      label: Text(
-                        'Generate',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 
-  Widget _buildFeeRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
-          ),
-          Text(
-            value,
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+  Widget _buildInvoices() {
+    return OpsPanel(
+      title: 'Invoices And Outstanding',
+      subtitle:
+          'Pending dues are derived from backend balance, not local status labels',
+      trailing: FilledButton.icon(
+        onPressed: () => _openGenerateInvoiceForm(),
+        icon: const Icon(Icons.receipt_long_outlined),
+        label: const Text('Generate'),
       ),
-    );
-  }
-
-  Widget _buildPendingDues() {
-    if (_pendingDues.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: SchoolDeskStatusPanel.empty(
-          title: 'No pending dues',
-          message: 'Outstanding invoices will appear here from backend.',
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-      itemCount: _pendingDues.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final d = _pendingDues[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: (_numValue(d['months']).toInt()) >= 2
-                  ? AppTheme.errorContainer
-                  : AppTheme.warningContainer,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      child: _pendingDues.isEmpty
+          ? OpsListRow(
+              icon: Icons.verified_outlined,
+              title: 'No outstanding balances',
+              subtitle:
+                  'Backend invoice balances are clear for the current result set.',
+              trailing: const OpsStatusPill(
+                label: 'Clear',
+                color: Colors.green,
+              ),
+            )
+          : Column(
+              children: [
+                for (final invoice in _pendingDues.take(20))
+                  OpsListRow(
+                    icon: Icons.receipt_long_outlined,
+                    title: _textValue(
+                      invoice['name'],
+                      fallback: 'Student invoice',
+                    ),
+                    subtitle:
+                        '${_textValue(invoice['class'], fallback: 'Class pending')} | Due ${_dateLabel(invoice['due_date'])} | Paid ${_money(_numValue(invoice['paid']))}',
+                    trailing: Wrap(
+                      spacing: 8,
                       children: [
-                        Text(
-                          _textValue(d['name'], fallback: 'Student'),
-                          style: GoogleFonts.dmSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        OpsStatusPill(
+                          label: _money(_numValue(invoice['balance'])),
+                          color: Colors.orange,
                         ),
-                        Text(
-                          '${_textValue(d['class'], fallback: 'Unassigned class')} • Last paid: ${d['lastPaid']}',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            color: AppTheme.muted,
-                          ),
+                        IconButton(
+                          tooltip: 'Record payment',
+                          icon: const Icon(Icons.payments_outlined),
+                          onPressed: () =>
+                              _openRecordPaymentForm(invoice: invoice),
+                        ),
+                        IconButton(
+                          tooltip: 'Send reminder',
+                          icon: const Icon(Icons.notifications_active_outlined),
+                          onPressed: () => _sendFeeReminder(invoice),
                         ),
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _money(_numValue(d['amount'])),
-                        style: GoogleFonts.dmSans(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.error,
-                        ),
-                      ),
-                      Text(
-                        '${_numValue(d['months']).toInt()} month(s)',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: AppTheme.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _sendFeeReminder(d),
-                      icon: const Icon(Icons.sms_rounded, size: 14),
-                      label: Text(
-                        'Send Reminder',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _openRecordPaymentForm(invoice: d),
-                      icon: const Icon(Icons.payment_rounded, size: 14),
-                      label: Text(
-                        'Record Payment',
-                        style: GoogleFonts.dmSans(fontSize: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
     );
   }
 
   Widget _buildPayments() {
-    if (_recentPayments.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: SchoolDeskStatusPanel.empty(
-          title: 'No payments recorded',
-          message: 'Backend payment receipts will appear here.',
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-      itemCount: _recentPayments.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final p = _recentPayments[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.successContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.check_circle_rounded,
-                  size: 20,
-                  color: AppTheme.success,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p['name'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${p['class']} • ${p['date']} • ${p['mode']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
-                      ),
-                    ),
-                    Text(
-                      'Receipt: ${p['receipt']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 10,
-                        color: AppTheme.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '₹${p['amount']}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.success,
+    return OpsPanel(
+      title: 'Payments And Receipts',
+      subtitle:
+          'Recorded payments and receipt preview stay tied to backend invoices',
+      trailing: OutlinedButton.icon(
+        onPressed: () => _openRecordPaymentForm(),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Record payment'),
+      ),
+      child: _recentPayments.isEmpty
+          ? OpsEmptyState(
+              icon: Icons.payments_outlined,
+              title: 'No payments yet',
+              message:
+                  'Payments will appear after Admin records them against invoices.',
+            )
+          : Column(
+              children: [
+                for (final payment in _recentPayments.take(20))
+                  OpsListRow(
+                    icon: Icons.payments_outlined,
+                    title: _textValue(payment['name'], fallback: 'Payment'),
+                    subtitle:
+                        '${_textValue(payment['mode'], fallback: 'Mode pending')} | ${_dateLabel(payment['date'])} | ${_textValue(payment['receipt'], fallback: 'Receipt pending')}',
+                    trailing: TextButton.icon(
+                      onPressed: () => _previewReceipt(payment),
+                      icon: const Icon(Icons.picture_as_pdf_outlined),
+                      label: Text(_money(_numValue(payment['amount']))),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => _printReceipt(p),
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                    ),
-                    child: Text(
-                      'Print',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
     );
   }
 
-  Widget _buildFinanceReports() {
+  Widget _buildConcessions() {
+    return OpsPanel(
+      title: 'Concessions',
+      subtitle:
+          'Review fee concessions without mixing them into invoice balances',
+      child: _concessions.isEmpty
+          ? OpsEmptyState(
+              icon: Icons.volunteer_activism_outlined,
+              title: 'No concession requests',
+              message:
+                  'Backend concession requests will appear here for finance review.',
+            )
+          : Column(
+              children: [
+                for (final concession in _concessions.take(20))
+                  OpsListRow(
+                    icon: Icons.volunteer_activism_outlined,
+                    title: _textValue(
+                      concession['student_name'] ?? concession['student_id'],
+                      fallback: 'Concession request',
+                    ),
+                    subtitle:
+                        '${_textValue(concession['reason'], fallback: 'Reason pending')} | ${_textValue(concession['status'], fallback: 'pending')}',
+                    trailing: OpsStatusPill(
+                      label: _textValue(
+                        concession['status'],
+                        fallback: 'Pending',
+                      ),
+                      color: _statusColor(_textValue(concession['status'])),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildReports() {
     final reports = [
-      {
-        'label': 'Monthly Collection Report',
-        'icon': Icons.calendar_month_rounded,
-        'color': AppTheme.primary,
-      },
-      {
-        'label': 'Pending Dues Report',
-        'icon': Icons.warning_rounded,
-        'color': AppTheme.error,
-      },
-      {
-        'label': 'Class-wise Fee Report',
-        'icon': Icons.class_rounded,
-        'color': AppTheme.success,
-      },
-      {
-        'label': 'Concession Report',
-        'icon': Icons.discount_rounded,
-        'color': AppTheme.warning,
-      },
-      {
-        'label': 'Annual Finance Summary',
-        'icon': Icons.summarize_rounded,
-        'color': Color(0xFF6C3483),
-      },
+      ('Collection summary', 'fee_collection_summary', 'pdf'),
+      ('Outstanding aging', 'fee_outstanding_aging', 'csv'),
+      ('Concession register', 'fee_concession_register', 'pdf'),
     ];
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-      itemCount: reports.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (_, i) {
-        final r = reports[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: (r['color'] as Color).withAlpha(20),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  r['icon'] as IconData,
-                  size: 20,
-                  color: r['color'] as Color,
-                ),
+    return OpsPanel(
+      title: 'Reports And Reconciliation',
+      subtitle: 'Exports use typed report lifecycle artifacts',
+      child: Column(
+        children: [
+          for (final report in reports)
+            OpsListRow(
+              icon: Icons.summarize_outlined,
+              title: report.$1,
+              subtitle:
+                  'Create ${report.$3.toUpperCase()} export through /fees/reports/exports',
+              trailing: FilledButton.icon(
+                onPressed: () => _requestReportExport(report.$2, report.$3),
+                icon: const Icon(Icons.file_download_outlined),
+                label: Text(report.$3.toUpperCase()),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  r['label'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: () => _requestReportExport(r, 'pdf'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                    ),
-                    child: Text('PDF', style: GoogleFonts.dmSans(fontSize: 11)),
-                  ),
-                  const SizedBox(width: 6),
-                  ElevatedButton(
-                    onPressed: () => _requestReportExport(r, 'csv'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                    ),
-                    child: Text('CSV', style: GoogleFonts.dmSans(fontSize: 11)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+            ),
+        ],
+      ),
     );
   }
 
@@ -809,13 +432,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen>
     );
     if (!mounted || result is! AdminFeeStructureFormResult) return;
     await _loadData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.message),
-        backgroundColor: AppTheme.success,
-      ),
-    );
+    _snack(result.message, success: true);
   }
 
   Future<void> _openGenerateInvoiceForm({Map<String, dynamic>? seed}) async {
@@ -833,14 +450,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen>
     );
     if (!mounted || result is! AdminInvoiceGenerationFormResult) return;
     await _loadData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Generated ${result.created} invoice(s), skipped ${result.skipped} existing invoice(s).',
-        ),
-        backgroundColor: AppTheme.success,
-      ),
+    _snack(
+      'Generated ${result.created} invoice(s), skipped ${result.skipped}.',
+      success: true,
     );
   }
 
@@ -855,123 +467,197 @@ class _AdminFeesScreenState extends State<AdminFeesScreen>
     );
     if (!mounted || result is! AdminPaymentRecordFormResult) return;
     await _loadData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Payment of ${_money(result.amount)} recorded for ${result.studentName}',
-        ),
-        backgroundColor: AppTheme.success,
-      ),
+    _snack(
+      'Payment of ${_money(result.amount)} recorded for ${result.studentName}',
+      success: true,
     );
   }
 
   Future<void> _sendFeeReminder(Map<String, dynamic> due) async {
-    final invoiceId = '${due['id'] ?? ''}';
+    final invoiceId = _textValue(due['id']);
     if (invoiceId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Backend invoice ID is missing'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
+      _snack('Backend invoice ID is missing');
       return;
     }
     try {
       await BackendApiClient.instance.createRaw('/fees/reminders', {
-        'invoice_ids': [invoiceId],
-        'message': 'Fee reminder for ${due['name'] ?? 'student'}',
+        'invoice_id': invoiceId,
+        'student_id': due['student_id'],
+        'message':
+            'Payment reminder for outstanding balance ${_money(_numValue(due['balance']))}',
       });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Reminder queued for ${due['name'] ?? 'student'}'),
-          backgroundColor: AppTheme.warning,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Reminder failed: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
+      _snack('Reminder request saved', success: true);
+    } catch (error) {
+      _snack('Unable to send reminder: $error');
     }
   }
 
-  Future<void> _requestReportExport(
-    Map<String, dynamic> report,
-    String format,
-  ) async {
+  Future<void> _requestReportExport(String reportType, String format) async {
     try {
-      final export = await BackendApiClient.instance.createReportExport(
+      await BackendApiClient.instance.createReportExport(
         '/fees/reports/exports',
-        reportTitle: '${report['label']}',
+        reportTitle: reportType,
+        reportType: reportType,
         format: format,
-        scope: 'admin',
-        parameters: {'source_screen': 'admin_fees'},
+        parameters: {
+          'pending_count': _pendingDues.length,
+          'structure_count': _feeStructures.length,
+        },
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${report['label']} export ${export['status'] ?? 'requested'}',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Report export failed: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
+      _snack('Report export queued', success: true);
+    } catch (error) {
+      _snack('Unable to queue report export: $error');
     }
   }
 
-  Future<void> _printReceipt(Map<String, dynamic> payment) async {
+  Future<void> _previewReceipt(Map<String, dynamic> payment) async {
     try {
       final pdfService = PdfService.getInstance();
-      final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
-      final pdfBytes = await pdfService.generateFeeReceipt(
-        receiptNo: payment['receipt'] as String? ?? 'RCP001',
-        studentName: payment['name'] as String? ?? '',
-        className: payment['class'] as String? ?? '',
-        rollNo: '01',
-        parentName: 'Parent of ${payment['name'] ?? ''}',
+      final amount = _numValue(payment['amount']);
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: _textValue(payment['receipt'], fallback: 'RCP'),
+        studentName: _textValue(payment['name'], fallback: 'Student'),
+        className: _textValue(payment['class'], fallback: 'Class'),
+        rollNo: _textValue(payment['roll'], fallback: '-'),
+        parentName: _textValue(payment['parent_name'], fallback: 'Parent'),
         feeItems: [
-          {
-            'description': 'Tuition Fee',
-            'amount': amount * 0.7,
-            'status': 'Paid',
-          },
-          {
-            'description': 'Activity Fee',
-            'amount': amount * 0.2,
-            'status': 'Paid',
-          },
-          {'description': 'Misc', 'amount': amount * 0.1, 'status': 'Paid'},
+          {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
         ],
         totalAmount: amount,
         paidAmount: amount,
         balance: 0,
-        paymentMode: payment['mode'] as String? ?? 'Cash',
-        paymentDate: DateTime.now(),
+        paymentMode: _textValue(payment['mode'], fallback: 'Recorded'),
+        paymentDate:
+            DateTime.tryParse(_textValue(payment['date'])) ?? DateTime.now(),
       );
       if (!mounted) return;
-      await pdfService.previewDocument(
-        context,
-        pdfBytes,
-        'Receipt ${payment['receipt'] ?? 'RCP'}',
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to generate receipt.')),
-        );
-      }
+      await pdfService.previewDocument(context, bytes, 'Fee Receipt');
+    } catch (error) {
+      _snack('Unable to preview receipt: $error');
     }
+  }
+
+  Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> fee) {
+    final category = _mapValue(fee['fee_category']);
+    final grade = _mapValue(fee['grade']);
+    return {
+      ...fee,
+      'class': _textValue(
+        grade['grade_name'],
+        fallback: _textValue(fee['grade_id']),
+      ),
+      'category': _textValue(
+        category['category_name'] ?? category['name'],
+        fallback: 'Fee',
+      ),
+      'amount': _numValue(fee['amount'] ?? fee['tuition']),
+      'frequency': _textValue(fee['frequency'], fallback: 'term'),
+      'due_day': fee['due_day'] ?? '-',
+    };
+  }
+
+  Map<String, dynamic> _normalizeInvoice(Map<String, dynamic> invoice) {
+    final student = _mapValue(invoice['student']);
+    final section = _mapValue(student['current_section'] ?? invoice['section']);
+    final grade = _mapValue(section['grade']);
+    final classLabel = [
+      _textValue(grade['grade_name'] ?? invoice['grade_name']),
+      _textValue(section['section_name'] ?? invoice['section_name']),
+    ].where((part) => part.isNotEmpty).join(' - ');
+    return {
+      ...invoice,
+      'id': _textValue(invoice['id']),
+      'student_id': _textValue(invoice['student_id']),
+      'name': _studentName(
+        student,
+        fallback: _textValue(invoice['student_name']),
+      ),
+      'class': classLabel.isEmpty
+          ? _textValue(invoice['class'], fallback: 'Class pending')
+          : classLabel,
+      'total': _numValue(invoice['total_amount'] ?? invoice['net_amount']),
+      'paid': _numValue(invoice['paid_amount']),
+      'balance': _numValue(invoice['balance']),
+      'due_date': invoice['due_date'],
+      'status': _textValue(invoice['status'], fallback: 'pending'),
+    };
+  }
+
+  Iterable<Map<String, dynamic>> _normalizePayments(
+    Map<String, dynamic> invoice,
+  ) {
+    final normalized = _normalizeInvoice(invoice);
+    final payments = invoice['payments'];
+    if (payments is! List) return const [];
+    return payments.whereType<Map>().map((payment) {
+      final row = Map<String, dynamic>.from(payment);
+      return {
+        ...row,
+        'name': normalized['name'],
+        'class': normalized['class'],
+        'student_id': normalized['student_id'],
+        'invoice_id': normalized['id'],
+        'amount': _numValue(row['amount_paid'] ?? row['amount']),
+        'mode': _textValue(row['payment_mode'] ?? row['mode']),
+        'date': row['payment_date'] ?? row['created_at'],
+        'receipt': row['receipt_number'] ?? row['receipt'],
+      };
+    });
+  }
+
+  double get _pendingTotal =>
+      _pendingDues.fold(0, (sum, row) => sum + _numValue(row['balance']));
+
+  double get _collectedTotal =>
+      _recentPayments.fold(0, (sum, row) => sum + _numValue(row['amount']));
+
+  Color _statusColor(String status) {
+    final lower = status.toLowerCase();
+    if (lower.contains('approved') || lower.contains('paid')) {
+      return Colors.green;
+    }
+    if (lower.contains('reject')) return Colors.red;
+    return Colors.orange;
+  }
+
+  void _snack(String message, {bool success = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: success ? AppTheme.success : AppTheme.error,
+      ),
+    );
+  }
+
+  Map<String, dynamic> _mapValue(Object? value) =>
+      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+  double _numValue(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+
+  String _studentName(Map<String, dynamic> student, {String fallback = ''}) {
+    final direct = _textValue(student['name']);
+    if (direct.isNotEmpty) return direct;
+    final fullName =
+        '${_textValue(student['first_name'])} ${_textValue(student['last_name'])}'
+            .trim();
+    return fullName.isEmpty ? fallback : fullName;
+  }
+
+  String _dateLabel(Object? value) {
+    final date = DateTime.tryParse('${value ?? ''}');
+    return date == null
+        ? 'date pending'
+        : date.toIso8601String().split('T').first;
+  }
+
+  String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
+
+  String _textValue(Object? value, {String fallback = ''}) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty || text == 'null' ? fallback : text;
   }
 }

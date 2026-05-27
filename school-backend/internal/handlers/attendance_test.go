@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
@@ -87,4 +89,106 @@ func TestMarkStaffAttendance(t *testing.T) {
 	assert.Equal(t, "2024-04-30T00:00:00Z", attendance["date"])
 	assert.Equal(t, "2024-04-30T09:00:00Z", attendance["check_in"])
 	assert.Equal(t, "2024-04-30T17:00:00Z", attendance["check_out"])
+}
+
+func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	h := NewAttendanceHandler()
+
+	adminRouter := scopedPolicyRouter("Admin", "user-policy-admin", "", "", "admin@policy.test", f.schoolID)
+	adminRouter.GET("/attendance/staff/qr-token", h.GetStaffQRToken)
+
+	tokenReq, _ := http.NewRequest(http.MethodGet, "/attendance/staff/qr-token", nil)
+	tokenResp := httptest.NewRecorder()
+	adminRouter.ServeHTTP(tokenResp, tokenReq)
+	assert.Equal(t, http.StatusOK, tokenResp.Code)
+
+	var tokenBody struct {
+		Success bool           `json:"success"`
+		Data    map[string]any `json:"data"`
+	}
+	assert.NoError(t, json.Unmarshal(tokenResp.Body.Bytes(), &tokenBody))
+	token, _ := tokenBody.Data["token"].(string)
+	if token == "" {
+		t.Fatalf("expected staff QR token in response: %s", tokenResp.Body.String())
+	}
+
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/attendance/staff/qr-scan", h.ScanStaffQR)
+
+	scanBody, _ := json.Marshal(map[string]string{"token": token})
+	scanReq, _ := http.NewRequest(http.MethodPost, "/attendance/staff/qr-scan", bytes.NewBuffer(scanBody))
+	scanReq.Header.Set("Content-Type", "application/json")
+	scanResp := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(scanResp, scanReq)
+	assert.Equal(t, http.StatusOK, scanResp.Code)
+
+	duplicateReq, _ := http.NewRequest(http.MethodPost, "/attendance/staff/qr-scan", bytes.NewBuffer(scanBody))
+	duplicateReq.Header.Set("Content-Type", "application/json")
+	duplicateResp := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(duplicateResp, duplicateReq)
+	assert.Equal(t, http.StatusOK, duplicateResp.Code)
+
+	var count int64
+	assert.NoError(t, database.DB.Model(&models.StaffAttendance{}).
+		Where("staff_id = ?", f.teacherStaffID).
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestStaffQRScanRejectsExpiredWrongSchoolAndUnlinkedTeacher(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	h := NewAttendanceHandler()
+	now := time.Now().UTC()
+	_, dateText := staffAttendanceDate(now)
+
+	expiredToken := signedStaffQRTokenForTest(t, staffQRPayload{
+		SchoolID:  f.schoolID,
+		Date:      dateText,
+		IssuedAt:  now.Add(-2 * time.Minute).Unix(),
+		ExpiresAt: now.Add(-time.Minute).Unix(),
+		Nonce:     "expired-token",
+	})
+	validWrongSchoolToken := signedStaffQRTokenForTest(t, staffQRPayload{
+		SchoolID:  "school-other",
+		Date:      dateText,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(time.Minute).Unix(),
+		Nonce:     "wrong-school-token",
+	})
+	validToken := signedStaffQRTokenForTest(t, staffQRPayload{
+		SchoolID:  f.schoolID,
+		Date:      dateText,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(time.Minute).Unix(),
+		Nonce:     "unlinked-token",
+	})
+
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/attendance/staff/qr-scan", h.ScanStaffQR)
+	assert.Equal(t, http.StatusBadRequest, postStaffQRForTest(teacherRouter, expiredToken).Code)
+	assert.Equal(t, http.StatusForbidden, postStaffQRForTest(teacherRouter, validWrongSchoolToken).Code)
+
+	unlinkedRouter := scopedPolicyRouter("Teacher", "user-unlinked", "", "", "", f.schoolID)
+	unlinkedRouter.POST("/attendance/staff/qr-scan", h.ScanStaffQR)
+	assert.Equal(t, http.StatusForbidden, postStaffQRForTest(unlinkedRouter, validToken).Code)
+}
+
+func signedStaffQRTokenForTest(t *testing.T, payload staffQRPayload) string {
+	t.Helper()
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal qr payload: %v", err)
+	}
+	encodedPayload := base64.RawURLEncoding.EncodeToString(payloadBytes)
+	return encodedPayload + "." + signStaffQRPayload(encodedPayload)
+}
+
+func postStaffQRForTest(router *gin.Engine, token string) *httptest.ResponseRecorder {
+	body, _ := json.Marshal(map[string]string{"token": token})
+	req, _ := http.NewRequest(http.MethodPost, "/attendance/staff/qr-scan", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
 }

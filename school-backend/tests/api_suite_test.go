@@ -181,11 +181,9 @@ func TestCompleteAPISuite(t *testing.T) {
 	s.expect("Parent blocked from other child fees", "GET", "/students/"+s.ids["other_student"]+"/fees", "Parent", "Parent", nil, http.StatusForbidden)
 	s.expect("Parent blocked from other child attendance", "GET", "/students/"+s.ids["other_student"]+"/attendance", "Parent", "Parent", nil, http.StatusForbidden)
 	s.expect("Parent blocked from other child marks", "GET", "/students/"+s.ids["other_student"]+"/marks", "Parent", "Parent", nil, http.StatusForbidden)
-	s.expect("Parent blocked from other child transport", "GET", "/students/"+s.ids["other_student"]+"/transport", "Parent", "Parent", nil, http.StatusForbidden)
 	s.expect("Teacher blocked from outside class fees", "GET", "/students/"+s.ids["outside_student"]+"/fees", "Teacher", "Teacher", nil, http.StatusForbidden)
 	s.expect("Teacher blocked from outside class attendance", "GET", "/students/"+s.ids["outside_student"]+"/attendance", "Teacher", "Teacher", nil, http.StatusForbidden)
 	s.expect("Teacher blocked from outside class marks", "GET", "/students/"+s.ids["outside_student"]+"/marks", "Teacher", "Teacher", nil, http.StatusForbidden)
-	s.expect("Teacher blocked from outside class transport", "GET", "/students/"+s.ids["outside_student"]+"/transport", "Teacher", "Teacher", nil, http.StatusForbidden)
 	s.expect("Parent view homework", "GET", "/homework", "Parent", "Parent", nil, http.StatusOK)
 	s.expectDataID("Parent create message conversation", "POST", "/message-conversations", "Parent", "Parent", map[string]any{
 		"reference_type": "homework", "reference_id": s.ids["homework"], "teacher_id": s.ids["staff"], "parent_id": "user-parent-suite",

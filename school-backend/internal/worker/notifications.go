@@ -18,7 +18,11 @@ func RunNotificationWorker() error {
 	log.Println("Notification worker started")
 	return services.Queue.Consume("notifications", func(payload map[string]interface{}) error {
 		if id, ok := payload["notification_id"].(string); ok && strings.TrimSpace(id) != "" {
-			return deliverNotificationPush(context.Background(), strings.TrimSpace(id))
+			if err := deliverNotificationPush(context.Background(), strings.TrimSpace(id)); err != nil {
+				services.RecordNotificationWorkerFailure()
+				return err
+			}
+			return nil
 		}
 		log.Printf("processed notification job without push target: %v", payload)
 		return nil

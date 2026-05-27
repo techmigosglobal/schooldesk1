@@ -184,7 +184,7 @@ func (h *CRUDHandler[T]) scopedQuery(c *gin.Context) *gorm.DB {
 
 func (h *CRUDHandler[T]) idCondition() string {
 	switch h.actualTableName() {
-	case "messages", "parent_teacher_meetings", "terms":
+	case "messages", "parent_teacher_meetings", "terms", "staff_subjects":
 		return h.actualTableName() + ".id = ?"
 	default:
 		return "id = ?"
@@ -192,21 +192,38 @@ func (h *CRUDHandler[T]) idCondition() string {
 }
 
 func (h *CRUDHandler[T]) actualTableName() string {
-	switch h.TableName {
-	case "homework":
-		return "homeworks"
-	default:
-		return h.TableName
-	}
+	return h.TableName
 }
 
 func (h *CRUDHandler[T]) applyListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
 	switch h.TableName {
 	case "homework":
 		return h.applyHomeworkListFilters(c, query)
+	case "staff_subjects":
+		return h.applyStaffSubjectListFilters(c, query)
+	case "grade_subjects":
+		return h.applyGradeSubjectListFilters(c, query)
 	default:
 		return query
 	}
+}
+
+func (h *CRUDHandler[T]) applyGradeSubjectListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	for _, field := range []string{"grade_id", "subject_id"} {
+		if value := strings.TrimSpace(c.Query(field)); value != "" {
+			query = query.Where("grade_subjects."+field+" = ?", value)
+		}
+	}
+	return query
+}
+
+func (h *CRUDHandler[T]) applyStaffSubjectListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	for _, field := range []string{"staff_id", "subject_id", "grade_id", "section_id"} {
+		if value := strings.TrimSpace(c.Query(field)); value != "" {
+			query = query.Where("staff_subjects."+field+" = ?", value)
+		}
+	}
+	return query
 }
 
 func (h *CRUDHandler[T]) applyHomeworkListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
@@ -262,6 +279,33 @@ func (h *CRUDHandler[T]) applyRoleRelationshipScope(c *gin.Context, query *gorm.
 	case "parent_student_links":
 		if role == "parent" {
 			return query.Where("parent_user_id = ?", currentUserID(c))
+		}
+	case "staff_subjects":
+		query = query.
+			Where("staff_subjects.staff_id IN (?)", database.DB.Model(&models.Staff{}).Select("id").Where("school_id = ?", schoolID)).
+			Where("staff_subjects.subject_id IN (?)", database.DB.Model(&models.Subject{}).Select("id").Where("school_id = ?", schoolID)).
+			Where("staff_subjects.grade_id IN (?)", database.DB.Model(&models.Grade{}).Select("id").Where("school_id = ?", schoolID))
+		switch role {
+		case "admin", "principal":
+			return query
+		case "teacher":
+			staffID := currentStaffID(c)
+			if staffID == "" {
+				return query.Where("1 = 0")
+			}
+			return query.Where("staff_subjects.staff_id = ?", staffID)
+		default:
+			return query.Where("1 = 0")
+		}
+	case "grade_subjects":
+		query = query.
+			Where("grade_subjects.grade_id IN (?)", database.DB.Model(&models.Grade{}).Select("id").Where("school_id = ?", schoolID)).
+			Where("grade_subjects.subject_id IN (?)", database.DB.Model(&models.Subject{}).Select("id").Where("school_id = ?", schoolID))
+		switch role {
+		case "admin", "principal":
+			return query
+		default:
+			return query.Where("1 = 0")
 		}
 	case "homework":
 		switch role {
@@ -324,8 +368,8 @@ func (h *CRUDHandler[T]) applyRoleRelationshipScope(c *gin.Context, query *gorm.
 			return query.Where("1 = 0")
 		}
 	case "parent_teacher_meetings":
-		query = query.Joins("JOIN event_calendars ON event_calendars.id = parent_teacher_meetings.event_id").
-			Where("event_calendars.school_id = ?", schoolID)
+		query = query.Joins(`JOIN events ON events.event_id = parent_teacher_meetings.event_id`).
+			Where("events.school_id = ?", schoolID)
 		switch role {
 		case "admin", "principal":
 			return query
@@ -373,6 +417,50 @@ func (h *CRUDHandler[T]) validateRelationshipPolicy(c *gin.Context, row *T) erro
 		if !canAccessParentStudentLink(c, parentID, studentID) && !isSchoolOperator(c) {
 			return errors.New("parent-student link access denied")
 		}
+	case "staff_subjects":
+		return validateStaffSubjectPolicy(c, row)
+	case "grade_subjects":
+		return validateGradeSubjectPolicy(c, row)
+	}
+	return nil
+}
+
+func validateGradeSubjectPolicy[T any](c *gin.Context, row *T) error {
+	if !isSchoolOperator(c) {
+		return errors.New("grade subject access denied")
+	}
+	schoolID := currentSchoolID(c)
+	if !gradeBelongsToSchool(getStringField(row, "GradeID"), schoolID) {
+		return errors.New("grade access denied")
+	}
+	if !subjectBelongsToSchool(getStringField(row, "SubjectID"), schoolID) {
+		return errors.New("subject access denied")
+	}
+	return nil
+}
+
+func validateStaffSubjectPolicy[T any](c *gin.Context, row *T) error {
+	if !isSchoolOperator(c) {
+		return errors.New("staff subject access denied")
+	}
+	schoolID := currentSchoolID(c)
+	staffID := getStringField(row, "StaffID")
+	subjectID := getStringField(row, "SubjectID")
+	gradeID := getStringField(row, "GradeID")
+	sectionID := getStringField(row, "SectionID")
+	if !staffBelongsToSchool(staffID, schoolID) {
+		return errors.New("staff access denied")
+	}
+	if !subjectBelongsToSchool(subjectID, schoolID) {
+		return errors.New("subject access denied")
+	}
+	if !gradeBelongsToSchool(gradeID, schoolID) {
+		return errors.New("grade access denied")
+	}
+	if sectionID != "" &&
+		(!sectionBelongsToGrade(sectionID, gradeID) ||
+			!sectionBelongsToSchool(sectionID, schoolID)) {
+		return errors.New("section access denied")
 	}
 	return nil
 }

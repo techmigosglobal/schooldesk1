@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 
 import '../core/config/env_config.dart';
 import '../core/errors/exceptions.dart';
+import 'generated/schooldesk_api.dart';
+import 'generated/schooldesk_api_models.dart';
 import 'token_storage_service.dart';
 
 /// Backend API client for school-desk backend
@@ -121,6 +124,319 @@ class BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to load dashboard',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPrincipalClassesOverview() async {
+    try {
+      final response = await _dio.get('/principal/classes');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load class command center',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalClass({
+    required String academicYearId,
+    required String sectionName,
+    required int capacity,
+    String gradeId = '',
+    String gradeName = '',
+    int? gradeNumber,
+    String classTeacherId = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/classes',
+        data: {
+          'grade_id': gradeId.trim(),
+          'grade_name': gradeName.trim(),
+          if (gradeNumber != null) 'grade_number': gradeNumber,
+          'academic_year_id': academicYearId.trim(),
+          'section_name': sectionName.trim(),
+          'capacity': capacity,
+          'class_teacher_id': classTeacherId.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create principal class',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalClassInstruction({
+    required String sectionId,
+    required String message,
+    String title = '',
+    String type = 'instruction',
+    String priority = 'normal',
+    bool sendNotice = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/classes/$sectionId/instructions',
+        data: {
+          'title': title.trim(),
+          'message': message.trim(),
+          'type': type.trim().isEmpty ? 'instruction' : type.trim(),
+          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
+          'send_notice': sendNotice,
+          'target_route': '/principal-classes-screen',
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save class instruction',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPrincipalSubjectsOverview() async {
+    try {
+      final response = await _dio.get('/principal/subjects');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load subject command center',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalSubjectAction({
+    required String subjectId,
+    required String actionType,
+    required String message,
+    String title = '',
+    String priority = 'normal',
+    String teacherId = '',
+    String gradeId = '',
+    String dueDate = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/subjects/$subjectId/actions',
+        data: {
+          'action_type': actionType.trim(),
+          'title': title.trim(),
+          'message': message.trim(),
+          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
+          'teacher_id': teacherId.trim(),
+          'grade_id': gradeId.trim(),
+          'due_date': dueDate.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save subject action',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> savePrincipalSubjectMapping({
+    required String subjectId,
+    required String gradeId,
+    required int periodsPerWeek,
+    int maxMarks = 100,
+    int passMarks = 35,
+    bool isMandatory = true,
+    String sectionId = '',
+    String teacherId = '',
+    bool isPrimary = true,
+    String assignmentId = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/subjects/${subjectId.trim()}/mappings',
+        data: {
+          'grade_id': gradeId.trim(),
+          'section_id': sectionId.trim(),
+          'teacher_id': teacherId.trim(),
+          'assignment_id': assignmentId.trim(),
+          'periods_per_week': periodsPerWeek,
+          'max_marks': maxMarks,
+          'pass_marks': passMarks,
+          'is_mandatory': isMandatory,
+          'is_primary': isPrimary,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save subject mapping',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPrincipalTimetableOverview() async {
+    try {
+      final response = await _dio.get('/principal/timetable');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load timetable command center',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalTimetableAction({
+    required String actionType,
+    required String message,
+    String title = '',
+    String priority = 'normal',
+    String slotId = '',
+    String dueDate = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/timetable/actions',
+        data: {
+          'action_type': actionType.trim(),
+          'title': title.trim(),
+          'message': message.trim(),
+          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
+          'slot_id': slotId.trim(),
+          'due_date': dueDate.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save timetable action',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPrincipalExamsOverview() async {
+    try {
+      final response = await _dio.get('/principal/exams');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load exam command center',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalExamAction({
+    required String actionType,
+    required String message,
+    String title = '',
+    String priority = 'normal',
+    String examId = '',
+    String dueDate = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/exams/actions',
+        data: {
+          'action_type': actionType.trim(),
+          'title': title.trim(),
+          'message': message.trim(),
+          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
+          'exam_id': examId.trim(),
+          'entity_id': examId.trim(),
+          'due_date': dueDate.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save exam action',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getPrincipalResultsOverview() async {
+    try {
+      final response = await _dio.get('/principal/results');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load results command center',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPrincipalResultAction({
+    required String actionType,
+    required String message,
+    String title = '',
+    String priority = 'normal',
+    String examId = '',
+    String dueDate = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/results/actions',
+        data: {
+          'action_type': actionType.trim(),
+          'title': title.trim(),
+          'message': message.trim(),
+          'priority': priority.trim().isEmpty ? 'normal' : priority.trim(),
+          'exam_id': examId.trim(),
+          'entity_id': examId.trim(),
+          'due_date': dueDate.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to save result action',
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -522,6 +838,7 @@ class BackendApiClient {
     required String firstName,
     required String lastName,
     String? staffCode,
+    String? username,
     String? email,
     String? phone,
     String? designation,
@@ -541,6 +858,8 @@ class BackendApiClient {
         data: {
           if (staffCode != null && staffCode.trim().isNotEmpty)
             'staff_code': staffCode.trim(),
+          if (username != null && username.trim().isNotEmpty)
+            'username': username.trim(),
           'first_name': firstName,
           'last_name': lastName,
           'email': email ?? '',
@@ -571,11 +890,17 @@ class BackendApiClient {
 
   Future<String> uploadStaffPhoto({
     required String staffId,
-    required String filePath,
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
   }) async {
     try {
       final formData = FormData.fromMap({
-        'photo': await MultipartFile.fromFile(filePath),
+        'photo': await _multipartStudentFile(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          fileName: fileName,
+        ),
       });
       final response = await _dio.post('/staff/$staffId/photo', data: formData);
       final data = response.data as Map<String, dynamic>;
@@ -591,10 +916,47 @@ class BackendApiClient {
     }
   }
 
+  Future<String> uploadStaffDocument({
+    required String staffId,
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
+    required String documentType,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'doc_type': documentType.trim().isEmpty
+            ? 'staff_document'
+            : documentType.trim(),
+        'document': await _multipartStudentFile(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          fileName: fileName,
+        ),
+      });
+      final response = await _dio.post(
+        '/staff/$staffId/documents',
+        data: formData,
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        final payload = data['data'] as Map<String, dynamic>? ?? {};
+        return '${payload['file_url'] ?? ''}';
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload staff document',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<void> updateStaff(
     String id, {
     required String firstName,
     required String lastName,
+    String? staffCode,
+    String? username,
     String? email,
     String? phone,
     String? designation,
@@ -611,6 +973,10 @@ class BackendApiClient {
       final response = await _dio.put(
         '/staff/$id',
         data: {
+          if (staffCode != null && staffCode.trim().isNotEmpty)
+            'staff_code': staffCode.trim(),
+          if (username != null && username.trim().isNotEmpty)
+            'username': username.trim(),
           'first_name': firstName,
           'last_name': lastName,
           'email': email ?? '',
@@ -837,6 +1203,28 @@ class BackendApiClient {
     }
   }
 
+  Future<String> uploadUserAvatar({
+    required String userId,
+    required String filePath,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dio.post('/users/$userId/avatar', data: formData);
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        final payload = data['data'] as Map<String, dynamic>? ?? {};
+        return '${payload['avatar'] ?? payload['avatar_url'] ?? ''}';
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload user avatar',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<void> deleteUser(String id, {bool permanent = false}) async {
     try {
       final response = await _dio.delete(
@@ -854,15 +1242,20 @@ class BackendApiClient {
   Future<void> assignParentStudents({
     required String parentUserId,
     required List<String> admissionNumbers,
+    List<String> studentIds = const [],
   }) async {
     try {
       final cleaned = admissionNumbers
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList();
+      final cleanedStudentIds = studentIds
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
       final response = await _dio.post(
         '/parents/$parentUserId/students',
-        data: {'admission_numbers': cleaned},
+        data: {'admission_numbers': cleaned, 'student_ids': cleanedStudentIds},
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] != true) {
@@ -986,11 +1379,17 @@ class BackendApiClient {
 
   Future<String> uploadStudentPhoto({
     required String studentId,
-    required String filePath,
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
   }) async {
     try {
       final formData = FormData.fromMap({
-        'photo': await MultipartFile.fromFile(filePath),
+        'photo': await _multipartStudentFile(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          fileName: fileName,
+        ),
       });
       final response = await _dio.post(
         '/students/$studentId/photo',
@@ -1009,6 +1408,41 @@ class BackendApiClient {
     }
   }
 
+  Future<String> uploadStudentDocument({
+    required String studentId,
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
+    required String docType,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'doc_type': docType.trim().isEmpty
+            ? 'admission_document'
+            : docType.trim(),
+        'document': await _multipartStudentFile(
+          filePath: filePath,
+          fileBytes: fileBytes,
+          fileName: fileName,
+        ),
+      });
+      final response = await _dio.post(
+        '/students/$studentId/documents',
+        data: formData,
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        final payload = data['data'] as Map<String, dynamic>? ?? {};
+        return '${payload['file_url'] ?? ''}';
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload student document',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<void> updateStudent(
     String id, {
     required String firstName,
@@ -1018,24 +1452,24 @@ class BackendApiClient {
     String? admissionNumber,
     String? studentCode,
     String? currentSectionId,
-    String admissionDate = '2026-01-01',
+    String? admissionDate,
     String status = 'active',
   }) async {
     try {
-      final response = await _dio.put(
-        '/students/$id',
-        data: {
-          'first_name': firstName,
-          'last_name': lastName,
-          'date_of_birth': dateOfBirth,
-          'gender': gender,
-          'admission_number': admissionNumber ?? '',
-          'student_code': studentCode ?? '',
-          'current_section_id': currentSectionId ?? '',
-          'admission_date': admissionDate,
-          'status': status,
-        },
-      );
+      final payload = <String, dynamic>{
+        'first_name': firstName,
+        'last_name': lastName,
+        'date_of_birth': dateOfBirth,
+        'gender': gender,
+        'admission_number': admissionNumber ?? '',
+        'student_code': studentCode ?? '',
+        'current_section_id': currentSectionId ?? '',
+        'status': status,
+      };
+      if ((admissionDate ?? '').trim().isNotEmpty) {
+        payload['admission_date'] = admissionDate!.trim();
+      }
+      final response = await _dio.put('/students/$id', data: payload);
       final data = response.data as Map<String, dynamic>;
       if (data['success'] != true) {
         throw ServerException(
@@ -1045,6 +1479,29 @@ class BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  Future<MultipartFile> _multipartStudentFile({
+    String? filePath,
+    Uint8List? fileBytes,
+    String? fileName,
+  }) async {
+    if (fileBytes != null && fileBytes.isNotEmpty) {
+      return MultipartFile.fromBytes(
+        fileBytes,
+        filename: (fileName ?? '').trim().isEmpty
+            ? 'schooldesk-upload'
+            : fileName!.trim(),
+      );
+    }
+    final cleanPath = (filePath ?? '').trim();
+    if (cleanPath.isEmpty) {
+      throw const ServerException(message: 'Upload file is required');
+    }
+    return MultipartFile.fromFile(
+      cleanPath,
+      filename: (fileName ?? '').trim().isEmpty ? null : fileName!.trim(),
+    );
   }
 
   Future<void> deleteStudent(String id) async {
@@ -1177,6 +1634,116 @@ class BackendApiClient {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getStudentAttendanceRecords(
+    String studentId, {
+    int? month,
+    int? year,
+  }) {
+    final queryParams = <String, dynamic>{};
+    if (month != null) queryParams['month'] = month.toString().padLeft(2, '0');
+    if (year != null) queryParams['year'] = '$year';
+    return getRawList(
+      '/students/$studentId/attendance',
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+  }
+
+  Future<StaffQrTokenModel> getStaffQrToken() async {
+    try {
+      final response = await _dio.get('/attendance/staff/qr-token');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return StaffQrTokenModel.fromJson(
+          Map<String, dynamic>.from(data['data'] as Map),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create staff QR code',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<StaffAttendanceModel> scanStaffQr(String token) async {
+    try {
+      final response = await _dio.post(
+        '/attendance/staff/qr-scan',
+        data: {'token': token},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return StaffAttendanceModel.fromJson(
+          Map<String, dynamic>.from(data['data'] as Map),
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to record staff attendance',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<StaffAttendanceModel?> getMyStaffAttendanceToday() async {
+    try {
+      final response = await _dio.get('/attendance/staff/me/today');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        final payload = data['data'];
+        if (payload is Map) {
+          final attendance = payload['attendance'];
+          if (attendance is Map) {
+            return StaffAttendanceModel.fromJson(
+              Map<String, dynamic>.from(attendance),
+            );
+          }
+        }
+        return null;
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load staff attendance',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<StaffAttendanceModel>> getStaffAttendanceForDate({
+    String? date,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (date != null && date.isNotEmpty) queryParams['date'] = date;
+
+      final response = await _dio.get(
+        '/attendance/staff',
+        queryParameters: queryParams,
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        final payload = data['data'];
+        final rows = payload is Map ? payload['attendances'] : payload;
+        if (rows is List) {
+          return rows
+              .whereType<Map>()
+              .map(
+                (item) => StaffAttendanceModel.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              )
+              .toList();
+        }
+        return const [];
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load staff attendance',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // ─── Exams ──────────────────────────────────────────────────────────────────
 
   Future<List<ExamModel>> getExams({
@@ -1190,14 +1757,15 @@ class BackendApiClient {
       if (yearId != null) queryParams['academic_year_id'] = yearId;
       if (termId != null) queryParams['term_id'] = termId;
 
-      final response = await _dio.get('/exams', queryParameters: queryParams);
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] == true) {
-        return (data['data'] as List)
-            .map((e) => ExamModel.fromJson(e as Map<String, dynamic>))
-            .toList();
+      final response = await SchoolDeskApi.instance.client.exams(
+        queryParams.isEmpty ? null : queryParams,
+      );
+      if (response.success == true) {
+        return _asListMap(
+          response.data,
+        ).map((e) => ExamModel.fromJson(e)).toList();
       }
-      throw ServerException(message: data['error'] ?? 'Failed to get exams');
+      throw ServerException(message: response.error ?? 'Failed to get exams');
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -1594,23 +2162,24 @@ class BackendApiClient {
     bool isHoliday = false,
   }) async {
     try {
-      final response = await _dio.post(
-        '/events',
-        data: {
-          'academic_year_id': academicYearId,
-          'event_title': title,
-          'event_type': eventType,
-          'description': description,
-          'start_datetime': start.toUtc().toIso8601String(),
-          'end_datetime': end.toUtc().toIso8601String(),
-          'location': location,
-          'is_holiday': isHoliday,
-        },
+      final response = await SchoolDeskApi.instance.client.createEvent(
+        EventDto(
+          academicYearId: academicYearId,
+          eventName: title,
+          eventType: eventType,
+          description: description,
+          startDate: start.toUtc().toIso8601String().split('T').first,
+          endDate: end.toUtc().toIso8601String().split('T').first,
+          startTime: start.toUtc().toIso8601String().split('T').last,
+          endTime: end.toUtc().toIso8601String().split('T').last,
+          venue: location,
+          isHoliday: isHoliday,
+          status: 'scheduled',
+        ),
       );
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
+      if (response.success != true) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to create event',
+          message: response.error ?? 'Failed to create event',
         );
       }
     } on DioException catch (e) {
@@ -1627,21 +2196,19 @@ class BackendApiClient {
     required String endDate,
   }) async {
     try {
-      final response = await _dio.post(
-        '/exams',
-        data: {
-          'academic_year_id': academicYearId,
-          'term_id': termId,
-          'exam_type_id': examTypeId,
-          'exam_name': examName,
-          'start_date': startDate,
-          'end_date': endDate,
-        },
+      final response = await SchoolDeskApi.instance.client.createExam(
+        ExamDto(
+          academicYearId: academicYearId,
+          termId: termId,
+          examTypeId: examTypeId,
+          examName: examName,
+          startDate: startDate,
+          endDate: endDate,
+        ),
       );
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
+      if (response.success != true) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to create exam',
+          message: response.error ?? 'Failed to create exam',
         );
       }
     } on DioException catch (e) {
@@ -1659,21 +2226,20 @@ class BackendApiClient {
     required String endDate,
   }) async {
     try {
-      final response = await _dio.put(
-        '/exams/$id',
-        data: {
-          'academic_year_id': academicYearId,
-          'term_id': termId,
-          'exam_type_id': examTypeId,
-          'exam_name': examName,
-          'start_date': startDate,
-          'end_date': endDate,
-        },
+      final response = await SchoolDeskApi.instance.client.updateExam(
+        id,
+        ExamDto(
+          academicYearId: academicYearId,
+          termId: termId,
+          examTypeId: examTypeId,
+          examName: examName,
+          startDate: startDate,
+          endDate: endDate,
+        ),
       );
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
+      if (response.success != true) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to update exam',
+          message: response.error ?? 'Failed to update exam',
         );
       }
     } on DioException catch (e) {
@@ -1683,14 +2249,12 @@ class BackendApiClient {
 
   Future<void> setExamPublished(String id, bool isPublished) async {
     try {
-      final response = await _dio.patch(
-        '/exams/$id/publish',
-        data: {'is_published': isPublished},
-      );
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
+      final response = await SchoolDeskApi.instance.client.publishExam(id, {
+        'is_published': isPublished,
+      });
+      if (response.success != true) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to update exam publish status',
+          message: response.error ?? 'Failed to update exam publish status',
         );
       }
     } on DioException catch (e) {
@@ -1704,12 +2268,23 @@ class BackendApiClient {
       if (academicYearId != null) {
         queryParams['academic_year_id'] = academicYearId;
       }
-      final response = await _dio.get('/events', queryParameters: queryParams);
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] == true) {
-        return _asListMap(data['data']);
+      final response = await SchoolDeskApi.instance.client.events(
+        queryParams.isEmpty ? null : queryParams,
+      );
+      if (response.success == true) {
+        return _asListMap(response.data).map((event) {
+          final normalized = Map<String, dynamic>.from(event);
+          normalized['id'] ??= normalized['event_id'];
+          normalized['event_title'] ??= normalized['event_name'];
+          normalized['location'] ??= normalized['venue'];
+          normalized['start_datetime'] ??=
+              '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
+          normalized['end_datetime'] ??=
+              '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
+          return normalized;
+        }).toList();
       }
-      throw ServerException(message: data['error'] ?? 'Failed to get events');
+      throw ServerException(message: 'Failed to get events');
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -1717,13 +2292,19 @@ class BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getNotifications() async {
     try {
-      final response = await _dio.get('/notifications');
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] == true) {
-        return _asListMap(data['data']);
+      final response = await SchoolDeskApi.instance.client.notifications();
+      if (response.success == true) {
+        return _asListMap(response.data).map((notification) {
+          final normalized = Map<String, dynamic>.from(notification);
+          normalized['id'] ??= normalized['notification_id'];
+          normalized['body'] ??= normalized['message'];
+          normalized['type'] ??= normalized['notification_type'];
+          normalized['user_id'] ??= normalized['target_user_id'];
+          return normalized;
+        }).toList();
       }
       throw ServerException(
-        message: data['error'] ?? 'Failed to get notifications',
+        message: response.error ?? 'Failed to get notifications',
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -1732,11 +2313,12 @@ class BackendApiClient {
 
   Future<void> markNotificationRead(String notificationId) async {
     try {
-      final response = await _dio.put('/notifications/$notificationId/read');
-      final data = response.data as Map<String, dynamic>;
-      if (data['success'] != true) {
+      final response = await SchoolDeskApi.instance.client.markNotificationRead(
+        notificationId,
+      );
+      if (response.success != true) {
         throw ServerException(
-          message: data['error'] ?? 'Failed to mark notification as read',
+          message: response.error ?? 'Failed to mark notification as read',
         );
       }
     } on DioException catch (e) {
@@ -1996,15 +2578,22 @@ class BackendApiClient {
       queryParams['section_id'] = sectionId.trim();
     }
     if (teacherId != null && teacherId.trim().isNotEmpty) {
-      queryParams['teacher_id'] = teacherId.trim();
+      queryParams['staff_id'] = teacherId.trim();
     }
     if (status != null && status.trim().isNotEmpty) {
       queryParams['status'] = status.trim();
     }
-    return getRawList(
-      '/homework',
-      queryParameters: queryParams.isEmpty ? null : queryParams,
-    );
+    try {
+      final response = await SchoolDeskApi.instance.client.homework(
+        queryParams.isEmpty ? null : queryParams,
+      );
+      if (response.success == true) {
+        return _asListMap(response.data);
+      }
+      throw ServerException(message: 'Failed to load homework');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> createHomework({
@@ -2017,19 +2606,28 @@ class BackendApiClient {
     required String dueDate,
     String studentId = '',
     String status = 'pending',
-  }) {
-    return createRaw('/homework', {
-      'title': title,
-      'subject': subject,
-      'class': className,
-      'section_id': sectionId,
-      'teacher_id': teacherId,
-      'student_id': studentId,
-      'description': description,
-      'due_date': dueDate,
-      'status': status,
-      'created_by': teacherId,
-    });
+  }) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.createHomework(
+        HomeworkDto(
+          title: title,
+          subjectId: subject,
+          classId: className,
+          sectionId: sectionId,
+          staffId: teacherId,
+          studentId: studentId,
+          description: description,
+          submissionDate: dueDate,
+          status: status,
+        ),
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to create homework',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> updateHomework(
@@ -2043,37 +2641,63 @@ class BackendApiClient {
     required String dueDate,
     String studentId = '',
     String status = 'pending',
-  }) {
-    return updateRaw('/homework/$id', {
-      'title': title,
-      'subject': subject,
-      'class': className,
-      'section_id': sectionId,
-      'teacher_id': teacherId,
-      'student_id': studentId,
-      'description': description,
-      'due_date': dueDate,
-      'status': status,
-      'created_by': teacherId,
-    });
+  }) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.updateHomework(
+        id,
+        HomeworkDto(
+          title: title,
+          subjectId: subject,
+          classId: className,
+          sectionId: sectionId,
+          staffId: teacherId,
+          studentId: studentId,
+          description: description,
+          submissionDate: dueDate,
+          status: status,
+        ),
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to update homework',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
-  Future<void> deleteHomework(String id) {
-    return deleteRaw('/homework/$id');
+  Future<void> deleteHomework(String id) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.deleteHomework(id);
+      if (response.success == true) return;
+      throw ServerException(
+        message: response.error ?? 'Failed to delete homework',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> getHomeworkSubmissions(
     String homeworkId, {
     String? studentId,
-  }) {
+  }) async {
     final queryParams = <String, dynamic>{};
     if (studentId != null && studentId.trim().isNotEmpty) {
       queryParams['student_id'] = studentId.trim();
     }
-    return getRawMap(
-      '/homework/$homeworkId/submissions',
-      queryParameters: queryParams.isEmpty ? null : queryParams,
-    );
+    try {
+      final response = await SchoolDeskApi.instance.client.homeworkSubmissions(
+        homeworkId,
+        queryParams.isEmpty ? null : queryParams,
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to load homework submissions',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> submitHomework(
@@ -2081,12 +2705,21 @@ class BackendApiClient {
     required String studentId,
     required String answerText,
     String attachmentUrl = '',
-  }) {
-    return createRaw('/homework/$homeworkId/submissions', {
-      'student_id': studentId,
-      'answer_text': answerText,
-      'attachment_url': attachmentUrl,
-    });
+  }) async {
+    try {
+      final response = await SchoolDeskApi.instance.client
+          .submitHomework(homeworkId, {
+            'student_id': studentId,
+            'answer_text': answerText,
+            'attachment_url': attachmentUrl,
+          });
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to submit homework',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   Future<Map<String, dynamic>> reviewHomeworkSubmission(
@@ -2095,12 +2728,21 @@ class BackendApiClient {
     required String status,
     String grade = '',
     String remarks = '',
-  }) {
-    return updateRaw('/homework/$homeworkId/submissions/$submissionId/review', {
-      'status': status,
-      'grade': grade,
-      'remarks': remarks,
-    });
+  }) async {
+    try {
+      final response = await SchoolDeskApi.instance.client
+          .reviewHomeworkSubmission(homeworkId, submissionId, {
+            'status': status,
+            'grade': grade,
+            'remarks': remarks,
+          });
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to review homework',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
   }
 
   // ─── Report Exports ───────────────────────────────────────────────────────
@@ -2139,6 +2781,108 @@ class BackendApiClient {
     );
   }
 
+  // ─── Tables.md ERP Resource Helpers ───────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getTablesMDRows(
+    String resource, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.listTablesMdRoot(
+        _tablesMDPath(resource),
+        queryParameters,
+      );
+      if (response.success == true) return _asListMap(response.data);
+      throw ServerException(
+        message: 'Failed to load ${_tablesMDPath(resource)}',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getTablesMDRow(
+    String resource,
+    String id,
+  ) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.getTablesMdRoot(
+        _tablesMDPath(resource),
+        id,
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to load $resource',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createTablesMDRow(
+    String resource,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.createTablesMdRoot(
+        _tablesMDPath(resource),
+        payload,
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to create $resource',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateTablesMDRow(
+    String resource,
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.updateTablesMdRoot(
+        _tablesMDPath(resource),
+        id,
+        payload,
+      );
+      if (response.success == true) return _asMap(response.data);
+      throw ServerException(
+        message: response.error ?? 'Failed to update $resource',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> deleteTablesMDRow(String resource, String id) async {
+    try {
+      final response = await SchoolDeskApi.instance.client.deleteTablesMdRoot(
+        _tablesMDPath(resource),
+        id,
+      );
+      if (response.success == true) return;
+      throw ServerException(
+        message: response.error ?? 'Failed to delete $resource',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  String _tablesMDPath(String resource) {
+    switch (resource.trim()) {
+      case 'approval_requests':
+        return 'approval-requests';
+      case 'principal_reports':
+        return 'principal-reports';
+      default:
+        return resource.trim().replaceAll('_', '-');
+    }
+  }
+
   // ─── Raw CRUD Helpers ─────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getRawList(
@@ -2146,6 +2890,15 @@ class BackendApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
+      final root = _tablesMDRootListPath(path);
+      if (root != null) {
+        final response = await SchoolDeskApi.instance.client.listTablesMdRoot(
+          root,
+          queryParameters,
+        );
+        if (response.success == true) return _asListMap(response.data);
+        throw ServerException(message: 'Failed to load $path');
+      }
       final response = await _dio.get(path, queryParameters: queryParameters);
       final data = _asMap(response.data);
       if (data['success'] == true) {
@@ -2178,6 +2931,17 @@ class BackendApiClient {
     Map<String, dynamic> payload,
   ) async {
     try {
+      final root = _tablesMDRootListPath(path);
+      if (root != null) {
+        final response = await SchoolDeskApi.instance.client.createTablesMdRoot(
+          root,
+          payload,
+        );
+        if (response.success == true) return _asMap(response.data);
+        throw ServerException(
+          message: response.error ?? 'Failed to create $path',
+        );
+      }
       final response = await _dio.post(path, data: payload);
       final data = _asMap(response.data);
       if (data['success'] == true) {
@@ -2194,6 +2958,18 @@ class BackendApiClient {
     Map<String, dynamic> payload,
   ) async {
     try {
+      final item = _tablesMDRootItemPath(path);
+      if (item != null) {
+        final response = await SchoolDeskApi.instance.client.updateTablesMdRoot(
+          item.root,
+          item.id,
+          payload,
+        );
+        if (response.success == true) return _asMap(response.data);
+        throw ServerException(
+          message: response.error ?? 'Failed to update $path',
+        );
+      }
       final response = await _dio.put(path, data: payload);
       final data = _asMap(response.data);
       if (data['success'] == true) {
@@ -2228,6 +3004,17 @@ class BackendApiClient {
 
   Future<void> deleteRaw(String path) async {
     try {
+      final item = _tablesMDRootItemPath(path);
+      if (item != null) {
+        final response = await SchoolDeskApi.instance.client.deleteTablesMdRoot(
+          item.root,
+          item.id,
+        );
+        if (response.success == true) return;
+        throw ServerException(
+          message: response.error ?? 'Failed to delete $path',
+        );
+      }
       final response = await _dio.delete(path);
       final data = _asMap(response.data);
       if (data['success'] == true) return;
@@ -2244,6 +3031,44 @@ class BackendApiClient {
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
   }
+
+  String? _tablesMDRootListPath(String path) {
+    final segments = _pathSegments(path);
+    if (segments.length != 1) return null;
+    return _tablesMDRoots.contains(segments.first) ? segments.first : null;
+  }
+
+  ({String root, String id})? _tablesMDRootItemPath(String path) {
+    final segments = _pathSegments(path);
+    if (segments.length != 2 || !_tablesMDRoots.contains(segments.first)) {
+      return null;
+    }
+    return (root: segments.first, id: segments.last);
+  }
+
+  List<String> _pathSegments(String path) {
+    return path
+        .split('?')
+        .first
+        .split('/')
+        .where((segment) => segment.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static const Set<String> _tablesMDRoots = {
+    'classes',
+    'attendance',
+    'fees',
+    'exams',
+    'homework',
+    'leaves',
+    'notifications',
+    'holidays',
+    'events',
+    'approval-requests',
+    'communications',
+    'principal-reports',
+  };
 
   // ─── Error Handling ─────────────────────────────────────────────────────────
 
@@ -2524,6 +3349,7 @@ class UserAccountModel {
   final String username;
   final String email;
   final String phone;
+  final String avatar;
   final String schoolId;
   final String roleId;
   final String roleName;
@@ -2540,6 +3366,7 @@ class UserAccountModel {
     required this.username,
     required this.email,
     required this.phone,
+    required this.avatar,
     required this.schoolId,
     required this.roleId,
     required this.roleName,
@@ -2558,6 +3385,7 @@ class UserAccountModel {
         username: json['username'] as String? ?? '',
         email: json['email'] as String? ?? '',
         phone: json['phone'] as String? ?? '',
+        avatar: json['avatar'] as String? ?? '',
         schoolId: json['school_id'] as String? ?? '',
         roleId: json['role_id'] as String? ?? '',
         roleName: json['role_name'] as String? ?? '',
@@ -2739,6 +3567,7 @@ class StaffModel {
   final String? email;
   final String? phone;
   final String? designation;
+  final String? employmentType;
   final String? departmentId;
   final String? departmentName;
   final String status;
@@ -2746,6 +3575,8 @@ class StaffModel {
   final String? gender;
   final String? joinDate;
   final String photoUrl;
+  final List<Map<String, dynamic>> documents;
+  final int documentCount;
 
   const StaffModel({
     required this.id,
@@ -2756,6 +3587,7 @@ class StaffModel {
     this.email,
     this.phone,
     this.designation,
+    this.employmentType,
     this.departmentId,
     this.departmentName,
     required this.status,
@@ -2763,30 +3595,46 @@ class StaffModel {
     this.gender,
     this.joinDate,
     required this.photoUrl,
+    this.documents = const [],
+    this.documentCount = 0,
   });
 
-  String get fullName => '$firstName $lastName';
+  String get fullName => '$firstName $lastName'.trim();
 
-  factory StaffModel.fromJson(Map<String, dynamic> json) => StaffModel(
-    id: json['id'] as String,
-    schoolId: json['school_id'] as String,
-    staffCode: json['staff_code'] as String? ?? '',
-    firstName: json['first_name'] as String,
-    lastName: json['last_name'] as String,
-    email: json['email'] as String?,
-    phone: json['phone'] as String?,
-    dateOfBirth: json['date_of_birth'] as String?,
-    gender: json['gender'] as String?,
-    designation: json['designation'] as String?,
-    departmentId: json['department_id'] as String?,
-    departmentName:
-        json['department_name'] as String? ??
-        (json['department'] as Map<String, dynamic>?)?['department_name']
-            as String?,
-    joinDate: json['join_date'] as String?,
-    status: json['status'] as String? ?? 'active',
-    photoUrl: _photoUrlFromJson(json),
-  );
+  factory StaffModel.fromJson(Map<String, dynamic> json) {
+    final documents = _listMapValue(json['documents']);
+    return StaffModel(
+      id: json['id'] as String,
+      schoolId: json['school_id'] as String,
+      staffCode: json['staff_code'] as String? ?? '',
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+      dateOfBirth: json['date_of_birth'] as String?,
+      gender: json['gender'] as String?,
+      designation: json['designation'] as String?,
+      employmentType: json['employment_type'] as String?,
+      departmentId: json['department_id'] as String?,
+      departmentName:
+          json['department_name'] as String? ??
+          (json['department'] as Map<String, dynamic>?)?['department_name']
+              as String?,
+      joinDate: json['join_date'] as String?,
+      status: json['status'] as String? ?? 'active',
+      photoUrl: _photoUrlFromJson(json),
+      documents: documents,
+      documentCount: documents.length,
+    );
+  }
+
+  static List<Map<String, dynamic>> _listMapValue(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
 
   static String _photoUrlFromJson(Map<String, dynamic> json) {
     final direct = (json['photo_url'] ?? json['photo'] ?? '').toString().trim();
@@ -2819,10 +3667,20 @@ class StudentModel {
   final String firstName;
   final String lastName;
   final String? dateOfBirth;
+  final String? admissionDate;
   final String? gender;
   final String? currentSectionId;
   final String status;
   final String photoUrl;
+  final List<Map<String, dynamic>> guardians;
+  final List<Map<String, dynamic>> documents;
+  final List<Map<String, dynamic>> parentAccounts;
+  final Map<String, dynamic> primaryGuardian;
+  final Map<String, dynamic> medicalRecord;
+  final Map<String, dynamic> currentSection;
+  final Map<String, dynamic> attendanceSummary;
+  final Map<String, dynamic> feeSummary;
+  final Map<String, dynamic> performanceSummary;
 
   const StudentModel({
     required this.id,
@@ -2832,27 +3690,108 @@ class StudentModel {
     required this.firstName,
     required this.lastName,
     this.dateOfBirth,
+    this.admissionDate,
     this.gender,
     this.currentSectionId,
     required this.status,
     required this.photoUrl,
+    this.guardians = const [],
+    this.documents = const [],
+    this.parentAccounts = const [],
+    this.primaryGuardian = const {},
+    this.medicalRecord = const {},
+    this.currentSection = const {},
+    this.attendanceSummary = const {},
+    this.feeSummary = const {},
+    this.performanceSummary = const {},
   });
 
-  String get fullName => '$firstName $lastName';
+  String get fullName => '$firstName $lastName'.trim();
+  double get attendancePercent => _doubleFromJson(
+    attendanceSummary['percent'] ?? attendanceSummary['attendance_percent'],
+  );
+  String get attendanceStatusLabel =>
+      (attendanceSummary['status_label'] ?? '').toString().trim();
+  String get feeStatus => (feeSummary['status'] ?? 'clear').toString().trim();
+  double get feeBalance => _doubleFromJson(feeSummary['balance']);
+  int get pendingInvoices => _intFromJson(feeSummary['pending_invoices']);
+  double get performanceScore =>
+      _doubleFromJson(performanceSummary['average_percent']);
+  String get performanceGrade =>
+      (performanceSummary['grade'] ?? 'N/A').toString().trim();
+  int get documentCount => documents.length;
+  String get primaryGuardianName {
+    final name = (primaryGuardian['full_name'] ?? primaryGuardian['name'] ?? '')
+        .toString()
+        .trim();
+    if (name.isNotEmpty) return name;
+    if (parentAccounts.isNotEmpty) {
+      final parent = parentAccounts.first;
+      final parentName = (parent['name'] ?? parent['username'] ?? '')
+          .toString()
+          .trim();
+      if (parentName.isNotEmpty) return parentName;
+    }
+    return '';
+  }
+
+  String get primaryGuardianPhone {
+    final phone = (primaryGuardian['phone'] ?? '').toString().trim();
+    if (phone.isNotEmpty) return phone;
+    if (parentAccounts.isNotEmpty) {
+      return (parentAccounts.first['phone'] ?? '').toString().trim();
+    }
+    return '';
+  }
 
   factory StudentModel.fromJson(Map<String, dynamic> json) => StudentModel(
     id: json['id'] as String,
-    schoolId: json['school_id'] as String,
+    schoolId: json['school_id'] as String? ?? '',
     studentCode: json['student_code'] as String? ?? '',
     admissionNumber: json['admission_number'] as String? ?? '',
-    firstName: json['first_name'] as String,
-    lastName: json['last_name'] as String,
+    firstName: json['first_name'] as String? ?? '',
+    lastName: json['last_name'] as String? ?? '',
     dateOfBirth: json['date_of_birth'] as String?,
+    admissionDate: json['admission_date'] as String?,
     gender: json['gender'] as String?,
     currentSectionId: json['current_section_id'] as String?,
     status: json['status'] as String? ?? 'active',
     photoUrl: _photoUrlFromJson(json),
+    guardians: _asListMap(json['guardians']),
+    documents: _asListMap(json['documents']),
+    parentAccounts: _asListMap(json['parent_accounts']),
+    primaryGuardian: _asMap(json['primary_guardian']),
+    medicalRecord: _asMap(json['medical_record']),
+    currentSection: _asMap(json['current_section']),
+    attendanceSummary: _asMap(json['attendance_summary']),
+    feeSummary: _asMap(json['fee_summary']),
+    performanceSummary: _asMap(json['performance_summary']),
   );
+
+  static List<Map<String, dynamic>> _asListMap(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  static Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return const {};
+  }
+
+  static double _doubleFromJson(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('${value ?? ''}') ?? 0;
+  }
+
+  static int _intFromJson(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? 0;
+  }
 
   static String _photoUrlFromJson(Map<String, dynamic> json) {
     final direct = (json['photo_url'] ?? json['photo'] ?? '').toString().trim();
@@ -2912,6 +3851,123 @@ class AttendanceSessionModel {
         totalStudents: json['total_students'] as int? ?? 0,
         presentCount: json['present_count'] as int? ?? 0,
       );
+}
+
+class StaffQrTokenModel {
+  final String token;
+  final String schoolDate;
+  final DateTime? issuedAt;
+  final DateTime? expiresAt;
+  final DateTime? serverTime;
+  final int refreshAfterSeconds;
+
+  const StaffQrTokenModel({
+    required this.token,
+    required this.schoolDate,
+    required this.issuedAt,
+    required this.expiresAt,
+    required this.serverTime,
+    required this.refreshAfterSeconds,
+  });
+
+  bool get isExpired =>
+      expiresAt != null && !DateTime.now().toUtc().isBefore(expiresAt!);
+
+  int get secondsRemaining {
+    final expiry = expiresAt;
+    if (expiry == null) return refreshAfterSeconds;
+    final remaining = expiry.difference(DateTime.now().toUtc()).inSeconds;
+    return remaining < 0 ? 0 : remaining;
+  }
+
+  factory StaffQrTokenModel.fromJson(Map<String, dynamic> json) =>
+      StaffQrTokenModel(
+        token: '${json['token'] ?? ''}',
+        schoolDate: '${json['school_date'] ?? ''}',
+        issuedAt: _parseDateTime(json['issued_at']),
+        expiresAt: _parseDateTime(json['expires_at']),
+        serverTime: _parseDateTime(json['server_time']),
+        refreshAfterSeconds: _intValue(json['refresh_after_seconds'], 60),
+      );
+
+  static DateTime? _parseDateTime(Object? value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString())?.toUtc();
+  }
+
+  static int _intValue(Object? value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? fallback;
+  }
+}
+
+class StaffAttendanceModel {
+  final String id;
+  final String staffId;
+  final DateTime? date;
+  final DateTime? checkIn;
+  final DateTime? checkOut;
+  final String status;
+  final String source;
+  final String biometricId;
+  final String markedBy;
+  final StaffModel? staff;
+
+  const StaffAttendanceModel({
+    required this.id,
+    required this.staffId,
+    required this.date,
+    required this.checkIn,
+    required this.checkOut,
+    required this.status,
+    required this.source,
+    required this.biometricId,
+    required this.markedBy,
+    required this.staff,
+  });
+
+  bool get checkedIn => checkIn != null;
+
+  String get staffName {
+    final name = staff?.fullName.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    return staffId;
+  }
+
+  String get checkInTimeLabel => _clockLabel(checkIn);
+
+  String get checkOutTimeLabel => _clockLabel(checkOut);
+
+  factory StaffAttendanceModel.fromJson(Map<String, dynamic> json) {
+    final staffJson = json['staff'];
+    return StaffAttendanceModel(
+      id: '${json['id'] ?? ''}',
+      staffId: '${json['staff_id'] ?? ''}',
+      date: _parseDateTime(json['date']),
+      checkIn: _parseDateTime(json['check_in']),
+      checkOut: _parseDateTime(json['check_out']),
+      status: '${json['status'] ?? ''}',
+      source: '${json['source'] ?? 'manual'}',
+      biometricId: '${json['biometric_id'] ?? ''}',
+      markedBy: '${json['marked_by'] ?? ''}',
+      staff: staffJson is Map
+          ? StaffModel.fromJson(Map<String, dynamic>.from(staffJson))
+          : null,
+    );
+  }
+
+  static DateTime? _parseDateTime(Object? value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString())?.toLocal();
+  }
+
+  static String _clockLabel(DateTime? value) {
+    if (value == null) return '--:--';
+    final hour = value.hour.toString().padLeft(2, '0');
+    final minute = value.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
 }
 
 class TimetableSuggestionModel {
@@ -3110,15 +4166,17 @@ class ExamModel {
   });
 
   factory ExamModel.fromJson(Map<String, dynamic> json) => ExamModel(
-    id: json['id'] as String,
-    schoolId: json['school_id'] as String,
-    academicYearId: json['academic_year_id'] as String,
-    termId: json['term_id'] as String,
-    examTypeId: json['exam_type_id'] as String,
-    examName: json['exam_name'] as String,
-    startDate: json['start_date'] as String,
-    endDate: json['end_date'] as String,
-    isPublished: json['is_published'] as bool? ?? false,
+    id: '${json['id'] ?? json['exam_id'] ?? ''}',
+    schoolId: '${json['school_id'] ?? ''}',
+    academicYearId: '${json['academic_year_id'] ?? ''}',
+    termId: '${json['term_id'] ?? ''}',
+    examTypeId: '${json['exam_type_id'] ?? json['exam_type'] ?? ''}',
+    examName: '${json['exam_name'] ?? ''}',
+    startDate: '${json['start_date'] ?? json['exam_date'] ?? ''}',
+    endDate: '${json['end_date'] ?? json['exam_date'] ?? ''}',
+    isPublished:
+        json['is_published'] as bool? ??
+        '${json['status'] ?? ''}'.toLowerCase() == 'published',
   );
 }
 

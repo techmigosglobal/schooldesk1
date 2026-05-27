@@ -7,6 +7,7 @@ import '../../widgets/admin_navigation.dart';
 import '../../widgets/dashboard_fab_widget.dart';
 import '../../widgets/erp_components.dart';
 import '../../widgets/erp_module_scaffold.dart';
+import '../../widgets/staff_qr_attendance_panel.dart';
 
 class AdminAttendanceScreen extends StatefulWidget {
   const AdminAttendanceScreen({super.key});
@@ -30,7 +31,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -142,6 +143,8 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       title: 'Attendance Administration',
       subtitle: 'Daily sessions, exceptions, and report exports',
       drawer: drawer,
+      railBreakpoint: double.infinity,
+      navigationDrawerEnabled: false,
       floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
@@ -163,6 +166,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
         isScrollable: true,
         tabs: const [
           Tab(text: 'Today\'s View'),
+          Tab(text: 'Staff QR'),
           Tab(text: 'Exceptions'),
           Tab(text: 'Reports'),
         ],
@@ -187,6 +191,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
               controller: _tabController,
               children: [
                 _buildTodayView(),
+                const StaffQrAttendancePanel(),
                 _buildExceptions(),
                 _buildReports(),
               ],

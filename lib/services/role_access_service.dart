@@ -16,6 +16,11 @@ class RoleAccessService {
 
   static Future<void> initialize() async {
     final api = BackendApiClient.instance;
+    if (!api.isAuthenticated) {
+      _setEmptyScope(initialized: true);
+      return;
+    }
+
     final profile = await _try(() => api.getProfile());
     final profileRole = profile?.roleName.trim().toLowerCase();
     api.setCurrentRole(profile?.roleName);
@@ -120,15 +125,7 @@ class RoleAccessService {
   }
 
   static void clear() {
-    _initialized = false;
-    _students = [];
-    _teachers = [];
-    _parentChildren = [];
-    _todayTimetable = [];
-    _invoices = [];
-    _activeTeacher = const {};
-    _teacherDashboard = const {};
-    _teacherAssignedClasses = [];
+    _setEmptyScope(initialized: false);
   }
 
   static Map<String, dynamic> get loggedInTeacher {
@@ -347,7 +344,12 @@ class RoleAccessService {
 
   static void _ensureInitialized() {
     if (_initialized) return;
-    // Best effort defaults before async initialize() runs.
+    _setEmptyScope(initialized: true);
+  }
+
+  static void _setEmptyScope({required bool initialized}) {
+    // Best effort defaults before async initialize() runs or after sign-out.
+    _initialized = initialized;
     _students = [];
     _teachers = [];
     _parentChildren = [];
@@ -356,7 +358,6 @@ class RoleAccessService {
     _activeTeacher = const {};
     _teacherDashboard = const {};
     _teacherAssignedClasses = [];
-    _initialized = true;
   }
 
   static List<Map<String, dynamic>> _filterTodayTimetable(

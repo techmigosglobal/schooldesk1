@@ -21,6 +21,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
   final double railBreakpoint;
   final bool bodyIsScrollable;
   final List<SchoolDeskModuleBottomAction>? mobileBottomActions;
+  final bool navigationDrawerEnabled;
 
   const SchoolDeskModuleScaffold({
     super.key,
@@ -35,6 +36,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
     this.railBreakpoint = 980,
     this.bodyIsScrollable = false,
     this.mobileBottomActions,
+    this.navigationDrawerEnabled = true,
   });
 
   @override
@@ -90,7 +92,10 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final showRail = MediaQuery.sizeOf(context).width >= widget.railBreakpoint;
+    final showRail =
+        widget.navigationDrawerEnabled &&
+        MediaQuery.sizeOf(context).width >= widget.railBreakpoint;
+    final showCompactMenuButton = !showRail && widget.navigationDrawerEnabled;
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
 
@@ -101,7 +106,9 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
       child: Scaffold(
         key: _scaffoldKey,
         backgroundColor: tokens.pageBackground,
-        drawer: showRail ? null : widget.drawer,
+        drawer: showRail || !widget.navigationDrawerEnabled
+            ? null
+            : widget.drawer,
         floatingActionButton: widget.floatingActionButton,
         floatingActionButtonLocation: widget.floatingActionButtonLocation,
         bottomNavigationBar: !showRail && _hasRoleShell
@@ -130,7 +137,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
                           _ModuleToolbar(
                             title: widget.title,
                             subtitle: widget.subtitle,
-                            showMenu: !showRail,
+                            showMenu: showCompactMenuButton,
                             onMenuPressed: () =>
                                 _scaffoldKey.currentState?.openDrawer(),
                             actions: widget.actions,
@@ -266,6 +273,14 @@ class _ModuleToolbar extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     final trailingActions = [...actions, ...globalActions];
+    final width = MediaQuery.sizeOf(context).width;
+    final compactActions = width < 700;
+    final menuActionWidth = trailingActions.isEmpty
+        ? 48.0
+        : compactActions
+        ? 96.0
+        : 280.0;
+    final inlineActionWidth = compactActions ? 132.0 : 320.0;
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
       padding: EdgeInsets.symmetric(
@@ -316,14 +331,14 @@ class _ModuleToolbar extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: trailingActions.isEmpty ? 48 : null,
-                  child: trailingActions.isEmpty
-                      ? const SizedBox.shrink()
-                      : Wrap(
-                          spacing: tokens.spacing.xs,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: trailingActions,
-                        ),
+                  width: menuActionWidth,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: _ModuleActionTray(
+                      actions: trailingActions,
+                      maxWidth: menuActionWidth,
+                    ),
+                  ),
                 ),
               ],
             )
@@ -356,10 +371,11 @@ class _ModuleToolbar extends StatelessWidget {
                 ),
                 if (actions.isNotEmpty) ...[
                   SizedBox(width: tokens.spacing.sm),
-                  Wrap(
-                    spacing: tokens.spacing.xs,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: actions,
+                  Flexible(
+                    child: _ModuleActionTray(
+                      actions: actions,
+                      maxWidth: inlineActionWidth,
+                    ),
                   ),
                 ],
                 if (globalActions.isNotEmpty) ...[
@@ -373,14 +389,44 @@ class _ModuleToolbar extends StatelessWidget {
                     ),
                   ),
                   SizedBox(width: tokens.spacing.xs),
-                  Wrap(
-                    spacing: tokens.spacing.xs,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: globalActions,
+                  Flexible(
+                    child: _ModuleActionTray(
+                      actions: globalActions,
+                      maxWidth: inlineActionWidth,
+                    ),
                   ),
                 ],
               ],
             ),
+    );
+  }
+}
+
+class _ModuleActionTray extends StatelessWidget {
+  final List<Widget> actions;
+  final double maxWidth;
+
+  const _ModuleActionTray({required this.actions, required this.maxWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    if (actions.isEmpty) return const SizedBox.shrink();
+    final tokens = Theme.of(context).schoolDesk;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0) SizedBox(width: tokens.spacing.xs),
+              actions[index],
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -532,37 +578,11 @@ class _ModuleBottomActionBar extends StatelessWidget {
         RouteAccessGuard.dashboardForRole(role) ?? AppRoutes.landingPage;
     final configuredActions = customActions;
     final actions = configuredActions == null
-        ? [
-            _BottomAction(
-              label: 'Home',
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home_rounded,
-              route: AppRoutes.initial,
-              selected: currentRoute == homeRoute,
-            ),
-            _BottomAction(
-              label: SchoolDeskGlossary.search,
-              icon: Icons.search_rounded,
-              activeIcon: Icons.manage_search_rounded,
-              route: AppRoutes.globalSearch,
-              selected: currentRoute == AppRoutes.globalSearch,
-            ),
-            _BottomAction(
-              label: SchoolDeskGlossary.notifications,
-              icon: Icons.notifications_none_rounded,
-              activeIcon: Icons.notifications_rounded,
-              route: AppRoutes.notificationCenter,
-              selected: currentRoute == AppRoutes.notificationCenter,
-              badgeCount: unreadCount,
-            ),
-            _BottomAction(
-              label: SchoolDeskGlossary.profile,
-              icon: Icons.account_circle_outlined,
-              activeIcon: Icons.account_circle_rounded,
-              route: AppRoutes.profileScreen,
-              selected: currentRoute == AppRoutes.profileScreen,
-            ),
-          ]
+        ? _defaultActionsForRole(
+            role: role,
+            currentRoute: currentRoute,
+            homeRoute: homeRoute,
+          )
         : [
             for (final action in configuredActions)
               _BottomAction(
@@ -615,6 +635,53 @@ class _ModuleBottomActionBar extends StatelessWidget {
       ),
     );
   }
+
+  List<_BottomAction> _defaultActionsForRole({
+    required String role,
+    required String? currentRoute,
+    required String homeRoute,
+  }) {
+    final normalizedRole = role.trim().toLowerCase();
+    final principal = normalizedRole == 'principal';
+    final inboxRoute = principal
+        ? AppRoutes.approvalCenter
+        : AppRoutes.notificationCenter;
+    return [
+      _BottomAction(
+        label: 'Home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        route: AppRoutes.initial,
+        selected: currentRoute == homeRoute,
+      ),
+      _BottomAction(
+        label: SchoolDeskGlossary.search,
+        icon: Icons.search_rounded,
+        activeIcon: Icons.manage_search_rounded,
+        route: AppRoutes.globalSearch,
+        selected: currentRoute == AppRoutes.globalSearch,
+      ),
+      _BottomAction(
+        label: principal ? 'Inbox' : SchoolDeskGlossary.notifications,
+        icon: principal
+            ? Icons.mail_outline_rounded
+            : Icons.notifications_none_rounded,
+        activeIcon: principal
+            ? Icons.mail_rounded
+            : Icons.notifications_rounded,
+        route: inboxRoute,
+        selected: currentRoute == inboxRoute,
+        badgeCount: principal ? 0 : unreadCount,
+      ),
+      _BottomAction(
+        label: SchoolDeskGlossary.profile,
+        icon: Icons.account_circle_outlined,
+        activeIcon: Icons.account_circle_rounded,
+        route: AppRoutes.profileScreen,
+        selected: currentRoute == AppRoutes.profileScreen,
+      ),
+    ];
+  }
 }
 
 class _BottomAction {
@@ -647,6 +714,10 @@ class _BottomActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final minHeight = (56.0 + ((textScale - 1) * 18))
+        .clamp(56.0, 76.0)
+        .toDouble();
     final color = action.selected
         ? theme.colorScheme.primary
         : tokens.textMuted;
@@ -664,7 +735,7 @@ class _BottomActionButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(tokens.radius.control),
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: BoxConstraints(minHeight: minHeight),
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: tokens.spacing.xs),
             child: Column(
@@ -677,16 +748,18 @@ class _BottomActionButton extends StatelessWidget {
                       )
                     : icon,
                 const SizedBox(height: 3),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
+                Flexible(
                   child: Text(
                     action.label,
-                    maxLines: 1,
+                    maxLines: textScale > 1.35 ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: color,
                       fontWeight: action.selected
                           ? FontWeight.w700
                           : FontWeight.w500,
+                      height: 1.05,
                     ),
                   ),
                 ),

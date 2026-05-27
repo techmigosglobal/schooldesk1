@@ -24,6 +24,9 @@ func (h *FrontendRecordHandler) List(c *gin.Context) {
 	query := database.DB.
 		Where("school_id = ? AND resource = ?", scopedSchoolID(c), h.resource).
 		Order("created_at DESC")
+	if h.parentOwnsRecords(c) {
+		query = query.Where("created_by = ?", currentUserID(c))
+	}
 	if err := query.Find(&rows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load records")
 		return
@@ -68,6 +71,10 @@ func (h *FrontendRecordHandler) Update(c *gin.Context) {
 		fail(c, http.StatusNotFound, "Record not found")
 		return
 	}
+	if h.parentOwnsRecords(c) && strings.TrimSpace(row.CreatedBy) != currentUserID(c) {
+		fail(c, http.StatusForbidden, "Record access denied")
+		return
+	}
 	payload, ok := h.bindPayload(c)
 	if !ok {
 		return
@@ -92,7 +99,11 @@ func (h *FrontendRecordHandler) Update(c *gin.Context) {
 }
 
 func (h *FrontendRecordHandler) Delete(c *gin.Context) {
-	result := database.DB.Delete(&models.FrontendRecord{}, "id = ? AND school_id = ? AND resource = ?", c.Param("id"), scopedSchoolID(c), h.resource)
+	query := database.DB.Where("id = ? AND school_id = ? AND resource = ?", c.Param("id"), scopedSchoolID(c), h.resource)
+	if h.parentOwnsRecords(c) {
+		query = query.Where("created_by = ?", currentUserID(c))
+	}
+	result := query.Delete(&models.FrontendRecord{})
 	if result.Error != nil {
 		fail(c, http.StatusInternalServerError, "Failed to delete record")
 		return
@@ -115,6 +126,18 @@ func (h *FrontendRecordHandler) bindPayload(c *gin.Context) (map[string]interfac
 		payload = map[string]interface{}{}
 	}
 	return payload, true
+}
+
+func (h *FrontendRecordHandler) parentOwnsRecords(c *gin.Context) bool {
+	if currentRole(c) != "parent" {
+		return false
+	}
+	switch h.resource {
+	case "certificates/requests", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
+		return true
+	default:
+		return false
+	}
 }
 
 func frontendRecordResponse(row models.FrontendRecord) gin.H {

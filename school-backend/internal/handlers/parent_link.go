@@ -27,7 +27,8 @@ func (h *ParentLinkHandler) AssignParentStudents(c *gin.Context) {
 	}
 
 	var req struct {
-		AdmissionNumbers []string `json:"admission_numbers" binding:"required,min=1"`
+		AdmissionNumbers []string `json:"admission_numbers"`
+		StudentIDs       []string `json:"student_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -47,46 +48,91 @@ func (h *ParentLinkHandler) AssignParentStudents(c *gin.Context) {
 	}
 
 	cleanAdmissionNumbers := make([]string, 0, len(req.AdmissionNumbers))
-	seen := map[string]struct{}{}
+	cleanAdmissionKeys := make([]string, 0, len(req.AdmissionNumbers))
+	seenAdmissions := map[string]struct{}{}
 	for _, admissionNo := range req.AdmissionNumbers {
 		clean := strings.TrimSpace(admissionNo)
 		if clean == "" {
 			continue
 		}
 		key := strings.ToLower(clean)
-		if _, ok := seen[key]; ok {
+		if _, ok := seenAdmissions[key]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		seenAdmissions[key] = struct{}{}
 		cleanAdmissionNumbers = append(cleanAdmissionNumbers, clean)
+		cleanAdmissionKeys = append(cleanAdmissionKeys, key)
 	}
-	if len(cleanAdmissionNumbers) == 0 {
-		fail(c, http.StatusBadRequest, "At least one non-empty admission number is required")
+
+	cleanStudentIDs := make([]string, 0, len(req.StudentIDs))
+	seenStudentIDs := map[string]struct{}{}
+	for _, studentID := range req.StudentIDs {
+		clean := strings.TrimSpace(studentID)
+		if clean == "" {
+			continue
+		}
+		if _, ok := seenStudentIDs[clean]; ok {
+			continue
+		}
+		seenStudentIDs[clean] = struct{}{}
+		cleanStudentIDs = append(cleanStudentIDs, clean)
+	}
+
+	if len(cleanAdmissionNumbers) == 0 && len(cleanStudentIDs) == 0 {
+		fail(c, http.StatusBadRequest, "At least one student id or admission number is required")
 		return
 	}
 
 	var students []models.Student
+	clauses := make([]string, 0, 2)
+	args := make([]interface{}, 0, 3)
+	if len(cleanStudentIDs) > 0 {
+		clauses = append(clauses, "id IN ?")
+		args = append(args, cleanStudentIDs)
+	}
+	if len(cleanAdmissionKeys) > 0 {
+		clauses = append(clauses, "(LOWER(admission_number) IN ? OR LOWER(student_code) IN ?)")
+		args = append(args, cleanAdmissionKeys, cleanAdmissionKeys)
+	}
 	if err := database.DB.
-		Where("school_id = ? AND admission_number IN ?", schoolID, cleanAdmissionNumbers).
+		Where("school_id = ?", schoolID).
+		Where(strings.Join(clauses, " OR "), args...).
 		Find(&students).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to resolve students")
 		return
 	}
-	if len(students) != len(cleanAdmissionNumbers) {
-		found := map[string]struct{}{}
-		for _, s := range students {
-			found[strings.ToLower(strings.TrimSpace(s.AdmissionNumber))] = struct{}{}
+
+	foundAdmissionKeys := map[string]struct{}{}
+	foundStudentIDs := map[string]struct{}{}
+	for _, s := range students {
+		foundStudentIDs[s.ID] = struct{}{}
+		if admission := strings.ToLower(strings.TrimSpace(s.AdmissionNumber)); admission != "" {
+			foundAdmissionKeys[admission] = struct{}{}
 		}
-		missing := make([]string, 0)
-		for _, a := range cleanAdmissionNumbers {
-			if _, ok := found[strings.ToLower(a)]; !ok {
-				missing = append(missing, a)
-			}
+		if code := strings.ToLower(strings.TrimSpace(s.StudentCode)); code != "" {
+			foundAdmissionKeys[code] = struct{}{}
 		}
+	}
+	missingAdmissions := make([]string, 0)
+	for _, admission := range cleanAdmissionNumbers {
+		if _, ok := foundAdmissionKeys[strings.ToLower(strings.TrimSpace(admission))]; !ok {
+			missingAdmissions = append(missingAdmissions, admission)
+		}
+	}
+	missingStudentIDs := make([]string, 0)
+	for _, studentID := range cleanStudentIDs {
+		if _, ok := foundStudentIDs[studentID]; !ok {
+			missingStudentIDs = append(missingStudentIDs, studentID)
+		}
+	}
+	if len(missingAdmissions) > 0 || len(missingStudentIDs) > 0 {
 		c.JSON(http.StatusBadRequest, models.APIResponse{
 			Success: false,
-			Error:   "Some admission numbers were not found for this school",
-			Details: gin.H{"missing_admission_numbers": missing},
+			Error:   "Some students were not found for this school",
+			Details: gin.H{
+				"missing_admission_numbers": missingAdmissions,
+				"missing_student_ids":       missingStudentIDs,
+			},
 		})
 		return
 	}
@@ -110,7 +156,7 @@ func (h *ParentLinkHandler) AssignParentStudents(c *gin.Context) {
 			SchoolID:               schoolID,
 			ParentUserID:           parentUserID,
 			StudentID:              s.ID,
-			StudentAdmissionNumber: s.AdmissionNumber,
+			StudentAdmissionNumber: firstNonEmpty(s.AdmissionNumber, s.StudentCode),
 		})
 	}
 	if err := tx.Create(&links).Error; err != nil {

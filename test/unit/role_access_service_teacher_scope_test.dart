@@ -20,6 +20,21 @@ void main() {
     BackendApiClient.instance.setAuthToken('test-token');
   });
 
+  tearDown(() {
+    BackendApiClient.instance.clearAuthToken();
+    RoleAccessService.clear();
+  });
+
+  test('initialize does not call role APIs before login', () async {
+    BackendApiClient.instance.clearAuthToken();
+
+    await RoleAccessService.initialize();
+
+    expect(adapter.requests, isEmpty);
+    expect(RoleAccessService.parentChildren, isEmpty);
+    expect(RoleAccessService.teacherClassName, 'Not assigned');
+  });
+
   test(
     'teacher scope keeps assigned subject from backend timetable even when it is not today',
     () async {
@@ -171,6 +186,7 @@ void _seedTeacherScope(
 
 class _FakeBackendAdapter implements HttpClientAdapter {
   final Map<String, Map<String, dynamic>> routes = {};
+  final List<String> requests = [];
 
   @override
   Future<ResponseBody> fetch(
@@ -179,6 +195,7 @@ class _FakeBackendAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     final key = '${options.method.toUpperCase()} ${options.path}';
+    requests.add(key);
     final payload = routes[key];
     if (payload == null) {
       return ResponseBody.fromString(

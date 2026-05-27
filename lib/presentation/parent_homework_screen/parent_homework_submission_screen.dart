@@ -136,6 +136,11 @@ class _ParentHomeworkSubmissionScreenState
   }
 
   Widget _homeworkContext() {
+    final subject = _text(widget.args.homework['subject']);
+    final deadline = _text(widget.args.homework['deadline']);
+    final instructions = _text(widget.args.homework['instructions']);
+    // Backend integration: homework metadata is shown only when the API-backed
+    // homework item supplies it. Empty fields are intentionally hidden.
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -152,19 +157,12 @@ class _ParentHomeworkSubmissionScreenState
           ),
           const SizedBox(height: 6),
           Text('Student: ${widget.args.studentName}'),
-          Text(
-            'Subject: ${_text(widget.args.homework['subject'], fallback: 'General')}',
-          ),
-          Text(
-            'Due: ${_text(widget.args.homework['deadline'], fallback: '-')}',
-          ),
-          const Divider(height: 18),
-          Text(
-            _text(
-              widget.args.homework['instructions'],
-              fallback: 'No instructions provided.',
-            ),
-          ),
+          if (subject.isNotEmpty) Text('Subject: $subject'),
+          if (deadline.isNotEmpty) Text('Due: $deadline'),
+          if (instructions.isNotEmpty) ...[
+            const Divider(height: 18),
+            Text(instructions),
+          ],
         ],
       ),
     );

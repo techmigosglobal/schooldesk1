@@ -37,17 +37,13 @@ class _ParentLeaveRequestFormScreenState
   late final TextEditingController _fromDateController;
   late final TextEditingController _toDateController;
   String _selectedStudentId = '';
-  String _selectedLeaveType = 'Sick Leave';
+  String _selectedLeaveType = '';
+  List<String> _leaveTypes = [];
+  bool _loadingLeaveTypes = true;
+  String? _leaveTypeError;
   bool _halfDay = false;
   bool _submitting = false;
   int _selectedNavIndex = 7;
-
-  static const _leaveTypes = [
-    'Sick Leave',
-    'Personal Leave',
-    'Early Pickup',
-    'Special Permission',
-  ];
 
   @override
   void initState() {
@@ -59,10 +55,7 @@ class _ParentLeaveRequestFormScreenState
     if (_selectedStudentId.isEmpty && widget.args.children.isNotEmpty) {
       _selectedStudentId = widget.args.children.first['id']?.toString() ?? '';
     }
-    final incomingType = widget.args.initialLeaveType;
-    if (incomingType != null && _leaveTypes.contains(incomingType)) {
-      _selectedLeaveType = incomingType;
-    }
+    _loadLeaveTypes();
   }
 
   @override
@@ -94,25 +87,7 @@ class _ParentLeaveRequestFormScreenState
           children: [
             _buildStudentDropdown(),
             const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedLeaveType,
-              decoration: const InputDecoration(labelText: 'Leave type'),
-              items: _leaveTypes
-                  .map(
-                    (type) => DropdownMenuItem(
-                      value: type,
-                      child: Text(type, style: GoogleFonts.dmSans()),
-                    ),
-                  )
-                  .toList(),
-              onChanged: _submitting
-                  ? null
-                  : (value) {
-                      if (value != null) {
-                        setState(() => _selectedLeaveType = value);
-                      }
-                    },
-            ),
+            _buildLeaveTypeDropdown(),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -171,7 +146,11 @@ class _ParentLeaveRequestFormScreenState
             ),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: _submitting || widget.args.children.isEmpty
+              onPressed:
+                  _submitting ||
+                      _loadingLeaveTypes ||
+                      widget.args.children.isEmpty ||
+                      _leaveTypes.isEmpty
                   ? null
                   : _submit,
               icon: _submitting
@@ -231,6 +210,58 @@ class _ParentLeaveRequestFormScreenState
     );
   }
 
+  Widget _buildLeaveTypeDropdown() {
+    if (_loadingLeaveTypes) {
+      return InputDecorator(
+        decoration: const InputDecoration(labelText: 'Leave type'),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Loading leave types...',
+              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_leaveTypes.isEmpty) {
+      return Text(
+        _leaveTypeError ??
+            'No leave types are configured for this school account.',
+        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedLeaveType.isEmpty ? null : _selectedLeaveType,
+      decoration: const InputDecoration(labelText: 'Leave type'),
+      items: _leaveTypes
+          .map(
+            (type) => DropdownMenuItem(
+              value: type,
+              child: Text(type, style: GoogleFonts.dmSans()),
+            ),
+          )
+          .toList(),
+      validator: (value) {
+        if ((value ?? '').trim().isEmpty) return 'Select a leave type';
+        return null;
+      },
+      onChanged: _submitting
+          ? null
+          : (value) {
+              if (value != null) {
+                setState(() => _selectedLeaveType = value);
+              }
+            },
+    );
+  }
+
   Widget _dateField({
     required TextEditingController controller,
     required String label,
@@ -260,6 +291,10 @@ class _ParentLeaveRequestFormScreenState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedLeaveType.trim().isEmpty) {
+      _showError('Select a leave type.');
+      return;
+    }
     final fromDate = _fromDateController.text.trim();
     final toDate = _toDateController.text.trim();
     final from = DateTime.tryParse(fromDate);
@@ -305,6 +340,46 @@ class _ParentLeaveRequestFormScreenState
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  Future<void> _loadLeaveTypes() async {
+    try {
+      final rows = await BackendApiClient.instance.getLeaveTypes();
+      final labels = rows
+          .map(_leaveTypeLabel)
+          .where((label) {
+            return label.trim().isNotEmpty;
+          })
+          .toSet()
+          .toList();
+      final incomingType = widget.args.initialLeaveType?.trim();
+      if (!mounted) return;
+      setState(() {
+        _leaveTypes = labels;
+        if (labels.isNotEmpty) {
+          _selectedLeaveType =
+              incomingType != null && labels.contains(incomingType)
+              ? incomingType
+              : labels.first;
+        }
+        _loadingLeaveTypes = false;
+        _leaveTypeError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingLeaveTypes = false;
+        _leaveTypeError = 'Unable to load leave types from backend: $error';
+      });
+    }
+  }
+
+  String _leaveTypeLabel(Map<String, dynamic> row) {
+    for (final key in const ['leave_name', 'name', 'leave_type', 'type']) {
+      final value = row[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return '';
   }
 
   String _studentLabel(Map<String, dynamic> row) {

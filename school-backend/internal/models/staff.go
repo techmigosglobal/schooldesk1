@@ -7,7 +7,7 @@ import (
 type Staff struct {
 	BaseModel
 	SchoolID       string               `gorm:"type:text;not null" json:"school_id"`
-	StaffCode      string               `gorm:"type:text;unique" json:"staff_code"`
+	StaffCode      string               `gorm:"type:text;index" json:"staff_code"`
 	FirstName      string               `gorm:"type:text;not null" json:"first_name"`
 	LastName       string               `gorm:"type:text;not null" json:"last_name"`
 	Email          string               `gorm:"type:text" json:"email"`
@@ -44,10 +44,12 @@ type StaffSubject struct {
 	StaffID   string   `gorm:"type:text;not null" json:"staff_id"`
 	SubjectID string   `gorm:"type:text;not null" json:"subject_id"`
 	GradeID   string   `gorm:"type:text;not null" json:"grade_id"`
+	SectionID *string  `gorm:"type:text" json:"section_id"`
 	IsPrimary bool     `gorm:"default:false" json:"is_primary"`
 	Staff     *Staff   `gorm:"foreignKey:StaffID" json:"staff,omitempty"`
 	Subject   *Subject `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
 	Grade     *Grade   `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
+	Section   *Section `gorm:"foreignKey:SectionID" json:"section,omitempty"`
 }
 
 type StaffDocument struct {

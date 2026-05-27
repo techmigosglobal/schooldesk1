@@ -205,6 +205,7 @@ func autoMigrate() error {
 		&models.Section{},
 		&models.Student{},
 		&models.Guardian{},
+		&models.StudentGuardian{},
 		&models.MedicalRecord{},
 		&models.StudentDocument{},
 		&models.Enrollment{},
@@ -216,6 +217,10 @@ func autoMigrate() error {
 		&models.OTPVerification{},
 		&models.AuditLog{},
 	); err != nil {
+		return err
+	}
+
+	if err := normalizeTimetableTimeColumnsBeforeAutoMigrate(); err != nil {
 		return err
 	}
 
@@ -249,9 +254,10 @@ func autoMigrate() error {
 		&models.RouteStop{},
 		&models.StudentTransport{},
 		&models.Announcement{},
-		&models.EventCalendar{},
+		// School events use Tables.md table `events`. Legacy `event_calendars` is backfilled.
 		&models.ParentTeacherMeeting{},
-		&models.Homework{},
+		// Homework assignments use Tables.md table `homework` (see ensureTablesMDSchema).
+		// Legacy `homeworks` is backfilled then retired.
 		&models.HomeworkSubmission{},
 		&models.DiaryEntry{},
 		&models.MessageConversation{},
@@ -270,8 +276,70 @@ func autoMigrate() error {
 	if err := normalizeParentPaymentRequestColumns(); err != nil {
 		return err
 	}
+	if err := ensureTablesMDSchema(); err != nil {
+		return err
+	}
+	if err := backfillTablesMDLegacy(); err != nil {
+		return err
+	}
+	if DB.Dialector.Name() == "postgres" {
+		DB.Exec(`
+			DO $$ BEGIN
+				IF EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_schema = 'public' AND table_name = 'guardians' AND column_name = 'student_id'
+				) THEN
+					UPDATE guardians g SET school_id = s.school_id
+					FROM students s WHERE g.student_id = s.id AND (g.school_id IS NULL OR g.school_id = '');
+				END IF;
+			END $$;
+		`)
+		DB.Exec(`
+			DO $$ BEGIN
+				IF EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_schema = 'public' AND table_name = 'guardians' AND column_name = 'student_id'
+				) THEN
+					INSERT INTO student_guardians (id, student_id, guardian_id, is_primary, can_pickup, school_id, created_at, updated_at)
+					SELECT gen_random_uuid()::text, g.student_id, g.id, COALESCE(g.is_primary, false), COALESCE(g.can_pickup, false), g.school_id, NOW(), NOW()
+					FROM guardians g WHERE g.student_id IS NOT NULL AND g.student_id != ''
+					ON CONFLICT DO NOTHING;
+				END IF;
+			END $$;
+		`)
+		DB.Exec(`
+			DO $$ BEGIN
+				ALTER TABLE timetable_slots ALTER COLUMN staff_id DROP NOT NULL;
+				ALTER TABLE timetable_slots ALTER COLUMN start_time TYPE TIME USING
+					CASE WHEN start_time::text ~ '^[0-9]{2}:[0-9]{2}' THEN start_time::time ELSE NULL END;
+				ALTER TABLE timetable_slots ALTER COLUMN end_time TYPE TIME USING
+					CASE WHEN end_time::text ~ '^[0-9]{2}:[0-9]{2}' THEN end_time::time ELSE NULL END;
+			EXCEPTION WHEN others THEN NULL; END $$;
+		`)
+	}
 
 	return nil
+}
+
+func normalizeTimetableTimeColumnsBeforeAutoMigrate() error {
+	if DB == nil || DB.Dialector.Name() != "postgres" {
+		return nil
+	}
+
+	return DB.Exec(`
+		DO $$ BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.tables
+				WHERE table_schema = 'public' AND table_name = 'timetable_slots'
+			) THEN
+				ALTER TABLE timetable_slots ALTER COLUMN staff_id DROP NOT NULL;
+				ALTER TABLE timetable_slots ALTER COLUMN start_time TYPE time without time zone USING
+					CASE WHEN start_time::text ~ '^[0-9]{2}:[0-9]{2}' THEN start_time::time ELSE NULL END;
+				ALTER TABLE timetable_slots ALTER COLUMN end_time TYPE time without time zone USING
+					CASE WHEN end_time::text ~ '^[0-9]{2}:[0-9]{2}' THEN end_time::time ELSE NULL END;
+			END IF;
+		EXCEPTION WHEN others THEN NULL; END $$;
+	`).Error
 }
 
 func normalizeParentPaymentRequestColumns() error {
@@ -481,7 +549,7 @@ func seedData() error {
 	guardianID := "ff0e8400-e29b-41d4-a716-446655440002"
 	guardian := models.Guardian{
 		BaseModel:    models.BaseModel{ID: guardianID},
-		StudentID:    studentID,
+		SchoolID:     schoolID,
 		FullName:     "Robert Smith",
 		Relationship: "father",
 		Phone:        "+91-9876543212",
@@ -492,6 +560,14 @@ func seedData() error {
 		CanPickup:    true,
 	}
 	DB.Create(&guardian)
+	DB.Create(&models.StudentGuardian{
+		ID:         "ff0e8400-e29b-41d4-a716-446655440003",
+		StudentID:  studentID,
+		GuardianID: guardianID,
+		IsPrimary:  true,
+		CanPickup:  true,
+		SchoolID:   schoolID,
+	})
 
 	enrollmentID := "ff0e8400-e29b-41d4-a716-446655440001"
 	enrollment := models.Enrollment{
@@ -595,7 +671,7 @@ func seedRolePermissions(adminRoleID, principalRoleID, teacherRoleID, parentRole
 		createPermission(adminRoleID, module, true, true, true, true, true)
 		createPermission(principalRoleID, module, true, true, true, module != "audit_logs", true)
 
-		teacherRead := inList(module, "dashboard", "guardians", "medical_records", "student_documents", "staff_subjects", "staff_qualifications", "library", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
+		teacherRead := inList(module, "dashboard", "guardians", "medical_records", "student_documents", "staff_subjects", "staff_qualifications", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
 		teacherManage := inList(module, "homework", "diary_entries", "message_conversations", "messages", "parent_teacher_meetings")
 		createPermission(teacherRoleID, module, teacherRead, teacherManage, teacherManage, false, false)
 
@@ -615,8 +691,6 @@ func permissionModules() []string {
 		"staff_documents",
 		"staff_subjects",
 		"staff_qualifications",
-		"transport",
-		"library",
 		"payroll",
 		"parent_teacher_meetings",
 		"homework",

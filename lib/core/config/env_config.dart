@@ -76,7 +76,7 @@ class EnvConfig {
   /// Defaults to the local Docker Go API for development.
   static String get apiBaseUrl {
     if (_configuredApiBaseUrl.isNotEmpty) {
-      return _configuredApiBaseUrl;
+      return ApiConfig.v1BaseUrlFrom(_configuredApiBaseUrl);
     }
     return ApiConfig.legacyV1BaseUrl;
   }

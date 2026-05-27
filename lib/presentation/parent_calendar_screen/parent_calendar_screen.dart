@@ -449,11 +449,13 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       fallback: 'Parent-Teacher Meeting',
     );
     final slotTime = _text(meeting['slot_time']);
+    // Backend integration: PTM venue should come from the event/meeting API.
+    // Leave it empty until a real location is published.
     return {
       'title': eventTitle,
       'type': 'PTM',
       'time': slotTime.isEmpty ? _timeRange(slotDate, null) : slotTime,
-      'venue': _text(event['location'], fallback: 'Classroom'),
+      'venue': _text(event['location']),
       'dateSort': slotDate,
       'dateDay': _dayNumber(slotDate),
       'dateMonth': _monthShort(slotDate),

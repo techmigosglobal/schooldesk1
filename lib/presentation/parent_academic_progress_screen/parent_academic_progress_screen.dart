@@ -71,16 +71,18 @@ class _ParentAcademicProgressScreenState
           final subject = schedule['subject'] is Map
               ? Map<String, dynamic>.from(schedule['subject'] as Map)
               : const <String, dynamic>{};
-          final maxMarks = (schedule['max_marks'] as num?)?.toInt() ?? 100;
-          final obtained = (m['marks_obtained'] as num?)?.toInt() ?? 0;
+          // Backend integration: marks, max marks, subject, and teacher labels
+          // are shown only when returned by the academic APIs.
+          final maxMarks = (schedule['max_marks'] as num?)?.toInt();
+          final obtained = (m['marks_obtained'] as num?)?.toInt();
           return {
-            'subject': subject['subject_name'] ?? 'Subject',
+            'subject': subject['subject_name'] ?? '',
             'marks': obtained,
             'max': maxMarks,
             'grade': m['grade_label'] ?? '',
-            'teacher': '',
+            'teacher': m['teacher_name'] ?? schedule['teacher_name'] ?? '',
             'color': AppTheme.primary,
-            'exam': schedule['exam_id'] ?? 'Exam',
+            'exam': schedule['exam_id'] ?? '',
           };
         }).toList();
 
@@ -98,7 +100,7 @@ class _ParentAcademicProgressScreenState
             .where((d) => '${d['remarks'] ?? d['remark'] ?? ''}'.isNotEmpty)
             .map(
               (d) => {
-                'teacher': d['created_by'] ?? 'Teacher',
+                'teacher': d['created_by'] ?? d['teacher_name'] ?? '',
                 'subject': d['subject'] ?? '',
                 'remark': d['remarks'] ?? d['remark'] ?? '',
                 'date': d['date'] ?? d['created_at'] ?? '',
@@ -264,9 +266,18 @@ class _ParentAcademicProgressScreenState
         'Marks will appear here after exams are published by the school.',
       );
     }
-    final avg =
-        _subjects.map((s) => s['marks'] as int).reduce((a, b) => a + b) /
-        _subjects.length;
+    final scored = _subjects.where(_hasScore).toList();
+    final avg = scored.isEmpty
+        ? null
+        : scored
+                  .map(
+                    (s) =>
+                        ((s['marks'] as num).toDouble() /
+                            (s['max'] as num).toDouble()) *
+                        100,
+                  )
+                  .reduce((a, b) => a + b) /
+              scored.length;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -288,7 +299,7 @@ class _ParentAcademicProgressScreenState
     );
   }
 
-  Widget _buildOverallCard(double avg) {
+  Widget _buildOverallCard(double? avg) {
     final best = _subjectExtreme(high: true);
     final needsWork = _subjectExtreme(high: false);
     return Container(
@@ -315,7 +326,7 @@ class _ParentAcademicProgressScreenState
                   ),
                 ),
                 Text(
-                  '${avg.toStringAsFixed(1)}%',
+                  avg == null ? '—' : '${avg.toStringAsFixed(1)}%',
                   style: GoogleFonts.dmSans(
                     fontSize: 28,
                     fontWeight: FontWeight.w700,
@@ -349,9 +360,10 @@ class _ParentAcademicProgressScreenState
     Map<String, dynamic>? selected;
     double? selectedPct;
     for (final subject in _subjects) {
-      final marks = (subject['marks'] as num?)?.toDouble() ?? 0;
-      final max = (subject['max'] as num?)?.toDouble() ?? 0;
-      final double pct = max <= 0 ? 0.0 : marks / max * 100;
+      if (!_hasScore(subject)) continue;
+      final marks = (subject['marks'] as num).toDouble();
+      final max = (subject['max'] as num).toDouble();
+      final double pct = marks / max * 100;
       if (selectedPct == null ||
           (high ? pct > selectedPct : pct < selectedPct)) {
         selected = subject;
@@ -359,7 +371,8 @@ class _ParentAcademicProgressScreenState
       }
     }
     if (selected == null || selectedPct == null) return 'Not published';
-    return '${selected['subject']} ${selectedPct.toStringAsFixed(0)}%';
+    final subject = _text(selected['subject'], fallback: 'Subject');
+    return '$subject ${selectedPct.toStringAsFixed(0)}%';
   }
 
   Widget _miniStat(String label, String value) {
@@ -389,7 +402,16 @@ class _ParentAcademicProgressScreenState
   }
 
   Widget _subjectCard(Map<String, dynamic> s) {
-    final pct = (s['marks'] as int) / (s['max'] as int);
+    final subject = _text(s['subject'], fallback: 'Subject not published');
+    final teacher = _text(s['teacher']);
+    final grade = _text(s['grade']);
+    final hasScore = _hasScore(s);
+    final pct = hasScore
+        ? (s['marks'] as num).toDouble() / (s['max'] as num).toDouble()
+        : 0.0;
+    final marksLabel = hasScore
+        ? '${(s['marks'] as num).toInt()}/${(s['max'] as num).toInt()}'
+        : '—';
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -411,7 +433,7 @@ class _ParentAcademicProgressScreenState
                 ),
                 child: Center(
                   child: Text(
-                    s['subject'].toString().substring(0, 2).toUpperCase(),
+                    _initials(subject),
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -426,19 +448,20 @@ class _ParentAcademicProgressScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      s['subject'],
+                      subject,
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Text(
-                      'Teacher: ${s['teacher']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
+                    if (teacher.isNotEmpty)
+                      Text(
+                        'Teacher: $teacher',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppTheme.muted,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -446,31 +469,32 @@ class _ParentAcademicProgressScreenState
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${s['marks']}/${s['max']}',
+                    marksLabel,
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                       color: s['color'] as Color,
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: (s['color'] as Color).withAlpha(20),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      s['grade'],
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: s['color'] as Color,
+                  if (grade.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: (s['color'] as Color).withAlpha(20),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        grade,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: s['color'] as Color,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -507,12 +531,12 @@ class _ParentAcademicProgressScreenState
     final exam = card['exam'] is Map
         ? Map<String, dynamic>.from(card['exam'] as Map)
         : const <String, dynamic>{};
-    final percent = (card['percentage'] as num?)?.toDouble() ?? 0;
+    final percent = (card['percentage'] as num?)?.toDouble();
     final rank = (card['class_rank'] as num?)?.toInt() ?? 0;
     return {
       'id': card['id'],
       'term': exam['exam_name'] ?? card['exam_id'] ?? 'Report Card',
-      'percentage': '${percent.toStringAsFixed(1)}%',
+      'percentage': percent == null ? '' : '${percent.toStringAsFixed(1)}%',
       'rank': rank <= 0 ? '-' : rank.toString(),
       'status': card['published_at'] == null ? 'Pending' : 'Published',
     };
@@ -520,6 +544,8 @@ class _ParentAcademicProgressScreenState
 
   Widget _reportCardItem(Map<String, dynamic> r) {
     final isPublished = r['status'] == 'Published';
+    final percentage = _text(r['percentage']);
+    final rank = _text(r['rank']);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -558,23 +584,26 @@ class _ParentAcademicProgressScreenState
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
                   children: [
-                    Text(
-                      'Score: ${r['percentage']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: AppTheme.muted,
+                    if (percentage.isNotEmpty)
+                      Text(
+                        'Score: $percentage',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: AppTheme.muted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Rank: ${r['rank']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: AppTheme.muted,
+                    if (rank.isNotEmpty && rank != '-')
+                      Text(
+                        'Rank: $rank',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: AppTheme.muted,
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ],
@@ -660,6 +689,8 @@ class _ParentAcademicProgressScreenState
   }
 
   Widget _remarkCard(Map<String, dynamic> r) {
+    final subject = _text(r['subject'], fallback: 'Remark');
+    final teacher = _text(r['teacher']);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -688,7 +719,7 @@ class _ParentAcademicProgressScreenState
               ),
               const SizedBox(width: 8),
               Text(
-                r['subject'],
+                subject,
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -709,17 +740,36 @@ class _ParentAcademicProgressScreenState
               color: AppTheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            '— ${r['teacher']}',
-            style: GoogleFonts.dmSans(
-              fontSize: 11,
-              color: AppTheme.muted,
-              fontStyle: FontStyle.italic,
+          if (teacher.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '— $teacher',
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                color: AppTheme.muted,
+                fontStyle: FontStyle.italic,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
+  }
+
+  bool _hasScore(Map<String, dynamic> subject) {
+    final marks = subject['marks'];
+    final max = subject['max'];
+    return marks is num && max is num && max > 0;
+  }
+
+  String _text(dynamic value, {String fallback = ''}) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? fallback : text;
+  }
+
+  String _initials(String value) {
+    final compact = value.replaceAll(RegExp(r'\s+'), '');
+    if (compact.isEmpty) return '--';
+    return compact.substring(0, compact.length < 2 ? 1 : 2).toUpperCase();
   }
 }

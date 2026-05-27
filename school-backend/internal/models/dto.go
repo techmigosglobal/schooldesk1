@@ -80,8 +80,9 @@ type CreateStaffRequest struct {
 	// are ignored to avoid cross-school writes.
 	SchoolID                 string  `json:"school_id"`
 	StaffCode                string  `json:"staff_code"`
-	FirstName                string  `json:"first_name" binding:"required"`
-	LastName                 string  `json:"last_name" binding:"required"`
+	Username                 string  `json:"username"`
+	FirstName                string  `json:"first_name"`
+	LastName                 string  `json:"last_name"`
 	Email                    string  `json:"email"`
 	Phone                    string  `json:"phone"`
 	DateOfBirth              string  `json:"date_of_birth"`
@@ -105,7 +106,7 @@ type CreateStudentRequest struct {
 	StudentCode      string `json:"student_code"`
 	AdmissionNumber  string `json:"admission_number"`
 	FirstName        string `json:"first_name" binding:"required"`
-	LastName         string `json:"last_name" binding:"required"`
+	LastName         string `json:"last_name"`
 	DateOfBirth      string `json:"date_of_birth" binding:"required"`
 	Gender           string `json:"gender" binding:"required"`
 	AdmissionDate    string `json:"admission_date"`

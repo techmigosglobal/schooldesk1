@@ -1,0 +1,65 @@
+groups:
+  - name: schooldesk-api
+    rules:
+      - alert: SchoolDeskBackendDown
+        expr: up{job="schooldesk-go-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: SchoolDesk API metrics scrape is down
+          description: Prometheus cannot scrape the SchoolDesk Go API for more than 2 minutes.
+
+      - alert: SchoolDeskDatabaseDown
+        expr: schooldesk_database_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: SchoolDesk database readiness is down
+          description: The Go API reports database readiness as unavailable.
+
+      - alert: SchoolDeskRedisDown
+        expr: schooldesk_redis_up == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: SchoolDesk Redis readiness is down
+          description: The Go API reports Redis readiness as unavailable.
+
+      - alert: SchoolDeskServerErrors
+        expr: sum(rate(schooldesk_http_errors_total{status_class="5xx"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: SchoolDesk API is returning 5xx responses
+          description: One or more routes have returned server errors during the last 5 minutes.
+
+      - alert: SchoolDeskDatabaseConnectionWaits
+        expr: increase(schooldesk_db_wait_count_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: SchoolDesk database pool is waiting for connections
+          description: Requests are waiting for a database connection, which can indicate pool pressure or slow queries.
+
+      - alert: SchoolDeskQueueBacklog
+        expr: max(schooldesk_queue_pending_jobs) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: SchoolDesk queue backlog is elevated
+          description: A Redis job queue has more than 100 pending jobs for at least 10 minutes.
+
+      - alert: SchoolDeskNotificationWorkerFailures
+        expr: increase(schooldesk_notification_worker_failures_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: SchoolDesk notification worker failures detected
+          description: The notification worker recorded one or more delivery failures during the last 10 minutes.

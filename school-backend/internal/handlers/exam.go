@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"school-backend/internal/database"
@@ -208,6 +209,50 @@ func (h *ExamHandler) PublishExam(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: exam})
 }
 
+func (h *ExamHandler) DeleteExam(c *gin.Context) {
+	id := c.Param("id")
+	schoolID := scopedSchoolID(c)
+	var exam models.Exam
+	if err := database.DB.First(&exam, "id = ? AND school_id = ?", id, schoolID).Error; err != nil {
+		fail(c, http.StatusNotFound, "Exam not found")
+		return
+	}
+
+	var schedCount int64
+	database.DB.Model(&models.ExamSchedule{}).Where("exam_id = ?", id).Count(&schedCount)
+
+	var markCount int64
+	database.DB.Model(&models.StudentMark{}).
+		Joins("JOIN exam_schedules es ON es.id = student_marks.exam_schedule_id").
+		Where("es.exam_id = ?", id).
+		Count(&markCount)
+	if markCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("Cannot delete: %d mark entries exist.", markCount)})
+		return
+	}
+
+	var rcCount int64
+	database.DB.Model(&models.ReportCard{}).Where("exam_id = ?", id).Count(&rcCount)
+	if rcCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("Cannot delete: %d report cards generated.", rcCount)})
+		return
+	}
+
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if schedCount > 0 {
+			if err := tx.Delete(&models.ExamSchedule{}, "exam_id = ?", id).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Delete(&exam).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete exam"})
+		return
+	}
+	auditAction(c, "exams", "delete", "exams", &id)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Exam and empty schedules deleted successfully", Data: gin.H{"id": id, "deleted_schedules": schedCount}})
+}
+
 func (h *ExamHandler) CreateExamSchedule(c *gin.Context) {
 	var req struct {
 		ExamID    string `json:"exam_id" binding:"required"`
@@ -271,6 +316,68 @@ func (h *ExamHandler) CreateExamSchedule(c *gin.Context) {
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: schedule})
 }
 
+func computeGradeFromScale(db *gorm.DB, schoolID string, scheduleID string, marksObtained float64) (gradeLabel string, gpaPoints float64) {
+	var schedule models.ExamSchedule
+	if err := db.First(&schedule, "id = ?", scheduleID).Error; err != nil || schedule.MaxMarks == 0 {
+		return "N/A", 0
+	}
+	pct := (marksObtained / float64(schedule.MaxMarks)) * 100
+	var scale models.GradingScale
+	if err := db.Where("school_id = ? AND min_percent <= ? AND max_percent >= ?", schoolID, pct, pct).
+		First(&scale).Error; err != nil {
+		return "N/A", 0
+	}
+	return scale.GradeLabel, scale.GPAPoints
+}
+
+func computeGradeLabel(db *gorm.DB, schoolID string, scheduleID string, marksObtained float64) string {
+	gradeLabel, _ := computeGradeFromScale(db, schoolID, scheduleID, marksObtained)
+	return gradeLabel
+}
+
+func regenerateReportCard(tx *gorm.DB, schoolID, studentID, examID, enrollmentID string) error {
+	type markSummary struct {
+		TotalObtained float64
+		TotalMax      float64
+	}
+
+	var summary markSummary
+	if err := tx.Raw(`
+		SELECT
+			COALESCE(SUM(sm.marks_obtained), 0) AS total_obtained,
+			COALESCE(SUM(es.max_marks), 0)      AS total_max
+		FROM student_marks sm
+		JOIN exam_schedules es ON es.id = sm.exam_schedule_id
+		WHERE sm.student_id = ? AND es.exam_id = ? AND sm.is_absent = false AND sm.is_exempted = false
+	`, studentID, examID).Scan(&summary).Error; err != nil {
+		return err
+	}
+
+	pct := 0.0
+	if summary.TotalMax > 0 {
+		pct = (summary.TotalObtained / summary.TotalMax) * 100
+	}
+
+	scale := models.GradingScale{GradeLabel: "N/A"}
+	_ = tx.Where("school_id = ? AND min_percent <= ? AND max_percent >= ?", schoolID, pct, pct).
+		First(&scale).Error
+
+	now := time.Now().UTC()
+	rc := models.ReportCard{
+		StudentID:     studentID,
+		ExamID:        examID,
+		EnrollmentID:  enrollmentID,
+		TotalObtained: summary.TotalObtained,
+		Percentage:    pct,
+		OverallGrade:  scale.GradeLabel,
+		OverallGPA:    scale.GPAPoints,
+		PublishedAt:   now,
+	}
+	return tx.Where("student_id = ? AND exam_id = ?", studentID, examID).
+		Assign(rc).
+		FirstOrCreate(&rc).Error
+}
+
 func (h *ExamHandler) EnterMarks(c *gin.Context) {
 	scheduleID := c.Param("schedule_id")
 	var schedule models.ExamSchedule
@@ -297,56 +404,79 @@ func (h *ExamHandler) EnterMarks(c *gin.Context) {
 		return
 	}
 
-	for _, m := range req.Marks {
-		if err := validateMarkStudentScope(scopedSchoolID(c), schedule, m.StudentID, m.EnrollmentID); err != nil {
-			fail(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		if err := validateMarkValue(schedule, m.MarksObtained, m.IsAbsent, m.IsExempted); err != nil {
-			fail(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		enteredBy := currentUserID(c)
-		updates := map[string]interface{}{
-			"marks_obtained": m.MarksObtained,
-			"grade_label":    m.GradeLabel,
-			"is_absent":      m.IsAbsent,
-			"is_exempted":    m.IsExempted,
-			"entered_by":     &enteredBy,
-		}
-		var existing models.StudentMark
-		err := database.DB.
-			Where("exam_schedule_id = ? AND student_id = ? AND enrollment_id = ?", scheduleID, m.StudentID, m.EnrollmentID).
-			First(&existing).Error
-		if err == nil {
-			if err := database.DB.Model(&existing).Updates(updates).Error; err != nil {
-				fail(c, http.StatusInternalServerError, "Failed to update marks")
-				return
+	schoolID := scopedSchoolID(c)
+	enteredBy := currentUserID(c)
+	type markAudit struct {
+		action string
+		id     string
+	}
+	audits := make([]markAudit, 0, len(req.Marks))
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		for _, m := range req.Marks {
+			if err := validateMarkStudentScope(tx, schoolID, schedule, m.StudentID, m.EnrollmentID); err != nil {
+				return err
 			}
-			id := existing.ID
-			auditAction(c, "exams", "update", "student_marks", &id)
-			continue
+			if err := validateMarkValue(schedule, m.MarksObtained, m.IsAbsent, m.IsExempted); err != nil {
+				return err
+			}
+			gradeLabel, gpaPoints := computeGradeFromScale(tx, schoolID, scheduleID, m.MarksObtained)
+			if m.IsAbsent || m.IsExempted {
+				gradeLabel = "N/A"
+				gpaPoints = 0
+			}
+			updates := map[string]interface{}{
+				"marks_obtained": m.MarksObtained,
+				"grade_label":    gradeLabel,
+				"gpa_points":     gpaPoints,
+				"is_absent":      m.IsAbsent,
+				"is_exempted":    m.IsExempted,
+				"entered_by":     &enteredBy,
+			}
+			var existing models.StudentMark
+			err := tx.
+				Where("exam_schedule_id = ? AND student_id = ? AND enrollment_id = ?", scheduleID, m.StudentID, m.EnrollmentID).
+				First(&existing).Error
+			if err == nil {
+				if err := tx.Model(&existing).Updates(updates).Error; err != nil {
+					return fmt.Errorf("failed to update marks: %w", err)
+				}
+				audits = append(audits, markAudit{action: "update", id: existing.ID})
+				if err := regenerateReportCard(tx, schoolID, m.StudentID, schedule.ExamID, m.EnrollmentID); err != nil {
+					return fmt.Errorf("report card regeneration failed for student %s: %w", m.StudentID, err)
+				}
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("failed to save marks: %w", err)
+			}
+			mark := models.StudentMark{
+				ExamScheduleID: scheduleID,
+				StudentID:      m.StudentID,
+				EnrollmentID:   m.EnrollmentID,
+				MarksObtained:  m.MarksObtained,
+				GradeLabel:     gradeLabel,
+				GPAPoints:      gpaPoints,
+				IsAbsent:       m.IsAbsent,
+				IsExempted:     m.IsExempted,
+				EnteredBy:      &enteredBy,
+			}
+			if err := tx.Create(&mark).Error; err != nil {
+				return fmt.Errorf("failed to save marks: %w", err)
+			}
+			audits = append(audits, markAudit{action: "create", id: mark.ID})
+			if err := regenerateReportCard(tx, schoolID, m.StudentID, schedule.ExamID, m.EnrollmentID); err != nil {
+				return fmt.Errorf("report card regeneration failed for student %s: %w", m.StudentID, err)
+			}
 		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			fail(c, http.StatusInternalServerError, "Failed to save marks")
-			return
-		}
-		mark := models.StudentMark{
-			ExamScheduleID: scheduleID,
-			StudentID:      m.StudentID,
-			EnrollmentID:   m.EnrollmentID,
-			MarksObtained:  m.MarksObtained,
-			GradeLabel:     m.GradeLabel,
-			IsAbsent:       m.IsAbsent,
-			IsExempted:     m.IsExempted,
-			EnteredBy:      &enteredBy,
-		}
-		if err := database.DB.Create(&mark).Error; err != nil {
-			fail(c, http.StatusInternalServerError, "Failed to save marks")
-			return
-		}
-		id := mark.ID
-		auditAction(c, "exams", "create", "student_marks", &id)
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, audit := range audits {
+		id := audit.id
+		auditAction(c, "exams", audit.action, "student_marks", &id)
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Marks entered successfully"})
@@ -414,6 +544,65 @@ func (h *ExamHandler) GetReportCards(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: reportCards})
 }
 
+func (h *ExamHandler) GetClassRanking(c *gin.Context) {
+	examID := c.Param("id")
+	schoolID := currentSchoolID(c)
+	sectionID := strings.TrimSpace(c.Query("section_id"))
+
+	type RankRow struct {
+		StudentID  string  `json:"student_id"`
+		FirstName  string  `json:"first_name"`
+		LastName   string  `json:"last_name"`
+		Obtained   float64 `json:"marks_obtained"`
+		TotalMax   float64 `json:"total_marks"`
+		Percentage float64 `json:"percentage"`
+		Grade      string  `json:"grade"`
+		ClassRank  int     `json:"rank"`
+	}
+	var rows []RankRow
+	sectionFilter := ""
+	args := []interface{}{examID, schoolID}
+	if sectionID != "" {
+		sectionFilter = "AND en.section_id = ?"
+		args = append(args, sectionID)
+	}
+
+	if err := database.DB.Raw(`
+		SELECT
+			s.id AS student_id,
+			s.first_name,
+			s.last_name,
+			rc.total_obtained AS obtained,
+			sm_max.total_max AS total_max,
+			ROUND(CAST(
+				CASE WHEN sm_max.total_max > 0
+					THEN (rc.total_obtained / sm_max.total_max) * 100
+					ELSE 0 END AS numeric
+			), 1) AS percentage,
+			rc.overall_grade AS grade,
+			DENSE_RANK() OVER (
+				ORDER BY CASE WHEN sm_max.total_max > 0
+					THEN (rc.total_obtained / sm_max.total_max)
+					ELSE 0 END DESC
+			) AS class_rank
+		FROM report_cards rc
+		JOIN students s ON s.id = rc.student_id
+		JOIN enrollments en ON en.id = rc.enrollment_id
+		JOIN (
+			SELECT es.exam_id, SUM(es.max_marks) AS total_max
+			FROM exam_schedules es GROUP BY es.exam_id
+		) sm_max ON sm_max.exam_id = rc.exam_id
+		WHERE rc.exam_id = ? AND s.school_id = ?
+		`+sectionFilter+`
+		ORDER BY class_rank ASC
+	`, args...).Scan(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load rankings"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"exam_id": examID, "rankings": rows})
+}
+
 func (h *ExamHandler) GetGradingScale(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	var scales []models.GradingScale
@@ -468,8 +657,8 @@ func scopedExamScheduleQuery(c *gin.Context) *gorm.DB {
 		Where("exams.school_id = ?", scopedSchoolID(c))
 }
 
-func validateMarkStudentScope(schoolID string, schedule models.ExamSchedule, studentID, enrollmentID string) error {
-	if countRows(database.DB.Model(&models.Enrollment{}).
+func validateMarkStudentScope(db *gorm.DB, schoolID string, schedule models.ExamSchedule, studentID, enrollmentID string) error {
+	if countRows(db.Model(&models.Enrollment{}).
 		Joins("JOIN students ON students.id = enrollments.student_id").
 		Where("enrollments.id = ? AND enrollments.student_id = ? AND enrollments.section_id = ?", enrollmentID, studentID, schedule.SectionID).
 		Where("students.school_id = ? AND students.status != ?", schoolID, "inactive")) == 0 {

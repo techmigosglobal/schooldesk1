@@ -13,6 +13,8 @@ analyzer:
   exclude:
     - test/**
     - integration_test/**
+    - Parent_Module_UI/**
+    - '**/__MACOSX/**'
   errors:
     # Keep release builds focused on production runtime issues.
     use_build_context_synchronously: ignore

@@ -1,7 +1,7 @@
 name: schooldesk1
 description: A new Flutter project.
 publish_to: none
-version: 1.0.5+13
+version: 1.0.6+14
 
 environment:
   sdk: ^3.9.0
@@ -21,6 +21,7 @@ dependencies:
   cached_network_image: ^3.3.1
   connectivity_plus: ^6.1.4
   dio: ^5.4.0
+  freezed_annotation: ^3.1.0
   flutter_secure_storage: ^9.2.2
   fluttertoast: ^9.0.0
   fl_chart: ^0.65.0
@@ -32,6 +33,8 @@ dependencies:
   printing: ^5.14.3
   provider: ^6.1.5+1
   path_provider: ^2.1.5
+  json_annotation: ^4.12.0
+  retrofit: ^4.9.2
 
   universal_html: ^2.2.4
   firebase_core: ^4.7.0
@@ -39,12 +42,20 @@ dependencies:
   flutter_local_notifications: ^21.0.0
   package_info_plus: ^9.0.1
   crypto: ^3.0.7
+  file_picker: ^11.0.2
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
+  share_plus: ^12.0.2
 dev_dependencies:
   flutter_test:    # CRITICAL: Required for Flutter project testing - DO NOT REMOVE
     sdk: flutter   # CRITICAL: Required for Flutter project testing - DO NOT REMOVE
   flutter_lints: ^5.0.0 # CRITICAL: Required for code quality - DO NOT REMOVE
+  build_runner: ^2.5.4
+  freezed: ^3.2.0
   integration_test:
     sdk: flutter
+  json_serializable: ^6.9.5
+  retrofit_generator: ^10.2.6
 
 flutter:
   uses-material-design: true # CRITICAL: Required for Material icon font - DO NOT REMOVE

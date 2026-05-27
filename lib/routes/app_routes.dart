@@ -30,6 +30,7 @@ import '../presentation/exams_results_screen/exams_results_screen.dart';
 import '../presentation/fee_monitoring_screen/fee_monitoring_screen.dart';
 import '../presentation/fee_payment_receipt_screen/fee_payment_receipt_screen.dart';
 import '../presentation/global_search_screen/global_search_screen.dart';
+import '../presentation/guardian_directory_screen/guardian_directory_screen.dart';
 import '../presentation/homework_messaging_screen/homework_messaging_screen.dart';
 import '../presentation/id_card_generation_screen/id_card_generation_screen.dart';
 import '../presentation/landing_page_screen/landing_page_screen.dart';
@@ -49,7 +50,11 @@ import '../presentation/parent_leave_screen/parent_leave_screen.dart';
 import '../presentation/parent_notices_screen/parent_notices_screen.dart';
 import '../presentation/parent_teacher_chat_screen/parent_teacher_chat_screen.dart';
 import '../presentation/principal_dashboard_screen/principal_dashboard_screen.dart';
+import '../presentation/principal_attendance_screen/principal_attendance_screen.dart';
+import '../presentation/principal_classes_screen/principal_classes_screen.dart';
 import '../presentation/principal_analytics_screen/principal_analytics_screen.dart';
+import '../presentation/principal_command_center_screens/principal_academic_command_screens.dart';
+import '../presentation/principal_subjects_screen/principal_subjects_screen.dart';
 import '../presentation/profile_management_screen/profile_management_screen.dart';
 import '../presentation/report_card_generator_screen/report_card_generator_screen.dart';
 import '../presentation/reports_analytics_screen/reports_analytics_screen.dart';
@@ -69,11 +74,10 @@ import '../presentation/teacher_homework_screen/teacher_homework_screen.dart';
 import '../presentation/teacher_homework_screen/teacher_homework_form_screens.dart';
 import '../presentation/teacher_leave_screen/teacher_leave_screen.dart';
 import '../presentation/teacher_leave_screen/teacher_leave_request_form_screen.dart';
-import '../presentation/teacher_lesson_planner_screen/teacher_lesson_planner_screen.dart';
+import '../presentation/teacher_my_attendance_screen/teacher_my_attendance_screen.dart';
 import '../presentation/teacher_parent_interaction_screen/teacher_parent_interaction_screen.dart';
 import '../presentation/teacher_performance_screen/teacher_performance_screen.dart';
 import '../presentation/teacher_reports_screen/teacher_reports_screen.dart';
-import '../presentation/teacher_resources_screen/teacher_resources_screen.dart';
 import '../presentation/teacher_student_notes_screen/teacher_student_notes_screen.dart';
 import '../presentation/timetable_management_screen/timetable_management_screen.dart';
 import '../services/backend_api_client.dart';
@@ -155,11 +159,11 @@ class AppRoutes {
   static const String teacherDashboard = '/teacher-dashboard-screen';
   static const String teacherClasses = '/teacher-classes-screen';
   static const String teacherAttendance = '/teacher-attendance-screen';
+  static const String teacherMyAttendance = '/teacher-my-attendance-screen';
   static const String teacherHomework = '/teacher-homework-screen';
   static const String teacherHomeworkForm = '/teacher-homework-screen/form';
   static const String teacherHomeworkSubmissions =
       '/teacher-homework-screen/submissions';
-  static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
   static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherCommunication = '/teacher-communication-screen';
@@ -167,7 +171,6 @@ class AppRoutes {
       '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
-  static const String teacherResources = '/teacher-resources-screen';
   static const String teacherDiscipline = '/teacher-discipline-screen';
   static const String teacherReports = '/teacher-reports-screen';
   // Parent Module Routes
@@ -200,6 +203,13 @@ class AppRoutes {
   static const String principalAnalytics = '/principal-analytics-screen';
   static const String principalUserManagement =
       '/principal-user-management-screen';
+  static const String guardianDirectory = '/guardian-directory-screen';
+  static const String principalClasses = '/principal-classes-screen';
+  static const String principalAttendance = '/principal-attendance-screen';
+  static const String principalSubjects = '/principal-subjects-screen';
+  static const String principalTimetable = '/principal-timetable-screen';
+  static const String principalExams = '/principal-exams-screen';
+  static const String principalResults = '/principal-results-screen';
   static const String principalAccountCreate =
       '/principal-user-management-screen/create';
   static const String principalAccountEdit =
@@ -313,6 +323,14 @@ class AppRoutes {
     ),
     principalUserManagement: (context) =>
         const AdminUserAccessScreen(ownerRole: 'principal'),
+    guardianDirectory: (context) =>
+        const GuardianDirectoryScreen(ownerRole: 'principal'),
+    principalClasses: (context) => const PrincipalClassesScreen(),
+    principalAttendance: (context) => const PrincipalAttendanceScreen(),
+    principalSubjects: (context) => const PrincipalSubjectsScreen(),
+    principalTimetable: (context) => const PrincipalTimetableScreen(),
+    principalExams: (context) => const PrincipalExamsScreen(),
+    principalResults: (context) => const PrincipalResultsScreen(),
     principalAccountCreate: (context) =>
         AccountAccessFormScreen(args: _accountFormArgs(context, 'principal')),
     principalAccountEdit: (context) =>
@@ -326,13 +344,13 @@ class AppRoutes {
     teacherDashboard: (context) => const TeacherDashboardScreen(),
     teacherClasses: (context) => const TeacherClassesScreen(),
     teacherAttendance: (context) => const TeacherAttendanceScreen(),
+    teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
     teacherHomework: (context) => const TeacherHomeworkScreen(),
     teacherHomeworkForm: (context) =>
         TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
     teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
       args: _teacherHomeworkSubmissionsArgs(context),
     ),
-    teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
     teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
@@ -341,7 +359,6 @@ class AppRoutes {
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
-    teacherResources: (context) => const TeacherResourcesScreen(),
     teacherDiscipline: (context) => const TeacherDisciplineScreen(),
     teacherReports: (context) => const TeacherReportsScreen(),
     // Parent Module,
@@ -421,12 +438,13 @@ class AppRoutes {
     required Widget? child,
     required WidgetBuilder? routeBuilder,
   }) {
-    // Temporary UI-only switch: keep all role route registrations and screen
-    // implementations intact, but hide protected role/module pages for now.
+    // Temporary UI-only switch: keep unfinished role route registrations hidden,
+    // while allowing the implemented principal, parent, and shared workflows.
     if (blankRoleModuleScreens &&
         metadata != null &&
         !metadata.isPublic &&
-        !_principalWorkflowVisibleRoutes.contains(metadata.route)) {
+        !metadata.isShared &&
+        !_roleWorkflowVisibleRoutes.contains(metadata.route)) {
       return const BlankRoleModuleScreen();
     }
 
@@ -435,31 +453,69 @@ class AppRoutes {
     return const SizedBox.shrink();
   }
 
-  static const Set<String> _principalWorkflowVisibleRoutes = {
+  static const Set<String> _roleWorkflowVisibleRoutes = {
     principalDashboard,
     principalSchoolProfile,
     principalUserManagement,
+    guardianDirectory,
+    principalClasses,
+    principalAttendance,
+    principalSubjects,
+    principalTimetable,
+    principalExams,
+    principalResults,
     principalAccountCreate,
     principalAccountEdit,
     principalParentChildAssignment,
+    academicManagement,
+    timetableManagement,
+    syllabusMonitoring,
+    examsResults,
+    reportsAnalytics,
     staffManagement,
     staffForm,
     studentOversight,
     approvalCenter,
     feeMonitoring,
-    timetableManagement,
-    syllabusMonitoring,
-    examsResults,
     communicationCenter,
     complaintManagement,
     eventsCalendar,
-    reportsAnalytics,
-    academicManagement,
-    academicYearForm,
-    academicSubjectForm,
-    academicClassForm,
-    academicCurriculumForm,
     principalAcademicInfo,
+    parentDashboard,
+    parentAcademicProgress,
+    parentAttendance,
+    parentHomework,
+    parentHomeworkSubmit,
+    parentNotices,
+    parentTeacherChat,
+    parentFees,
+    parentPaymentRequestForm,
+    feePaymentReceipt,
+    parentLeave,
+    parentLeaveRequestForm,
+    parentCalendar,
+    parentDocuments,
+    parentDiary,
+    parentAcademicInfo,
+    adminDashboard,
+    adminAttendance,
+    teacherDashboard,
+    teacherClasses,
+    teacherAttendance,
+    teacherMyAttendance,
+    teacherHomework,
+    teacherHomeworkForm,
+    teacherHomeworkSubmissions,
+    teacherPerformance,
+    teacherStudentNotes,
+    teacherCommunication,
+    teacherParentInteraction,
+    teacherLeave,
+    teacherLeaveRequestForm,
+    teacherDiscipline,
+    teacherReports,
+    teacherDiary,
+    teacherAcademicInfo,
     principalAnalytics,
     notificationCenter,
     settingsScreen,

@@ -61,3 +61,71 @@ func TestFrontendRecordHandlerPersistsResourceRecords(t *testing.T) {
 		t.Fatalf("list body missing record: %s", list.Body.String())
 	}
 }
+
+func TestFrontendRecordHandlerScopesParentOwnedRecords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	database.DB = db
+	if err := db.AutoMigrate(&models.FrontendRecord{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	records := []models.FrontendRecord{
+		{
+			BaseModel: models.BaseModel{ID: "own-ack"},
+			SchoolID:  "school-test",
+			Resource:  "notice-acknowledgements",
+			Payload:   `{"notice_id":"notice-own"}`,
+			CreatedBy: "parent-a",
+		},
+		{
+			BaseModel: models.BaseModel{ID: "other-ack"},
+			SchoolID:  "school-test",
+			Resource:  "notice-acknowledgements",
+			Payload:   `{"notice_id":"notice-other"}`,
+			CreatedBy: "parent-b",
+		},
+	}
+	if err := db.Create(&records).Error; err != nil {
+		t.Fatalf("seed records: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("school_id", "school-test")
+		c.Set("user_id", "parent-a")
+		c.Set("role_name", "Parent")
+		c.Next()
+	})
+	handler := NewFrontendRecordHandler("notice-acknowledgements")
+	router.GET("/notice-acknowledgements", handler.List)
+	router.PUT("/notice-acknowledgements/:id", handler.Update)
+
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/notice-acknowledgements", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), `"notice_id":"notice-own"`) {
+		t.Fatalf("list body missing own record: %s", list.Body.String())
+	}
+	if strings.Contains(list.Body.String(), "notice-other") {
+		t.Fatalf("list body leaked another parent's record: %s", list.Body.String())
+	}
+
+	updateOther := httptest.NewRecorder()
+	router.ServeHTTP(
+		updateOther,
+		httptest.NewRequest(
+			http.MethodPut,
+			"/notice-acknowledgements/other-ack",
+			strings.NewReader(`{"acknowledged_at":"2026-05-23T00:00:00Z"}`),
+		),
+	)
+	if updateOther.Code != http.StatusForbidden {
+		t.Fatalf("update other status = %d body=%s", updateOther.Code, updateOther.Body.String())
+	}
+}

@@ -71,10 +71,10 @@ Date: 2026-05-05
 | My Classes | Assigned classes and roster | `/teacher-classes-screen` | `GET /api/sections`, `GET /api/students`, `GET /api/timetable/slots` | Partial | Verify teacher scoping by linked staff ID. |
 | Attendance | Load class students, mark attendance, correction requests | `/teacher-attendance-screen` | `GET /api/students`, `POST /api/attendance/mark`, `GET /api/attendance/sessions` | Complete / Partial | Core marking exists. Correction request path should be verified. |
 | Homework | Create/update homework for class/students | `/teacher-homework-screen` | Raw/generic homework endpoints if used | Partial | Needs dedicated backend trace for homework CRUD and parent visibility. |
-| Lesson Planner | Lesson plan creation and tracking | `/teacher-lesson-planner-screen` | Not clearly dedicated in `BackendApiClient` | UI-only / Needs API | Add/verify lesson plan endpoints. |
+| Lesson Planner | Retired from current product scope | Not exposed | No active API contract | Out of scope | Keep historical screen source unregistered until the product reopens this module. |
 | Student Performance | Marks/grades/performance review | `/teacher-performance-screen` | `GET /api/exams`, `GET /api/students/:id/marks`, possible raw grades calls | Partial | Verify grade write/bulk entry endpoints. |
 | Student Notes | Notes for student observations | `/teacher-student-notes-screen` | Raw/generic student-note endpoints if used | Partial | Confirm notes persist and are scoped. |
-| Resources | Teaching resources/files | `/teacher-resources-screen` | Not clearly dedicated in `BackendApiClient` | UI-only / Needs API | Needs backend storage/document endpoints. |
+| Resources | Retired from current product scope | Not exposed | No active API contract | Out of scope | Keep historical screen source unregistered until the product reopens this module. |
 | Communication | Teacher announcements/messages | `/teacher-communication-screen` | `GET /api/announcements`, message raw endpoints if used | Partial | Verify teacher-created messages and inbox. |
 | Parent Interaction | Parent messaging / PTM | `/teacher-parent-interaction-screen` | PTM/message endpoints likely raw or HR comms | Partial | Needs endpoint trace and parent-side confirmation. |
 | Leave | Submit and view leave | `/teacher-leave-screen` | `GET /api/leave/applications`, `POST /api/leave/applications` | Partial | Submit/list calls exist. Approver flow is principal/admin. |

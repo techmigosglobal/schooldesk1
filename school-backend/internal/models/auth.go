@@ -48,7 +48,7 @@ type User struct {
 	AuthInvalidatedAt *time.Time    `json:"-"`
 	CreatedAt         time.Time     `json:"created_at"`
 	School            *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
-	Role              *Role         `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	Role              *Role         `gorm:"foreignKey:RoleID" json:"role_detail,omitempty"`
 	Sessions          []UserSession `gorm:"foreignKey:UserID" json:"sessions,omitempty"`
 	AuditLogs         []AuditLog    `gorm:"foreignKey:UserID" json:"audit_logs,omitempty"`
 }

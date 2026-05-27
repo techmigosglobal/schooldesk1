@@ -31,7 +31,7 @@ func TestCreateSubstitution(t *testing.T) {
 	subject := models.Subject{BaseModel: models.BaseModel{ID: "subject-substitution-test"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Mathematics"}
 	originalStaff := models.Staff{BaseModel: models.BaseModel{ID: "original-staff-id"}, SchoolID: school.ID, StaffCode: "SUB-1", FirstName: "Original", LastName: "Teacher", Status: "active"}
 	substituteStaff := models.Staff{BaseModel: models.BaseModel{ID: "sub-staff-id"}, SchoolID: school.ID, StaffCode: "SUB-2", FirstName: "Substitute", LastName: "Teacher", Status: "active"}
-	slot := models.TimetableSlot{BaseModel: models.BaseModel{ID: "test-slot-id"}, SectionID: section.ID, AcademicYearID: year.ID, TermID: term.ID, DayOfWeek: 2, PeriodNumber: 1, SubjectID: subject.ID, StaffID: originalStaff.ID, StartTime: "09:00", EndTime: "09:40", SlotType: "regular"}
+	slot := models.TimetableSlot{BaseModel: models.BaseModel{ID: "test-slot-id"}, SectionID: section.ID, AcademicYearID: year.ID, TermID: term.ID, DayOfWeek: 2, PeriodNumber: 1, SubjectID: subject.ID, StaffID: originalStaff.ID, StartTime: mustTimetableTestClock(t, "09:00"), EndTime: mustTimetableTestClock(t, "09:40"), SlotType: "regular"}
 	for _, seed := range []any{&school, &year, &term, &grade, &section, &department, &subject, &originalStaff, &substituteStaff, &slot} {
 		assert.NoError(t, database.DB.Create(seed).Error)
 	}

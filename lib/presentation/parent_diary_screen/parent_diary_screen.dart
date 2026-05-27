@@ -137,7 +137,8 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
       'notes': e['notes'] ?? '',
       'schedule': e['schedule'] ?? '',
       'type': e['type'] ?? 'regular',
-      'createdBy': e['created_by'] ?? 'Teacher',
+      // Backend integration: show the author only when the diary API provides it.
+      'createdBy': e['created_by'] ?? e['teacher_name'] ?? '',
       'student_id': e['student_id'] ?? '',
     };
   }
@@ -624,6 +625,9 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
 
   Widget _buildEntryCard(Map<String, dynamic> entry) {
     final type = entry['type'] as String? ?? 'regular';
+    final subject = (entry['subject'] as String? ?? '').trim();
+    final title = (entry['title'] as String? ?? '').trim();
+    final createdBy = (entry['createdBy'] as String? ?? '').trim();
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -659,7 +663,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    entry['subject'] as String? ?? '',
+                    subject.isEmpty ? 'Diary entry' : subject,
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
@@ -694,14 +698,15 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  entry['title'] as String? ?? '',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurface,
+                if (title.isNotEmpty)
+                  Text(
+                    title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.onSurface,
+                    ),
                   ),
-                ),
                 if ((entry['classwork'] as String? ?? '').isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _infoRow(
@@ -737,24 +742,26 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     color: AppTheme.muted,
                   ),
                 ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.person_outline,
-                      size: 13,
-                      color: AppTheme.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      entry['createdBy'] as String? ?? '',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
+                if (createdBy.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline,
+                        size: 13,
                         color: AppTheme.muted,
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 4),
+                      Text(
+                        createdBy,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppTheme.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

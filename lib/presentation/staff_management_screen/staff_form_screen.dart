@@ -41,11 +41,13 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _emailController;
+  late final TextEditingController _employeeController;
+  late final TextEditingController _usernameController;
   late final TextEditingController _designationController;
   late final TextEditingController _passwordController;
   late final TextEditingController _customDepartmentController;
 
-  String _selectedDept = 'Science';
+  String _selectedDept = 'Teacher';
   String _accountRole = 'Teacher';
   bool _saving = false;
   bool _passwordVisible = false;
@@ -53,34 +55,12 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
 
   static const String _customDepartmentValue = '__custom_department__';
   static const List<String> _departments = [
-    'Administration',
-    'Academic Administration',
-    'Admissions',
-    'Accounts',
-    'Science',
-    'Mathematics',
-    'English',
-    'Hindi',
-    'Marathi',
-    'Sanskrit',
-    'Social Studies',
-    'History',
-    'Geography',
-    'Civics',
-    'Physics',
-    'Chemistry',
-    'Biology',
-    'Computer Science',
-    'Information Technology',
-    'Commerce',
-    'Economics',
-    'Library',
-    'Physical Education',
-    'Arts & Crafts',
-    'Music',
-    'Transport',
-    'Housekeeping',
-    'Security',
+    'Teacher',
+    'Co Teacher',
+    'Admin',
+    'Staff',
+    'Support Staff',
+    'PE',
   ];
 
   bool get _isAdminOwner => widget.args.isAdminOwner;
@@ -105,6 +85,10 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController = TextEditingController(text: staff?.name ?? '');
     _phoneController = TextEditingController(text: staff?.phone ?? '');
     _emailController = TextEditingController(text: staff?.email ?? '');
+    _employeeController = TextEditingController(text: staff?.employeeId ?? '');
+    _usernameController = TextEditingController(
+      text: staff?.loginUsername ?? '',
+    );
     _designationController = TextEditingController(
       text: staff?.designation ?? '',
     );
@@ -117,7 +101,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     }
     final existingDepartment = staff?.department.trim();
     if (existingDepartment == null || existingDepartment.isEmpty) {
-      _selectedDept = 'Science';
+      _selectedDept = 'Teacher';
     } else if (_departments.contains(existingDepartment)) {
       _selectedDept = existingDepartment;
     } else {
@@ -131,6 +115,8 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
+    _employeeController.dispose();
+    _usernameController.dispose();
     _designationController.dispose();
     _passwordController.dispose();
     _customDepartmentController.dispose();
@@ -189,16 +175,21 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                     children: [
                       _buildResponsivePair(
                         first: _buildNameField(),
-                        second: _buildDepartmentField(),
+                        second: _buildEmployeeField(),
                       ),
                       const SizedBox(height: 16),
                       _buildResponsivePair(
-                        first: _buildDesignationField(),
-                        second: _buildPhoneField(),
+                        first: _buildDepartmentField(),
+                        second: _buildDesignationField(),
                       ),
                       const SizedBox(height: 16),
                       _buildResponsivePair(
-                        first: _buildEmailField(),
+                        first: _buildPhoneField(),
+                        second: _buildEmailField(),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildResponsivePair(
+                        first: _buildUsernameField(),
                         second: _isEdit
                             ? _buildReadOnlyRoleField()
                             : _buildLoginRoleField(),
@@ -348,6 +339,33 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildEmployeeField() {
+    return TextFormField(
+      controller: _employeeController,
+      textInputAction: TextInputAction.next,
+      decoration: const InputDecoration(
+        labelText: 'Employee ID *',
+        prefixIcon: Icon(Icons.badge_outlined),
+      ),
+      validator: (value) => value == null || value.trim().isEmpty
+          ? 'Employee ID is required'
+          : null,
+    );
+  }
+
+  Widget _buildUsernameField() {
+    return TextFormField(
+      controller: _usernameController,
+      textInputAction: TextInputAction.next,
+      decoration: const InputDecoration(
+        labelText: 'Login username *',
+        prefixIcon: Icon(Icons.account_circle_outlined),
+      ),
+      validator: (value) =>
+          value == null || value.trim().isEmpty ? 'Username is required' : null,
     );
   }
 
@@ -548,6 +566,8 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     await api.BackendApiClient.instance.createStaff(
       firstName: name.firstName,
       lastName: name.lastName,
+      staffCode: _employeeController.text.trim(),
+      username: _usernameController.text.trim(),
       email: _emailController.text.trim(),
       phone: _phoneController.text.trim(),
       designation: _designationController.text.trim(),
@@ -564,6 +584,8 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
       widget.args.existingStaff!.id,
       firstName: name.firstName,
       lastName: name.lastName,
+      staffCode: _employeeController.text.trim(),
+      username: _usernameController.text.trim(),
       email: _emailController.text.trim(),
       phone: _phoneController.text.trim(),
       designation: _designationController.text.trim(),
@@ -579,11 +601,6 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   }
 
   ({String firstName, String lastName}) _splitStaffName(String fullName) {
-    final parts = fullName.trim().split(RegExp(r'\s+'));
-    final firstName = parts.isEmpty || parts.first.isEmpty
-        ? 'Staff'
-        : parts.first;
-    final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : '.';
-    return (firstName: firstName, lastName: lastName);
+    return (firstName: fullName.trim(), lastName: '');
   }
 }

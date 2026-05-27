@@ -159,17 +159,31 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               label: SchoolDeskGlossary.approvalCenter,
               route: AppRoutes.approvalCenter,
             ),
+            SchoolDeskNavigationItem(
+              index: 15,
+              icon: Icons.qr_code_2_outlined,
+              activeIcon: Icons.qr_code_2_rounded,
+              label: SchoolDeskGlossary.attendance,
+              route: AppRoutes.principalAttendance,
+            ),
           ],
         ),
         SchoolDeskNavigationSection(
           label: 'Academic Records',
           items: [
             SchoolDeskNavigationItem(
+              index: 16,
+              icon: Icons.grid_view_outlined,
+              activeIcon: Icons.grid_view_rounded,
+              label: 'Class Hub',
+              route: AppRoutes.principalClasses,
+            ),
+            SchoolDeskNavigationItem(
               index: 4,
               icon: Icons.calendar_view_week_outlined,
               activeIcon: Icons.calendar_view_week_rounded,
               label: SchoolDeskGlossary.timetableRecords,
-              route: AppRoutes.timetableManagement,
+              route: AppRoutes.principalTimetable,
             ),
             SchoolDeskNavigationItem(
               index: 5,
@@ -183,7 +197,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               icon: Icons.quiz_outlined,
               activeIcon: Icons.quiz_rounded,
               label: SchoolDeskGlossary.examRecords,
-              route: AppRoutes.examsResults,
+              route: AppRoutes.principalExams,
             ),
             SchoolDeskNavigationItem(
               index: 12,
@@ -240,7 +254,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               icon: Icons.bar_chart_outlined,
               activeIcon: Icons.bar_chart_rounded,
               label: SchoolDeskGlossary.reports,
-              route: AppRoutes.reportsAnalytics,
+              route: AppRoutes.principalResults,
             ),
             SchoolDeskNavigationItem(
               index: 13,
@@ -311,4 +325,161 @@ String _initials(String name, {required String fallback}) {
       .map((part) => part.trim()[0].toUpperCase())
       .join();
   return parts.isEmpty ? fallback : parts;
+}
+
+class PrincipalShellBottomBar extends StatelessWidget {
+  const PrincipalShellBottomBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    final destinations = const [
+      _PrincipalShellDestination(
+        label: 'Home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        route: AppRoutes.principalDashboard,
+      ),
+      _PrincipalShellDestination(
+        label: SchoolDeskGlossary.search,
+        icon: Icons.search_rounded,
+        activeIcon: Icons.manage_search_rounded,
+        route: AppRoutes.globalSearch,
+        arguments: 'principal',
+      ),
+      _PrincipalShellDestination(
+        label: 'Inbox',
+        icon: Icons.mail_outline_rounded,
+        activeIcon: Icons.mail_rounded,
+        route: AppRoutes.approvalCenter,
+      ),
+      _PrincipalShellDestination(
+        label: SchoolDeskGlossary.profile,
+        icon: Icons.account_circle_outlined,
+        activeIcon: Icons.account_circle_rounded,
+        route: AppRoutes.profileScreen,
+        arguments: 'principal',
+      ),
+    ];
+
+    final tokens = Theme.of(context).schoolDesk;
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: tokens.panel,
+        elevation: 10,
+        shadowColor: Colors.black.withAlpha(24),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: tokens.panelBorder)),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: tokens.spacing.xs,
+            vertical: tokens.spacing.xs,
+          ),
+          child: Row(
+            children: [
+              for (final destination in destinations)
+                Expanded(
+                  child: _PrincipalShellBottomButton(
+                    destination: destination,
+                    selected: currentRoute == destination.route,
+                    onTap: () => _navigate(context, destination),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _navigate(BuildContext context, _PrincipalShellDestination destination) {
+    final navigator = Navigator.of(context);
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    if (currentRoute == destination.route) return;
+    if (destination.route == AppRoutes.principalDashboard) {
+      navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
+      return;
+    }
+    navigator.pushNamed(destination.route, arguments: destination.arguments);
+  }
+}
+
+class _PrincipalShellDestination {
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final String route;
+  final Object? arguments;
+
+  const _PrincipalShellDestination({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    required this.route,
+    this.arguments,
+  });
+}
+
+class _PrincipalShellBottomButton extends StatelessWidget {
+  final _PrincipalShellDestination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PrincipalShellBottomButton({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final minHeight = (56.0 + ((textScale - 1) * 18))
+        .clamp(56.0, 76.0)
+        .toDouble();
+    final color = selected ? theme.colorScheme.primary : tokens.textMuted;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(tokens.radius.control),
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: minHeight),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: tokens.spacing.xs,
+              vertical: tokens.spacing.xs,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  selected ? destination.activeIcon : destination.icon,
+                  color: color,
+                  size: 23,
+                ),
+                SizedBox(height: tokens.spacing.xs),
+                Text(
+                  destination.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

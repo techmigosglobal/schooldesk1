@@ -33,7 +33,7 @@ void main() {
     expect(
       main,
       contains(
-        'fees.POST("/invoices", middleware.RBACMiddleware("Admin"), feeHandler.CreateInvoice)',
+        'fees.POST("/invoices", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write"',
       ),
     );
   });

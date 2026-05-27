@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../core/config/env_config.dart';
 import '../../routes/app_routes.dart';
 import '../../services/backend_api_client.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/erp_components.dart';
 
 class PrincipalDashboardScreen extends StatefulWidget {
@@ -37,33 +39,81 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
     try {
       final api = BackendApiClient.instance;
-      final results = await Future.wait<Object>([
+      final criticalResults = await Future.wait<Object>([
         api.getDashboard('principal'),
         api.getCurrentSchool(),
         api.getProfile(),
-        api.getAcademicYears(),
-        api.getGrades(),
-        api.getSections(),
-        api.getRawList('/subjects'),
-        api.getStaff(page: 1, pageSize: 1),
-        api.getStudents(page: 1, pageSize: 1),
-        api.getFeeStructures(),
-        api.getTimetableSlots(),
-        api.getNotifications(),
+      ]);
+      final optionalResults = await Future.wait<Object>([
+        _loadOptional(
+          label: 'academic years',
+          request: api.getAcademicYears(),
+          fallback: <AcademicYearModel>[],
+        ),
+        _loadOptional(
+          label: 'grades',
+          request: api.getGrades(),
+          fallback: <GradeModel>[],
+        ),
+        _loadOptional(
+          label: 'sections',
+          request: api.getSections(),
+          fallback: <SectionModel>[],
+        ),
+        _loadOptional(
+          label: 'subjects',
+          request: api.getRawList('/subjects'),
+          fallback: <Map<String, dynamic>>[],
+        ),
+        _loadOptional(
+          label: 'staff count',
+          request: api.getStaff(page: 1, pageSize: 1),
+          fallback: const PaginatedList<StaffModel>(
+            data: [],
+            total: 0,
+            page: 1,
+            pageSize: 1,
+          ),
+        ),
+        _loadOptional(
+          label: 'student count',
+          request: api.getStudents(page: 1, pageSize: 1),
+          fallback: const PaginatedList<StudentModel>(
+            data: [],
+            total: 0,
+            page: 1,
+            pageSize: 1,
+          ),
+        ),
+        _loadOptional(
+          label: 'fee structures',
+          request: api.getFeeStructures(),
+          fallback: <Map<String, dynamic>>[],
+        ),
+        _loadOptional(
+          label: 'timetable slots',
+          request: api.getTimetableSlots(),
+          fallback: <Map<String, dynamic>>[],
+        ),
+        _loadOptional(
+          label: 'notifications',
+          request: api.getNotifications(),
+          fallback: <Map<String, dynamic>>[],
+        ),
       ]);
 
-      final dashboard = Map<String, dynamic>.from(results[0] as Map);
-      final school = Map<String, dynamic>.from(results[1] as Map);
-      final profile = results[2] as UserResponse;
-      final academicYears = results[3] as List<AcademicYearModel>;
-      final grades = results[4] as List<GradeModel>;
-      final sections = results[5] as List<SectionModel>;
-      final subjects = results[6] as List<Map<String, dynamic>>;
-      final staff = results[7] as PaginatedList<StaffModel>;
-      final students = results[8] as PaginatedList<StudentModel>;
-      final feeStructures = results[9] as List<Map<String, dynamic>>;
-      final timetableSlots = results[10] as List<Map<String, dynamic>>;
-      final notifications = results[11] as List<Map<String, dynamic>>;
+      final dashboard = Map<String, dynamic>.from(criticalResults[0] as Map);
+      final school = Map<String, dynamic>.from(criticalResults[1] as Map);
+      final profile = criticalResults[2] as UserResponse;
+      final academicYears = optionalResults[0] as List<AcademicYearModel>;
+      final grades = optionalResults[1] as List<GradeModel>;
+      final sections = optionalResults[2] as List<SectionModel>;
+      final subjects = optionalResults[3] as List<Map<String, dynamic>>;
+      final staff = optionalResults[4] as PaginatedList<StaffModel>;
+      final students = optionalResults[5] as PaginatedList<StudentModel>;
+      final feeStructures = optionalResults[6] as List<Map<String, dynamic>>;
+      final timetableSlots = optionalResults[7] as List<Map<String, dynamic>>;
+      final notifications = optionalResults[8] as List<Map<String, dynamic>>;
 
       if (!mounted) return;
       setState(() {
@@ -91,6 +141,24 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         _error = '$e';
         _loading = false;
       });
+    }
+  }
+
+  Future<T> _loadOptional<T>({
+    required String label,
+    required Future<T> request,
+    required T fallback,
+  }) async {
+    try {
+      return await request;
+    } catch (error, stackTrace) {
+      developer.log(
+        'Principal dashboard optional load failed: $label',
+        name: 'PrincipalDashboardScreen',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return fallback;
     }
   }
 
@@ -150,6 +218,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     _open(AppRoutes.globalSearch, arguments: 'principal'),
               ),
               const SizedBox(height: 18),
+              _OperationalGapsPanel(
+                gaps: _data.operationalGaps,
+                criticalCount: _data.criticalGapCount,
+                warningCount: _data.warningGapCount,
+                onGapTap: _openOperationalGap,
+              ),
+              const SizedBox(height: 22),
               _SectionTitle('Academics'),
               const SizedBox(height: 12),
               _AcademicModuleGrid(
@@ -157,91 +232,103 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   _AcademicModuleItem(
                     label: 'Students',
                     route: AppRoutes.studentOversight,
-                    illustration: SchoolDeskUiIllustrations.resources,
+                    illustration: SchoolDeskUiIllustrations.principalStudents,
                     fallbackIcon: Icons.groups_rounded,
                     accent: const Color(0xFF60A5FA),
+                    cardColor: const Color(0xFFEAF4FF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Teachers',
+                    label: 'Staff Management',
                     route: AppRoutes.staffManagement,
-                    illustration: SchoolDeskUiIllustrations.lessonPlanner,
+                    illustration:
+                        SchoolDeskUiIllustrations.principalStaffManagement,
                     fallbackIcon: Icons.co_present_rounded,
-                    accent: const Color(0xFFF59E0B),
+                    accent: const Color(0xFF7C3AED),
+                    cardColor: const Color(0xFFF3ECFF),
+                  ),
+                  _AcademicModuleItem(
+                    label: 'Guardians',
+                    route: AppRoutes.guardianDirectory,
+                    illustration: SchoolDeskUiIllustrations.principalGuardians,
+                    fallbackIcon: Icons.family_restroom_rounded,
+                    accent: const Color(0xFF2563EB),
+                    cardColor: const Color(0xFFF4EEFF),
+                  ),
+                  _AcademicModuleItem(
+                    label: 'Class Hub',
+                    route: AppRoutes.principalClasses,
+                    illustration: SchoolDeskUiIllustrations.principalClasses,
+                    fallbackIcon: Icons.grid_view_rounded,
+                    accent: const Color(0xFF2457D6),
+                    cardColor: const Color(0xFFEAF1FF),
                   ),
                   _AcademicModuleItem(
                     label: 'Attendance',
-                    route: AppRoutes.studentOversight,
+                    route: AppRoutes.principalAttendance,
                     illustration: SchoolDeskUiIllustrations.attendance,
-                    fallbackIcon: Icons.fact_check_rounded,
-                    accent: const Color(0xFF14B8A6),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Classes',
-                    route: AppRoutes.academicManagement,
-                    illustration: SchoolDeskUiIllustrations.classRoutine,
-                    fallbackIcon: Icons.meeting_room_rounded,
-                    accent: const Color(0xFF818CF8),
+                    fallbackIcon: Icons.qr_code_2_rounded,
+                    accent: const Color(0xFF0E9384),
+                    cardColor: const Color(0xFFE7FAF6),
                   ),
                   _AcademicModuleItem(
                     label: 'Subjects',
-                    route: AppRoutes.academicManagement,
-                    illustration: SchoolDeskUiIllustrations.homework,
+                    route: AppRoutes.principalSubjects,
+                    illustration: SchoolDeskUiIllustrations.principalSubjects,
                     fallbackIcon: Icons.menu_book_rounded,
-                    accent: const Color(0xFF38BDF8),
+                    accent: const Color(0xFF06B6D4),
+                    cardColor: const Color(0xFFE8FAFC),
                   ),
                   _AcademicModuleItem(
                     label: 'Timetable',
-                    route: AppRoutes.timetableManagement,
-                    illustration: SchoolDeskUiIllustrations.calendar,
+                    route: AppRoutes.principalTimetable,
+                    illustration: SchoolDeskUiIllustrations.principalTimetable,
                     fallbackIcon: Icons.calendar_month_rounded,
-                    accent: const Color(0xFFF97316),
+                    accent: const Color(0xFFF59E0B),
+                    cardColor: const Color(0xFFFFF1DF),
                   ),
                   _AcademicModuleItem(
                     label: 'Exams',
-                    route: AppRoutes.examsResults,
-                    illustration: SchoolDeskUiIllustrations.homework,
-                    fallbackIcon: Icons.edit_document,
+                    route: AppRoutes.principalExams,
+                    illustration: SchoolDeskUiIllustrations.principalExams,
+                    fallbackIcon: Icons.assignment_rounded,
                     accent: const Color(0xFFEF4444),
+                    cardColor: const Color(0xFFFFEFF0),
                   ),
                   _AcademicModuleItem(
                     label: 'Results',
-                    route: AppRoutes.examsResults,
-                    illustration: SchoolDeskUiIllustrations.resources,
-                    fallbackIcon: Icons.school_rounded,
-                    accent: const Color(0xFF8B5CF6),
+                    route: AppRoutes.principalResults,
+                    illustration: SchoolDeskUiIllustrations.principalResults,
+                    fallbackIcon: Icons.workspace_premium_rounded,
+                    accent: const Color(0xFF22C55E),
+                    cardColor: const Color(0xFFEAFBF0),
                   ),
                   _AcademicModuleItem(
                     label: 'Fees',
                     route: AppRoutes.feeMonitoring,
-                    illustration: SchoolDeskUiIllustrations.fees,
-                    fallbackIcon: Icons.payments_rounded,
-                    accent: const Color(0xFF22C55E),
+                    illustration: SchoolDeskUiIllustrations.principalFees,
+                    fallbackIcon: Icons.account_balance_wallet_rounded,
+                    accent: const Color(0xFF16A34A),
+                    cardColor: const Color(0xFFE9F9EF),
                   ),
                   _AcademicModuleItem(
                     label: 'Events',
-                    route: AppRoutes.notificationCenter,
-                    arguments: 'principal',
-                    illustration: SchoolDeskUiIllustrations.calendar,
+                    route: AppRoutes.eventsCalendar,
+                    illustration: SchoolDeskUiIllustrations.principalEvents,
                     fallbackIcon: Icons.event_rounded,
-                    accent: const Color(0xFFEC4899),
+                    accent: const Color(0xFFF59E0B),
+                    cardColor: const Color(0xFFFFF5D8),
                   ),
                   _AcademicModuleItem(
                     label: 'Inbox',
-                    route: AppRoutes.communicationCenter,
-                    illustration: SchoolDeskUiIllustrations.chat,
+                    route: AppRoutes.approvalCenter,
+                    illustration: SchoolDeskUiIllustrations.principalInbox,
                     fallbackIcon: Icons.mail_rounded,
                     accent: const Color(0xFF0EA5E9),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Approvals',
-                    route: AppRoutes.approvalCenter,
-                    illustration: SchoolDeskUiIllustrations.notices,
-                    fallbackIcon: Icons.approval_rounded,
-                    accent: const Color(0xFFEF4444),
+                    cardColor: const Color(0xFFEAF4FF),
                     badge: _data.pendingApprovals,
                   ),
                 ],
-                onTap: (item) => _open(item.route, arguments: item.arguments),
+                onTap: (item) => _open(item.route),
               ),
               const SizedBox(height: 22),
               _SectionTitle('Today'),
@@ -252,7 +339,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     '${_data.attendancePresent}/${_data.attendanceMarked}',
                 fees: '${_data.collectionPct.round()}%',
                 feesDetail: _data.money(_data.totalPaid),
-                onAttendance: () => _open(AppRoutes.studentOversight),
+                onAttendance: () => _open(AppRoutes.principalAttendance),
                 onFees: () => _open(AppRoutes.feeMonitoring),
               ),
               const SizedBox(height: 22),
@@ -299,6 +386,22 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     Navigator.pushNamed(context, route, arguments: arguments);
   }
 
+  void _openOperationalGap(_OperationalGap gap) {
+    final route = switch (gap.route) {
+      'guardianDirectory' => AppRoutes.guardianDirectory,
+      'principalClasses' => AppRoutes.principalClasses,
+      'feeMonitoring' => AppRoutes.feeMonitoring,
+      'principalSubjects' => AppRoutes.principalSubjects,
+      'principalTimetable' => AppRoutes.principalTimetable,
+      'staffManagement' => AppRoutes.staffManagement,
+      'principalExams' => AppRoutes.principalExams,
+      'principalAttendance' => AppRoutes.principalAttendance,
+      _ => AppRoutes.principalDashboard,
+    };
+    if (route == AppRoutes.principalDashboard) return;
+    _open(route);
+  }
+
   void _showGoLiveStatus() {
     final ready = _data.setupSteps.every((step) => step.isComplete);
     ScaffoldMessenger.of(context)
@@ -332,6 +435,9 @@ class _PrincipalHomeData {
   final double collectionPct;
   final double totalPaid;
   final int unreadNotifications;
+  final int criticalGapCount;
+  final int warningGapCount;
+  final List<_OperationalGap> operationalGaps;
   final List<_SetupStep> setupSteps;
 
   const _PrincipalHomeData({
@@ -350,6 +456,9 @@ class _PrincipalHomeData {
     required this.collectionPct,
     required this.totalPaid,
     required this.unreadNotifications,
+    required this.criticalGapCount,
+    required this.warningGapCount,
+    required this.operationalGaps,
     required this.setupSteps,
   });
 
@@ -370,6 +479,9 @@ class _PrincipalHomeData {
       collectionPct: 0,
       totalPaid: 0,
       unreadNotifications: 0,
+      criticalGapCount: 0,
+      warningGapCount: 0,
+      operationalGaps: [],
       setupSteps: [],
     );
   }
@@ -394,6 +506,12 @@ class _PrincipalHomeData {
     final fees = Map<String, dynamic>.from(dashboard['fees'] as Map? ?? {});
     final attendance = Map<String, dynamic>.from(
       dashboard['today_attendance'] as Map? ?? {},
+    );
+    final operationalGapSummary = Map<String, dynamic>.from(
+      dashboard['operational_gaps'] as Map? ?? {},
+    );
+    final operationalGaps = _OperationalGap.listFrom(
+      operationalGapSummary['items'],
     );
     final schoolName = _text(school['name'], fallback: 'School');
     final board = _schoolDescriptor(
@@ -448,6 +566,9 @@ class _PrincipalHomeData {
       collectionPct: _doubleValue(fees['collection_pct']),
       totalPaid: _doubleValue(fees['total_paid']),
       unreadNotifications: unreadNotifications,
+      criticalGapCount: _intValue(operationalGapSummary['critical'], 0),
+      warningGapCount: _intValue(operationalGapSummary['warning'], 0),
+      operationalGaps: operationalGaps,
       setupSteps: [
         _SetupStep(
           title: 'School Registration',
@@ -466,12 +587,12 @@ class _PrincipalHomeData {
         ),
         _SetupStep(
           title: 'Classes & Sections Creation',
-          route: AppRoutes.academicManagement,
+          route: AppRoutes.principalClasses,
           isComplete: hasClasses,
         ),
         _SetupStep(
           title: 'Subjects Setup',
-          route: AppRoutes.academicManagement,
+          route: AppRoutes.principalSubjects,
           isComplete: hasSubjects,
         ),
         _SetupStep(
@@ -491,7 +612,7 @@ class _PrincipalHomeData {
         ),
         _SetupStep(
           title: 'Timetable Setup',
-          route: AppRoutes.timetableManagement,
+          route: AppRoutes.principalTimetable,
           isComplete: hasTimetable,
         ),
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),
@@ -559,6 +680,55 @@ class _SetupStep {
   final bool isComplete;
 
   const _SetupStep({required this.title, this.route, required this.isComplete});
+}
+
+class _OperationalGap {
+  final String category;
+  final String severity;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final String route;
+  final String entityLabel;
+  final int count;
+
+  const _OperationalGap({
+    required this.category,
+    required this.severity,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.route,
+    required this.entityLabel,
+    required this.count,
+  });
+
+  factory _OperationalGap.fromJson(Map<String, dynamic> json) {
+    return _OperationalGap(
+      category: _PrincipalHomeData._text(json['category'], fallback: 'Setup'),
+      severity: _PrincipalHomeData._text(json['severity'], fallback: 'warning'),
+      title: _PrincipalHomeData._text(json['title'], fallback: 'Gap found'),
+      message: _PrincipalHomeData._text(
+        json['message'],
+        fallback: 'Review this setup gap.',
+      ),
+      actionLabel: _PrincipalHomeData._text(
+        json['action_label'],
+        fallback: 'Review',
+      ),
+      route: _PrincipalHomeData._text(json['route']),
+      entityLabel: _PrincipalHomeData._text(json['entity_label']),
+      count: _PrincipalHomeData._intValue(json['count'], 1),
+    );
+  }
+
+  static List<_OperationalGap> listFrom(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((row) => _OperationalGap.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+  }
 }
 
 class _PrincipalHomePattern extends StatelessWidget {
@@ -633,21 +803,33 @@ class _PrincipalAppHeader extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 370;
         final horizontal = compact ? 16.0 : 22.0;
-        final headerHeight = compact ? 190.0 : 204.0;
+        final headerHeight = compact ? 192.0 : 208.0;
         return Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(8),
-          elevation: 3,
-          shadowColor: const Color(0x2A0F172A),
+          elevation: 6,
+          shadowColor: const Color(0x330F172A),
           child: Container(
             height: headerHeight,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               gradient: const LinearGradient(
-                colors: [Color(0xFF0F2A2E), Color(0xFF10262B)],
+                colors: [
+                  Color(0xFF103869),
+                  Color(0xFF0D676B),
+                  Color(0xFF0E7A59),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
+              border: Border.all(color: Colors.white.withOpacity(0.10)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x220F172A),
+                  blurRadius: 18,
+                  offset: Offset(0, 10),
+                ),
+              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: Stack(
@@ -662,9 +844,9 @@ class _PrincipalAppHeader extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.fromLTRB(
                     horizontal,
-                    compact ? 18 : 22,
+                    compact ? 16 : 20,
                     horizontal,
-                    compact ? 16 : 22,
+                    compact ? 16 : 20,
                   ),
                   child: Column(
                     children: [
@@ -679,16 +861,12 @@ class _PrincipalAppHeader extends StatelessWidget {
                                   'Hello, School Principal',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style:
-                                      (compact
-                                              ? theme.textTheme.titleMedium
-                                              : theme.textTheme.titleLarge)
-                                          ?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w900,
-                                            letterSpacing: 0,
-                                            height: 1.05,
-                                          ),
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0,
+                                    height: 1.05,
+                                  ),
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
@@ -744,79 +922,86 @@ class _SchoolIdentityBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final logoSize = compact ? 48.0 : 54.0;
-    return Row(
-      children: [
-        _HeaderSchoolLogo(imageUrl: data.schoolLogoUrl, size: logoSize),
-        SizedBox(width: compact ? 10 : 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                data.schoolName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    (compact
-                            ? theme.textTheme.titleMedium
-                            : theme.textTheme.titleLarge)
-                        ?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0,
-                        ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                data.schoolBoard,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.white.withOpacity(0.88),
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(width: compact ? 8 : 12),
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: compact ? 104 : 118,
-            maxWidth: compact ? 116 : 138,
-          ),
-          child: SizedBox(
-            height: compact ? 50 : 54,
-            child: FilledButton(
-              onPressed: onViewProfile,
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF111827),
-                elevation: 0,
-                padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  'View Profile',
-                  maxLines: 1,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: const Color(0xFF111827),
+    final logoSize = compact ? 50.0 : 58.0;
+    return Container(
+      padding: EdgeInsets.all(compact ? 10 : 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withOpacity(0.16)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _HeaderSchoolLogo(imageUrl: data.schoolLogoUrl, size: logoSize),
+          SizedBox(width: compact ? 10 : 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  data.schoolName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    color: Colors.white,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
+                    height: 1.08,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  data.schoolBoard,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withOpacity(0.88),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: compact ? 8 : 12),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: compact ? 100 : 114,
+              maxWidth: compact ? 116 : 136,
+            ),
+            child: SizedBox(
+              height: compact ? 44 : 48,
+              child: FilledButton(
+                onPressed: onViewProfile,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF111827),
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'View Profile',
+                    maxLines: 1,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: const Color(0xFF111827),
+                      fontWeight: FontWeight.w900,
+                      fontSize: compact ? 13 : 14,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -830,9 +1015,9 @@ class _PrincipalHeaderScrim extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.black.withOpacity(0.34),
-            Colors.black.withOpacity(0.18),
-            Colors.black.withOpacity(0.46),
+            Colors.black.withOpacity(0.22),
+            const Color(0xFF102A56).withOpacity(0.16),
+            Colors.black.withOpacity(0.36),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -863,32 +1048,32 @@ class _HeaderNotificationButton extends StatelessWidget {
         children: [
           Material(
             color: Colors.white.withOpacity(0.16),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
             child: InkWell(
               onTap: onTap,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
               child: Container(
-                width: 44,
-                height: 44,
+                width: 42,
+                height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.white.withOpacity(0.20)),
                 ),
                 child: const Icon(
                   Icons.notifications_none_rounded,
                   color: Colors.white,
-                  size: 23,
+                  size: 22,
                 ),
               ),
             ),
           ),
           if (unreadCount > 0)
             Positioned(
-              top: -5,
-              right: -5,
+              top: -4,
+              right: -4,
               child: Container(
-                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                constraints: const BoxConstraints(minWidth: 19, minHeight: 19),
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
@@ -1094,6 +1279,213 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
+class _OperationalGapsPanel extends StatelessWidget {
+  final List<_OperationalGap> gaps;
+  final int criticalCount;
+  final int warningCount;
+  final ValueChanged<_OperationalGap> onGapTap;
+
+  const _OperationalGapsPanel({
+    required this.gaps,
+    required this.criticalCount,
+    required this.warningCount,
+    required this.onGapTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final total = gaps.length;
+    final visible = gaps.take(4).toList();
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      elevation: 3,
+      shadowColor: const Color(0x160F172A),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: total == 0
+                ? const Color(0xFFD1FAE5)
+                : const Color(0xFFFED7AA),
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: total == 0
+                ? const [Colors.white, Color(0xFFF0FDF4)]
+                : const [Colors.white, Color(0xFFFFF7ED)],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: total == 0
+                        ? const Color(0xFFDCFCE7)
+                        : const Color(0xFFFFEDD5),
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: Icon(
+                    total == 0
+                        ? Icons.verified_rounded
+                        : Icons.warning_amber_rounded,
+                    color: total == 0
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFF97316),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        total == 0 ? 'No Operational Gaps' : 'Gaps to Fill',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: const Color(0xFF0F172A),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        total == 0
+                            ? 'Core class, fee, guardian, subject, and timetable links look complete.'
+                            : '$total active gap${total == 1 ? '' : 's'}: $criticalCount critical, $warningCount warning.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (visible.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              for (final gap in visible) ...[
+                _OperationalGapRow(gap: gap, onTap: () => onGapTap(gap)),
+                if (gap != visible.last) const SizedBox(height: 8),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OperationalGapRow extends StatelessWidget {
+  final _OperationalGap gap;
+  final VoidCallback onTap;
+
+  const _OperationalGapRow({required this.gap, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = switch (gap.severity) {
+      'critical' => const Color(0xFFDC2626),
+      'info' => const Color(0xFF2563EB),
+      _ => const Color(0xFFF97316),
+    };
+    final icon = switch (gap.category) {
+      'Guardians' => Icons.family_restroom_rounded,
+      'Classes' => Icons.maps_home_work_rounded,
+      'Fees' => Icons.account_balance_wallet_rounded,
+      'Subjects' => Icons.menu_book_rounded,
+      'Timetable' => Icons.calendar_month_rounded,
+      'Staff' => Icons.co_present_rounded,
+      'Exams' => Icons.assignment_rounded,
+      'Attendance' => Icons.how_to_reg_rounded,
+      _ => Icons.task_alt_rounded,
+    };
+    return Material(
+      color: const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      gap.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      gap.message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      gap.actionLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded, color: color, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AcademicModuleGrid extends StatelessWidget {
   final List<_AcademicModuleItem> items;
   final ValueChanged<_AcademicModuleItem> onTap;
@@ -1105,16 +1497,20 @@ class _AcademicModuleGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 340;
-        final spacing = compact ? 10.0 : 14.0;
+        final spacing = compact ? 14.0 : 16.0;
+        final columns = compact ? 2 : 3;
+        final textScale = MediaQuery.textScalerOf(context).scale(1);
+        final labelHeight = (34.0 * textScale).clamp(38.0, 58.0).toDouble();
+        final tileExtent = 94.0 + 10.0 + labelHeight + 8.0;
         return GridView.builder(
           shrinkWrap: true,
           itemCount: items.length,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: compact ? 2 : 3,
+            crossAxisCount: columns,
             crossAxisSpacing: spacing,
-            mainAxisSpacing: spacing,
-            mainAxisExtent: compact ? 112 : 116,
+            mainAxisSpacing: 18,
+            mainAxisExtent: tileExtent,
           ),
           itemBuilder: (context, index) {
             final item = items[index];
@@ -1129,19 +1525,19 @@ class _AcademicModuleGrid extends StatelessWidget {
 class _AcademicModuleItem {
   final String label;
   final String route;
-  final Object? arguments;
   final String illustration;
   final IconData fallbackIcon;
   final Color accent;
+  final Color cardColor;
   final int badge;
 
   const _AcademicModuleItem({
     required this.label,
     required this.route,
-    this.arguments,
     required this.illustration,
     required this.fallbackIcon,
     required this.accent,
+    required this.cardColor,
     this.badge = 0,
   });
 }
@@ -1168,102 +1564,129 @@ class _AcademicModuleTileState extends State<_AcademicModuleTile> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final theme = Theme.of(context);
-    return Listener(
-      onPointerDown: (_) => _setPressed(true),
-      onPointerUp: (_) => _setPressed(false),
-      onPointerCancel: (_) => _setPressed(false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.96 : 1,
-        duration: const Duration(milliseconds: 110),
-        curve: Curves.easeOut,
-        child: Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          elevation: _pressed ? 1 : 3,
-          shadowColor: const Color(0x140F172A),
-          child: InkWell(
-            onTap: widget.onTap,
-            borderRadius: BorderRadius.circular(14),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: Container(
-                            width: 54,
-                            height: 54,
-                            decoration: BoxDecoration(
-                              color: item.accent.withOpacity(0.10),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(6),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final imageSize = (constraints.maxWidth - 18)
+            .clamp(74.0, 94.0)
+            .toDouble();
+        return Semantics(
+          button: true,
+          label: item.label,
+          child: Listener(
+            onPointerDown: (_) => _setPressed(true),
+            onPointerUp: (_) => _setPressed(false),
+            onPointerCancel: (_) => _setPressed(false),
+            child: AnimatedScale(
+              scale: _pressed ? 0.96 : 1,
+              duration: const Duration(milliseconds: 110),
+              curve: Curves.easeOut,
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: widget.onTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: imageSize,
+                              height: imageSize,
+                              padding: const EdgeInsets.all(9),
+                              decoration: BoxDecoration(
+                                color: item.cardColor,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: item.accent.withOpacity(0.10),
+                                ),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0x0F0F172A),
+                                    blurRadius: 10,
+                                    offset: Offset(0, 5),
+                                  ),
+                                ],
+                              ),
                               child: SvgPicture.asset(
                                 item.illustration,
                                 fit: BoxFit.contain,
                                 placeholderBuilder: (_) => Icon(
                                   item.fallbackIcon,
                                   color: item.accent,
-                                  size: 28,
+                                  size: 34,
                                 ),
+                              ),
+                            ),
+                            if (item.badge > 0)
+                              Positioned(
+                                top: -6,
+                                right: -6,
+                                child: Container(
+                                  constraints: const BoxConstraints(
+                                    minWidth: 25,
+                                  ),
+                                  height: 25,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444),
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    item.badge > 99 ? '99+' : '${item.badge}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      height: 1,
+                                      letterSpacing: 0,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height:
+                              (34.0 * MediaQuery.textScalerOf(context).scale(1))
+                                  .clamp(38.0, 58.0)
+                                  .toDouble(),
+                          width: constraints.maxWidth,
+                          child: Center(
+                            child: Text(
+                              item.label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: AppTheme.onSurface,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w900,
+                                height: 1.05,
+                                letterSpacing: 0,
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        height: 18,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            item.label,
-                            maxLines: 1,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: const Color(0xFF111827),
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (item.badge > 0)
-                  Positioned(
-                    top: -5,
-                    right: -5,
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 22),
-                      height: 22,
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        item.badge > 99 ? '99+' : '${item.badge}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          height: 1,
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -1328,7 +1751,7 @@ class _SnapshotTile extends StatelessWidget {
   final String detail;
   final IconData icon;
   final Color color;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _SnapshotTile({
     required this.label,
@@ -1336,79 +1759,83 @@ class _SnapshotTile extends StatelessWidget {
     required this.detail,
     required this.icon,
     required this.color,
-    required this.onTap,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tile = Container(
+      constraints: const BoxConstraints(minHeight: 78),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: const Color(0xFF0F172A),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  detail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: const Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(14),
       elevation: 2,
       shadowColor: const Color(0x120F172A),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 78),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      detail,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: const Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+      child: onTap == null
+          ? tile
+          : InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(14),
+              child: tile,
+            ),
     );
   }
 }

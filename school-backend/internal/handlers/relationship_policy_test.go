@@ -121,12 +121,9 @@ func setupRelationshipPolicyFixture(t *testing.T) relationshipFixture {
 		&models.ParentStudentLink{SchoolID: f.schoolID, ParentUserID: f.parentUserID, StudentID: f.studentID, StudentAdmissionNumber: "POL-ADM-1"},
 		&models.ParentStudentLink{SchoolID: f.schoolID, ParentUserID: f.otherParentUserID, StudentID: f.otherStudentID, StudentAdmissionNumber: "POL-ADM-2"},
 		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-policy"}, StaffID: f.teacherStaffID, SubjectID: f.subjectID, GradeID: gradeID, IsPrimary: true},
-		&models.TimetableSlot{BaseModel: models.BaseModel{ID: f.timetableSlotID}, SectionID: f.sectionID, AcademicYearID: f.yearID, TermID: f.termID, DayOfWeek: 5, PeriodNumber: 1, StartTime: "09:00:00", EndTime: "09:45:00", SubjectID: f.subjectID, StaffID: f.teacherStaffID, SlotType: "regular"},
-		&models.Homework{BaseModel: models.BaseModel{ID: "homework-linked"}, SchoolID: f.schoolID, Title: "Linked Homework", SectionID: f.sectionID, TeacherID: f.teacherStaffID, StudentID: f.studentID, Subject: "Mathematics", DueDate: now.AddDate(0, 0, 1), Status: "pending"},
-		&models.Homework{BaseModel: models.BaseModel{ID: "homework-other"}, SchoolID: f.schoolID, Title: "Other Homework", SectionID: f.otherSectionID, TeacherID: f.otherStaffID, StudentID: f.otherStudentID, Subject: "Science", DueDate: now.AddDate(0, 0, 1), Status: "pending"},
+		&models.TimetableSlot{BaseModel: models.BaseModel{ID: f.timetableSlotID}, SectionID: f.sectionID, AcademicYearID: f.yearID, TermID: f.termID, DayOfWeek: 5, PeriodNumber: 1, StartTime: mustTimetableTestClock(t, "09:00"), EndTime: mustTimetableTestClock(t, "09:45"), SubjectID: f.subjectID, StaffID: f.teacherStaffID, SlotType: "regular"},
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-linked"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.sectionID, TeacherID: f.teacherStaffID, StudentID: f.studentID, Title: "Linked Diary", Subject: "Mathematics"},
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-other"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.otherSectionID, TeacherID: f.otherStaffID, StudentID: f.otherStudentID, Title: "Other Diary", Subject: "Science"},
-		&models.EventCalendar{BaseModel: models.BaseModel{ID: f.eventID}, SchoolID: f.schoolID, AcademicYearID: f.yearID, EventTitle: "PTM", EventType: "ptm", StartDatetime: now, EndDatetime: now.Add(time.Hour), CreatedBy: f.teacherStaffID},
 		&models.ParentTeacherMeeting{BaseModel: models.BaseModel{ID: "ptm-linked"}, EventID: f.eventID, SectionID: f.sectionID, SlotDate: now, SlotTime: "10:00", DurationMin: 15, TeacherID: f.teacherStaffID, GuardianID: "guardian-linked", StudentID: f.studentID, Status: "scheduled"},
 		&models.ParentTeacherMeeting{BaseModel: models.BaseModel{ID: "ptm-other"}, EventID: f.eventID, SectionID: f.otherSectionID, SlotDate: now, SlotTime: "10:30", DurationMin: 15, TeacherID: f.otherStaffID, GuardianID: "guardian-other", StudentID: f.otherStudentID, Status: "scheduled"},
 		&models.MessageConversation{BaseModel: models.BaseModel{ID: f.conversationID}, SchoolID: f.schoolID, TeacherID: f.teacherStaffID, ParentID: f.parentUserID, StudentID: f.studentID, Title: "Linked conversation", LastMessageTime: now},
@@ -139,8 +136,39 @@ func setupRelationshipPolicyFixture(t *testing.T) relationshipFixture {
 			t.Fatalf("seed %T: %v", record, err)
 		}
 	}
+	seedTablesMDPolicyFixtures(t, f, now)
 
 	return f
+}
+
+func seedTablesMDPolicyFixtures(t *testing.T, f relationshipFixture, now time.Time) {
+	t.Helper()
+	due := now.AddDate(0, 0, 1).Format("2006-01-02")
+	rows := []map[string]interface{}{
+		{
+			"homework_id": "homework-linked", "school_id": f.schoolID, "title": "Linked Homework",
+			"section_id": f.sectionID, "staff_id": f.teacherStaffID, "subject_id": f.subjectID,
+			"submission_date": due, "status": "pending",
+		},
+		{
+			"homework_id": "homework-other", "school_id": f.schoolID, "title": "Other Homework",
+			"section_id": f.otherSectionID, "staff_id": f.otherStaffID, "subject_id": f.subjectID,
+			"submission_date": due, "status": "pending",
+		},
+	}
+	for _, row := range rows {
+		if err := database.DB.Table("homework").Create(row).Error; err != nil {
+			t.Fatalf("seed homework: %v", err)
+		}
+	}
+	eventRow := map[string]interface{}{
+		"event_id": f.eventID, "school_id": f.schoolID, "academic_year_id": f.yearID,
+		"event_name": "PTM", "event_type": "ptm", "start_date": now.Format("2006-01-02"),
+		"end_date": now.Format("2006-01-02"), "organizer_id": f.teacherStaffID, "status": "scheduled",
+	}
+	if err := database.DB.Table("events").Create(eventRow).Error; err != nil {
+		t.Fatalf("seed events: %v", err)
+	}
 }
 
 func scopedPolicyRouter(roleName, userID, linkedType, linkedID, email, schoolID string) *gin.Engine {
@@ -169,6 +197,24 @@ func decodePolicyList(t *testing.T, body string) []map[string]any {
 		t.Fatalf("decode list: %v body=%s", err, body)
 	}
 	return response.Data
+}
+
+func findPolicyRow(rows []map[string]any, id string) map[string]any {
+	for _, row := range rows {
+		if row["id"] == id {
+			return row
+		}
+	}
+	return nil
+}
+
+func policyMap(t *testing.T, value any) map[string]any {
+	t.Helper()
+	row, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("expected map, got %T (%v)", value, value)
+	}
+	return row
 }
 
 func TestParentStudentLinkListIsScopedToAuthenticatedParent(t *testing.T) {
@@ -283,6 +329,97 @@ func TestTeacherStudentListIsScopedToAssignedSections(t *testing.T) {
 	}
 }
 
+func TestPrincipalStudentListIncludesOperationalSummaries(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	now := time.Date(2026, 5, 8, 9, 0, 0, 0, time.UTC)
+	session := models.AttendanceSession{
+		BaseModel:     models.BaseModel{ID: "attendance-policy-summary"},
+		SectionID:     f.sectionID,
+		SubjectID:     f.subjectID,
+		StaffID:       f.teacherStaffID,
+		Date:          now,
+		PeriodNumber:  1,
+		TotalStudents: 1,
+		PresentCount:  1,
+	}
+	mark := models.StudentMark{
+		BaseModel:      models.BaseModel{ID: "mark-policy-summary"},
+		ExamScheduleID: "schedule-policy-summary",
+		StudentID:      f.studentID,
+		EnrollmentID:   f.enrollmentID,
+		MarksObtained:  45,
+	}
+	schedule := models.ExamSchedule{
+		BaseModel: models.BaseModel{ID: mark.ExamScheduleID},
+		ExamID:    "exam-policy-summary",
+		GradeID:   "grade-policy",
+		SectionID: f.sectionID,
+		SubjectID: f.subjectID,
+		ExamDate:  now,
+		MaxMarks:  50,
+		PassMarks: 20,
+	}
+	exam := models.Exam{
+		BaseModel:      models.BaseModel{ID: schedule.ExamID},
+		SchoolID:       f.schoolID,
+		AcademicYearID: f.yearID,
+		TermID:         f.termID,
+		ExamTypeID:     "exam-type-policy-summary",
+		ExamName:       "Unit Test",
+		StartDate:      now,
+		EndDate:        now,
+	}
+	examType := models.ExamType{BaseModel: models.BaseModel{ID: exam.ExamTypeID}, SchoolID: f.schoolID, Name: "Unit"}
+	records := []any{
+		&session,
+		&models.StudentAttendance{BaseModel: models.BaseModel{ID: "student-attendance-policy-summary"}, SessionID: session.ID, StudentID: f.studentID, EnrollmentID: f.enrollmentID, Status: "present", MarkedAt: now},
+		&models.FeeInvoice{BaseModel: models.BaseModel{ID: "fee-policy-summary"}, StudentID: f.studentID, AcademicYearID: f.yearID, InvoiceNumber: "INV-POL-SUMMARY", InvoiceDate: now, DueDate: now.AddDate(0, 0, -1), TotalAmount: 1000, DiscountAmount: 100, NetAmount: 900, PaidAmount: 400, Balance: 500, Status: "pending"},
+		&examType,
+		&exam,
+		&schedule,
+		&mark,
+	}
+	for _, record := range records {
+		if err := database.DB.Create(record).Error; err != nil {
+			t.Fatalf("seed %T: %v", record, err)
+		}
+	}
+
+	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.GET("/students", NewStudentHandler().GetStudents)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/students", nil))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	rows := decodePolicyList(t, response.Body.String())
+	if len(rows) != 2 {
+		t.Fatalf("principal should see school students, rows=%v", rows)
+	}
+	row := findPolicyRow(rows, f.studentID)
+	if row == nil {
+		t.Fatalf("linked student missing from rows=%v", rows)
+	}
+	attendance := policyMap(t, row["attendance_summary"])
+	if attendance["status_label"] != "Present" || attendance["percent"].(float64) != 100 {
+		t.Fatalf("attendance summary=%v", attendance)
+	}
+	fees := policyMap(t, row["fee_summary"])
+	if fees["status"] != "overdue" || fees["balance"].(float64) != 500 {
+		t.Fatalf("fee summary=%v", fees)
+	}
+	performance := policyMap(t, row["performance_summary"])
+	if performance["grade"] != "A+" {
+		t.Fatalf("performance summary=%v", performance)
+	}
+	parents, ok := row["parent_accounts"].([]any)
+	if !ok || len(parents) != 1 {
+		t.Fatalf("parent accounts=%v", row["parent_accounts"])
+	}
+}
+
 func TestTeacherCannotCreateAttendanceSessionForUnassignedSection(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
@@ -332,7 +469,11 @@ func TestAttendanceMarkRejectsStudentOutsideSessionSection(t *testing.T) {
 func TestParentHomeworkAndDiaryListsAreScopedToLinkedStudents(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	router := scopedPolicyRouter("Parent", f.parentUserID, "", "", "parent@policy.test", f.schoolID)
-	homework := NewCRUDHandler[models.Homework]("homework", "homework", []string{"title"}, true)
+	homeworkResource, ok := TablesMDResourceFor("homework")
+	if !ok {
+		t.Fatal("homework tables.md resource missing")
+	}
+	homework := NewTablesMDCRUDHandler(homeworkResource)
 	diary := NewCRUDHandler[models.DiaryEntry]("diary_entries", "diary_entries", []string{"title"}, true)
 	router.GET("/homework", homework.List)
 	router.GET("/diary-entries", diary.List)
@@ -343,7 +484,7 @@ func TestParentHomeworkAndDiaryListsAreScopedToLinkedStudents(t *testing.T) {
 		t.Fatalf("homework status=%d body=%s", homeworkResp.Code, homeworkResp.Body.String())
 	}
 	homeworkRows := decodePolicyList(t, homeworkResp.Body.String())
-	if len(homeworkRows) != 1 || homeworkRows[0]["id"] != "homework-linked" {
+	if len(homeworkRows) != 1 || homeworkRows[0]["homework_id"] != "homework-linked" {
 		t.Fatalf("parent should only see linked homework, rows=%v", homeworkRows)
 	}
 
@@ -369,25 +510,26 @@ func TestParentHomeworkStudentFilterReturnsSelectedChildAssignments(t *testing.T
 			StudentID:              f.otherStudentID,
 			StudentAdmissionNumber: "POL-ADM-2",
 		},
-		&models.Homework{
-			BaseModel: models.BaseModel{ID: "homework-linked-section"},
-			SchoolID:  f.schoolID,
-			Title:     "Linked Section Homework",
-			SectionID: f.sectionID,
-			TeacherID: f.teacherStaffID,
-			Subject:   "Mathematics",
-			DueDate:   now.AddDate(0, 0, 1),
-			Status:    "pending",
-		},
 	}
 	for _, record := range extraRecords {
 		if err := database.DB.Create(record).Error; err != nil {
 			t.Fatalf("seed %T: %v", record, err)
 		}
 	}
+	if err := database.DB.Table("homework").Create(map[string]interface{}{
+		"homework_id": "homework-linked-section", "school_id": f.schoolID, "title": "Linked Section Homework",
+		"section_id": f.sectionID, "staff_id": f.teacherStaffID, "subject_id": f.subjectID,
+		"submission_date": now.AddDate(0, 0, 1).Format("2006-01-02"), "status": "pending",
+	}).Error; err != nil {
+		t.Fatalf("seed section homework: %v", err)
+	}
 
 	router := scopedPolicyRouter("Parent", f.parentUserID, "", "", "parent@policy.test", f.schoolID)
-	homework := NewCRUDHandler[models.Homework]("homework", "homework", []string{"title"}, true)
+	homeworkResource, ok := TablesMDResourceFor("homework")
+	if !ok {
+		t.Fatal("homework tables.md resource missing")
+	}
+	homework := NewTablesMDCRUDHandler(homeworkResource)
 	router.GET("/homework", homework.List)
 
 	response := httptest.NewRecorder()
@@ -398,7 +540,11 @@ func TestParentHomeworkStudentFilterReturnsSelectedChildAssignments(t *testing.T
 	rows := decodePolicyList(t, response.Body.String())
 	gotIDs := map[string]bool{}
 	for _, row := range rows {
-		gotIDs[row["id"].(string)] = true
+		id, _ := row["homework_id"].(string)
+		if id == "" {
+			id, _ = row["id"].(string)
+		}
+		gotIDs[id] = true
 	}
 	wantIDs := map[string]bool{
 		"homework-linked":         true,

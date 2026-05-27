@@ -76,6 +76,7 @@ func setupSchoolScopeFixture(t *testing.T) schoolScopeFixture {
 	currentExam := models.Exam{BaseModel: models.BaseModel{ID: f.currentExamID}, SchoolID: f.schoolID, AcademicYearID: f.yearID, TermID: f.termID, ExamTypeID: currentExamType.ID, ExamName: "Current Exam", StartDate: now, EndDate: now.AddDate(0, 0, 1), IsPublished: true}
 	currentSchedule := models.ExamSchedule{BaseModel: models.BaseModel{ID: f.currentExamScheduleID}, ExamID: currentExam.ID, GradeID: "grade-policy", SectionID: f.sectionID, SubjectID: f.subjectID, ExamDate: now, MaxMarks: 100, PassMarks: 35}
 	currentReport := models.ReportCard{BaseModel: models.BaseModel{ID: f.currentReportCardID}, StudentID: f.studentID, EnrollmentID: f.enrollmentID, ExamID: currentExam.ID, TotalObtained: 89, Percentage: 89, OverallGrade: "A", PublishedAt: now}
+	currentGradeA := models.GradingScale{BaseModel: models.BaseModel{ID: "grade-scale-scope-a"}, SchoolID: f.schoolID, GradeLabel: "A", MinPercent: 80, MaxPercent: 100, GPAPoints: 4}
 	currentLeaveType := models.LeaveType{BaseModel: models.BaseModel{ID: f.currentLeaveTypeID}, SchoolID: f.schoolID, LeaveName: "Current Sick Leave", MaxDaysPerYear: 12, IsPaid: true, ApplicableTo: "teaching"}
 	currentLeave := models.LeaveApplication{BaseModel: models.BaseModel{ID: f.currentLeaveApplication}, StaffID: f.teacherStaffID, LeaveTypeID: currentLeaveType.ID, FromDate: now, ToDate: now, TotalDays: 1, Reason: "Fever", Status: "pending", AppliedAt: now}
 	currentOtherLeave := models.LeaveApplication{BaseModel: models.BaseModel{ID: currentOtherLeaveID}, StaffID: f.otherStaffID, LeaveTypeID: currentLeaveType.ID, FromDate: now, ToDate: now, TotalDays: 1, Reason: "Training", Status: "pending", AppliedAt: now}
@@ -100,10 +101,10 @@ func setupSchoolScopeFixture(t *testing.T) schoolScopeFixture {
 	otherLeaveType := models.LeaveType{BaseModel: models.BaseModel{ID: f.externalLeaveTypeID}, SchoolID: otherSchool.ID, LeaveName: "Other Sick Leave", MaxDaysPerYear: 12, IsPaid: true, ApplicableTo: "teaching"}
 	otherLeave := models.LeaveApplication{BaseModel: models.BaseModel{ID: f.externalLeaveAppID}, StaffID: otherStaff.ID, LeaveTypeID: otherLeaveType.ID, FromDate: now, ToDate: now, TotalDays: 1, Reason: "Other", Status: "pending", AppliedAt: now}
 	otherBalance := models.LeaveBalance{BaseModel: models.BaseModel{ID: f.externalLeaveBalanceID}, StaffID: otherStaff.ID, LeaveTypeID: otherLeaveType.ID, AcademicYearID: otherYear.ID, TotalEntitled: 12, RemainingDays: 12}
-	otherSlot := models.TimetableSlot{BaseModel: models.BaseModel{ID: f.externalTimetableSlotID}, SectionID: otherSection.ID, AcademicYearID: otherYear.ID, TermID: otherTerm.ID, DayOfWeek: 3, PeriodNumber: 1, SubjectID: otherSubject.ID, StaffID: otherStaff.ID, StartTime: "09:00", EndTime: "09:40", SlotType: "regular"}
+	otherSlot := models.TimetableSlot{BaseModel: models.BaseModel{ID: f.externalTimetableSlotID}, SectionID: otherSection.ID, AcademicYearID: otherYear.ID, TermID: otherTerm.ID, DayOfWeek: 3, PeriodNumber: 1, SubjectID: otherSubject.ID, StaffID: otherStaff.ID, StartTime: mustTimetableTestClock(t, "09:00"), EndTime: mustTimetableTestClock(t, "09:40"), SlotType: "regular"}
 
 	for _, seed := range []any{
-		&currentExamType, &currentExam, &currentSchedule, &currentReport, &currentLeaveType, &currentLeave, &currentOtherLeave, &currentBalance, &currentOtherBalance,
+		&currentExamType, &currentExam, &currentSchedule, &currentReport, &currentGradeA, &currentLeaveType, &currentLeave, &currentOtherLeave, &currentBalance, &currentOtherBalance,
 		&otherSchool, &otherYear, &otherTerm, &otherDept, &otherGrade, &otherSection, &otherSubject, &otherStaff, &otherStudent, &otherEnrollment, &otherExamType, &otherExam, &otherSchedule, &otherReport, &otherLeaveType, &otherLeave, &otherBalance, &otherSlot,
 	} {
 		if err := database.DB.Create(seed).Error; err != nil {
@@ -367,7 +368,7 @@ func TestAdminExamMarksAreUpsertedAndScheduleMarksReadable(t *testing.T) {
 		tooHigh,
 		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+f.currentExamScheduleID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.studentID+`","enrollment_id":"`+f.enrollmentID+`","marks_obtained":101,"grade_label":"A+"}]}`)),
 	)
-	if tooHigh.Code != http.StatusBadRequest {
+	if tooHigh.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("marks above max should be rejected, status=%d body=%s", tooHigh.Code, tooHigh.Body.String())
 	}
 }

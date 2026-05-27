@@ -645,31 +645,130 @@ func (h *SchoolHandler) UpdateSection(c *gin.Context) {
 
 func (h *SchoolHandler) DeleteSection(c *gin.Context) {
 	id := c.Param("id")
+	schoolID := scopedSchoolID(c)
 	var section models.Section
 	if err := database.DB.
 		Joins("JOIN grades ON grades.id = sections.grade_id").
-		First(&section, "sections.id = ? AND grades.school_id = ?", id, scopedSchoolID(c)).Error; err != nil {
+		First(&section, "sections.id = ? AND grades.school_id = ?", id, schoolID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Section not found"})
 		return
 	}
-	if blockAcademicDelete(c,
-		academicRef("students", &models.Student{}, "current_section_id = ?", id),
-		academicRef("enrollments", &models.Enrollment{}, "section_id = ?", id),
-		academicRef("attendance sessions", &models.AttendanceSession{}, "section_id = ?", id),
-		academicRef("attendance summaries", &models.AttendanceSummary{}, "section_id = ?", id),
-		academicRef("timetable slots", &models.TimetableSlot{}, "section_id = ?", id),
-		academicRef("parent teacher meetings", &models.ParentTeacherMeeting{}, "section_id = ?", id),
-		academicRef("homework", &models.Homework{}, "section_id = ?", id),
-		academicRef("diary entries", &models.DiaryEntry{}, "section_id = ?", id),
-	) {
+
+	activeCount, err := activeSectionStudentCount(id, schoolID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate section links"})
 		return
 	}
-	if err := database.DB.Delete(&models.Section{}, "id = ?", id).Error; err != nil {
+	if activeCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Cannot delete while linked students are active"})
+		return
+	}
+
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM student_attendances WHERE session_id IN (SELECT id FROM attendance_sessions WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM student_attendances WHERE enrollment_id IN (SELECT id FROM enrollments WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM attendance_summaries WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM attendance_sessions WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM substitutions WHERE timetable_slot_id IN (SELECT id FROM timetable_slots WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM timetable_slots WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM student_marks WHERE exam_schedule_id IN (SELECT id FROM exam_schedules WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM student_marks WHERE enrollment_id IN (SELECT id FROM enrollments WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM exam_schedules WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM report_cards WHERE enrollment_id IN (SELECT id FROM enrollments WHERE section_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := deleteSectionHomework(tx, id); err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM diary_entries WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM parent_teacher_meetings WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM staff_subjects WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM enrollments WHERE section_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.Student{}).
+			Where("school_id = ? AND current_section_id = ?", schoolID, id).
+			Update("current_section_id", nil).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Section{}, "id = ?", id).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete section"})
 		return
 	}
 	auditAction(c, "sections", "delete", "sections", &id)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Section deleted successfully"})
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Section and linked class records deleted successfully"})
+}
+
+func deleteSectionHomework(tx *gorm.DB, sectionID string) error {
+	var homeworkIDs []string
+	if err := tx.Model(&models.Homework{}).Where("section_id = ?", sectionID).Pluck("id", &homeworkIDs).Error; err != nil {
+		return err
+	}
+	if len(homeworkIDs) > 0 {
+		if err := tx.Where("homework_id IN ?", homeworkIDs).Delete(&models.HomeworkSubmission{}).Error; err != nil {
+			return err
+		}
+	}
+	if err := tx.Where("section_id = ?", sectionID).Delete(&models.Homework{}).Error; err != nil {
+		return err
+	}
+
+	if tx.Migrator().HasTable("homework") && tx.Migrator().HasColumn("homework", "homework_id") {
+		if err := tx.Exec("DELETE FROM homework_submissions WHERE homework_id IN (SELECT homework_id FROM homework WHERE section_id = ?)", sectionID).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM homework WHERE section_id = ?", sectionID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func activeSectionStudentCount(sectionID, schoolID string) (int64, error) {
+	var currentCount int64
+	if err := database.DB.Model(&models.Student{}).
+		Where("school_id = ? AND current_section_id = ? AND LOWER(COALESCE(status, '')) != ?", schoolID, sectionID, "inactive").
+		Count(&currentCount).Error; err != nil {
+		return 0, err
+	}
+	var enrollmentCount int64
+	if err := database.DB.Table("enrollments").
+		Joins("JOIN students ON students.id = enrollments.student_id").
+		Where(`
+			enrollments.section_id = ?
+			AND students.school_id = ?
+			AND LOWER(COALESCE(students.status, '')) != ?
+			AND LOWER(COALESCE(enrollments.status, '')) IN ?
+		`, sectionID, schoolID, "inactive", []string{"", "active", "enrolled"}).
+		Count(&enrollmentCount).Error; err != nil {
+		return 0, err
+	}
+	return currentCount + enrollmentCount, nil
 }
 
 func (h *SchoolHandler) GetDepartments(c *gin.Context) {
@@ -794,18 +893,56 @@ func (h *SchoolHandler) DeleteSubject(c *gin.Context) {
 		return
 	}
 	if blockAcademicDelete(c,
-		academicRef("subject mappings", &models.GradeSubject{}, "subject_id = ?", id),
-		academicRef("timetable slots", &models.TimetableSlot{}, "subject_id = ?", id),
 		academicRef("attendance sessions", &models.AttendanceSession{}, "subject_id = ?", id),
 	) {
 		return
 	}
-	if err := database.DB.Delete(&models.Subject{}, "id = ? AND school_id = ?", id, scopedSchoolID(c)).Error; err != nil {
+	var markCount int64
+	if err := database.DB.Model(&models.StudentMark{}).
+		Joins("JOIN exam_schedules ON exam_schedules.id = student_marks.exam_schedule_id").
+		Where("exam_schedules.subject_id = ?", id).
+		Count(&markCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate subject marks"})
+		return
+	}
+	if markCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Cannot delete while linked marks exist"})
+		return
+	}
+	var reportCount int64
+	if err := database.DB.Model(&models.ReportCard{}).
+		Where("exam_id IN (SELECT exam_id FROM exam_schedules WHERE subject_id = ?)", id).
+		Count(&reportCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate subject report cards"})
+		return
+	}
+	if reportCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Cannot delete while linked report cards exist"})
+		return
+	}
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM substitutions WHERE timetable_slot_id IN (SELECT id FROM timetable_slots WHERE subject_id = ?)", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.TimetableSlot{}, "subject_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.ExamSchedule{}, "subject_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.StaffSubject{}, "subject_id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.GradeSubject{}, "subject_id = ?", id).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.Subject{}, "id = ? AND school_id = ?", id, scopedSchoolID(c)).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete subject"})
 		return
 	}
 	auditAction(c, "subjects", "delete", "subjects", &id)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Subject deleted successfully"})
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Subject and linked empty setup records deleted successfully"})
 }
 
 type academicReference struct {

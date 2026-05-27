@@ -66,6 +66,39 @@ void main() {
     expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
   });
 
+  testWidgets('compact principal shell uses dashboard inbox navigation', (
+    tester,
+  ) async {
+    BackendApiClient.instance.clearAuthToken();
+    BackendApiClient.instance.setCurrentRole('principal');
+    addTearDown(BackendApiClient.instance.clearAuthToken);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: SchoolDeskModuleScaffold(
+          title: 'Classes Command Center',
+          drawer: const Drawer(child: Text('Navigation')),
+          body: const Text('Class list'),
+        ),
+      ),
+    );
+
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.search), findsOneWidget);
+    expect(find.text('Inbox'), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.notifications), findsNothing);
+    expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.menu_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Navigation'), findsOneWidget);
+  });
+
   testWidgets('compact role shell supports admin visual shortcuts', (
     tester,
   ) async {

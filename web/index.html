@@ -108,8 +108,10 @@
 
     <!-- Shown when a startup error occurs -->
     <div id="load-error">
-      <h2>Something went wrong</h2>
-      <p>The app couldn’t initialize properly due to a code-related issue</p>
+      <h2 id="load-error-title">Something went wrong</h2>
+      <p id="load-error-message">
+        The app couldn’t initialize properly due to a code-related issue
+      </p>
     </div>
 
     <script>
@@ -138,12 +140,16 @@
         }
       }
 
-      function showLoadError(message, detail) {
+      function showLoadError(message, detail, title) {
         if (appLoaded) return;
         appLoaded = true;
         removeLoader();
         var errEl = document.getElementById("load-error");
         if (errEl) {
+          var titleEl = document.getElementById("load-error-title");
+          var messageEl = document.getElementById("load-error-message");
+          if (titleEl && title) titleEl.textContent = title;
+          if (messageEl && message) messageEl.textContent = message;
           errEl.classList.add("visible");
         }
         window.parent.postMessage(
@@ -188,11 +194,12 @@
         var loader = document.getElementById("loading-container");
         if (loader && loader.style.display !== "none") {
           showLoadError(
-            "Loading timed out",
+            "The app is still loading. Refresh once the Flutter web server finishes compiling.",
             "The app did not start in time. Please refresh the page.",
+            "Still loading"
           );
         }
-      }, 90000);
+      }, 300000);
     </script>
 
     <script>

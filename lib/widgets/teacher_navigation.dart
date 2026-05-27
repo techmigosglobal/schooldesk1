@@ -91,7 +91,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       onDestinationSelected: widget.onDestinationSelected,
       sections: [
         const SchoolDeskNavigationSection(
-          label: 'Overview',
+          label: 'Today',
           items: [
             SchoolDeskNavigationItem(
               index: 0,
@@ -99,6 +99,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               activeIcon: Icons.dashboard_rounded,
               label: 'Dashboard',
               route: AppRoutes.teacherDashboard,
+            ),
+            SchoolDeskNavigationItem(
+              index: 14,
+              icon: Icons.qr_code_scanner_outlined,
+              activeIcon: Icons.qr_code_scanner_rounded,
+              label: 'My Attendance',
+              route: AppRoutes.teacherMyAttendance,
             ),
           ],
         ),
@@ -116,7 +123,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: 2,
               icon: Icons.how_to_reg_outlined,
               activeIcon: Icons.how_to_reg_rounded,
-              label: 'Attendance',
+              label: 'Student Attendance',
               route: AppRoutes.teacherAttendance,
             ),
             SchoolDeskNavigationItem(
@@ -126,13 +133,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               label: 'Homework',
               route: AppRoutes.teacherHomework,
               badgeCount: RoleAccessService.teacherHomeworkDue,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 4,
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book_rounded,
-              label: 'Lesson Planner',
-              route: AppRoutes.teacherLessonPlanner,
             ),
           ],
         ),
@@ -152,13 +152,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               activeIcon: Icons.note_alt_rounded,
               label: 'Student Notes',
               route: AppRoutes.teacherStudentNotes,
-            ),
-            SchoolDeskNavigationItem(
-              index: 7,
-              icon: Icons.folder_outlined,
-              activeIcon: Icons.folder_rounded,
-              label: 'Resources',
-              route: AppRoutes.teacherResources,
             ),
           ],
         ),

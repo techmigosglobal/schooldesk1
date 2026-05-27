@@ -51,6 +51,29 @@ flutter run --dart-define-from-file=env.json
 After local verification succeeds, the same Go API stack is the deployment path
 for the Hostinger VPS environment.
 
+### Optional Prometheus + Grafana
+
+Start the observability overlay with the local backend:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml --profile observability up -d
+```
+
+Prometheus is available at `http://127.0.0.1:9090`; Grafana is available at
+`http://127.0.0.1:3000` with `admin` / `schooldesk-admin` unless overridden by
+`GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. The provisioned dashboard is
+`SchoolDesk API Overview`.
+
+Verify the full local observability stack:
+
+```bash
+scripts/verify-observability.sh
+```
+
+For Hostinger/VPS, keep Grafana and Prometheus bound to `127.0.0.1` and access
+them through SSH tunnels unless a protected reverse proxy is explicitly added.
+Details are in `docs/observability-runbook.md`.
+
 ## Switching Backend Targets
 
 The app changes backend linkage through `API_BASE_URL`; no Dart code should be

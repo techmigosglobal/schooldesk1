@@ -24,6 +24,8 @@ class StudentFilterBarWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final feeStatuses = ['All', 'Paid', 'Pending', 'Overdue', 'Defaulter'];
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final filterRowHeight = (34.0 * textScale).clamp(38.0, 56.0).toDouble();
 
     return Container(
       color: AppTheme.surface,
@@ -43,7 +45,7 @@ class StudentFilterBarWidget extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 34,
+            height: filterRowHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: classOptions.length,
@@ -55,6 +57,8 @@ class StudentFilterBarWidget extends StatelessWidget {
                     classOptions[i] == 'All'
                         ? 'All Classes'
                         : 'Class ${classOptions[i]}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: selected ? Colors.white : AppTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
@@ -77,7 +81,7 @@ class StudentFilterBarWidget extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           SizedBox(
-            height: 34,
+            height: filterRowHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: feeStatuses.length,
@@ -87,6 +91,8 @@ class StudentFilterBarWidget extends StatelessWidget {
                 return FilterChip(
                   label: Text(
                     feeStatuses[i],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: selected ? Colors.white : AppTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,

@@ -65,6 +65,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               );
         feeList = invoices.map((inv) {
           final status = (inv['status'] ?? '').toString().toLowerCase();
+          // Backend integration: invoice/payment values are rendered only from
+          // the fee APIs. Missing payment metadata remains empty in the UI.
           return {
             'id': inv['id'],
             'invoiceNumber': inv['invoice_number'] ?? '',
@@ -91,7 +93,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 'component': 'Invoice ${inv['invoice_number'] ?? ''}',
                 'amount': (payment['amount_paid'] as num?)?.toDouble() ?? 0,
                 'date': (payment['payment_date'] ?? '').toString(),
-                'method': (payment['payment_mode'] ?? 'Online').toString(),
+                'method': (payment['payment_mode'] ?? '').toString(),
                 'receiptNo': (payment['receipt_number'] ?? '').toString(),
                 'student': _studentName(child),
                 'class': _studentClass(child),
@@ -116,7 +118,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             'amount': (request['amount'] as num?)?.toDouble() ?? 0,
             'date': (request['payment_date'] ?? request['created_at'] ?? '')
                 .toString(),
-            'method': (request['payment_mode'] ?? 'Online').toString(),
+            'method': (request['payment_mode'] ?? '').toString(),
             'receiptNo': (request['request_reference'] ?? '').toString(),
             'student': _studentName(child),
             'class': _studentClass(child),
@@ -287,7 +289,36 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             ),
           ),
           const SizedBox(height: 10),
-          if (pending.isEmpty)
+          if (_feeStructure.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.outlineVariant),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_rounded,
+                    color: AppTheme.muted,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'No fee invoices published yet.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        color: AppTheme.muted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (pending.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -302,12 +333,14 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     size: 24,
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    'All fees are paid! Great job.',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14,
-                      color: AppTheme.success,
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Text(
+                      'No pending fees in published invoices.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        color: AppTheme.success,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -352,6 +385,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       0,
       (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0),
     );
+    final hasInvoices = _feeStructure.isNotEmpty;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -379,7 +413,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       ),
                     ),
                     Text(
-                      '₹$_totalPending',
+                      hasInvoices ? '₹$_totalPending' : '—',
                       style: GoogleFonts.dmSans(
                         fontSize: 28,
                         fontWeight: FontWeight.w700,
@@ -387,7 +421,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       ),
                     ),
                     Text(
-                      'Live invoice status from backend',
+                      hasInvoices
+                          ? 'Live invoice status from backend'
+                          : 'Published invoice balances will appear here',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         color: Colors.white70,
@@ -422,7 +458,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            '₹$paid of ₹$total paid',
+            hasInvoices ? '₹$paid of ₹$total paid' : 'No invoices published',
             style: GoogleFonts.dmSans(fontSize: 11, color: Colors.white70),
           ),
         ],
@@ -432,6 +468,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   Widget _feeItemCard(Map<String, dynamic> fee, bool showPayBtn) {
     final isPending = fee['status'] == 'Pending';
+    final meta = <String>[
+      _text(fee['frequency']),
+      if (_text(fee['dueDate']).isNotEmpty) 'Due: ${_text(fee['dueDate'])}',
+    ].where((part) => part.isNotEmpty).join(' • ');
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -469,19 +509,20 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  fee['component'],
+                  _text(fee['component'], fallback: 'Invoice'),
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                Text(
-                  '${fee['frequency']} • Due: ${fee['dueDate']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: AppTheme.muted,
+                if (meta.isNotEmpty)
+                  Text(
+                    meta,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: AppTheme.muted,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -566,6 +607,11 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       itemBuilder: (_, i) {
         final p = _paymentHistory[i];
         final isPaid = p['status'] == 'Paid';
+        final meta = <String>[
+          _text(p['date']),
+          _text(p['method']),
+        ].where((part) => part.isNotEmpty).join(' • ');
+        final receiptNo = _text(p['receiptNo']);
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
@@ -599,26 +645,28 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      p['component'],
+                      _text(p['component'], fallback: 'Payment record'),
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Text(
-                      '${p['date']} • ${p['method']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
+                    if (meta.isNotEmpty)
+                      Text(
+                        meta,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppTheme.muted,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Receipt: ${p['receiptNo']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
+                    if (receiptNo.isNotEmpty)
+                      Text(
+                        'Receipt: $receiptNo',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: AppTheme.muted,
+                        ),
                       ),
-                    ),
                     Text(
                       '${p['status']}',
                       style: GoogleFonts.dmSans(
@@ -684,6 +732,19 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0),
     );
     final child = _childrenData[_activeChildIndex];
+    final className = _studentClass(child);
+    if (_feeStructure.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Fee structure will appear after invoices are published.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
+          ),
+        ),
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -697,7 +758,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Fee Structure — Class ${child['class']}',
+                className.isEmpty
+                    ? 'Fee Structure'
+                    : 'Fee Structure — Class $className',
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -817,6 +880,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     try {
       final pdfService = PdfService.getInstance();
       final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
+      final paymentDate = DateTime.tryParse(_text(payment['date']));
+      if (paymentDate == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receipt date is not available from backend yet.'),
+          ),
+        );
+        return;
+      }
       final rawItems = payment['items'];
       final List<Map<String, dynamic>> feeItems = rawItems is List
           ? rawItems.map((e) => Map<String, dynamic>.from(e as Map)).toList()
@@ -829,23 +902,23 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             ];
 
       final pdfBytes = await pdfService.generateFeeReceipt(
-        receiptNo: payment['receiptNo'] as String? ?? 'RCP001',
-        studentName: payment['student'] as String? ?? '',
-        className: payment['class'] as String? ?? '',
-        rollNo: payment['rollNo'] as String? ?? '',
-        parentName: payment['parentName'] as String? ?? '',
+        receiptNo: _text(payment['receiptNo']),
+        studentName: _text(payment['student']),
+        className: _text(payment['class']),
+        rollNo: _text(payment['rollNo']),
+        parentName: _text(payment['parentName']),
         feeItems: feeItems,
         totalAmount: amount,
         paidAmount: amount,
         balance: 0,
-        paymentMode: payment['method'] as String? ?? 'Online',
-        paymentDate: DateTime.now(),
+        paymentMode: _text(payment['method']),
+        paymentDate: paymentDate,
       );
       if (!mounted) return;
       await pdfService.previewDocument(
         context,
         pdfBytes,
-        'Receipt ${payment['receiptNo'] ?? 'RCP'}',
+        'Receipt ${_text(payment['receiptNo'], fallback: 'Preview')}',
       );
     } catch (e) {
       if (mounted) {
@@ -856,5 +929,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         );
       }
     }
+  }
+
+  String _text(dynamic value, {String fallback = ''}) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? fallback : text;
   }
 }

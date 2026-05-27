@@ -28,8 +28,8 @@ func (h *ParentTeacherMeetingHandler) Book(c *gin.Context) {
 
 	var row models.ParentTeacherMeeting
 	if err := database.DB.
-		Joins("JOIN event_calendars ON event_calendars.id = parent_teacher_meetings.event_id").
-		Where("parent_teacher_meetings.id = ? AND event_calendars.school_id = ?", id, scopedSchoolID(c)).
+		Joins(`JOIN events ON events.event_id = parent_teacher_meetings.event_id`).
+		Where("parent_teacher_meetings.id = ? AND events.school_id = ?", id, scopedSchoolID(c)).
 		First(&row).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			fail(c, http.StatusNotFound, "PTM slot not found")

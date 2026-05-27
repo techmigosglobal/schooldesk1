@@ -40,6 +40,10 @@ func (q *JobQueue) Enqueue(ctx context.Context, queueType string, payload map[st
 	}).Err()
 }
 
+func (q *JobQueue) PendingLength(ctx context.Context, queueType string) (int64, error) {
+	return q.client.XLen(ctx, q.streamKey(queueType)).Result()
+}
+
 func (q *JobQueue) Consume(queueType string, handler func(map[string]interface{}) error) error {
 	stream := q.streamKey(queueType)
 	lastID := "0"

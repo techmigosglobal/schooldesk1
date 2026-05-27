@@ -90,6 +90,16 @@ func (h *TimetableHandler) CreateTimetableSlot(c *gin.Context) {
 		fail(c, err.Status, err.Message)
 		return
 	}
+	startTime, err := timetableClockPointer(req.StartTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_time must be HH:MM"})
+		return
+	}
+	endTime, err := timetableClockPointer(req.EndTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "end_time must be HH:MM"})
+		return
+	}
 
 	slot := models.TimetableSlot{
 		SectionID:      req.SectionID,
@@ -99,8 +109,8 @@ func (h *TimetableHandler) CreateTimetableSlot(c *gin.Context) {
 		PeriodNumber:   req.PeriodNumber,
 		SubjectID:      req.SubjectID,
 		StaffID:        req.StaffID,
-		StartTime:      req.StartTime,
-		EndTime:        req.EndTime,
+		StartTime:      startTime,
+		EndTime:        endTime,
 		SlotType:       "regular",
 	}
 
@@ -143,6 +153,16 @@ func (h *TimetableHandler) UpdateTimetableSlot(c *gin.Context) {
 		fail(c, err.Status, err.Message)
 		return
 	}
+	startTime, err := timetableClockPointer(req.StartTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "start_time must be HH:MM"})
+		return
+	}
+	endTime, err := timetableClockPointer(req.EndTime)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "end_time must be HH:MM"})
+		return
+	}
 
 	slot.SectionID = req.SectionID
 	slot.AcademicYearID = req.AcademicYearID
@@ -151,8 +171,8 @@ func (h *TimetableHandler) UpdateTimetableSlot(c *gin.Context) {
 	slot.SubjectID = req.SubjectID
 	slot.StaffID = req.StaffID
 	slot.PeriodNumber = req.PeriodNumber
-	slot.StartTime = req.StartTime
-	slot.EndTime = req.EndTime
+	slot.StartTime = startTime
+	slot.EndTime = endTime
 	if strings.TrimSpace(req.RoomID) == "" {
 		slot.RoomID = nil
 	} else {
@@ -363,6 +383,18 @@ func (h *TimetableHandler) GenerateTimetableSlots(c *gin.Context) {
 			continue
 		}
 
+		startTime, err := timetableClockPointer(suggestion.StartTime)
+		if err != nil {
+			tx.Rollback()
+			fail(c, http.StatusInternalServerError, "Failed to parse suggested start time")
+			return
+		}
+		endTime, err := timetableClockPointer(suggestion.EndTime)
+		if err != nil {
+			tx.Rollback()
+			fail(c, http.StatusInternalServerError, "Failed to parse suggested end time")
+			return
+		}
 		slot := models.TimetableSlot{
 			SectionID:      suggestion.SectionID,
 			AcademicYearID: suggestion.AcademicYearID,
@@ -371,8 +403,8 @@ func (h *TimetableHandler) GenerateTimetableSlots(c *gin.Context) {
 			PeriodNumber:   suggestion.PeriodNumber,
 			SubjectID:      suggestion.SubjectID,
 			StaffID:        suggestion.StaffID,
-			StartTime:      suggestion.StartTime,
-			EndTime:        suggestion.EndTime,
+			StartTime:      startTime,
+			EndTime:        endTime,
 			SlotType:       "regular",
 		}
 		if err := tx.Create(&slot).Error; err != nil {
@@ -810,6 +842,18 @@ func parseTimetableClock(value string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return time.Date(2000, 1, 1, parsed.Hour(), parsed.Minute(), 0, 0, time.UTC), nil
+}
+
+func timetableClockPointer(value string) (*time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := parseTimetableClock(value)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }
 
 func scopedTimetableSlotQuery(c *gin.Context) *gorm.DB {

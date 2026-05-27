@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"school-backend/internal/database"
@@ -10,6 +11,8 @@ import (
 	"school-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type AnnouncementHandler struct{}
@@ -177,21 +180,198 @@ func (h *AnnouncementHandler) GetNotifications(c *gin.Context) {
 	if schoolID != "" {
 		query = query.Where("school_id = ?", schoolID)
 	}
-	query.Order("sent_at DESC").Find(&notifications)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: notifications})
+	if err := query.Order("sent_at DESC").Find(&notifications).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load notifications")
+		return
+	}
+	rows := make([]gin.H, 0, len(notifications))
+	for _, notification := range notifications {
+		rows = append(rows, notificationLogResponse(notification))
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: rows})
+}
+
+func (h *AnnouncementHandler) CreateNotification(c *gin.Context) {
+	var req struct {
+		Title            string `json:"title"`
+		Message          string `json:"message"`
+		Body             string `json:"body"`
+		NotificationType string `json:"notification_type"`
+		Type             string `json:"type"`
+		TargetRole       string `json:"target_role"`
+		TargetUserID     string `json:"target_user_id"`
+		Priority         string `json:"priority"`
+		DeliveryMode     string `json:"delivery_mode"`
+		ExpiryDate       string `json:"expiry_date"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	message := strings.TrimSpace(firstNonEmpty(req.Message, req.Body))
+	if title == "" || message == "" {
+		fail(c, http.StatusBadRequest, "title and message are required")
+		return
+	}
+	schoolID := scopedSchoolID(c)
+	notificationID := uuid.New().String()
+	notificationType := strings.TrimSpace(firstNonEmpty(req.NotificationType, req.Type, "general"))
+	targetRole := strings.TrimSpace(firstNonEmpty(req.TargetRole, "all"))
+	targetUserID := strings.TrimSpace(req.TargetUserID)
+	priority := strings.TrimSpace(firstNonEmpty(req.Priority, "medium"))
+	deliveryMode := strings.TrimSpace(firstNonEmpty(req.DeliveryMode, notificationChannelInApp))
+	now := time.Now().UTC()
+	row := map[string]interface{}{
+		"notification_id":   notificationID,
+		"school_id":         schoolID,
+		"title":             title,
+		"message":           message,
+		"notification_type": notificationType,
+		"target_role":       targetRole,
+		"target_user_id":    targetUserID,
+		"priority":          priority,
+		"delivery_mode":     deliveryMode,
+		"is_read":           false,
+		"sent_by":           currentUserID(c),
+		"sent_at":           now,
+		"created_at":        now,
+		"updated_at":        now,
+	}
+	if expiry := strings.TrimSpace(req.ExpiryDate); expiry != "" {
+		row["expiry_date"] = expiry
+	}
+
+	var logs []models.NotificationLog
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("notifications").Create(row).Error; err != nil {
+			return err
+		}
+		var createErr error
+		if targetUserID != "" {
+			logs, createErr = createNotificationLogsForUserIDsTx(
+				tx, schoolID, []string{targetUserID}, title, message,
+				notificationType, priority, notificationType, notificationID,
+			)
+		} else {
+			logs, createErr = createNotificationLogsForRolesTx(
+				tx, schoolID, notificationTargetRoles(targetRole), "",
+				title, message, notificationType, priority, notificationType, notificationID,
+			)
+		}
+		return createErr
+	})
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to create notification")
+		return
+	}
+	auditAction(c, "notifications", "create", "notifications", &notificationID)
+	enqueuePushNotifications(logs)
+	c.JSON(http.StatusCreated, models.APIResponse{
+		Success: true,
+		Data: gin.H{
+			"notification": row,
+			"logs":         logs,
+		},
+	})
 }
 
 func (h *AnnouncementHandler) MarkNotificationRead(c *gin.Context) {
 	id := c.Param("id")
 	userID := c.GetString("user_id")
 	schoolID := scopedSchoolID(c)
-	var notification models.NotificationLog
-	if err := database.DB.First(&notification, "id = ? AND recipient_user_id = ? AND school_id = ?", id, userID, schoolID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Notification not found"})
+	now := time.Now().UTC()
+	result := database.DB.Model(&models.NotificationLog{}).
+		Where("school_id = ? AND recipient_user_id = ?", schoolID, userID).
+		Where("(id = ? OR reference_id = ?)", id, id).
+		Updates(map[string]interface{}{
+			"is_read": true,
+			"read_at": now,
+		})
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark notification as read"})
 		return
 	}
-
-	notification.IsRead = true
-	database.DB.Save(&notification)
+	if result.RowsAffected == 0 {
+		legacy := database.DB.Table("notifications").
+			Where(`"notification_id" = ? AND "school_id" = ?`, id, schoolID).
+			Where(
+				`("target_user_id" = ? OR LOWER(COALESCE("target_role", '')) IN ('parent', 'parents', 'teacher', 'teachers', 'staff', 'admin', 'principal', 'all', 'everyone'))`,
+				userID,
+			).
+			Updates(map[string]interface{}{
+				"is_read": true,
+				"read_at": now,
+			})
+		if legacy.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to mark notification as read"})
+			return
+		}
+		if legacy.RowsAffected == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Notification not found"})
+			return
+		}
+	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Notification marked as read"})
+}
+
+func notificationTargetRoles(targetRole string) []string {
+	cleaned := strings.ToLower(strings.TrimSpace(targetRole))
+	if cleaned == "" || cleaned == "all" || cleaned == "everyone" {
+		return nil
+	}
+	parts := strings.FieldsFunc(cleaned, func(r rune) bool {
+		return r == ',' || r == ';' || r == '|'
+	})
+	roles := make([]string, 0, len(parts))
+	for _, part := range parts {
+		role := strings.TrimSpace(part)
+		switch role {
+		case "", "all", "everyone":
+			return nil
+		case "parents", "guardian", "guardians":
+			role = "parent"
+		case "teachers", "staff":
+			role = "teacher"
+		case "admins":
+			role = "admin"
+		case "principals", "principle":
+			role = "principal"
+		}
+		roles = append(roles, role)
+	}
+	return roles
+}
+
+func notificationLogResponse(row models.NotificationLog) gin.H {
+	notificationID := row.ID
+	if row.ReferenceID != nil && strings.TrimSpace(*row.ReferenceID) != "" {
+		notificationID = strings.TrimSpace(*row.ReferenceID)
+	}
+	return gin.H{
+		"id":                  row.ID,
+		"notification_log_id": row.ID,
+		"notification_id":     notificationID,
+		"school_id":           row.SchoolID,
+		"recipient_user_id":   row.RecipientUserID,
+		"target_user_id":      row.RecipientUserID,
+		"title":               row.Title,
+		"message":             row.Body,
+		"body":                row.Body,
+		"notification_type":   row.Category,
+		"type":                row.Category,
+		"priority":            row.Priority,
+		"route":               row.Route,
+		"reference_type":      row.ReferenceType,
+		"reference_id":        row.ReferenceID,
+		"is_read":             row.IsRead,
+		"read_at":             row.ReadAt,
+		"sent_at":             row.SentAt,
+		"delivery_status":     row.DeliveryStatus,
+		"push_status":         row.PushStatus,
+		"push_error":          row.PushError,
+		"pushed_at":           row.PushedAt,
+		"created_at":          row.CreatedAt,
+		"updated_at":          row.UpdatedAt,
+	}
 }

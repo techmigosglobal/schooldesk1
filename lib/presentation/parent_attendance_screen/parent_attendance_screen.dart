@@ -25,6 +25,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   List<String> _childIds = [];
 
   List<Map<String, dynamic>> _attendanceHistory = [];
+  Map<int, String> _attendanceDayStatus = {};
   List<Map<String, dynamic>> _leaveRequests = [];
   bool _loading = true;
 
@@ -90,20 +91,25 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           .getStudentAttendanceSummary(studentId: studentId);
       final leaveRequests = await BackendApiClient.instance
           .getStudentLeaveApplications(studentId: studentId);
+      // Backend integration: populate _attendanceDayStatus from day-wise
+      // attendance rows when the API exposes them. Until then, calendar dates
+      // stay empty instead of showing hard-coded present/absent values.
+      final attendanceDayStatus = _dayStatusFromSummary(attendanceSummary);
 
       setState(() {
         _attendanceHistory = [
           {
             'month': 'Current Month',
-            'present': attendanceSummary['present_days'] ?? 0,
-            'absent': attendanceSummary['absent_days'] ?? 0,
-            'total': attendanceSummary['total_days'] ?? 0,
-            'percentage': attendanceSummary['attendance_pct'] ?? 0.0,
+            'present': attendanceSummary['present_days'],
+            'absent': attendanceSummary['absent_days'],
+            'total': attendanceSummary['total_days'],
+            'percentage': attendanceSummary['attendance_pct'],
             'date': 'Current Month',
             'time': '—',
             'status': 'Summary',
           },
         ];
+        _attendanceDayStatus = attendanceDayStatus;
         _leaveRequests = leaveRequests.map(_leaveRequestFromApi).toList();
         _loading = false;
       });
@@ -216,17 +222,17 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     final current = _attendanceHistory.isEmpty
         ? <String, dynamic>{}
         : _attendanceHistory.first;
-    final present = (current['present'] as num?)?.toInt() ?? 0;
-    final absent = (current['absent'] as num?)?.toInt() ?? 0;
-    final late = (current['late'] as num?)?.toInt() ?? 0;
-    final pct = (current['percentage'] as num?)?.toDouble() ?? 0;
-    final rate = '${pct.toStringAsFixed(0)}%';
+    final present = _numberLabel(current['present']);
+    final absent = _numberLabel(current['absent']);
+    final late = _numberLabel(current['late']);
+    final pct = (current['percentage'] as num?)?.toDouble();
+    final rate = pct == null ? '—' : '${pct.toStringAsFixed(0)}%';
     return Row(
       children: [
         Expanded(
           child: _statCard(
             'Present',
-            '$present',
+            present,
             Icons.check_circle_rounded,
             AppTheme.success,
             AppTheme.successContainer,
@@ -236,7 +242,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         Expanded(
           child: _statCard(
             'Absent',
-            '$absent',
+            absent,
             Icons.cancel_rounded,
             AppTheme.error,
             AppTheme.errorContainer,
@@ -246,7 +252,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         Expanded(
           child: _statCard(
             'Late',
-            '$late',
+            late,
             Icons.schedule_rounded,
             AppTheme.warning,
             AppTheme.warningContainer,
@@ -338,23 +344,19 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ),
           const SizedBox(height: 8),
           _buildCalendarGrid(),
+          if (_attendanceDayStatus.isEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Day-wise attendance will appear after the school publishes it.',
+              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildCalendarGrid() {
-    final Map<int, String> statusMap = {
-      7: 'P',
-      8: 'H',
-      9: 'P',
-      10: 'P',
-      11: 'A',
-      12: 'P',
-      14: 'L',
-      15: 'P',
-      16: 'P',
-    };
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -367,7 +369,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       itemCount: 30,
       itemBuilder: (_, i) {
         final day = i + 1;
-        final status = statusMap[day];
+        final status = _attendanceDayStatus[day];
         Color bg = Colors.transparent;
         Color textColor = AppTheme.onSurface;
         if (status == 'P') {
@@ -419,16 +421,29 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             border: Border.all(color: AppTheme.outlineVariant),
           ),
           child: Column(
-            children: _attendanceHistory.asMap().entries.map((e) {
-              final i = e.key;
-              final rec = e.value;
-              return Column(
-                children: [
-                  if (i > 0) const Divider(height: 1),
-                  _attendanceRow(rec),
-                ],
-              );
-            }).toList(),
+            children: _attendanceHistory.isEmpty
+                ? [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Attendance history will appear after the school publishes it.',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: AppTheme.muted,
+                        ),
+                      ),
+                    ),
+                  ]
+                : _attendanceHistory.asMap().entries.map((e) {
+                    final i = e.key;
+                    final rec = e.value;
+                    return Column(
+                      children: [
+                        if (i > 0) const Divider(height: 1),
+                        _attendanceRow(rec),
+                      ],
+                    );
+                  }).toList(),
           ),
         ),
       ],
@@ -635,6 +650,51 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       const SnackBar(content: Text('Leave request submitted successfully!')),
     );
   }
+}
+
+Map<int, String> _dayStatusFromSummary(Map<String, dynamic> summary) {
+  final source =
+      summary['daily_statuses'] ??
+      summary['daily_attendance'] ??
+      summary['days'];
+  if (source is! List) return const {};
+  final now = DateTime.now();
+  final statuses = <int, String>{};
+  for (final item in source.whereType<Map>()) {
+    final row = Map<String, dynamic>.from(item);
+    final parsed = DateTime.tryParse('${row['date'] ?? ''}');
+    if (parsed == null ||
+        parsed.month != now.month ||
+        parsed.year != now.year) {
+      continue;
+    }
+    final status = _statusCode(row['status'] ?? row['attendance_status']);
+    if (status.isNotEmpty) statuses[parsed.day] = status;
+  }
+  return statuses;
+}
+
+String _statusCode(dynamic raw) {
+  switch ('${raw ?? ''}'.trim().toLowerCase()) {
+    case 'present':
+    case 'p':
+      return 'P';
+    case 'absent':
+    case 'a':
+      return 'A';
+    case 'late':
+    case 'l':
+      return 'L';
+    case 'holiday':
+    case 'h':
+      return 'H';
+  }
+  return '';
+}
+
+String _numberLabel(dynamic value) {
+  if (value is num) return value.toInt().toString();
+  return '—';
 }
 
 class _StudentLeaveRequestPage extends StatefulWidget {

@@ -13,6 +13,19 @@ curl -fsS http://127.0.0.1:8080/metrics
 scripts/verify-local-docker-api.sh
 ```
 
+## Optional Observability
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.observability.yml --profile observability up -d
+scripts/verify-observability.sh
+```
+
+Local URLs:
+
+- Prometheus: `http://127.0.0.1:9090`
+- Grafana: `http://127.0.0.1:3000`
+- Grafana dashboard: `SchoolDesk API Overview`
+
 ## Standard Quality Gate
 
 ```bash

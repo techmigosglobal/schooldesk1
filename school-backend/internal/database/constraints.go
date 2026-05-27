@@ -130,13 +130,13 @@ func integrityProbes() []integrityProbe {
 				LEFT JOIN sections ON sections.id = attendance_sessions.section_id
 				LEFT JOIN grades ON grades.id = sections.grade_id
 				LEFT JOIN subjects ON subjects.id = attendance_sessions.subject_id
-				LEFT JOIN staff ON staff.id = attendance_sessions.staff_id
+				LEFT JOIN staffs ON staffs.id = attendance_sessions.staff_id
 				WHERE sections.id IS NULL
 					OR grades.id IS NULL
 					OR subjects.id IS NULL
-					OR staff.id IS NULL
+					OR staffs.id IS NULL
 					OR subjects.school_id <> grades.school_id
-					OR staff.school_id <> grades.school_id
+					OR staffs.school_id <> grades.school_id
 			`,
 		},
 		{
@@ -194,13 +194,26 @@ func integrityProbes() []integrityProbe {
 			`,
 		},
 		{
-			name: "guardians_orphan",
+			name: "guardian_school_orphan",
 			query: `
-				SELECT COUNT(*)
-				FROM guardians
-				LEFT JOIN students ON students.id = guardians.student_id
-				WHERE students.id IS NULL
-			`,
+					SELECT COUNT(*)
+					FROM guardians
+					LEFT JOIN schools ON schools.id = guardians.school_id
+					WHERE schools.id IS NULL
+				`,
+		},
+		{
+			name: "student_guardian_school_mismatch",
+			query: `
+					SELECT COUNT(*)
+					FROM student_guardians
+					LEFT JOIN students ON students.id = student_guardians.student_id
+					LEFT JOIN guardians ON guardians.id = student_guardians.guardian_id
+					WHERE students.id IS NULL
+						OR guardians.id IS NULL
+						OR student_guardians.school_id <> students.school_id
+						OR student_guardians.school_id <> guardians.school_id
+				`,
 		},
 		{
 			name: "student_admission_number_duplicate",
@@ -228,6 +241,47 @@ func integrityProbes() []integrityProbe {
 					GROUP BY school_id, student_code
 					HAVING COUNT(*) > 1
 				) AS duplicates
+			`,
+		},
+		{
+			name: "staff_code_duplicate",
+			query: `
+				SELECT COUNT(*)
+				FROM (
+					SELECT school_id, staff_code
+					FROM staffs
+					WHERE staff_code IS NOT NULL
+						AND staff_code <> ''
+					GROUP BY school_id, staff_code
+					HAVING COUNT(*) > 1
+				) AS duplicates
+			`,
+		},
+		{
+			name: "staff_subject_school_mismatch",
+			query: `
+				SELECT COUNT(*)
+				FROM staff_subjects
+				LEFT JOIN staffs ON staffs.id = staff_subjects.staff_id
+				LEFT JOIN subjects ON subjects.id = staff_subjects.subject_id
+				LEFT JOIN grades ON grades.id = staff_subjects.grade_id
+				LEFT JOIN sections ON sections.id = staff_subjects.section_id
+				LEFT JOIN grades section_grades ON section_grades.id = sections.grade_id
+				WHERE staffs.id IS NULL
+					OR subjects.id IS NULL
+					OR grades.id IS NULL
+					OR staffs.school_id <> subjects.school_id
+					OR staffs.school_id <> grades.school_id
+					OR (
+						staff_subjects.section_id IS NOT NULL
+						AND staff_subjects.section_id <> ''
+						AND (
+							sections.id IS NULL
+							OR section_grades.id IS NULL
+							OR section_grades.school_id <> staffs.school_id
+							OR sections.grade_id <> staff_subjects.grade_id
+						)
+					)
 			`,
 		},
 		{
@@ -259,9 +313,32 @@ func integrityProbes() []integrityProbe {
 
 func relationshipConstraintStatements() []string {
 	return []string{
+		"ALTER TABLE students DROP CONSTRAINT IF EXISTS uni_students_student_code;",
+		"ALTER TABLE students DROP CONSTRAINT IF EXISTS uni_students_admission_number;",
+		"ALTER TABLE staffs DROP CONSTRAINT IF EXISTS uni_staff_staff_code;",
+		"ALTER TABLE staffs DROP CONSTRAINT IF EXISTS uni_staffs_staff_code;",
+		"DROP INDEX IF EXISTS uni_students_student_code;",
+		"DROP INDEX IF EXISTS uni_students_admission_number;",
+		"DROP INDEX IF EXISTS uni_staff_staff_code;",
+		"DROP INDEX IF EXISTS uni_staffs_staff_code;",
+		"DROP INDEX IF EXISTS idx_students_student_code;",
+		"DROP INDEX IF EXISTS idx_students_admission_number;",
+		"DROP INDEX IF EXISTS idx_staff_staff_code;",
+		"DROP INDEX IF EXISTS idx_staffs_staff_code;",
+		addForeignKeyConstraint("student_marks", "fk_sm_student", "student_id", "students", "id", "ON DELETE RESTRICT"),
+		addForeignKeyConstraint("enrollments", "fk_en_student", "student_id", "students", "id", "ON DELETE RESTRICT"),
+		addForeignKeyConstraint("report_cards", "fk_rc_student", "student_id", "students", "id", "ON DELETE RESTRICT"),
 		addForeignKeyConstraint("students", "fk_students_school", "school_id", "schools", "id", "ON DELETE RESTRICT"),
 		addForeignKeyConstraint("students", "fk_students_current_section", "current_section_id", "sections", "id", "ON DELETE SET NULL"),
-		addForeignKeyConstraint("guardians", "fk_guardians_student", "student_id", "students", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("staffs", "fk_staff_school", "school_id", "schools", "id", "ON DELETE RESTRICT"),
+		addForeignKeyConstraint("staff_subjects", "fk_staff_subjects_staff", "staff_id", "staffs", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("staff_subjects", "fk_staff_subjects_subject", "subject_id", "subjects", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("staff_subjects", "fk_staff_subjects_grade", "grade_id", "grades", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("staff_subjects", "fk_staff_subjects_section", "section_id", "sections", "id", "ON DELETE SET NULL"),
+		addForeignKeyConstraint("staff_documents", "fk_staff_documents_staff", "staff_id", "staffs", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraintIfColumnExists("guardians", "fk_guardians_student", "student_id", "students", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("student_guardians", "fk_student_guardians_student", "student_id", "students", "id", "ON DELETE CASCADE"),
+		addForeignKeyConstraint("student_guardians", "fk_student_guardians_guardian", "guardian_id", "guardians", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("medical_records", "fk_medical_records_student", "student_id", "students", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("student_documents", "fk_student_documents_student", "student_id", "students", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("enrollments", "fk_enrollments_student", "student_id", "students", "id", "ON DELETE CASCADE"),
@@ -272,7 +349,7 @@ func relationshipConstraintStatements() []string {
 		addForeignKeyConstraint("parent_student_links", "fk_parent_student_links_student", "student_id", "students", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("attendance_sessions", "fk_attendance_sessions_section", "section_id", "sections", "id", "ON DELETE RESTRICT"),
 		addForeignKeyConstraint("attendance_sessions", "fk_attendance_sessions_subject", "subject_id", "subjects", "id", "ON DELETE RESTRICT"),
-		addForeignKeyConstraint("attendance_sessions", "fk_attendance_sessions_staff", "staff_id", "staff", "id", "ON DELETE RESTRICT"),
+		addForeignKeyConstraint("attendance_sessions", "fk_attendance_sessions_staff", "staff_id", "staffs", "id", "ON DELETE RESTRICT"),
 		addForeignKeyConstraint("student_attendances", "fk_student_attendances_session", "session_id", "attendance_sessions", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("student_attendances", "fk_student_attendances_student", "student_id", "students", "id", "ON DELETE CASCADE"),
 		addForeignKeyConstraint("student_attendances", "fk_student_attendances_enrollment", "enrollment_id", "enrollments", "id", "ON DELETE CASCADE"),
@@ -281,8 +358,15 @@ func relationshipConstraintStatements() []string {
 		addForeignKeyConstraint("payments", "fk_payments_invoice", "invoice_id", "fee_invoices", "id", "ON DELETE CASCADE"),
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_students_school_admission_number ON students (school_id, admission_number) WHERE admission_number <> '';",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_students_school_student_code ON students (school_id, student_code) WHERE student_code <> '';",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_school_staff_code ON staffs (school_id, staff_code) WHERE staff_code <> '';",
+		"CREATE INDEX IF NOT EXISTS idx_staff_subjects_staff_section_subject ON staff_subjects (staff_id, section_id, subject_id);",
+		"CREATE INDEX IF NOT EXISTS idx_staff_subjects_grade_subject ON staff_subjects (grade_id, subject_id);",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_sg_one_primary ON student_guardians(student_id) WHERE is_primary = true;",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_student_links_school_parent_student ON parent_student_links (school_id, parent_user_id, student_id);",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_enrollments_student_section_year ON enrollments (student_id, section_id, academic_year_id);",
+		"CREATE INDEX IF NOT EXISTS idx_students_school_id ON students(school_id);",
+		"CREATE INDEX IF NOT EXISTS idx_enrollments_school_student ON enrollments(student_id, section_id);",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_student_marks_unique ON student_marks(exam_schedule_id, student_id, enrollment_id);",
 		"CREATE INDEX IF NOT EXISTS idx_student_attendances_session_student ON student_attendances (session_id, student_id);",
 		"CREATE INDEX IF NOT EXISTS idx_attendance_sessions_section_date_period ON attendance_sessions (section_id, date, period_number);",
 	}
@@ -294,6 +378,30 @@ func addForeignKeyConstraint(table, constraintName, column, referenceTable, refe
 	}
 	return fmt.Sprintf(
 		"DO $$ BEGIN ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)%s; EXCEPTION WHEN duplicate_object THEN NULL; END $$;",
+		table,
+		constraintName,
+		column,
+		referenceTable,
+		referenceColumn,
+		onDelete,
+	)
+}
+
+func addForeignKeyConstraintIfColumnExists(table, constraintName, column, referenceTable, referenceColumn, onDelete string) string {
+	if onDelete != "" {
+		onDelete = " " + onDelete
+	}
+	return fmt.Sprintf(
+		`DO $$ BEGIN
+			IF EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = '%s' AND column_name = '%s'
+			) THEN
+				ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s(%s)%s;
+			END IF;
+		EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,
+		table,
+		column,
 		table,
 		constraintName,
 		column,

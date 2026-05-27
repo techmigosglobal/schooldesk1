@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,20 @@ type parentChildSummary struct {
 	CurrentSectionID  *string `json:"current_section_id"`
 	PendingFeeBalance float64 `json:"pending_fee_balance"`
 	PendingInvoices   int64   `json:"pending_invoices"`
+}
+
+type principalOperationalGap struct {
+	ID          string `json:"id"`
+	Category    string `json:"category"`
+	Severity    string `json:"severity"`
+	Title       string `json:"title"`
+	Message     string `json:"message"`
+	ActionLabel string `json:"action_label"`
+	Route       string `json:"route"`
+	EntityType  string `json:"entity_type"`
+	EntityID    string `json:"entity_id"`
+	EntityLabel string `json:"entity_label"`
+	Count       int64  `json:"count"`
 }
 
 func (h *DashboardHandler) Admin(c *gin.Context) {
@@ -129,7 +144,7 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 				(SELECT COUNT(*) FROM staffs WHERE school_id = ? AND status = 'active') AS total_staff,
 				(SELECT COUNT(*) FROM sections JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ?) AS total_classes,
 				(SELECT COUNT(*) FROM announcements WHERE school_id = ? AND is_urgent = true) AS urgent_notices,
-				(SELECT COUNT(*) FROM event_calendars WHERE school_id = ? AND start_datetime >= ?) AS upcoming_events,
+				(SELECT COUNT(*) FROM events WHERE school_id = ? AND start_date >= date(?)) AS upcoming_events,
 				(SELECT COUNT(*) FROM exams WHERE school_id = ? AND start_date >= ?) AS upcoming_exams,
 			COALESCE((SELECT SUM(fee_invoices.net_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_invoiced,
 			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_paid,
@@ -149,6 +164,11 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 		return
 	}
 	row.PendingApprovals = pendingApprovals
+	operationalGaps, err := principalOperationalGaps(schoolID, todayStart, todayEnd)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load principal operational gaps")
+		return
+	}
 	success(c, http.StatusOK, gin.H{
 		"role": "Principal",
 		"metrics": gin.H{
@@ -156,13 +176,490 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 			"total_staff":       row.TotalStaff,
 			"total_classes":     row.TotalClasses,
 			"pending_approvals": row.PendingApprovals,
+			"operational_gaps":  len(operationalGaps),
 			"urgent_notices":    row.UrgentNotices,
 			"upcoming_events":   row.UpcomingEvents,
 			"upcoming_exams":    row.UpcomingExams,
 		},
 		"fees":             buildFeeSummary(row.TotalInvoiced, row.TotalPaid, row.TotalBalance, row.PendingInvoices, row.PaidInvoices),
 		"today_attendance": buildAttendanceSummary(row.TodayPresent, row.TodayMarked, row.TodaySessions),
+		"operational_gaps": buildPrincipalOperationalGapSummary(operationalGaps),
 	}, "")
+}
+
+func principalOperationalGaps(schoolID string, todayStart, todayEnd time.Time) ([]principalOperationalGap, error) {
+	gaps := make([]principalOperationalGap, 0)
+	if err := appendParentLinkGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendClassTeacherGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendFeeStructureGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendSubjectCoverageGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendSubjectTeacherGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendTimetableGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendUnassignedTeacherGaps(&gaps, schoolID); err != nil {
+		return nil, err
+	}
+	if err := appendExamScheduleGaps(&gaps, schoolID, todayStart); err != nil {
+		return nil, err
+	}
+	if err := appendTodayAttendanceGaps(&gaps, schoolID, todayStart, todayEnd); err != nil {
+		return nil, err
+	}
+	if len(gaps) > 12 {
+		gaps = gaps[:12]
+	}
+	return gaps, nil
+}
+
+func buildPrincipalOperationalGapSummary(gaps []principalOperationalGap) gin.H {
+	critical := 0
+	warning := 0
+	info := 0
+	for _, gap := range gaps {
+		switch gap.Severity {
+		case "critical":
+			critical++
+		case "info":
+			info++
+		default:
+			warning++
+		}
+	}
+	return gin.H{
+		"total":    len(gaps),
+		"critical": critical,
+		"warning":  warning,
+		"info":     info,
+		"items":    gaps,
+	}
+}
+
+type principalGapClassRow struct {
+	SectionID   string
+	GradeID     string
+	GradeName   string
+	SectionName string
+	Count       int64
+}
+
+func appendParentLinkGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT COALESCE(sections.id, '') AS section_id,
+			COALESCE(grades.id, '') AS grade_id,
+			COALESCE(grades.grade_name, 'Unassigned') AS grade_name,
+			COALESCE(sections.section_name, 'No section') AS section_name,
+			COUNT(students.id) AS count
+		FROM students
+		LEFT JOIN sections ON sections.id = students.current_section_id
+		LEFT JOIN grades ON grades.id = sections.grade_id
+		LEFT JOIN parent_student_links
+			ON parent_student_links.student_id = students.id
+			AND parent_student_links.school_id = students.school_id
+		WHERE students.school_id = ?
+			AND students.status != 'inactive'
+			AND parent_student_links.id IS NULL
+		GROUP BY sections.id, grades.id, grades.grade_name, sections.section_name
+		ORDER BY count DESC, grades.grade_name ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-parent-link:" + firstNonEmpty(row.SectionID, "unassigned"),
+			Category:    "Guardians",
+			Severity:    "critical",
+			Title:       "Parent account link missing",
+			Message:     pluralize(row.Count, "student") + " in " + label + " " + pluralVerb(row.Count, "has", "have") + " no linked parent login.",
+			ActionLabel: "Link parent",
+			Route:       "guardianDirectory",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       row.Count,
+		})
+	}
+	return nil
+}
+
+func appendClassTeacherGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			1 AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		LEFT JOIN staffs
+			ON staffs.id = sections.class_teacher_id
+			AND staffs.school_id = grades.school_id
+			AND (staffs.status = '' OR LOWER(staffs.status) = 'active')
+		WHERE grades.school_id = ?
+			AND (sections.class_teacher_id IS NULL OR sections.class_teacher_id = '' OR staffs.id IS NULL)
+		ORDER BY grades.grade_number ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-class-teacher:" + row.SectionID,
+			Category:    "Classes",
+			Severity:    "critical",
+			Title:       "Class teacher not assigned",
+			Message:     label + " has no active class teacher linked.",
+			ActionLabel: "Assign teacher",
+			Route:       "principalClasses",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	return nil
+}
+
+func appendFeeStructureGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			1 AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		LEFT JOIN fee_structures
+			ON fee_structures.school_id = grades.school_id
+			AND fee_structures.grade_id = sections.grade_id
+			AND fee_structures.academic_year_id = sections.academic_year_id
+		WHERE grades.school_id = ?
+			AND fee_structures.id IS NULL
+		GROUP BY sections.id, grades.id, grades.grade_name, sections.section_name, grades.grade_number
+		ORDER BY grades.grade_number ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-fee-structure:" + row.SectionID,
+			Category:    "Fees",
+			Severity:    "critical",
+			Title:       "Fee structure missing",
+			Message:     label + " has no fee structure for its academic year.",
+			ActionLabel: "Create fees",
+			Route:       "feeMonitoring",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	return nil
+}
+
+func appendSubjectCoverageGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			1 AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		WHERE grades.school_id = ?
+			AND NOT EXISTS (
+				SELECT 1 FROM grade_subjects
+				WHERE grade_subjects.grade_id = grades.id
+			)
+		ORDER BY grades.grade_number ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-subject-coverage:" + row.SectionID,
+			Category:    "Subjects",
+			Severity:    "warning",
+			Title:       "Subject coverage missing",
+			Message:     label + " has no subjects mapped to its grade.",
+			ActionLabel: "Map subjects",
+			Route:       "principalSubjects",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	return nil
+}
+
+func appendSubjectTeacherGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			COUNT(DISTINCT grade_subjects.subject_id) AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		JOIN grade_subjects ON grade_subjects.grade_id = grades.id
+		WHERE grades.school_id = ?
+			AND NOT EXISTS (
+				SELECT 1
+				FROM staff_subjects
+				JOIN staffs ON staffs.id = staff_subjects.staff_id
+				WHERE staffs.school_id = grades.school_id
+					AND (staffs.status = '' OR LOWER(staffs.status) = 'active')
+					AND staff_subjects.grade_id = grades.id
+					AND staff_subjects.subject_id = grade_subjects.subject_id
+					AND (
+						staff_subjects.section_id IS NULL
+						OR staff_subjects.section_id = ''
+						OR staff_subjects.section_id = sections.id
+					)
+			)
+		GROUP BY sections.id, grades.id, grades.grade_name, sections.section_name, grades.grade_number
+		HAVING COUNT(DISTINCT grade_subjects.subject_id) > 0
+		ORDER BY count DESC, grades.grade_number ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-subject-teachers:" + row.SectionID,
+			Category:    "Subjects",
+			Severity:    "warning",
+			Title:       "Subject teachers missing",
+			Message:     pluralize(row.Count, "subject") + " in " + label + " " + pluralVerb(row.Count, "needs", "need") + " a teacher assignment.",
+			ActionLabel: "Assign teachers",
+			Route:       "principalSubjects",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       row.Count,
+		})
+	}
+	return nil
+}
+
+func appendTimetableGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			1 AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		WHERE grades.school_id = ?
+			AND NOT EXISTS (
+				SELECT 1 FROM timetable_slots
+				WHERE timetable_slots.section_id = sections.id
+					AND timetable_slots.academic_year_id = sections.academic_year_id
+			)
+		ORDER BY grades.grade_number ASC, sections.section_name ASC
+		LIMIT 6
+	`, schoolID).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-timetable:" + row.SectionID,
+			Category:    "Timetable",
+			Severity:    "warning",
+			Title:       "Timetable not created",
+			Message:     label + " has no timetable slots for its academic year.",
+			ActionLabel: "Build timetable",
+			Route:       "principalTimetable",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	return nil
+}
+
+func appendUnassignedTeacherGaps(gaps *[]principalOperationalGap, schoolID string) error {
+	var count int64
+	if err := database.DB.Raw(`
+		SELECT COUNT(*) AS count
+		FROM staffs
+		WHERE staffs.school_id = ?
+			AND (staffs.status = '' OR LOWER(staffs.status) = 'active')
+			AND LOWER(COALESCE(staffs.designation, '')) LIKE '%teacher%'
+			AND NOT EXISTS (SELECT 1 FROM sections WHERE sections.class_teacher_id = staffs.id)
+			AND NOT EXISTS (SELECT 1 FROM staff_subjects WHERE staff_subjects.staff_id = staffs.id)
+			AND NOT EXISTS (SELECT 1 FROM timetable_slots WHERE timetable_slots.staff_id = staffs.id)
+	`, schoolID).Scan(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "unassigned-teachers",
+			Category:    "Staff",
+			Severity:    "warning",
+			Title:       "Teachers without assignments",
+			Message:     pluralize(count, "active teacher") + " " + pluralVerb(count, "is", "are") + " not linked to a class, subject, or timetable.",
+			ActionLabel: "Review staff",
+			Route:       "staffManagement",
+			EntityType:  "staff",
+			EntityLabel: "Active teachers",
+			Count:       count,
+		})
+	}
+	return nil
+}
+
+func appendExamScheduleGaps(gaps *[]principalOperationalGap, schoolID string, todayStart time.Time) error {
+	var rows []struct {
+		ExamID   string
+		ExamName string
+		Count    int64
+	}
+	if err := database.DB.Raw(`
+		SELECT exams.id AS exam_id,
+			exams.exam_name AS exam_name,
+			1 AS count
+		FROM exams
+		WHERE exams.school_id = ?
+			AND exams.start_date >= ?
+			AND NOT EXISTS (
+				SELECT 1 FROM exam_schedules
+				WHERE exam_schedules.exam_id = exams.id
+			)
+		ORDER BY exams.start_date ASC
+		LIMIT 4
+	`, schoolID, todayStart).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := firstNonEmpty(strings.TrimSpace(row.ExamName), "Upcoming exam")
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "missing-exam-schedule:" + row.ExamID,
+			Category:    "Exams",
+			Severity:    "warning",
+			Title:       "Exam schedule incomplete",
+			Message:     label + " has no subject schedule yet.",
+			ActionLabel: "Review exams",
+			Route:       "principalExams",
+			EntityType:  "exam",
+			EntityID:    row.ExamID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	return nil
+}
+
+func appendTodayAttendanceGaps(gaps *[]principalOperationalGap, schoolID string, todayStart, todayEnd time.Time) error {
+	dayOfWeek := int(todayStart.Weekday())
+	if dayOfWeek == 0 {
+		dayOfWeek = 7
+	}
+	var rows []principalGapClassRow
+	if err := database.DB.Raw(`
+		SELECT sections.id AS section_id,
+			grades.id AS grade_id,
+			grades.grade_name AS grade_name,
+			sections.section_name AS section_name,
+			COUNT(DISTINCT timetable_slots.id) AS count
+		FROM sections
+		JOIN grades ON grades.id = sections.grade_id
+		JOIN timetable_slots
+			ON timetable_slots.section_id = sections.id
+			AND timetable_slots.academic_year_id = sections.academic_year_id
+			AND timetable_slots.day_of_week = ?
+		WHERE grades.school_id = ?
+			AND EXISTS (
+				SELECT 1 FROM students
+				WHERE students.current_section_id = sections.id
+					AND students.school_id = grades.school_id
+					AND students.status != 'inactive'
+			)
+			AND NOT EXISTS (
+				SELECT 1 FROM attendance_sessions
+				WHERE attendance_sessions.section_id = sections.id
+					AND attendance_sessions.date >= ?
+					AND attendance_sessions.date < ?
+			)
+		GROUP BY sections.id, grades.id, grades.grade_name, sections.section_name, grades.grade_number
+		ORDER BY count DESC, grades.grade_number ASC, sections.section_name ASC
+		LIMIT 4
+	`, dayOfWeek, schoolID, todayStart, todayEnd).Scan(&rows).Error; err != nil {
+		return err
+	}
+	for _, row := range rows {
+		label := principalGapClassLabel(row.GradeName, row.SectionName)
+		*gaps = append(*gaps, principalOperationalGap{
+			ID:          "attendance-unmarked:" + row.SectionID,
+			Category:    "Attendance",
+			Severity:    "info",
+			Title:       "Attendance not marked today",
+			Message:     label + " has scheduled classes today but no attendance session.",
+			ActionLabel: "Check attendance",
+			Route:       "principalAttendance",
+			EntityType:  "section",
+			EntityID:    row.SectionID,
+			EntityLabel: label,
+			Count:       row.Count,
+		})
+	}
+	return nil
+}
+
+func principalGapClassLabel(gradeName, sectionName string) string {
+	grade := strings.TrimSpace(gradeName)
+	section := strings.TrimSpace(sectionName)
+	if grade == "" {
+		grade = "Class"
+	}
+	if section == "" || strings.EqualFold(section, "No section") {
+		return grade
+	}
+	return grade + " " + section
+}
+
+func pluralize(count int64, singular string) string {
+	if count == 1 {
+		return "1 " + singular
+	}
+	label := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(singular), "s")) + "s"
+	return strconv.FormatInt(count, 10) + " " + label
+}
+
+func pluralVerb(count int64, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
 }
 
 var principalApprovalResources = []string{
@@ -235,8 +732,8 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 			(SELECT COUNT(*) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?) AS today_sessions,
 			COALESCE((SELECT SUM(present_count) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?), 0) AS today_present,
 			COALESCE((SELECT SUM(total_students) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?), 0) AS today_marked,
-			(SELECT COUNT(*) FROM homeworks WHERE school_id = ? AND teacher_id = ?) AS homework_total,
-			(SELECT COUNT(*) FROM homeworks WHERE school_id = ? AND teacher_id = ? AND due_date >= ? AND status != 'completed') AS homework_due,
+			(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ?) AS homework_total,
+			(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ? AND submission_date >= ? AND status NOT IN ('completed', 'closed')) AS homework_due,
 			(SELECT COUNT(*) FROM diary_entries WHERE school_id = ? AND teacher_id = ? AND entry_date >= ? AND entry_date < ?) AS diary_today,
 			(SELECT COUNT(*) FROM messages JOIN message_conversations ON message_conversations.id = messages.conversation_id WHERE message_conversations.school_id = ? AND message_conversations.teacher_id = ? AND messages.sender_role = 'parent' AND messages.is_read = false) AS unread_messages
 	`, schoolID, staffID, staffID, schoolID, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, schoolID, staffID, schoolID, staffID, todayStart, schoolID, staffID, todayStart, todayEnd, schoolID, staffID).Scan(&row).Error; err != nil {
@@ -304,7 +801,9 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 			(SELECT COUNT(*) FROM student_attendances WHERE student_id IN (SELECT student_id FROM linked_students)) AS attendance_marked,
 			COALESCE((SELECT SUM(balance) FROM fee_invoices WHERE student_id IN (SELECT student_id FROM linked_students) AND status != 'paid'), 0) AS pending_fees,
 			(SELECT COUNT(*) FROM fee_invoices WHERE student_id IN (SELECT student_id FROM linked_students) AND status != 'paid') AS pending_invoices,
-			(SELECT COUNT(*) FROM homeworks WHERE school_id = ? AND student_id IN (SELECT student_id FROM linked_students) AND status != 'completed') AS homework_open,
+			(SELECT COUNT(*) FROM homework WHERE school_id = ? AND section_id IN (
+				SELECT current_section_id FROM students WHERE id IN (SELECT student_id FROM linked_students)
+			) AND status NOT IN ('completed', 'closed')) AS homework_open,
 			(SELECT COUNT(*) FROM messages JOIN message_conversations ON message_conversations.id = messages.conversation_id WHERE message_conversations.school_id = ? AND message_conversations.parent_id = ? AND messages.sender_role = 'teacher' AND messages.is_read = false) AS unread_messages
 	`, schoolID, userID, schoolID, schoolID, userID).Scan(&row).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load parent dashboard")

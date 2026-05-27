@@ -163,6 +163,7 @@ type NotificationLog struct {
 	ReferenceType   string     `gorm:"type:text" json:"reference_type"`
 	ReferenceID     *string    `gorm:"type:text" json:"reference_id"`
 	IsRead          bool       `gorm:"default:false" json:"is_read"`
+	ReadAt          *time.Time `json:"read_at,omitempty"`
 	SentAt          time.Time  `json:"sent_at"`
 	DeliveryStatus  string     `gorm:"type:text;default:'pending'" json:"delivery_status"`
 	PushStatus      string     `gorm:"type:text;default:'pending'" json:"push_status"`

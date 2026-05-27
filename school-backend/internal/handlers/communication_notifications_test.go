@@ -193,14 +193,18 @@ func TestMessageCreateNormalizesSenderAndNotifiesRecipient(t *testing.T) {
 func TestHomeworkCreateNotifiesLinkedParent(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
-	handler := NewCRUDHandler[models.Homework]("homework", "homework", []string{"title"}, true)
+	resource, ok := TablesMDResourceFor("homework")
+	if !ok {
+		t.Fatal("homework tables.md resource missing")
+	}
+	handler := NewTablesMDCRUDHandler(resource)
 	router.POST("/homework", handler.Create)
 
 	resp := httptest.NewRecorder()
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/homework",
-		strings.NewReader(`{"title":"Fractions worksheet","subject":"Mathematics","class":"Grade 8 A","section_id":"`+f.sectionID+`","teacher_id":"`+f.teacherStaffID+`","student_id":"`+f.studentID+`","description":"Complete exercise 3","due_date":"2026-05-30T00:00:00Z","status":"pending"}`),
+		strings.NewReader(`{"title":"Fractions worksheet","subject_id":"`+f.subjectID+`","class_id":"Grade 8 A","section_id":"`+f.sectionID+`","staff_id":"`+f.teacherStaffID+`","description":"Complete exercise 3","submission_date":"2026-05-30","status":"pending"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(resp, req)
