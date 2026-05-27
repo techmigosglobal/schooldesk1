@@ -453,14 +453,14 @@ func seedData() error {
 	}
 	DB.Create(&grade2)
 
-	grade10ID := "990e8400-e29b-41d4-a716-446655440010"
-	grade10 := models.Grade{
-		BaseModel:   models.BaseModel{ID: grade10ID},
+	pp1ID := "990e8400-e29b-41d4-a716-446655440010"
+	pp1 := models.Grade{
+		BaseModel:   models.BaseModel{ID: pp1ID},
 		SchoolID:    schoolID,
-		GradeNumber: 10,
-		GradeName:   "Grade 10",
+		GradeNumber: 0,
+		GradeName:   "PP1",
 	}
-	DB.Create(&grade10)
+	DB.Create(&pp1)
 
 	subjID := "aa0e8400-e29b-41d4-a716-446655440001"
 	subj := models.Subject{
@@ -489,7 +489,7 @@ func seedData() error {
 	sectionID := "bb0e8400-e29b-41d4-a716-446655440001"
 	section := models.Section{
 		BaseModel:      models.BaseModel{ID: sectionID},
-		GradeID:        grade10ID,
+		GradeID:        pp1ID,
 		AcademicYearID: yearID,
 		SectionName:    "A",
 		Capacity:       40,
@@ -638,7 +638,7 @@ func seedData() error {
 		BaseModel:      models.BaseModel{ID: feeStructID},
 		SchoolID:       schoolID,
 		AcademicYearID: yearID,
-		GradeID:        grade10ID,
+		GradeID:        pp1ID,
 		FeeCategoryID:  feeCatID,
 		Amount:         5000,
 		DueDay:         10,

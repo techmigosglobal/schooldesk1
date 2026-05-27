@@ -474,7 +474,7 @@ func (v *verifier) runTeacherHomeworkFlow() {
 	v.expectDataID("Teacher creates homework assignment", http.MethodPost, "/homework", "Teacher", "Teacher", map[string]any{
 		"title":       "Local Docker Homework " + v.suffix,
 		"subject":     "Mathematics",
-		"class":       "Grade 10 A",
+		"class":       "PP1 A",
 		"section_id":  v.ids["default_section"],
 		"teacher_id":  v.ids["teacher_staff"],
 		"student_id":  v.ids["payment_student"],
@@ -490,7 +490,7 @@ func (v *verifier) runTeacherHomeworkFlow() {
 	v.expect("Teacher updates homework assignment", http.MethodPut, "/homework/"+v.ids["homework"], "Teacher", "Teacher", map[string]any{
 		"title":       "Local Docker Homework Updated " + v.suffix,
 		"subject":     "Mathematics",
-		"class":       "Grade 10 A",
+		"class":       "PP1 A",
 		"section_id":  v.ids["default_section"],
 		"teacher_id":  v.ids["teacher_staff"],
 		"student_id":  v.ids["payment_student"],

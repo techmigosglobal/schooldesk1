@@ -43,16 +43,11 @@ class _ParentPaymentRequestFormScreenState
   late final TextEditingController _referenceController;
   late final TextEditingController _paymentDateController;
   final _remarksController = TextEditingController();
-  String _paymentMode = 'UPI';
+  String _paymentMode = 'cash';
   bool _submitting = false;
   int _selectedNavIndex = 6;
 
-  static const _paymentModes = [
-    ('UPI', Icons.qr_code_rounded),
-    ('Online Transfer', Icons.account_balance_rounded),
-    ('Debit/Credit Card', Icons.credit_card_rounded),
-    ('Cash at School', Icons.money_rounded),
-  ];
+  static const _paymentModes = [('cash', 'Cash', Icons.money_rounded)];
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -138,7 +133,7 @@ class _ParentPaymentRequestFormScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : 'Submit INR ${_totalAmount.toStringAsFixed(0)}',
+                    : 'Submit Cash ₹${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -356,14 +351,14 @@ class _ParentPaymentRequestFormScreenState
                   child: Row(
                     children: [
                       Icon(
-                        mode.$2,
+                        mode.$3,
                         size: 18,
                         color: selected ? AppTheme.primary : AppTheme.muted,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          mode.$1,
+                          mode.$2,
                           style: GoogleFonts.dmSans(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -412,7 +407,7 @@ class _ParentPaymentRequestFormScreenState
                 receiptNumber: _referenceController.text.trim(),
                 amountPaid: (fee['amount'] as num?)?.toDouble() ?? 0,
                 paymentDate: _paymentDateController.text.trim(),
-                paymentMode: _paymentMode,
+                paymentMode: 'cash',
               ),
               remarks: _remarksController.text.trim(),
             );

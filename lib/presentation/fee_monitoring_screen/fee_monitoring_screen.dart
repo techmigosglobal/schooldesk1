@@ -13,13 +13,11 @@ class FeeMonitoringScreen extends StatefulWidget {
   State<FeeMonitoringScreen> createState() => _FeeMonitoringScreenState();
 }
 
-class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   String _searchQuery = '';
   String _selectedClass = 'All';
   String _selectedStatus = 'All';
-  String _selectedView = 'Student Fees';
+  String _selectedView = 'Overview';
 
   List<Map<String, dynamic>> _feeStructures = [];
   List<Map<String, dynamic>> _studentFees = [];
@@ -28,7 +26,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   List<Map<String, dynamic>> _feeCategories = [];
   List<AcademicYearModel> _academicYears = [];
   List<GradeModel> _grades = [];
-  List<StudentModel> _students = [];
   bool _loading = true;
   String? _error;
 
@@ -37,7 +34,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
     _loadData();
   }
 
@@ -54,7 +50,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
       final feeCategories = await api.getRawList('/fees/categories');
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
-      final students = await api.getStudents(page: 1, pageSize: 500);
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
@@ -64,7 +59,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
         _feeCategories = feeCategories;
         _academicYears = academicYears;
         _grades = grades;
-        _students = students.data;
         _loading = false;
       });
     } catch (error) {
@@ -77,12 +71,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return _buildBody();
   }
@@ -90,9 +78,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   Widget _buildBody() {
     final cards = _feeDirectoryCards;
     return PrincipalDirectoryScaffold(
-      title: 'Fees Directory',
-      subtitle:
-          'Collection overview, invoices, structures, payments, concessions, and exports',
+      title: 'Fee Dashboard',
+      subtitle: 'Collection, pending dues, receipts, and class-wise fee setup',
       loading: _loading,
       error: _error,
       onRefresh: _loadData,
@@ -128,19 +115,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   }
 
   Widget _buildDirectoryFilters() {
-    final classes = [
-      'All',
+    final realClasses = [
       ..._studentFees
           .map((row) => _textValue(row['class']))
           .where((value) => value.isNotEmpty)
+          .where((value) => value.toLowerCase() != 'class not assigned')
           .toSet(),
     ];
+    final classes = ['All Classes', ...realClasses];
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 4, 22, 4),
       child: Column(
         children: [
           PrincipalDirectorySearchBox(
-            hint: 'Search student, invoice, class, or payment...',
+            hint: 'Search student, class, invoice, fee type...',
             onChanged: (value) => setState(() => _searchQuery = value),
           ),
           const SizedBox(height: 14),
@@ -152,11 +140,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
               children: [
                 for (final option in const [
                   ('Overview', Icons.insights_outlined),
+                  ('Class Fees', Icons.class_outlined),
                   ('Student Fees', Icons.receipt_long_outlined),
-                  ('Structures', Icons.price_change_outlined),
-                  ('Fee Elements', Icons.category_outlined),
                   ('Payments', Icons.payments_outlined),
                   ('Concessions', Icons.volunteer_activism_outlined),
+                  ('Analytics', Icons.bar_chart_rounded),
+                  ('Fee Types', Icons.category_outlined),
                 ])
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -170,7 +159,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
               ],
             ),
           ),
-          if (_selectedView == 'Student Fees') ...[
+          if (_selectedView == 'Student Fees' && realClasses.isNotEmpty) ...[
             const SizedBox(height: 10),
             SizedBox(
               height: 42,
@@ -183,14 +172,22 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
                       padding: const EdgeInsets.only(right: 8),
                       child: PrincipalDirectoryChip(
                         label: classValue,
-                        selected: _selectedClass == classValue,
-                        onTap: () =>
-                            setState(() => _selectedClass = classValue),
+                        selected:
+                            (_selectedClass == 'All' &&
+                                classValue == 'All Classes') ||
+                            _selectedClass == classValue,
+                        onTap: () => setState(
+                          () => _selectedClass = classValue == 'All Classes'
+                              ? 'All'
+                              : classValue,
+                        ),
                       ),
                     ),
                 ],
               ),
             ),
+          ],
+          if (_selectedView == 'Student Fees') ...[
             const SizedBox(height: 10),
             SizedBox(
               height: 42,
@@ -202,7 +199,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
                     Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: PrincipalDirectoryChip(
-                        label: status,
+                        label: status == 'All' ? 'All Status' : status,
                         selected: _selectedStatus == status,
                         onTap: () => setState(() => _selectedStatus = status),
                       ),
@@ -217,71 +214,122 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   }
 
   Widget _buildDirectoryMetrics() {
-    return PrincipalDirectoryMetricStrip(
-      metrics: [
-        PrincipalDirectoryMetric(
-          label: 'Actual Fee',
-          value: _money(_totalActual),
-          icon: Icons.price_change_outlined,
-          color: Colors.indigo,
-          tone: const Color(0xFFEFF6FF),
-        ),
-        PrincipalDirectoryMetric(
-          label: 'Discount Given',
-          value: _money(_totalDiscount),
-          icon: Icons.discount_outlined,
-          color: Colors.deepPurple,
-          tone: const Color(0xFFF5F3FF),
-        ),
-        PrincipalDirectoryMetric(
-          label: 'To Be Paid',
-          value: _money(_totalPending),
-          icon: Icons.pending_actions_outlined,
-          color: Colors.orange,
-          tone: const Color(0xFFFFF7ED),
-        ),
-        PrincipalDirectoryMetric(
-          label: 'Collected',
-          value: _money(_totalCollected),
-          icon: Icons.payments_outlined,
-          color: Colors.green,
-          tone: const Color(0xFFECFDF3),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.52,
+        children: [
+          _FeeDashboardMetricCard(
+            title: 'Total Collection',
+            value: _money(_totalCollected),
+            subtitle: 'This academic year',
+            icon: Icons.account_balance_wallet_outlined,
+            color: const Color(0xFF3157F6),
+          ),
+          _FeeDashboardMetricCard(
+            title: 'Fees Pending',
+            value: _money(_totalPending),
+            subtitle: 'From $_pendingStudentCount students',
+            icon: Icons.pending_actions_outlined,
+            color: const Color(0xFF18B57D),
+          ),
+          _FeeDashboardMetricCard(
+            title: 'Today Collection',
+            value: _money(_todayCollection),
+            subtitle: _dateLabel(DateTime.now()),
+            icon: Icons.receipt_long_outlined,
+            color: const Color(0xFF8751F4),
+          ),
+          _FeeDashboardMetricCard(
+            title: 'Overdue Students',
+            value: '$_overdueStudentCount',
+            subtitle: 'Need attention',
+            icon: Icons.notifications_active_outlined,
+            color: const Color(0xFFFF8A12),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildDirectoryQuickActions() {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        OutlinedButton.icon(
-          onPressed: _showFeeStructureForm,
-          icon: const Icon(Icons.price_change_outlined),
-          label: const Text('Add Class-wise Fee'),
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                'Quick Actions',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _selectedView = 'Class Fees'),
+              child: const Text('View All'),
+            ),
+          ],
         ),
-        OutlinedButton.icon(
-          onPressed: _showManualEntrySheet,
-          icon: const Icon(Icons.add_card_outlined),
-          label: const Text('Add Student Fee'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _generateStudentFeeRecords,
-          icon: const Icon(Icons.receipt_long_outlined),
-          label: const Text('Generate Records'),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => _showPaymentSheet(
-            _studentFees.isEmpty ? null : _studentFees.first,
-          ),
-          icon: const Icon(Icons.payments_outlined),
-          label: const Text('Payment Received'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _exportFeeReport,
-          icon: const Icon(Icons.file_download_outlined),
-          label: const Text('Export'),
+        const SizedBox(height: 8),
+        GridView.count(
+          crossAxisCount: 3,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 1.06,
+          children: [
+            _FeeQuickActionTile(
+              label: 'Add Fee Structure',
+              icon: Icons.add_circle_outline_rounded,
+              color: const Color(0xFF3157F6),
+              onTap: _showFeeStructureForm,
+            ),
+            _FeeQuickActionTile(
+              label: 'Class Fee Info',
+              icon: Icons.class_outlined,
+              color: const Color(0xFF1984E8),
+              onTap: () => setState(() => _selectedView = 'Class Fees'),
+            ),
+            _FeeQuickActionTile(
+              label: 'Collect Payment',
+              icon: Icons.payments_outlined,
+              color: const Color(0xFF18B57D),
+              onTap: () => _showPaymentSheet(_firstCollectibleInvoice),
+            ),
+            _FeeQuickActionTile(
+              label: 'Generate Receipt',
+              icon: Icons.receipt_outlined,
+              color: const Color(0xFF8751F4),
+              onTap: () {
+                final invoice = _studentFees
+                    .where((row) => _numValue(row['paid']) > 0)
+                    .firstOrNull;
+                if (invoice == null) {
+                  _snack('No paid invoice is available for receipt preview');
+                  return;
+                }
+                _printReceiptFromInvoice(invoice);
+              },
+            ),
+            _FeeQuickActionTile(
+              label: 'Concessions',
+              icon: Icons.volunteer_activism_outlined,
+              color: const Color(0xFFFF8A12),
+              onTap: () => setState(() => _selectedView = 'Concessions'),
+            ),
+            _FeeQuickActionTile(
+              label: 'Analytics',
+              icon: Icons.bar_chart_rounded,
+              color: const Color(0xFFE84D68),
+              onTap: () => setState(() => _selectedView = 'Analytics'),
+            ),
+          ],
         ),
       ],
     );
@@ -290,10 +338,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   List<Widget> get _feeDirectoryCards {
     return switch (_selectedView) {
       'Overview' => _overviewCards,
-      'Structures' => [
+      'Class Fees' => [
         for (final row in _feeStructures) _buildStructureCard(row),
       ],
-      'Fee Elements' => [
+      'Fee Types' => [
         for (final row in _feeCategories) _buildFeeCategoryCard(row),
       ],
       'Payments' => [
@@ -302,6 +350,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
       'Concessions' => [
         for (final row in _filteredConcessionRows) _buildConcessionCard(row),
       ],
+      'Analytics' => _analyticsCards,
       _ => [for (final row in _filteredStudents) _buildStudentFeeCard(row)],
     };
   }
@@ -331,13 +380,112 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
     ];
   }
 
+  List<Widget> get _analyticsCards {
+    final totalInvoiced = _studentFees.fold(
+      0.0,
+      (sum, row) => sum + _numValue(row['total']),
+    );
+    final paidPct = totalInvoiced <= 0
+        ? 0
+        : ((_totalCollected / totalInvoiced) * 100).clamp(0, 100);
+    final classesCovered = _feeStructures
+        .map((row) => _textValue(row['class']))
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .length;
+    return [
+      PrincipalDirectoryCard(
+        icon: Icons.pie_chart_outline_rounded,
+        title: 'Collection Rate',
+        subtitle: 'Collected against total invoiced fees',
+        status: '${paidPct.toStringAsFixed(0)}%',
+        statusColor: AppTheme.success,
+        chips: [
+          PrincipalInfoPill(
+            icon: Icons.account_balance_wallet_outlined,
+            label: 'Collected ${_money(_totalCollected)}',
+          ),
+          PrincipalInfoPill(
+            icon: Icons.receipt_long_outlined,
+            label: 'Invoiced ${_money(totalInvoiced)}',
+          ),
+        ],
+      ),
+      PrincipalDirectoryCard(
+        icon: Icons.class_outlined,
+        title: 'Class Fee Coverage',
+        subtitle: 'Classes with configured fee structures',
+        status: '$classesCovered classes',
+        statusColor: AppTheme.primary,
+        chips: [
+          PrincipalInfoPill(
+            icon: Icons.price_change_outlined,
+            label: '${_feeStructures.length} structures',
+          ),
+          PrincipalInfoPill(
+            icon: Icons.category_outlined,
+            label: '${_feeCategories.length} fee types',
+          ),
+        ],
+        onTap: () => setState(() => _selectedView = 'Class Fees'),
+      ),
+      PrincipalDirectoryCard(
+        icon: Icons.warning_amber_rounded,
+        title: 'Pending and Overdue',
+        subtitle: 'Students needing fee follow-up',
+        status: '$_overdueStudentCount overdue',
+        statusColor: AppTheme.warning,
+        chips: [
+          PrincipalInfoPill(
+            icon: Icons.pending_actions_outlined,
+            label: 'Pending ${_money(_totalPending)}',
+          ),
+          PrincipalInfoPill(
+            icon: Icons.people_outline_rounded,
+            label: '$_pendingStudentCount students',
+          ),
+        ],
+        onTap: () => setState(() => _selectedView = 'Student Fees'),
+      ),
+      PrincipalDirectoryCard(
+        icon: Icons.volunteer_activism_outlined,
+        title: 'Concessions Provided',
+        subtitle: 'Concession requests and decisions recorded',
+        status: '${_concessionRequests.length} requests',
+        statusColor: AppTheme.primary,
+        onTap: () => setState(() => _selectedView = 'Concessions'),
+      ),
+      PrincipalDirectoryCard(
+        icon: Icons.file_download_outlined,
+        title: 'Fee Analytics Export',
+        subtitle: 'Generate the backend fee report for this selection',
+        status: 'Report',
+        statusColor: AppTheme.success,
+        chips: [
+          PrincipalInfoPill(
+            icon: Icons.filter_alt_outlined,
+            label: 'Class $_selectedClass',
+          ),
+          PrincipalInfoPill(
+            icon: Icons.verified_outlined,
+            label: 'Status $_selectedStatus',
+          ),
+        ],
+        onTap: _exportFeeReport,
+      ),
+    ];
+  }
+
   Widget _buildStudentFeeCard(Map<String, dynamic> row) {
     final status = _statusForInvoice(row);
+    final total = _numValue(row['total']);
+    final paid = _numValue(row['paid']);
+    final paidPct = total <= 0 ? 0 : ((paid / total) * 100).clamp(0, 100);
     return PrincipalDirectoryCard(
       icon: Icons.receipt_long_outlined,
       title: _textValue(row['name'], fallback: 'Student'),
       subtitle:
-          '${_textValue(row['class'], fallback: 'Class pending')} | Due ${_dateLabel(row['due_date'])}',
+          '${_textValue(row['class'], fallback: 'Class not assigned')} | Due ${_dateLabel(row['due_date'])}',
       status: status,
       statusColor: _statusColor(status),
       chips: [
@@ -348,6 +496,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
         PrincipalInfoPill(
           icon: Icons.pending_actions_outlined,
           label: 'Balance ${_money(_numValue(row['balance']))}',
+        ),
+        PrincipalInfoPill(
+          icon: Icons.pie_chart_outline_rounded,
+          label: '${paidPct.toStringAsFixed(0)}% paid',
         ),
       ],
       trailing: PopupMenuButton<String>(
@@ -487,73 +639,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
   Future<void> _openInvoiceDetail(Map<String, dynamic> row) async {
     final action = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (detailContext) => PrincipalDetailPage(
-          title: _textValue(row['name'], fallback: 'Student Fee'),
-          menuItems: const [
-            PopupMenuItem(value: 'payment', child: Text('Record payment')),
-            PopupMenuItem(value: 'receipt', child: Text('Preview receipt')),
-          ],
-          onMenuSelected: (value) => Navigator.pop(detailContext, value),
-          children: [
-            PrincipalDetailCard(
-              title: 'Invoice Details',
-              trailing: PrincipalStatusPill(
-                label: _statusForInvoice(row),
-                color: _statusColor(_statusForInvoice(row)),
-              ),
-              children: [
-                PrincipalDetailRow(
-                  label: 'Student',
-                  value: _textValue(row['name'], fallback: 'Student'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Class',
-                  value: _textValue(row['class'], fallback: 'Class pending'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Invoice',
-                  value: _textValue(row['invoice_number'], fallback: '-'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Due date',
-                  value: _dateLabel(row['due_date']),
-                ),
-                PrincipalDetailRow(
-                  label: 'Actual fee',
-                  value: _money(_numValue(row['total'])),
-                ),
-                PrincipalDetailRow(
-                  label: 'Discount',
-                  value: _money(_numValue(row['discount'])),
-                ),
-                PrincipalDetailRow(
-                  label: 'Paid',
-                  value: _money(_numValue(row['paid'])),
-                ),
-                PrincipalDetailRow(
-                  label: 'Balance',
-                  value: _money(_numValue(row['balance'])),
-                ),
-              ],
-            ),
-            PrincipalDetailCard(
-              title: 'Actions',
-              children: [
-                PrincipalActionTile(
-                  icon: Icons.payments_outlined,
-                  title: 'Record payment',
-                  subtitle: 'Post a payment against this invoice',
-                  onTap: () => Navigator.pop(detailContext, 'payment'),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.picture_as_pdf_outlined,
-                  title: 'Preview receipt',
-                  subtitle: 'Generate and preview fee receipt PDF',
-                  onTap: () => Navigator.pop(detailContext, 'receipt'),
-                ),
-              ],
-            ),
-          ],
+        builder: (detailContext) => _FeeInvoiceDetailPage(
+          invoice: row,
+          status: _statusForInvoice(row),
+          onCollectPayment: () => Navigator.pop(detailContext, 'payment'),
+          onReceipt: () => Navigator.pop(detailContext, 'receipt'),
         ),
       ),
     );
@@ -588,23 +678,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
         ),
       ),
     );
-  }
-
-  Future<void> _showManualEntrySheet() async {
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalInputPage(
-          title: 'Add Student Fee Entry',
-          icon: Icons.add_card_outlined,
-          child: _ManualFeeEntrySheet(
-            students: _students,
-            feeCategories: _feeCategories,
-            onSubmit: _createManualInvoice,
-          ),
-        ),
-      ),
-    );
-    if (result == true) await _loadData();
   }
 
   Future<void> _showFeeStructureForm({Map<String, dynamic>? structure}) async {
@@ -738,21 +811,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
     }
   }
 
-  Future<bool> _createManualInvoice(Map<String, dynamic> payload) async {
-    try {
-      /*
-      createRaw(
-        '/fees/invoices'
-      */
-      await BackendApiClient.instance.createRaw('/fees/invoices', payload);
-      _snack('Student fee entry saved', success: true);
-      return true;
-    } catch (error) {
-      _snack('Unable to save student fee entry: $error');
-      return false;
-    }
-  }
-
   Future<void> _generateStudentFeeRecords({Map<String, dynamic>? seed}) async {
     final year =
         _academicYears
@@ -799,27 +857,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
     }
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => PrincipalInputPage(
-          title: 'Payment Received Now',
-          icon: Icons.payments_outlined,
-          child: _PaymentEntryForm(
-            invoice: invoice,
-            balance: _numValue(invoice['balance']),
-            onSubmit: (amount, receipt) async {
-              await BackendApiClient.instance.recordPayment(
-                PaymentRequest(
-                  invoiceId: _textValue(invoice['id']),
-                  receiptNumber: receipt,
-                  amountPaid: amount,
-                  paymentDate: DateTime.now()
-                      .toIso8601String()
-                      .split('T')
-                      .first,
-                  paymentMode: 'cash',
-                ),
-              );
-            },
-          ),
+        builder: (_) => _CashPaymentPage(
+          invoice: invoice,
+          onSubmit: (amount, receipt, remarks) async {
+            await BackendApiClient.instance.recordPayment(
+              PaymentRequest(
+                invoiceId: _textValue(invoice['id']),
+                receiptNumber: receipt,
+                amountPaid: amount,
+                paymentDate: DateTime.now().toIso8601String().split('T').first,
+                paymentMode: 'cash',
+                transactionId: remarks.trim().isEmpty ? null : remarks.trim(),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -960,7 +1011,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
         fallback: _textValue(invoice['student_name']),
       ),
       'class': classLabel.isEmpty
-          ? _textValue(invoice['class'], fallback: 'Class pending')
+          ? _textValue(invoice['class'], fallback: 'Class not assigned')
           : classLabel,
       'total': _numValue(invoice['total_amount'] ?? invoice['net_amount']),
       'discount': _numValue(invoice['discount_amount']),
@@ -1004,14 +1055,25 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
     return 'Pending';
   }
 
-  double get _totalActual =>
-      _studentFees.fold(0, (sum, row) => sum + _numValue(row['total']));
-  double get _totalDiscount =>
-      _studentFees.fold(0, (sum, row) => sum + _numValue(row['discount']));
   double get _totalPending =>
       _studentFees.fold(0, (sum, row) => sum + _numValue(row['balance']));
   double get _totalCollected =>
       _studentFees.fold(0, (sum, row) => sum + _numValue(row['paid']));
+  int get _pendingStudentCount =>
+      _studentFees.where((row) => _numValue(row['balance']) > 0).length;
+  int get _overdueStudentCount =>
+      _studentFees.where((row) => _statusForInvoice(row) == 'Overdue').length;
+  double get _todayCollection {
+    final today = DateTime.now().toIso8601String().split('T').first;
+    return _recentPayments
+        .where((row) => _dateLabel(row['date']) == today)
+        .fold(0, (sum, row) => sum + _numValue(row['amount']));
+  }
+
+  Map<String, dynamic>? get _firstCollectibleInvoice {
+    final rows = _studentFees.where((row) => _numValue(row['balance']) > 0);
+    return rows.isEmpty ? null : rows.first;
+  }
 
   Color _statusColor(String status) {
     final lower = status.toLowerCase();
@@ -1071,6 +1133,925 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen>
       ),
     );
   }
+}
+
+class _FeeDashboardMetricCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  const _FeeDashboardMetricCard({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, color.withAlpha(215)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(45),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Container(
+                width: 27,
+                height: 27,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(32),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: Colors.white, size: 16),
+              ),
+            ],
+          ),
+          const Spacer(),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withAlpha(220),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeeQuickActionTile extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _FeeQuickActionTile({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE3EDF5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: color.withAlpha(18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 17),
+              ),
+              const Spacer(),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  height: 1.15,
+                  fontWeight: FontWeight.w900,
+                  color: principalDirectoryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeeInvoiceDetailPage extends StatelessWidget {
+  final Map<String, dynamic> invoice;
+  final String status;
+  final VoidCallback onCollectPayment;
+  final VoidCallback onReceipt;
+
+  const _FeeInvoiceDetailPage({
+    required this.invoice,
+    required this.status,
+    required this.onCollectPayment,
+    required this.onReceipt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _num(invoice['total']);
+    final paid = _num(invoice['paid']);
+    final balance = _num(invoice['balance']);
+    final progress = total <= 0 ? 0.0 : (paid / total).clamp(0.0, 1.0);
+    final items = _items(invoice);
+    final payments = _payments(invoice);
+
+    return Scaffold(
+      backgroundColor: principalDirectoryBackground,
+      appBar: AppBar(
+        backgroundColor: principalDirectoryBackground,
+        elevation: 0,
+        title: const Text('Student Fee Details'),
+        actions: [
+          IconButton(
+            tooltip: 'Receipt',
+            onPressed: paid > 0 ? onReceipt : null,
+            icon: const Icon(Icons.receipt_long_outlined),
+          ),
+        ],
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x1F7FA6BD),
+                blurRadius: 16,
+                offset: Offset(0, -5),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: balance > 0 ? onCollectPayment : null,
+                  child: Text('Collect ${_money(balance)}'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: balance > 0
+                      ? () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Reminder queue is not connected yet. Use contact workflow after selecting the student.',
+                              ),
+                            ),
+                          );
+                        }
+                      : null,
+                  child: const Text('Send Reminder'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            _detailPanel(
+              child: Row(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.account_circle_outlined,
+                      color: principalDirectoryAccent,
+                      size: 42,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _text(invoice['name'], fallback: 'Student'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: principalDirectoryText,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          _text(
+                            invoice['class'],
+                            fallback: 'Class not assigned',
+                          ),
+                          style: const TextStyle(
+                            color: principalDirectoryMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Invoice ${_text(invoice['invoice_number'], fallback: '-')}',
+                          style: const TextStyle(
+                            color: principalDirectoryMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  PrincipalStatusPill(
+                    label: status,
+                    color: _statusColor(status),
+                  ),
+                ],
+              ),
+            ),
+            _detailPanel(
+              title: 'Fee Summary',
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 108,
+                    height: 108,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 94,
+                          height: 94,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 13,
+                            backgroundColor: const Color(0xFFEFF3F8),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Color(0xFF18B57D),
+                            ),
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(progress * 100).toStringAsFixed(0)}%',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w900,
+                                color: principalDirectoryText,
+                              ),
+                            ),
+                            const Text(
+                              'Paid',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: principalDirectoryMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _amountRow(
+                          'Total Fees',
+                          _money(total),
+                          const Color(0xFF3157F6),
+                        ),
+                        _amountRow(
+                          'Paid Fees',
+                          _money(paid),
+                          const Color(0xFF18B57D),
+                        ),
+                        _amountRow(
+                          'Pending Fees',
+                          _money(balance),
+                          const Color(0xFFE84D68),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _detailPanel(
+              title: 'Fee Breakdown',
+              child: Column(
+                children: [
+                  if (items.isEmpty)
+                    _emptyText('No invoice item breakdown is available.')
+                  else
+                    for (final item in items)
+                      _breakdownRow(
+                        title: _text(
+                          item['description'] ??
+                              _map(item['fee_category'])['category_name'],
+                          fallback: 'Fee item',
+                        ),
+                        amount: _num(item['amount']),
+                        balance: balance,
+                        paid: paid,
+                      ),
+                ],
+              ),
+            ),
+            _detailPanel(
+              title: 'Payments',
+              child: Column(
+                children: [
+                  if (payments.isEmpty)
+                    _emptyText('No payment has been recorded yet.')
+                  else
+                    for (final payment in payments)
+                      _paymentRow(
+                        amount: _num(payment['amount_paid']),
+                        mode: _text(payment['payment_mode'], fallback: 'cash'),
+                        date: _date(payment['payment_date']),
+                        receipt: _text(payment['receipt_number']),
+                      ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _detailPanel({String? title, required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7FA6BD).withAlpha(36),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: principalDirectoryText,
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+
+  static Widget _amountRow(String label, String value, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: principalDirectoryMuted,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              color: principalDirectoryText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _breakdownRow({
+    required String title,
+    required double amount,
+    required double balance,
+    required double paid,
+  }) {
+    final paidRatio = amount <= 0 ? 0.0 : (paid / amount).clamp(0.0, 1.0);
+    final statusLabel = balance <= 0
+        ? 'Paid'
+        : paid > 0
+        ? 'Paid ${(paidRatio * 100).toStringAsFixed(0)}%'
+        : 'Due ${_money(amount)}';
+    final statusColor = balance <= 0 || paid > 0
+        ? const Color(0xFF18B57D)
+        : const Color(0xFFFF8A12);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFCFE),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE3EDF5)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: statusColor.withAlpha(18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.local_offer_outlined, color: statusColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                _money(amount),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withAlpha(16),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _paymentRow({
+    required double amount,
+    required String mode,
+    required String date,
+    required String receipt,
+  }) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const CircleAvatar(
+        backgroundColor: Color(0xFFEAFBF3),
+        child: Icon(Icons.payments_outlined, color: Color(0xFF18B57D)),
+      ),
+      title: Text(
+        _money(amount),
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      subtitle: Text(
+        [date, mode, receipt].where((part) => part.isNotEmpty).join(' | '),
+      ),
+    );
+  }
+
+  static Widget _emptyText(String message) {
+    return Text(
+      message,
+      style: const TextStyle(
+        color: principalDirectoryMuted,
+        fontWeight: FontWeight.w700,
+      ),
+    );
+  }
+
+  static List<Map<String, dynamic>> _items(Map<String, dynamic> invoice) {
+    final raw = invoice['items'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((item) {
+      return Map<String, dynamic>.from(item);
+    }).toList();
+  }
+
+  static List<Map<String, dynamic>> _payments(Map<String, dynamic> invoice) {
+    final raw = invoice['payments'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((payment) {
+      return Map<String, dynamic>.from(payment);
+    }).toList();
+  }
+
+  static Map<String, dynamic> _map(Object? value) =>
+      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+
+  static double _num(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+
+  static String _text(Object? value, {String fallback = ''}) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
+  static String _date(Object? value) {
+    final date = DateTime.tryParse('${value ?? ''}');
+    return date == null ? '' : date.toIso8601String().split('T').first;
+  }
+
+  static String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
+
+  static Color _statusColor(String status) {
+    final lower = status.toLowerCase();
+    if (lower.contains('paid')) return const Color(0xFF18B57D);
+    if (lower.contains('overdue')) return const Color(0xFFE84D68);
+    if (lower.contains('partial')) return const Color(0xFF3157F6);
+    return const Color(0xFFFF8A12);
+  }
+}
+
+class _CashPaymentPage extends StatefulWidget {
+  final Map<String, dynamic> invoice;
+  final Future<void> Function(double amount, String receipt, String remarks)
+  onSubmit;
+
+  const _CashPaymentPage({required this.invoice, required this.onSubmit});
+
+  @override
+  State<_CashPaymentPage> createState() => _CashPaymentPageState();
+}
+
+class _CashPaymentPageState extends State<_CashPaymentPage> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _amountController;
+  late final TextEditingController _receiptController;
+  late final TextEditingController _remarksController;
+  bool _saving = false;
+
+  double get _balance => _num(widget.invoice['balance']);
+  double get _amount => double.tryParse(_amountController.text.trim()) ?? 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _amountController = TextEditingController(
+      text: _balance.toStringAsFixed(0),
+    );
+    _receiptController = TextEditingController(
+      text:
+          'CASH-${now.year}${_two(now.month)}${_two(now.day)}-${now.millisecondsSinceEpoch.toString().substring(8)}',
+    );
+    _remarksController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _receiptController.dispose();
+    _remarksController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: principalDirectoryBackground,
+      appBar: AppBar(
+        backgroundColor: principalDirectoryBackground,
+        elevation: 0,
+        title: const Text('Collect Payment'),
+      ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+            children: [
+              _panel(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.account_circle_outlined,
+                        color: principalDirectoryAccent,
+                        size: 34,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _text(widget.invoice['name'], fallback: 'Student'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: principalDirectoryText,
+                            ),
+                          ),
+                          Text(
+                            _text(
+                              widget.invoice['class'],
+                              fallback: 'Class not assigned',
+                            ),
+                            style: const TextStyle(
+                              color: principalDirectoryMuted,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            'Due amount',
+                            style: TextStyle(
+                              color: Colors.red.shade400,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      _money(_balance),
+                      style: const TextStyle(
+                        color: Color(0xFFE84D68),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Select Fee Type',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              _panel(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _text(
+                          widget.invoice['invoice_number'],
+                          fallback: 'Student fee invoice',
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    Text(
+                      'Due: ${_money(_balance)}',
+                      style: const TextStyle(
+                        color: principalDirectoryMuted,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Payment Details',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _amountController,
+                enabled: !_saving,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Amount',
+                  prefixText: '₹ ',
+                ),
+                validator: (value) {
+                  final amount = double.tryParse((value ?? '').trim()) ?? 0;
+                  if (amount <= 0) return 'Enter an amount';
+                  if (amount > _balance) return 'Amount cannot exceed balance';
+                  return null;
+                },
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              _readonlyMoney('Discount', 0),
+              const SizedBox(height: 12),
+              _readonlyMoney('Fine / Late Fee', 0),
+              const SizedBox(height: 12),
+              _readonlyMoney('Total Amount', _amount),
+              const SizedBox(height: 18),
+              const Text(
+                'Payment Method',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 10),
+              _panel(
+                child: Row(
+                  children: const [
+                    Icon(Icons.payments_outlined, color: Color(0xFF18B57D)),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Cash',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    Icon(Icons.check_circle_rounded, color: Color(0xFF18B57D)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _receiptController,
+                enabled: !_saving,
+                decoration: const InputDecoration(labelText: 'Receipt number'),
+                validator: (value) {
+                  if ((value ?? '').trim().length < 3) {
+                    return 'Enter receipt number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _remarksController,
+                enabled: !_saving,
+                minLines: 3,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Remarks (optional)',
+                  hintText: 'Enter remarks',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: _saving ? null : _submit,
+                child: Text(
+                  _saving
+                      ? 'Collecting...'
+                      : 'Collect ${_money(_amount <= 0 ? _balance : _amount)}',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _readonlyMoney(String label, double amount) {
+    return TextFormField(
+      enabled: false,
+      initialValue: _money(amount),
+      decoration: InputDecoration(labelText: label),
+    );
+  }
+
+  Widget _panel({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE3EDF5)),
+      ),
+      child: child,
+    );
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onSubmit(
+        _amount,
+        _receiptController.text.trim(),
+        _remarksController.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to collect payment: $error'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
+  double _num(Object? value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+
+  String _text(Object? value, {String fallback = ''}) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
+  String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
+
+  String _two(int value) => value.toString().padLeft(2, '0');
 }
 
 class _FeeStructureInputForm extends StatefulWidget {
@@ -1576,7 +2557,7 @@ class _PaymentEntryFormState extends State<_PaymentEntryForm> {
             icon: Icons.receipt_long_outlined,
             title: studentName.isEmpty ? 'Student invoice' : studentName,
             subtitle:
-                'Balance ₹${widget.balance.toStringAsFixed(0)} | ${widget.invoice['class'] ?? 'Class pending'}',
+                'Balance ₹${widget.balance.toStringAsFixed(0)} | ${widget.invoice['class'] ?? 'Class not assigned'}',
           ),
           const SizedBox(height: 12),
           TextFormField(

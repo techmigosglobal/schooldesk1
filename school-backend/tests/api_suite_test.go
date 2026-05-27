@@ -163,12 +163,12 @@ func TestCompleteAPISuite(t *testing.T) {
 		"attendances": []map[string]any{{"student_id": s.ids["new_student"], "enrollment_id": s.ids["new_enrollment"], "status": "present"}},
 	}, http.StatusOK)
 	s.expectDataID("Teacher assign homework", "POST", "/homework", "Teacher", "Teacher", map[string]any{
-		"title": "Runtime Homework", "subject": "Mathematics", "class": "Grade 10-A", "section_id": s.ids["section"],
+		"title": "Runtime Homework", "subject": "Mathematics", "class": "PP1-A", "section_id": s.ids["section"],
 		"teacher_id": s.ids["staff"], "student_id": s.ids["new_student"], "description": "API suite homework",
 		"due_date": "2026-05-03T00:00:00Z", "status": "pending", "created_by": s.ids["staff"],
 	}, http.StatusCreated, "homework")
 	s.expectDataID("Teacher write diary", "POST", "/diary-entries", "Teacher", "Teacher", map[string]any{
-		"date": "2026-05-01T00:00:00Z", "class": "Grade 10-A", "section_id": s.ids["section"], "subject": "Mathematics",
+		"date": "2026-05-01T00:00:00Z", "class": "PP1-A", "section_id": s.ids["section"], "subject": "Mathematics",
 		"title": "Runtime Diary", "classwork": "API suite", "homework": "Complete assignment", "type": "regular",
 		"teacher_id": s.ids["staff"], "student_id": s.ids["new_student"], "created_by": "Suite Teacher",
 	}, http.StatusCreated, "diary")
@@ -266,7 +266,7 @@ func seedFixtures() error {
 	if err := create(&models.Department{BaseModel: models.BaseModel{ID: deptID}, SchoolID: schoolID, DepartmentName: "Math"}); err != nil {
 		return err
 	}
-	if err := create(&models.Grade{BaseModel: models.BaseModel{ID: gradeID}, SchoolID: schoolID, GradeNumber: 10, GradeName: "Grade 10"}); err != nil {
+	if err := create(&models.Grade{BaseModel: models.BaseModel{ID: gradeID}, SchoolID: schoolID, GradeNumber: 0, GradeName: "PP1"}); err != nil {
 		return err
 	}
 	if err := create(&models.Subject{BaseModel: models.BaseModel{ID: subjectID}, SchoolID: schoolID, DepartmentID: deptID, SubjectName: "Mathematics", SubjectCode: "MATH", SubjectType: "core"}); err != nil {

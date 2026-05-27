@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../services/backend_api_client.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/admin_navigation.dart';
+import '../../widgets/app_navigation.dart';
 import '../../widgets/dashboard_fab_widget.dart';
 import '../../widgets/erp_components.dart';
 import '../../widgets/erp_module_scaffold.dart';
@@ -790,11 +791,17 @@ class _TimetableFormScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final role = BackendApiClient.instance.currentRoleName?.toLowerCase();
+    final isPrincipal = role == 'principal';
     return SchoolDeskModuleScaffold(
       title: title,
       subtitle: subtitle,
-      drawer: AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      drawer: isPrincipal
+          ? PrincipalDrawer(selectedIndex: 4, onDestinationSelected: (_) {})
+          : AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
+      floatingActionButton: DashboardFabWidget(
+        role: isPrincipal ? DashboardRole.principal : DashboardRole.admin,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: ListView(
         padding: const EdgeInsets.all(16),

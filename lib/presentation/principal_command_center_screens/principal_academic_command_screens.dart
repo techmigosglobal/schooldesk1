@@ -5,15 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/operations_workspace.dart';
 import '../../widgets/principal_directory_ui.dart';
 
-enum _TimetableMode {
-  today,
-  classes,
-  teachers,
-  subjects,
-  rooms,
-  alerts,
-  actions,
-}
+enum _TimetableMode { periods, coverage, staff, rooms, alerts }
 
 enum _PrincipalCommandKind { timetable, exams, results }
 
@@ -26,15 +18,15 @@ class PrincipalTimetableScreen extends StatefulWidget {
 }
 
 class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
-  _TimetableMode _mode = _TimetableMode.today;
+  _TimetableMode _mode = _TimetableMode.periods;
 
   @override
   Widget build(BuildContext context) {
     return _PrincipalCommandScreen(
       kind: _PrincipalCommandKind.timetable,
-      title: 'Timetable Command Center',
+      title: 'Timetable Builder',
       subtitle:
-          'Supervise class schedules, teacher load, rooms, conflicts, and emergency substitutions',
+          'Create class periods, review the schedule, and cleanly remove slots',
       icon: Icons.calendar_view_week_rounded,
       accent: Colors.teal,
       loadData: BackendApiClient.instance.getPrincipalTimetableOverview,
@@ -89,6 +81,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
         ];
       },
       content: (data, openAction) => [
+        const _TimetableWorkflowStrip(),
         _TimetableModePicker(
           selected: _mode,
           onSelected: (mode) => setState(() => _mode = mode),
@@ -103,51 +96,38 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
     void Function(_ActionSpec action) openAction,
   ) {
     final views = _map(data['views']);
-    final today = _map(data['today_monitoring']);
     return switch (_mode) {
-      _TimetableMode.today => OpsResponsiveGrid(
+      _TimetableMode.periods => _rowsPanel(
+        'Created Periods',
+        'Only saved timetable slots are shown here',
+        _list(views['periods']),
+        Icons.schedule_outlined,
+      ),
+      _TimetableMode.coverage => OpsResponsiveGrid(
         minTileWidth: 360,
         children: [
           _rowsPanel(
-            'Ongoing Classes',
-            'Live class periods from today',
-            _list(today['ongoing_classes']),
-            Icons.play_circle_outline,
+            'Class Coverage',
+            'Classes with saved timetable periods',
+            _list(views['class_wise']),
+            Icons.meeting_room_outlined,
           ),
           _rowsPanel(
-            'Emergency substitutions',
-            'Substitute teachers and absent staff',
-            _list(today['substitute_teachers']),
-            Icons.swap_horiz_rounded,
-          ),
-          _rowsPanel(
-            'Free Periods',
-            'Classes without mapped periods today',
-            _list(today['free_periods']),
-            Icons.free_cancellation_outlined,
+            'Subject Coverage',
+            'Subjects already mapped into the timetable',
+            _list(views['subject_wise']),
+            Icons.menu_book_outlined,
           ),
         ],
       ),
-      _TimetableMode.classes => _rowsPanel(
-        'Class-wise',
-        'Class-wise timetable coverage',
-        _list(views['class_wise']),
-        Icons.meeting_room_outlined,
-      ),
-      _TimetableMode.teachers => _rowsPanel(
-        'Teacher-wise',
+      _TimetableMode.staff => _rowsPanel(
+        'Teacher Load',
         'Teacher load and schedule coverage',
         _list(views['teacher_wise']),
         Icons.badge_outlined,
       ),
-      _TimetableMode.subjects => _rowsPanel(
-        'Subject-wise',
-        'Subject coverage and timetable usage',
-        _list(views['subject_wise']),
-        Icons.menu_book_outlined,
-      ),
       _TimetableMode.rooms => _rowsPanel(
-        'Room-wise',
+        'Room Usage',
         'Room usage and availability',
         _list(views['room_wise']),
         Icons.door_back_door_outlined,
@@ -157,14 +137,6 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
         'Conflicts detected by backend timetable analysis',
         _list(data['conflict_alerts']),
         Icons.warning_amber_rounded,
-      ),
-      _TimetableMode.actions => _actionsPanel(
-        title: 'Timetable Actions',
-        subtitle:
-            'Request schedule review, substitution follow-up, or conflict resolution',
-        rows: _list(data['actions']),
-        openAction: openAction,
-        actionType: 'schedule_review',
       ),
     };
   }
@@ -209,12 +181,15 @@ class PrincipalExamsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return _PrincipalCommandScreen(
       kind: _PrincipalCommandKind.exams,
-      title: 'Exams Command Center',
-      subtitle:
-          'Exam Dashboard, Exam Creation readiness, Monitoring Panel, and Evaluation Tracking',
+      title: 'Exam Workflow',
+      subtitle: 'Prepare, schedule, monitor, evaluate, and publish exams',
       icon: Icons.fact_check_rounded,
       accent: Colors.indigo,
       loadData: BackendApiClient.instance.getPrincipalExamsOverview,
+      onAddCreate: _openExamForm,
+      onEditEntry: (context, row) => _openExamForm(context, exam: row),
+      addIcon: Icons.add_rounded,
+      addTooltip: 'Create exam',
       saveAction:
           ({
             required actionType,
@@ -265,29 +240,30 @@ class PrincipalExamsScreen extends StatelessWidget {
         final monitoring = _map(data['monitoring_panel']);
         final evaluation = _map(data['evaluation_tracking']);
         return [
+          const _ExamWorkflowStrip(),
           OpsResponsiveGrid(
             minTileWidth: 360,
             children: [
               _rowsPanel(
-                'Exam Dashboard',
-                'Campaign status and readiness',
-                _list(data['exam_dashboard']),
-                Icons.assignment_outlined,
-              ),
-              _rowsPanel(
-                'Exam Creation',
-                'Types, grades, subjects, rooms, and staff for Admin creation',
+                '1. Readiness',
+                'Exam types, grades, subjects, rooms, and invigilators',
                 _optionRows(controls),
                 Icons.add_task_outlined,
               ),
               _rowsPanel(
-                'Monitoring Panel',
-                'Live progress, absent students, and paper submission',
+                '2. Scheduled Exams',
+                'Created exams and their publish state',
+                _list(data['exam_dashboard']),
+                Icons.assignment_outlined,
+              ),
+              _rowsPanel(
+                '3. Live Monitoring',
+                'Exam progress, absentees, and paper submission',
                 _list(monitoring['live_exam_progress']),
                 Icons.monitor_heart_outlined,
               ),
               _rowsPanel(
-                'Evaluation Tracking',
+                '4. Evaluation',
                 'Marks pending and delayed evaluation follow-up',
                 _list(evaluation['marks_pending']),
                 Icons.edit_note_outlined,
@@ -295,9 +271,8 @@ class PrincipalExamsScreen extends StatelessWidget {
             ],
           ),
           _actionsPanel(
-            title: 'Exam Actions',
-            subtitle:
-                'Assign invigilators, request readiness checks, or escalate evaluation delays',
+            title: '5. Publish',
+            subtitle: 'Approve schedules, publish results, or record notes',
             rows: _list(data['actions']),
             openAction: openAction,
             actionType: 'exam_readiness',
@@ -305,6 +280,35 @@ class PrincipalExamsScreen extends StatelessWidget {
         ];
       },
     );
+  }
+
+  Future<bool> _openExamForm(
+    BuildContext context, {
+    Map<String, dynamic>? exam,
+  }) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PrincipalInputPage(
+          title: exam == null ? 'Create Exam' : 'Edit Exam',
+          icon: Icons.fact_check_rounded,
+          child: _ExamInputForm(
+            exam: exam,
+            onSubmit: (payload) async {
+              final id = _text(exam?['exam_id'] ?? exam?['id']);
+              if (id.isEmpty) {
+                await BackendApiClient.instance.createRaw('/exams', payload);
+              } else {
+                await BackendApiClient.instance.updateRaw(
+                  '/exams/$id',
+                  payload,
+                );
+              }
+            },
+          ),
+        ),
+      ),
+    );
+    return result == true;
   }
 }
 
@@ -526,10 +530,16 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
       isEmpty: !_loading && _error == null && entries.isEmpty,
       emptyState: OpsEmptyState(
         icon: widget.icon,
-        title: 'No ${_directoryTitle.toLowerCase()} rows',
-        message: 'Adjust search or wait for backend data to arrive.',
+        title: _emptyTitle,
+        message: _emptyMessage,
       ),
       slivers: [
+        if (_isTimetable || _isExams)
+          SliverToBoxAdapter(
+            child: _isTimetable
+                ? const _TimetableWorkflowStrip()
+                : const _ExamWorkflowStrip(),
+          ),
         SliverToBoxAdapter(
           child: PrincipalDirectoryMetricStrip(
             metrics: [
@@ -605,9 +615,43 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
 
   String get _directoryTitle {
     return switch (widget.kind) {
-      _PrincipalCommandKind.timetable => 'Timetable Directory',
-      _PrincipalCommandKind.exams => 'Exams Directory',
+      _PrincipalCommandKind.timetable => 'Timetable Builder',
+      _PrincipalCommandKind.exams => 'Exam Workflow',
       _PrincipalCommandKind.results => 'Results Directory',
+    };
+  }
+
+  bool get _isTimetable => widget.kind == _PrincipalCommandKind.timetable;
+
+  bool get _isExams => widget.kind == _PrincipalCommandKind.exams;
+
+  bool get _allowsFollowUpActions => !_isTimetable;
+
+  String get _emptyTitle {
+    return switch (widget.kind) {
+      _PrincipalCommandKind.timetable => 'No timetable periods yet',
+      _PrincipalCommandKind.exams => 'No exams scheduled yet',
+      _PrincipalCommandKind.results => 'No results rows',
+    };
+  }
+
+  String get _emptyMessage {
+    return switch (widget.kind) {
+      _PrincipalCommandKind.timetable =>
+        'Create the first class period, then it will appear here for review, edit, and delete.',
+      _PrincipalCommandKind.exams =>
+        'Create an exam schedule from the workflow, then monitor and evaluate it here.',
+      _PrincipalCommandKind.results =>
+        'Adjust search or wait for backend results data to arrive.',
+    };
+  }
+
+  String get _searchHint {
+    return switch (widget.kind) {
+      _PrincipalCommandKind.timetable =>
+        'Search class, subject, teacher, day...',
+      _PrincipalCommandKind.exams => 'Search exam, class, subject, status...',
+      _PrincipalCommandKind.results => 'Search results directory...',
     };
   }
 
@@ -626,7 +670,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
       child: Column(
         children: [
           PrincipalDirectorySearchBox(
-            hint: 'Search ${_directoryTitle.toLowerCase()}...',
+            hint: _searchHint,
             onChanged: (value) => setState(() => _search = value),
           ),
           const SizedBox(height: 14),
@@ -677,90 +721,21 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
 
   List<_CommandDirectoryEntry> _timetableEntries() {
     final views = _map(_data['views']);
-    final today = _map(_data['today_monitoring']);
     return [
       ..._rowsToEntries(
         section: 'Periods',
         rows: _list(views['periods']),
         icon: Icons.schedule_outlined,
       ),
-      ..._rowsToEntries(
-        section: 'Today',
-        rows: _list(today['ongoing_classes']),
-        icon: Icons.play_circle_outline,
-      ),
-      ..._rowsToEntries(
-        section: 'Substitutions',
-        rows: _list(today['substitute_teachers']),
-        icon: Icons.swap_horiz_rounded,
-      ),
-      ..._rowsToEntries(
-        section: 'Free Periods',
-        rows: _list(today['free_periods']),
-        icon: Icons.free_cancellation_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Classes',
-        rows: _list(views['class_wise']),
-        icon: Icons.meeting_room_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Teachers',
-        rows: _list(views['teacher_wise']),
-        icon: Icons.badge_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Subjects',
-        rows: _list(views['subject_wise']),
-        icon: Icons.menu_book_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Rooms',
-        rows: _list(views['room_wise']),
-        icon: Icons.door_back_door_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Alerts',
-        rows: _list(_data['conflict_alerts']),
-        icon: Icons.warning_amber_rounded,
-      ),
-      ..._rowsToEntries(
-        section: 'Actions',
-        rows: _list(_data['actions']),
-        icon: Icons.task_alt_outlined,
-      ),
     ];
   }
 
   List<_CommandDirectoryEntry> _examEntries() {
-    final controls = _map(_data['creation_controls']);
-    final monitoring = _map(_data['monitoring_panel']);
-    final evaluation = _map(_data['evaluation_tracking']);
     return [
       ..._rowsToEntries(
-        section: 'Dashboard',
+        section: 'Scheduled Exams',
         rows: _list(_data['exam_dashboard']),
         icon: Icons.assignment_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Creation',
-        rows: _optionRows(controls),
-        icon: Icons.add_task_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Monitoring',
-        rows: _list(monitoring['live_exam_progress']),
-        icon: Icons.monitor_heart_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Evaluation',
-        rows: _list(evaluation['marks_pending']),
-        icon: Icons.edit_note_outlined,
-      ),
-      ..._rowsToEntries(
-        section: 'Actions',
-        rows: _list(_data['actions']),
-        icon: Icons.task_alt_outlined,
       ),
     ];
   }
@@ -850,7 +825,8 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
       },
       itemBuilder: (_) => [
         const PopupMenuItem(value: 'open', child: Text('View details')),
-        const PopupMenuItem(value: 'action', child: Text('Create follow-up')),
+        if (_allowsFollowUpActions)
+          const PopupMenuItem(value: 'action', child: Text('Create follow-up')),
         if (_canEditEntry(entry))
           PopupMenuItem(value: 'edit', child: Text(_editMenuLabel)),
         if (_canDeleteEntry(entry))
@@ -866,15 +842,17 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
         .toList();
     final canEdit = _canEditEntry(entry);
     final canDelete = _canDeleteEntry(entry);
+    final hasActions = _allowsFollowUpActions || canEdit || canDelete;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (detailContext) => PrincipalDetailPage(
           title: entry.title,
           menuItems: [
-            const PopupMenuItem(
-              value: 'action',
-              child: Text('Create follow-up'),
-            ),
+            if (_allowsFollowUpActions)
+              const PopupMenuItem(
+                value: 'action',
+                child: Text('Create follow-up'),
+              ),
             if (canEdit)
               PopupMenuItem(value: 'edit', child: Text(_editMenuLabel)),
             if (canDelete)
@@ -920,50 +898,52 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
                   ),
               ],
             ),
-            PrincipalDetailCard(
-              title: 'Actions',
-              children: [
-                PrincipalActionTile(
-                  icon: Icons.add_task_rounded,
-                  title: 'Create follow-up',
-                  subtitle: 'Save a principal action against this row',
-                  onTap: () {
-                    Navigator.pop(detailContext);
-                    _openAction(
-                      _ActionSpec(
-                        actionType: _defaultActionType,
-                        title: entry.title,
-                        priority: 'normal',
-                        entityId: _entityIdFor(entry),
-                        dueDate: '',
-                      ),
-                    );
-                  },
-                ),
-                if (canEdit)
-                  PrincipalActionTile(
-                    icon: Icons.edit_calendar_outlined,
-                    title: _editMenuLabel,
-                    subtitle:
-                        'Change the class, teacher, subject, day, or time.',
-                    onTap: () {
-                      Navigator.pop(detailContext);
-                      _editEntry(entry);
-                    },
-                  ),
-                if (canDelete)
-                  PrincipalActionTile(
-                    icon: Icons.delete_outline_rounded,
-                    title: _deleteMenuLabel,
-                    subtitle: _deleteDetailHelp,
-                    color: AppTheme.error,
-                    onTap: () {
-                      Navigator.pop(detailContext);
-                      _deleteEntry(entry);
-                    },
-                  ),
-              ],
-            ),
+            if (hasActions)
+              PrincipalDetailCard(
+                title: 'Actions',
+                children: [
+                  if (_allowsFollowUpActions)
+                    PrincipalActionTile(
+                      icon: Icons.add_task_rounded,
+                      title: 'Create follow-up',
+                      subtitle: 'Save a principal action against this row',
+                      onTap: () {
+                        Navigator.pop(detailContext);
+                        _openAction(
+                          _ActionSpec(
+                            actionType: _defaultActionType,
+                            title: entry.title,
+                            priority: 'normal',
+                            entityId: _entityIdFor(entry),
+                            dueDate: '',
+                          ),
+                        );
+                      },
+                    ),
+                  if (canEdit)
+                    PrincipalActionTile(
+                      icon: Icons.edit_calendar_outlined,
+                      title: _editMenuLabel,
+                      subtitle:
+                          'Change the class, teacher, subject, day, or time.',
+                      onTap: () {
+                        Navigator.pop(detailContext);
+                        _editEntry(entry);
+                      },
+                    ),
+                  if (canDelete)
+                    PrincipalActionTile(
+                      icon: Icons.delete_outline_rounded,
+                      title: _deleteMenuLabel,
+                      subtitle: _deleteDetailHelp,
+                      color: AppTheme.error,
+                      onTap: () {
+                        Navigator.pop(detailContext);
+                        _deleteEntry(entry);
+                      },
+                    ),
+                ],
+              ),
           ],
         ),
       ),
@@ -994,9 +974,13 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
         if (id.isEmpty || !hasSlotShape) return '';
         return '/timetable/slots/$id';
       case _PrincipalCommandKind.exams:
-        if (entry.section != 'Dashboard') return '';
         final id = _text(entry.row['exam_id'] ?? entry.row['id']);
         if (id.isEmpty) return '';
+        final hasExamShape =
+            entry.row.containsKey('exam_name') ||
+            entry.row.containsKey('exam_type') ||
+            entry.row.containsKey('start_date');
+        if (!hasExamShape) return '';
         return '/exams/$id';
       case _PrincipalCommandKind.results:
         return '';
@@ -1024,7 +1008,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
   String get _editMenuLabel {
     return switch (widget.kind) {
       _PrincipalCommandKind.timetable => 'Edit timetable slot',
-      _PrincipalCommandKind.exams => 'Edit',
+      _PrincipalCommandKind.exams => 'Edit exam',
       _PrincipalCommandKind.results => 'Edit',
     };
   }
@@ -1245,6 +1229,602 @@ class _CommandActionFormState extends State<_CommandActionForm> {
     if (!mounted) return;
     setState(() => _saving = false);
     if (ok) Navigator.pop(context, true);
+  }
+}
+
+class _TimetableWorkflowStrip extends StatelessWidget {
+  const _TimetableWorkflowStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _PrincipalWorkflowStrip(
+      steps: [
+        _WorkflowStep(
+          icon: Icons.meeting_room_outlined,
+          label: 'Pick class',
+          helper: 'Choose section',
+        ),
+        _WorkflowStep(
+          icon: Icons.calendar_today_outlined,
+          label: 'Pick day',
+          helper: 'Set weekday',
+        ),
+        _WorkflowStep(
+          icon: Icons.menu_book_outlined,
+          label: 'Assign subject',
+          helper: 'Map teacher',
+        ),
+        _WorkflowStep(
+          icon: Icons.schedule_outlined,
+          label: 'Set time',
+          helper: 'Save period',
+        ),
+      ],
+    );
+  }
+}
+
+class _ExamWorkflowStrip extends StatelessWidget {
+  const _ExamWorkflowStrip();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _PrincipalWorkflowStrip(
+      steps: [
+        _WorkflowStep(
+          icon: Icons.fact_check_outlined,
+          label: 'Readiness',
+          helper: 'Types and classes',
+        ),
+        _WorkflowStep(
+          icon: Icons.event_available_outlined,
+          label: 'Schedule',
+          helper: 'Dates and subjects',
+        ),
+        _WorkflowStep(
+          icon: Icons.monitor_heart_outlined,
+          label: 'Monitor',
+          helper: 'Live progress',
+        ),
+        _WorkflowStep(
+          icon: Icons.edit_note_outlined,
+          label: 'Evaluate',
+          helper: 'Marks pending',
+        ),
+        _WorkflowStep(
+          icon: Icons.publish_outlined,
+          label: 'Publish',
+          helper: 'Principal decision',
+        ),
+      ],
+    );
+  }
+}
+
+class _PrincipalWorkflowStrip extends StatelessWidget {
+  final List<_WorkflowStep> steps;
+
+  const _PrincipalWorkflowStrip({required this.steps});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFDDEAF2)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF7FA6BD).withAlpha(28),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 430;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (var index = 0; index < steps.length; index++)
+                  SizedBox(
+                    width: compact
+                        ? (constraints.maxWidth - 8) / 2
+                        : (constraints.maxWidth - (8 * (steps.length - 1))) /
+                              steps.length,
+                    child: _WorkflowStepTile(
+                      number: index + 1,
+                      step: steps[index],
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _WorkflowStep {
+  final IconData icon;
+  final String label;
+  final String helper;
+
+  const _WorkflowStep({
+    required this.icon,
+    required this.label,
+    required this.helper,
+  });
+}
+
+class _WorkflowStepTile extends StatelessWidget {
+  final int number;
+  final _WorkflowStep step;
+
+  const _WorkflowStepTile({required this.number, required this.step});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5FAFE),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE1EDF5)),
+      ),
+      child: Row(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: principalDirectoryAccent.withAlpha(18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  step.icon,
+                  color: principalDirectoryAccent,
+                  size: 18,
+                ),
+              ),
+              Positioned(
+                right: -4,
+                top: -5,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: principalDirectoryAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    '$number',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: principalDirectoryText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  step.helper,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: principalDirectoryMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExamInputForm extends StatefulWidget {
+  final Map<String, dynamic>? exam;
+  final Future<void> Function(Map<String, dynamic> payload) onSubmit;
+
+  const _ExamInputForm({this.exam, required this.onSubmit});
+
+  @override
+  State<_ExamInputForm> createState() => _ExamInputFormState();
+}
+
+class _ExamInputFormState extends State<_ExamInputForm> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _name;
+  late final TextEditingController _startDate;
+  late final TextEditingController _endDate;
+
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+  String _academicYearId = '';
+  String _termId = '';
+  String _examTypeId = '';
+  Map<String, dynamic> _exam = {};
+
+  List<AcademicYearModel> _academicYears = [];
+  List<Map<String, dynamic>> _terms = [];
+  List<Map<String, dynamic>> _examTypes = [];
+
+  bool get _ready =>
+      _academicYearId.isNotEmpty &&
+      _termId.isNotEmpty &&
+      _examTypeId.isNotEmpty &&
+      _examTypes.isNotEmpty &&
+      _terms.isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _exam = Map<String, dynamic>.from(widget.exam ?? const {});
+    _name = TextEditingController(
+      text: _text(_exam['exam_name'] ?? _exam['name']),
+    );
+    _startDate = TextEditingController(
+      text: _dateOnly(
+        _exam['start_date'],
+        fallback: _dateInput(DateTime.now()),
+      ),
+    );
+    _endDate = TextEditingController(
+      text: _dateOnly(_exam['end_date'], fallback: _dateInput(DateTime.now())),
+    );
+    _loadReferences();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _startDate.dispose();
+    _endDate.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadReferences() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final api = BackendApiClient.instance;
+      final id = _text(_exam['exam_id'] ?? _exam['id']);
+      if (id.isNotEmpty && _text(_exam['academic_year_id']).isEmpty) {
+        _exam = await api.getRawMap('/exams/$id');
+        _name.text = _text(_exam['exam_name'] ?? _exam['name']);
+        _startDate.text = _dateOnly(
+          _exam['start_date'],
+          fallback: _dateInput(DateTime.now()),
+        );
+        _endDate.text = _dateOnly(
+          _exam['end_date'],
+          fallback: _dateInput(DateTime.now()),
+        );
+      }
+
+      final years = await api.getAcademicYears();
+      final examTypes = await api.getExamTypes();
+      final yearId = _initialId(
+        _text(_exam['academic_year_id']),
+        years.map((year) => year.id),
+        fallback: years.where((year) => year.isCurrent).firstOrNull?.id,
+      );
+      final terms = yearId.isEmpty
+          ? <Map<String, dynamic>>[]
+          : await api.getTerms(yearId);
+      if (!mounted) return;
+      setState(() {
+        _academicYears = years;
+        _examTypes = examTypes;
+        _academicYearId = yearId;
+        _terms = terms;
+        _termId = _initialId(
+          _text(_exam['term_id']),
+          terms.map((term) => _text(term['id'])),
+        );
+        _examTypeId = _initialId(
+          _text(_exam['exam_type_id']),
+          examTypes.map((type) => _text(type['id'])),
+        );
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Unable to load exam setup data. $error';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadTermsForYear(String yearId) async {
+    setState(() {
+      _academicYearId = yearId;
+      _termId = '';
+      _terms = [];
+    });
+    if (yearId.isEmpty) return;
+    try {
+      final terms = await BackendApiClient.instance.getTerms(yearId);
+      if (!mounted) return;
+      setState(() {
+        _terms = terms;
+        _termId = _initialId('', terms.map((term) => _text(term['id'])));
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = 'Unable to load terms for academic year. $error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return OpsEmptyState(
+        icon: Icons.fact_check_outlined,
+        title: 'Exam setup unavailable',
+        message: _error!,
+        actionLabel: 'Retry',
+        onAction: _loadReferences,
+      );
+    }
+    if (!_ready) {
+      return const OpsEmptyState(
+        icon: Icons.rule_folder_outlined,
+        title: 'Exam setup required',
+        message:
+            'Create academic years, terms, and exam types before creating exams.',
+      );
+    }
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _name,
+            enabled: !_saving,
+            decoration: const InputDecoration(
+              labelText: 'Exam name',
+              prefixIcon: Icon(Icons.fact_check_outlined),
+            ),
+            validator: (value) => _required(value, 'Enter exam name.'),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _academicYearId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Academic year',
+              prefixIcon: Icon(Icons.calendar_month_outlined),
+            ),
+            items: _academicYears
+                .map(
+                  (year) => DropdownMenuItem(
+                    value: year.id,
+                    child: Text(year.yearLabel),
+                  ),
+                )
+                .toList(),
+            validator: (value) => _required(value, 'Select academic year.'),
+            onChanged: _saving
+                ? null
+                : (value) => _loadTermsForYear(value ?? ''),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: ValueKey('exam-term-$_academicYearId-$_termId'),
+            initialValue: _termId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Term',
+              prefixIcon: Icon(Icons.date_range_outlined),
+            ),
+            items: _terms
+                .map(
+                  (term) => DropdownMenuItem(
+                    value: _text(term['id']),
+                    child: Text(_termLabel(term)),
+                  ),
+                )
+                .toList(),
+            validator: (value) => _required(value, 'Select term.'),
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _termId = value ?? ''),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _examTypeId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Exam type',
+              prefixIcon: Icon(Icons.category_outlined),
+            ),
+            items: _examTypes
+                .where((type) => _text(type['id']).isNotEmpty)
+                .map(
+                  (type) => DropdownMenuItem(
+                    value: _text(type['id']),
+                    child: Text(
+                      _examTypeLabel(type),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            validator: (value) => _required(value, 'Select exam type.'),
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _examTypeId = value ?? ''),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _startDate,
+            enabled: !_saving,
+            keyboardType: TextInputType.datetime,
+            decoration: const InputDecoration(
+              labelText: 'Start date',
+              helperText: 'YYYY-MM-DD',
+              prefixIcon: Icon(Icons.event_outlined),
+            ),
+            validator: _dateValidator,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _endDate,
+            enabled: !_saving,
+            keyboardType: TextInputType.datetime,
+            decoration: const InputDecoration(
+              labelText: 'End date',
+              helperText: 'YYYY-MM-DD',
+              prefixIcon: Icon(Icons.event_available_outlined),
+            ),
+            validator: _dateValidator,
+          ),
+          const SizedBox(height: 18),
+          FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(_saving ? 'Saving...' : 'Save exam'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final start = DateTime.parse(_startDate.text.trim());
+    final end = DateTime.parse(_endDate.text.trim());
+    if (end.isBefore(start)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('End date cannot be before start date.'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await widget.onSubmit({
+        'academic_year_id': _academicYearId,
+        'term_id': _termId,
+        'exam_type_id': _examTypeId,
+        'exam_name': _name.text.trim(),
+        'start_date': _startDate.text.trim(),
+        'end_date': _endDate.text.trim(),
+      });
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to save exam: $error'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  static String _dateInput(DateTime date) =>
+      date.toIso8601String().split('T').first;
+
+  static String _dateOnly(Object? value, {required String fallback}) {
+    final parsed = DateTime.tryParse(_text(value));
+    return parsed == null ? fallback : _dateInput(parsed);
+  }
+
+  static String _initialId(
+    String preferred,
+    Iterable<String> options, {
+    String? fallback,
+  }) {
+    final values = options.where((value) => value.trim().isNotEmpty).toList();
+    if (preferred.trim().isNotEmpty && values.contains(preferred)) {
+      return preferred;
+    }
+    if (fallback != null &&
+        fallback.trim().isNotEmpty &&
+        values.contains(fallback)) {
+      return fallback;
+    }
+    return values.isEmpty ? '' : values.first;
+  }
+
+  static String _termLabel(Map<String, dynamic> term) {
+    return _text(
+      term['term_name'] ?? term['name'] ?? term['label'],
+      fallback: _text(term['id'], fallback: 'Term'),
+    );
+  }
+
+  static String _examTypeLabel(Map<String, dynamic> type) {
+    return _text(
+      type['name'] ?? type['exam_type'] ?? type['label'],
+      fallback: _text(type['id'], fallback: 'Exam type'),
+    );
+  }
+
+  static String? _required(String? value, String message) {
+    return (value ?? '').trim().isEmpty ? message : null;
+  }
+
+  static String? _dateValidator(String? value) {
+    final text = (value ?? '').trim();
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
+      return 'Use YYYY-MM-DD.';
+    }
+    return DateTime.tryParse(text) == null ? 'Enter a valid date.' : null;
   }
 }
 
@@ -1687,30 +2267,25 @@ class _TimetableModePicker extends StatelessWidget {
     return OpsPanel(
       title: 'Timetable Views',
       subtitle:
-          'Class-wise, Teacher-wise, Subject-wise, Room-wise, Conflict Alerts, and Actions',
+          'Move through periods, class coverage, teacher load, room usage, and conflicts',
       child: OpsModeSelector<_TimetableMode>(
         selected: selected,
         onSelected: onSelected,
         options: const [
           OpsModeOption(
-            value: _TimetableMode.today,
-            icon: Icons.today_outlined,
-            label: 'Today',
+            value: _TimetableMode.periods,
+            icon: Icons.schedule_outlined,
+            label: 'Periods',
           ),
           OpsModeOption(
-            value: _TimetableMode.classes,
+            value: _TimetableMode.coverage,
             icon: Icons.meeting_room_outlined,
-            label: 'Classes',
+            label: 'Coverage',
           ),
           OpsModeOption(
-            value: _TimetableMode.teachers,
+            value: _TimetableMode.staff,
             icon: Icons.badge_outlined,
-            label: 'Teachers',
-          ),
-          OpsModeOption(
-            value: _TimetableMode.subjects,
-            icon: Icons.menu_book_outlined,
-            label: 'Subjects',
+            label: 'Staff',
           ),
           OpsModeOption(
             value: _TimetableMode.rooms,
@@ -1721,11 +2296,6 @@ class _TimetableModePicker extends StatelessWidget {
             value: _TimetableMode.alerts,
             icon: Icons.warning_amber_rounded,
             label: 'Alerts',
-          ),
-          OpsModeOption(
-            value: _TimetableMode.actions,
-            icon: Icons.task_alt_outlined,
-            label: 'Actions',
           ),
         ],
       ),

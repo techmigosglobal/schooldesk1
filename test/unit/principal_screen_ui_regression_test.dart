@@ -43,7 +43,7 @@ void main() {
         'lib/presentation/fee_monitoring_screen/fee_monitoring_screen.dart',
       ).readAsStringSync();
 
-      expect(source, contains('Fees Directory'));
+      expect(source, contains('Fee Dashboard'));
       expect(source, contains("String _selectedView = 'Student Fees'"));
       expect(
         source,
@@ -63,20 +63,23 @@ void main() {
       expect(source, contains("createRaw('/fees/structures'"));
       expect(source, contains("createRaw(\n        '/fees/invoices'"));
       expect(source, contains('class _ManualFeeEntrySheet'));
+      expect(source, contains('class _CashPaymentPage'));
+      expect(source, contains('class _FeeInvoiceDetailPage'));
       expect(source, contains('class _PaymentEntryForm'));
       expect(source, contains('Add Student Fee Entry'));
       expect(source, contains("'discount_amount': _discount"));
       expect(source, contains("'net_amount': _payable"));
-      expect(source, contains('Payment Received Now'));
-      expect(source, contains('Actual Fee'));
-      expect(source, contains('Discount Given'));
-      expect(source, contains('To Be Paid'));
-      expect(source, contains('Generate Records'));
+      expect(source, contains('Collect Payment'));
+      expect(source, contains('Total Collection'));
+      expect(source, contains('Fees Pending'));
+      expect(source, contains('Today Collection'));
+      expect(source, contains('Quick Actions'));
+      expect(source, contains("paymentMode: 'cash'"));
       expect(source, contains('BackendApiClient.instance.recordPayment'));
       expect(source, contains('_printReceiptFromInvoice'));
       expect(source, contains('Widget _buildDirectoryQuickActions()'));
       expect(source, contains('Widget _buildDirectoryMetrics()'));
-      expect(source, contains('PrincipalDirectoryMetricStrip'));
+      expect(source, contains('_FeeDashboardMetricCard'));
       expect(source, contains('for (final classValue in classes)'));
       expect(source, contains('for (final status in _statusFilters)'));
       expect(source, contains('PopupMenuButton<String>'));
@@ -94,9 +97,13 @@ void main() {
       ).readAsStringSync();
 
       expect(source, contains('PrincipalDirectoryChip'));
-      expect(source, contains('selected: _selectedClass == classValue'));
+      expect(source, contains("classValue == 'All Classes'"));
+      expect(source, contains("_selectedClass = classValue == 'All Classes'"));
+      expect(
+        source,
+        contains("label: status == 'All' ? 'All Status' : status"),
+      );
       expect(source, contains('selected: _selectedStatus == status'));
-      expect(source, contains('setState(() => _selectedClass = classValue)'));
       expect(source, contains('setState(() => _selectedStatus = status)'));
     },
   );
@@ -843,18 +850,35 @@ void main() {
     expect(source, contains('Delete Inactive Account Permanently'));
   });
 
-  test('principal timetable is oversight with advice requests only', () {
+  test('principal timetable can write backend class slots', () {
     final source = File(
       'lib/presentation/timetable_management_screen/timetable_management_screen.dart',
     ).readAsStringSync();
+    final backendRoutes = File('school-backend/main.go').readAsStringSync();
 
+    expect(source, contains('Add Period'));
+    expect(source, contains('_openAddPeriodForm'));
+    expect(source, contains('_openEditPeriodForm'));
+    expect(source, contains('_deletePeriod'));
+    expect(source, contains("deleteRaw('/timetable/slots/"));
+    expect(source, contains('AdminTimetablePeriodFormScreen'));
+    expect(source, contains('AdminTimetableGenerationFormScreen'));
     expect(source, contains('Raise Advice'));
     expect(source, contains('/principal/timetable-advice'));
-    expect(source, contains('suggestTimetableSlots('));
-    expect(source, contains('Timetable suggestions sent to Admin'));
     expect(source, isNot(contains('rootNavigator: true')));
-    expect(source, isNot(contains("label: const Text('Add Period')")));
     expect(source, isNot(contains('void _showEditPeriodDialog')));
+    expect(
+      backendRoutes,
+      contains(
+        'timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal")',
+      ),
+    );
+    expect(
+      backendRoutes,
+      contains(
+        'timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal")',
+      ),
+    );
   });
 
   test(

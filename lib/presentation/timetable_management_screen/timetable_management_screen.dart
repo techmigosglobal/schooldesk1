@@ -7,6 +7,7 @@ import '../../widgets/app_navigation.dart';
 import '../../widgets/dashboard_fab_widget.dart';
 import '../../widgets/empty_state_widget.dart';
 import '../../widgets/erp_module_scaffold.dart';
+import '../admin_timetable_screen/admin_timetable_form_screens.dart';
 
 class TimetableManagementScreen extends StatefulWidget {
   const TimetableManagementScreen({super.key});
@@ -50,6 +51,8 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
     'LUNCH',
   ];
   List<String> _teachers = [];
+  List<StaffModel> _staffRecords = [];
+  List<Map<String, dynamic>> _subjectRecords = [];
 
   Map<String, List<Map<String, dynamic>>> _timetable = {};
   List<Map<String, dynamic>> _substituteRequests = [];
@@ -67,7 +70,8 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
     final slots = await api.getTimetableSlots();
     final substitutions = await api.getSubstitutions();
     final sections = await api.getSections();
-    final staff = await api.getStaff(page: 1, pageSize: 100);
+    final staff = await api.getStaff(page: 1, pageSize: 300, status: 'active');
+    final subjects = await api.getRawList('/subjects');
     final academicYears = await api.getAcademicYears();
     final currentYear = academicYears.isEmpty
         ? null
@@ -87,6 +91,14 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
         'academic_year_id': slot['academic_year_id'],
         'term_id': slot['term_id'],
         'period': _intValue(slot['period_number'], fallback: 0),
+        'period_number': _intValue(slot['period_number'], fallback: 0),
+        'subject_id': slot['subject_id'],
+        'staff_id': slot['staff_id'],
+        'room_id': slot['room_id'],
+        'start_time': slot['start_time'],
+        'end_time': slot['end_time'],
+        'subject_data': slot['subject'],
+        'staff_data': slot['staff'],
         'subject': slot['subject']?['subject_name'] ?? slot['subject_id'] ?? '',
         'teacher': slot['staff'] == null
             ? slot['staff_id'] ?? ''
@@ -103,6 +115,8 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
       _timetable = parsed;
       _substituteRequests = substitutions;
       _teachers = staff.data.map((t) => t.fullName).toList();
+      _staffRecords = staff.data;
+      _subjectRecords = subjects;
       _academicYears = academicYears;
       _terms = terms;
       _classes = labels;
@@ -163,6 +177,13 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
   String get _defaultTermId => _terms.isEmpty ? '' : '${_terms.first['id']}';
 
   int get _activeDayNumber => _days.indexOf(_selectedDay) + 1;
+
+  bool get _canWriteSlots =>
+      _selectedSection != null &&
+      _currentAcademicYear != null &&
+      _defaultTermId.trim().isNotEmpty &&
+      _subjectRecords.isNotEmpty &&
+      _staffRecords.isNotEmpty;
 
   List<Map<String, dynamic>> _periodsForSelectedClass() {
     final sectionId = _selectedSection?.id;
@@ -229,9 +250,19 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
-          tooltip: 'Generate suggestions',
-          onPressed: _openTimetableSuggestionScreen,
+          tooltip: 'Generate periods',
+          onPressed: _canWriteSlots ? _openGenerateTimetableForm : null,
           icon: const Icon(Icons.auto_awesome_outlined),
+        ),
+        IconButton(
+          tooltip: 'Add period',
+          onPressed: _canWriteSlots ? _openAddPeriodForm : null,
+          icon: const Icon(Icons.add_rounded),
+        ),
+        IconButton(
+          tooltip: 'Refresh timetable',
+          onPressed: _loadData,
+          icon: const Icon(Icons.refresh_rounded),
         ),
         if (!_timetableApproved)
           TextButton.icon(
@@ -298,40 +329,6 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
     );
   }
 
-  Future<void> _openTimetableSuggestionScreen() async {
-    if (_selectedSection == null ||
-        _currentAcademicYear == null ||
-        _defaultTermId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Class and term setup are required first'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-      return;
-    }
-    final sent = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => _TimetableSuggestionFormScreen(
-          className: _selectedClass,
-          day: _selectedDay,
-          section: _selectedSection!,
-          academicYear: _currentAcademicYear!,
-          termId: _defaultTermId,
-          dayOfWeek: _activeDayNumber,
-        ),
-      ),
-    );
-    if (!mounted || sent != true) return;
-    setState(() => _timetableApproved = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Timetable suggestions sent to Admin'),
-        backgroundColor: AppTheme.success,
-      ),
-    );
-  }
-
   Widget _buildTimetableTab() {
     final periods = _periodsForSelectedClass();
     return Column(
@@ -385,9 +382,16 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
                       ),
                     ),
                   TextButton.icon(
-                    onPressed: _openTimetableSuggestionScreen,
+                    onPressed: _canWriteSlots
+                        ? _openGenerateTimetableForm
+                        : null,
                     icon: const Icon(Icons.auto_awesome_outlined, size: 14),
-                    label: const Text('Suggest'),
+                    label: const Text('Generate'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: _canWriteSlots ? _openAddPeriodForm : null,
+                    icon: const Icon(Icons.add_rounded, size: 14),
+                    label: const Text('Add Period'),
                   ),
                   TextButton.icon(
                     onPressed: () => _openTimetableAdviceScreen(),
@@ -415,11 +419,14 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
         ),
         Expanded(
           child: periods.isEmpty
-              ? const EmptyStateWidget(
+              ? EmptyStateWidget(
                   icon: Icons.calendar_view_week_outlined,
                   title: 'No timetable periods',
-                  description:
-                      'Backend timetable periods for the selected day will appear here.',
+                  description: _canWriteSlots
+                      ? 'Add a period or generate periods for this class and day.'
+                      : 'Class, academic year, term, subjects, and staff are required before timetable slots can be created.',
+                  actionLabel: _canWriteSlots ? 'Add Period' : null,
+                  onAction: _canWriteSlots ? _openAddPeriodForm : null,
                 )
               : ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -630,10 +637,29 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Icon(
-                  Icons.visibility_outlined,
-                  size: 14,
-                  color: AppTheme.muted,
+                PopupMenuButton<String>(
+                  tooltip: 'Period options',
+                  icon: const Icon(
+                    Icons.more_vert_rounded,
+                    size: 18,
+                    color: AppTheme.muted,
+                  ),
+                  onSelected: (value) {
+                    if (value == 'edit') _openEditPeriodForm(p);
+                    if (value == 'delete') _deletePeriod(p);
+                    if (value == 'details') _openPeriodDetailScreen(p);
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit period')),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete period'),
+                    ),
+                    PopupMenuItem(
+                      value: 'details',
+                      child: Text('View details'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -656,6 +682,147 @@ class _TimetableManagementScreenState extends State<TimetableManagementScreen>
     );
     if (!mounted || raiseAdvice != true) return;
     await _openTimetableAdviceScreen();
+  }
+
+  Future<void> _openGenerateTimetableForm() async {
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetableGenerationFormScreen(
+          args: AdminTimetableGenerationFormArgs(
+            classLabel: _selectedClass,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _defaultTermId,
+            dayLabel: _selectedDay,
+            dayNumber: _activeDayNumber,
+          ),
+        ),
+      ),
+    );
+    await _handleTimetableWriteResult(result);
+  }
+
+  Future<void> _openAddPeriodForm() async {
+    final periods = _periodsForSelectedClass();
+    final nextPeriod =
+        periods.fold<int>(
+          0,
+          (max, period) => _intValue(period['period_number'], fallback: 0) > max
+              ? _intValue(period['period_number'], fallback: 0)
+              : max,
+        ) +
+        1;
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetablePeriodFormScreen(
+          args: AdminTimetablePeriodFormArgs(
+            classLabel: _selectedClass,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _defaultTermId,
+            dayLabel: _selectedDay,
+            dayNumber: _activeDayNumber,
+            nextPeriodNumber: nextPeriod,
+            subjects: _subjectRecords,
+            staff: _staffRecords,
+          ),
+        ),
+      ),
+    );
+    await _handleTimetableWriteResult(result);
+  }
+
+  Future<void> _openEditPeriodForm(Map<String, dynamic> period) async {
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetablePeriodFormScreen(
+          args: AdminTimetablePeriodFormArgs(
+            classLabel: _selectedClass,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _defaultTermId,
+            dayLabel: _selectedDay,
+            dayNumber: _activeDayNumber,
+            nextPeriodNumber: _intValue(
+              period['period_number'],
+              fallback: _periodsForSelectedClass().length + 1,
+            ),
+            subjects: _subjectRecords,
+            staff: _staffRecords,
+            period: period,
+          ),
+        ),
+      ),
+    );
+    await _handleTimetableWriteResult(result);
+  }
+
+  Future<void> _handleTimetableWriteResult(
+    AdminTimetableFormResult? result,
+  ) async {
+    if (!mounted || result == null) return;
+    await _loadData();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: AppTheme.success,
+      ),
+    );
+  }
+
+  Future<void> _deletePeriod(Map<String, dynamic> period) async {
+    final id = _stringValue(period['id']);
+    if (id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Backend timetable slot ID is missing'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete timetable period'),
+        content: Text(
+          'Remove period ${period['period_number'] ?? period['period']} from $_selectedClass on $_selectedDay?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await BackendApiClient.instance.deleteRaw('/timetable/slots/$id');
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Timetable period deleted'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to delete timetable period: $error'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
   }
 
   Widget _buildSubstituteTab() {
@@ -1163,446 +1330,6 @@ class _TimetableAdviceFormScreenState
         ),
       ),
     );
-  }
-}
-
-class _TimetableSuggestionFormScreen extends StatefulWidget {
-  final String className;
-  final String day;
-  final SectionModel section;
-  final AcademicYearModel academicYear;
-  final String termId;
-  final int dayOfWeek;
-
-  const _TimetableSuggestionFormScreen({
-    required this.className,
-    required this.day,
-    required this.section,
-    required this.academicYear,
-    required this.termId,
-    required this.dayOfWeek,
-  });
-
-  @override
-  State<_TimetableSuggestionFormScreen> createState() =>
-      _TimetableSuggestionFormScreenState();
-}
-
-class _TimetableSuggestionFormScreenState
-    extends State<_TimetableSuggestionFormScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _periodCountCtrl = TextEditingController(text: '7');
-  final _startCtrl = TextEditingController(text: '09:00');
-  final _durationCtrl = TextEditingController(text: '40');
-  final _gapCtrl = TextEditingController(text: '5');
-  TimetableSuggestionResult? _preview;
-  bool _previewing = false;
-  bool _sending = false;
-
-  @override
-  void dispose() {
-    _periodCountCtrl.dispose();
-    _startCtrl.dispose();
-    _durationCtrl.dispose();
-    _gapCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _previewSuggestions() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _previewing = true;
-      _preview = null;
-    });
-    try {
-      final preview = await BackendApiClient.instance.suggestTimetableSlots(
-        sectionId: widget.section.id,
-        academicYearId: widget.academicYear.id,
-        termId: widget.termId,
-        dayOfWeek: widget.dayOfWeek,
-        periodCount: _positiveInt(_periodCountCtrl.text, 7),
-        startTime: _startCtrl.text.trim(),
-        periodDurationMinutes: _positiveInt(_durationCtrl.text, 40),
-        gapMinutes: _nonNegativeInt(_gapCtrl.text, 5),
-      );
-      if (!mounted) return;
-      setState(() {
-        _preview = preview;
-        _previewing = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _previewing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Suggestion preview failed: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    }
-  }
-
-  Future<void> _sendAdvice() async {
-    final preview = _preview;
-    if (preview == null || !_formKey.currentState!.validate()) return;
-    setState(() => _sending = true);
-    try {
-      await BackendApiClient.instance.createRaw('/principal/timetable-advice', {
-        'class_name': widget.className,
-        'section_id': widget.section.id,
-        'day': widget.day,
-        'message': _suggestionAdviceMessage(preview),
-        'status': 'open',
-        'suggestions': preview.suggestions
-            .map(
-              (suggestion) => {
-                ...suggestion.toSlotPayload(),
-                'subject_name': suggestion.subjectName,
-                'staff_name': suggestion.staffName,
-                'warnings': suggestion.warnings,
-                'blocking': suggestion.blocking,
-              },
-            )
-            .toList(),
-        'summary': preview.toSummaryPayload(),
-      });
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _sending = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Suggestion advice failed: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    }
-  }
-
-  String _suggestionAdviceMessage(TimetableSuggestionResult preview) {
-    final lines = preview.suggestions
-        .map((suggestion) {
-          final status = suggestion.blocking ? 'review needed' : 'ready';
-          final warnings = suggestion.warnings.isEmpty
-              ? ''
-              : ' ${suggestion.warnings.join(' ')}';
-          return 'P${suggestion.periodNumber}: ${suggestion.subjectName} with ${suggestion.staffName} (${suggestion.startTime}-${suggestion.endTime}) - $status.$warnings';
-        })
-        .join('\n');
-    return 'Principal timetable suggestion for ${widget.className} on ${widget.day}.\n${preview.creatablePeriods} periods are ready and ${preview.blockedPeriods} need review.\n$lines';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final preview = _preview;
-    return Scaffold(
-      backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: Text(
-          'Suggest Timetable',
-          style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-        ),
-        backgroundColor: AppTheme.surface,
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-          children: [
-            _TimetableFormSection(
-              title: 'Selected Timetable',
-              children: [
-                _TimetableReadOnlyValue(
-                  label: 'Class / Section',
-                  value: widget.className,
-                ),
-                _TimetableReadOnlyValue(label: 'Day', value: widget.day),
-                _TimetableReadOnlyValue(
-                  label: 'Academic Year',
-                  value: widget.academicYear.yearLabel,
-                ),
-                _TimetableReadOnlyValue(label: 'Term ID', value: widget.termId),
-                _TimetableReadOnlyValue(
-                  label: 'Section ID',
-                  value: widget.section.id,
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _TimetableFormSection(
-              title: 'Generation Parameters',
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final twoColumns = constraints.maxWidth >= 520;
-                    final fields = [
-                      _numberField(
-                        controller: _periodCountCtrl,
-                        label: 'Periods',
-                        min: 1,
-                        max: 12,
-                      ),
-                      _timeField(),
-                      _numberField(
-                        controller: _durationCtrl,
-                        label: 'Minutes per period',
-                        min: 1,
-                        max: 180,
-                      ),
-                      _numberField(
-                        controller: _gapCtrl,
-                        label: 'Gap minutes',
-                        min: 0,
-                        max: 60,
-                      ),
-                    ];
-                    if (!twoColumns) {
-                      return Column(
-                        children: fields
-                            .map(
-                              (field) => Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: field,
-                              ),
-                            )
-                            .toList(),
-                      );
-                    }
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: fields[0]),
-                            const SizedBox(width: 10),
-                            Expanded(child: fields[1]),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(child: fields[2]),
-                            const SizedBox(width: 10),
-                            Expanded(child: fields[3]),
-                          ],
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _TimetableFormSection(
-              title: 'Backend Preview',
-              children: [_buildSuggestionPreview(preview)],
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _previewing || _sending
-                      ? null
-                      : _previewSuggestions,
-                  icon: _previewing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.auto_awesome_outlined),
-                  label: const Text('Preview'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: preview == null || _sending || _previewing
-                      ? null
-                      : _sendAdvice,
-                  icon: _sending
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send_rounded),
-                  label: const Text('Send Advice'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _numberField({
-    required TextEditingController controller,
-    required String label,
-    required int min,
-    required int max,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: TextInputType.number,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      validator: (value) {
-        final parsed = int.tryParse((value ?? '').trim());
-        if (parsed == null || parsed < min || parsed > max) {
-          return 'Use $min-$max';
-        }
-        return null;
-      },
-      onChanged: (_) => setState(() => _preview = null),
-    );
-  }
-
-  Widget _timeField() {
-    return TextFormField(
-      controller: _startCtrl,
-      keyboardType: TextInputType.datetime,
-      decoration: const InputDecoration(
-        labelText: 'Start time',
-        hintText: '09:00',
-        border: OutlineInputBorder(),
-      ),
-      validator: (value) {
-        final text = (value ?? '').trim();
-        final match = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(text);
-        if (!match) return 'Use HH:mm';
-        return null;
-      },
-      onChanged: (_) => setState(() => _preview = null),
-    );
-  }
-
-  Widget _buildSuggestionPreview(TimetableSuggestionResult? preview) {
-    if (_previewing) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (preview == null) {
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          'Preview backend-generated suggestions before sending advice.',
-          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
-        ),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${preview.creatablePeriods} ready, ${preview.blockedPeriods} need review',
-          style: GoogleFonts.dmSans(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: preview.blockedPeriods == 0
-                ? AppTheme.success
-                : AppTheme.warning,
-          ),
-        ),
-        const SizedBox(height: 8),
-        ...preview.suggestions.map(_buildSuggestionRow),
-      ],
-    );
-  }
-
-  Widget _buildSuggestionRow(TimetableSuggestionModel suggestion) {
-    final color = suggestion.blocking ? AppTheme.warning : AppTheme.success;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: suggestion.blocking
-            ? AppTheme.warningContainer
-            : AppTheme.successContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(80)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: color.withAlpha(30),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'P${suggestion.periodNumber}',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  suggestion.subjectName,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Text(
-                  '${suggestion.staffName} - ${suggestion.startTime} to ${suggestion.endTime}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: AppTheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (suggestion.warnings.isNotEmpty)
-                  Text(
-                    suggestion.warnings.join(' '),
-                    style: GoogleFonts.dmSans(
-                      fontSize: 10,
-                      color: AppTheme.warning,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  int _positiveInt(String value, int fallback) {
-    final parsed = int.tryParse(value.trim()) ?? fallback;
-    return parsed <= 0 ? fallback : parsed;
-  }
-
-  int _nonNegativeInt(String value, int fallback) {
-    final parsed = int.tryParse(value.trim()) ?? fallback;
-    return parsed < 0 ? fallback : parsed;
   }
 }
 

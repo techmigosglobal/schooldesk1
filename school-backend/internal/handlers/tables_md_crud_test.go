@@ -41,14 +41,14 @@ func TestTablesMDCRUDHandlerUsesCustomPrimaryKeyAndSchoolScope(t *testing.T) {
 	router.ServeHTTP(create, httptest.NewRequest(
 		http.MethodPost,
 		"/classes",
-		bytes.NewBufferString(`{"class_id":"class-10-a","school_id":"client-school","class_name":"Grade 10 A","academic_year_id":"year-1"}`),
+		bytes.NewBufferString(`{"class_id":"class-pp1-a","school_id":"client-school","class_name":"PP1 A","academic_year_id":"year-1"}`),
 	))
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", create.Code, create.Body.String())
 	}
 
 	var row map[string]interface{}
-	if err := database.DB.Table("classes").Where("class_id = ?", "class-10-a").Take(&row).Error; err != nil {
+	if err := database.DB.Table("classes").Where("class_id = ?", "class-pp1-a").Take(&row).Error; err != nil {
 		t.Fatalf("load created class: %v", err)
 	}
 	if got := row["school_id"]; got != "school-from-token" {
@@ -56,7 +56,7 @@ func TestTablesMDCRUDHandlerUsesCustomPrimaryKeyAndSchoolScope(t *testing.T) {
 	}
 
 	get := httptest.NewRecorder()
-	router.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/classes/class-10-a", nil))
+	router.ServeHTTP(get, httptest.NewRequest(http.MethodGet, "/classes/class-pp1-a", nil))
 	if get.Code != http.StatusOK {
 		t.Fatalf("get status=%d body=%s", get.Code, get.Body.String())
 	}
@@ -68,7 +68,7 @@ func TestTablesMDCRUDHandlerUsesCustomPrimaryKeyAndSchoolScope(t *testing.T) {
 	if err := json.Unmarshal(get.Body.Bytes(), &response); err != nil {
 		t.Fatalf("decode get response: %v", err)
 	}
-	if !response.Success || response.Data["class_id"] != "class-10-a" {
+	if !response.Success || response.Data["class_id"] != "class-pp1-a" {
 		t.Fatalf("unexpected response: %+v", response)
 	}
 }

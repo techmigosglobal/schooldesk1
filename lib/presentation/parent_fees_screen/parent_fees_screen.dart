@@ -30,9 +30,20 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   bool _loading = true;
   String? _error;
 
-  int get _totalPending => _feeStructure
-      .where((f) => f['status'] == 'Pending')
-      .fold(0, (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0));
+  double get _totalAmount => _feeStructure.fold(
+    0,
+    (sum, f) => sum + ((f['totalAmount'] as num?)?.toDouble() ?? 0),
+  );
+
+  double get _paidAmount => _feeStructure.fold(
+    0,
+    (sum, f) => sum + ((f['paidAmount'] as num?)?.toDouble() ?? 0),
+  );
+
+  double get _pendingAmount => _feeStructure.fold(
+    0,
+    (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0),
+  );
 
   @override
   void initState() {
@@ -65,21 +76,25 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               );
         feeList = invoices.map((inv) {
           final status = (inv['status'] ?? '').toString().toLowerCase();
+          final balance = (inv['balance'] as num?)?.toDouble() ?? 0;
+          final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0;
+          final total =
+              (inv['net_amount'] as num?)?.toDouble() ??
+              (inv['total_amount'] as num?)?.toDouble() ??
+              balance + paid;
           // Backend integration: invoice/payment values are rendered only from
           // the fee APIs. Missing payment metadata remains empty in the UI.
           return {
             'id': inv['id'],
             'invoiceNumber': inv['invoice_number'] ?? '',
-            'component': 'Invoice ${inv['invoice_number'] ?? ''}',
-            'frequency': 'Invoice',
-            'amount': (inv['balance'] as num?)?.toDouble() ?? 0,
-            'paidAmount': (inv['paid_amount'] as num?)?.toDouble() ?? 0,
-            'totalAmount':
-                (inv['net_amount'] as num?)?.toDouble() ??
-                (inv['total_amount'] as num?)?.toDouble() ??
-                0,
+            'component': _installmentLabel(inv),
+            'frequency': 'Installment',
+            'amount': balance,
+            'paidAmount': paid,
+            'totalAmount': total,
             'dueDate': (inv['due_date'] ?? '').toString(),
-            'status': status == 'paid' ? 'Paid' : 'Pending',
+            'status': _statusFromInvoice(status, balance, inv['due_date']),
+            'items': _invoiceItems(inv),
           };
         }).toList();
 
@@ -163,16 +178,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     );
     if (_loading) {
       return SchoolDeskModuleScaffold(
-        title: 'Fees',
-        subtitle: 'Review dues, payment history, and fee structure',
+        title: 'My Fees',
+        subtitle: 'Fee overview, installments, and payment history',
         drawer: drawer,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
     if (_error != null || _childrenData.isEmpty) {
       return SchoolDeskModuleScaffold(
-        title: 'Fees',
-        subtitle: 'Review dues, payment history, and fee structure',
+        title: 'My Fees',
+        subtitle: 'Fee overview, installments, and payment history',
         drawer: drawer,
         body: Center(
           child: Padding(
@@ -200,8 +215,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       );
     }
     return SchoolDeskModuleScaffold(
-      title: 'Fees',
-      subtitle: 'Review dues, payment history, and fee structure',
+      title: 'My Fees',
+      subtitle: 'Fee overview, installments, and payment history',
       drawer: drawer,
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
@@ -210,9 +225,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       bottom: TabBar(
         controller: _tabController,
         tabs: const [
-          Tab(text: 'Due Fees'),
-          Tab(text: 'History'),
-          Tab(text: 'Structure'),
+          Tab(text: 'Fees'),
+          Tab(text: 'Payments'),
+          Tab(text: 'Fee Types'),
         ],
       ),
       body: Column(
@@ -270,19 +285,141 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     );
   }
 
+  Widget _buildFeeStudentCard(Map<String, dynamic> child) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(14),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: AppTheme.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.account_circle_rounded,
+              color: AppTheme.primary,
+              size: 34,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _studentName(child).isEmpty
+                      ? 'Linked student'
+                      : _studentName(child),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.onSurface,
+                  ),
+                ),
+                Text(
+                  [
+                    _studentClass(child),
+                    if (_studentRoll(child).isNotEmpty)
+                      'Adm No: ${_studentRoll(child)}',
+                  ].where((part) => part.trim().isNotEmpty).join(' | '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: AppTheme.muted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_childrenData.length > 1)
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: AppTheme.muted,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryAmountRow(String label, String amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Icon(Icons.circle, color: color, size: 8),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: AppTheme.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            amount,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: AppTheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _emptyRow(IconData icon, String message, Color color) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            message,
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDueFeesTab() {
-    final pending = _feeStructure
-        .where((f) => f['status'] == 'Pending')
-        .toList();
+    final child = _childrenData[_activeChildIndex];
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildFeeStudentCard(child),
+          const SizedBox(height: 14),
           _buildDueSummaryCard(),
           const SizedBox(height: 16),
           Text(
-            'Pending Payments',
+            'Fee Installments',
             style: GoogleFonts.dmSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -297,78 +434,164 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppTheme.outlineVariant),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.receipt_long_rounded,
-                    color: AppTheme.muted,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'No fee invoices published yet.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        color: AppTheme.muted,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else if (pending.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppTheme.successContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppTheme.success,
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'No pending fees in published invoices.',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        color: AppTheme.success,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+              child: _emptyRow(
+                Icons.receipt_long_rounded,
+                'No fee invoices published yet.',
+                AppTheme.muted,
               ),
             )
           else ...[
-            ...pending.map((f) => _feeItemCard(f, true)),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _openPaymentRequestForm(),
-                icon: const Icon(Icons.payment_rounded, size: 18),
-                label: Text(
-                  'Pay All Pending — ₹$_totalPending',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+            ..._feeStructure.map((f) => _feeItemCard(f, true)),
+            if (_pendingAmount > 0) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openPaymentRequestForm(),
+                  icon: const Icon(Icons.payment_rounded, size: 18),
+                  label: Text(
+                    'Pay Now — ${_money(_pendingAmount)}',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _headerColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _headerColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDueSummaryCard() {
+    final paid = _paidAmount;
+    final total = _totalAmount;
+    final pending = _pendingAmount;
+    final hasInvoices = _feeStructure.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 112,
+                height: 112,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      height: 96,
+                      child: CircularProgressIndicator(
+                        value: total > 0 ? paid / total : 0,
+                        strokeWidth: 13,
+                        backgroundColor: AppTheme.surfaceVariant,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppTheme.primary,
+                        ),
+                      ),
+                    ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          total > 0
+                              ? '${((paid / total) * 100).toStringAsFixed(0)}%'
+                              : '0%',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.onSurface,
+                          ),
+                        ),
+                        Text(
+                          'Paid',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: AppTheme.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fee Overview',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _summaryAmountRow(
+                      'Total Fees',
+                      hasInvoices ? _money(total) : '—',
+                      AppTheme.primary,
+                    ),
+                    _summaryAmountRow(
+                      'Paid Fees',
+                      hasInvoices ? _money(paid) : '—',
+                      AppTheme.success,
+                    ),
+                    _summaryAmountRow(
+                      'Pending Fees',
+                      hasInvoices ? _money(pending) : '—',
+                      AppTheme.error,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (pending > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withAlpha(18),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_money(pending)} is due on ${_nextDueDateLabel()}',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.error,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _openPaymentRequestForm(),
+                    child: const Text('Pay Now'),
+                  ),
+                ],
               ),
             ),
           ],
@@ -377,101 +600,18 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     );
   }
 
-  Widget _buildDueSummaryCard() {
-    final paid = _feeStructure
-        .where((f) => f['status'] == 'Paid')
-        .fold(0, (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0));
-    final total = _feeStructure.fold(
-      0,
-      (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0),
-    );
-    final hasInvoices = _feeStructure.isNotEmpty;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFD4850A), Color(0xFFE67E22)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total Pending',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    Text(
-                      hasInvoices ? '₹$_totalPending' : '—',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                    Text(
-                      hasInvoices
-                          ? 'Live invoice status from backend'
-                          : 'Published invoice balances will appear here',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: total > 0 ? paid / total : 0,
-              backgroundColor: Colors.white30,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              minHeight: 6,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            hasInvoices ? '₹$paid of ₹$total paid' : 'No invoices published',
-            style: GoogleFonts.dmSans(fontSize: 11, color: Colors.white70),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _feeItemCard(Map<String, dynamic> fee, bool showPayBtn) {
-    final isPending = fee['status'] == 'Pending';
+    final status = _text(fee['status'], fallback: 'Pending');
+    final isPending = status == 'Pending' || status == 'Due';
+    final isPaid = status == 'Paid';
     final meta = <String>[
-      _text(fee['frequency']),
       if (_text(fee['dueDate']).isNotEmpty) 'Due: ${_text(fee['dueDate'])}',
     ].where((part) => part.isNotEmpty).join(' • ');
+    final statusColor = isPaid
+        ? AppTheme.success
+        : isPending
+        ? AppTheme.warning
+        : AppTheme.muted;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -490,16 +630,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isPending
-                  ? AppTheme.warning.withAlpha(20)
-                  : AppTheme.successContainer,
+              color: statusColor.withAlpha(18),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
-              isPending
-                  ? Icons.pending_actions_rounded
-                  : Icons.check_circle_rounded,
-              color: isPending ? AppTheme.warning : AppTheme.success,
+              isPaid
+                  ? Icons.check_circle_rounded
+                  : isPending
+                  ? Icons.schedule_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: statusColor,
               size: 20,
             ),
           ),
@@ -530,11 +670,11 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₹${fee['amount']}',
+                _money((fee['amount'] as num?)?.toDouble() ?? 0),
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: isPending ? AppTheme.warning : AppTheme.success,
+                  color: statusColor,
                 ),
               ),
               if (showPayBtn && isPending)
@@ -562,15 +702,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.successContainer,
+                    color: statusColor.withAlpha(18),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'Paid',
+                    status,
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.success,
+                      color: statusColor,
                     ),
                   ),
                 ),
@@ -727,13 +867,14 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   }
 
   Widget _buildStructureTab() {
-    final totalAnnual = _feeStructure.fold(
+    final feeTypes = _feeTypeBreakdown();
+    final totalAnnual = feeTypes.fold<double>(
       0,
-      (sum, f) => sum + ((f['amount'] as num?)?.toInt() ?? 0),
+      (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0),
     );
     final child = _childrenData[_activeChildIndex];
     final className = _studentClass(child);
-    if (_feeStructure.isEmpty) {
+    if (feeTypes.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -759,8 +900,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             children: [
               Text(
                 className.isEmpty
-                    ? 'Fee Structure'
-                    : 'Fee Structure — Class $className',
+                    ? 'Fee Types'
+                    : 'Fee Types — Class $className',
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -769,7 +910,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               ),
               const SizedBox(height: 4),
               Text(
-                'Values sourced from generated invoices and balances.',
+                'Values are sourced from generated invoice items.',
                 style: GoogleFonts.dmSans(
                   fontSize: 11,
                   color: AppTheme.primary,
@@ -779,7 +920,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           ),
         ),
         const SizedBox(height: 12),
-        ..._feeStructure.map((f) => _feeItemCard(f, false)),
+        ...feeTypes.map((f) => _feeTypeCard(f)),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(14),
@@ -790,7 +931,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           child: Row(
             children: [
               Text(
-                'Total Annual Fee:',
+                'Total Fee Types:',
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -798,7 +939,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               ),
               const Spacer(),
               Text(
-                '₹$totalAnnual',
+                _money(totalAnnual),
                 style: GoogleFonts.dmSans(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -812,12 +953,92 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     );
   }
 
+  Widget _feeTypeCard(Map<String, dynamic> row) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withAlpha(18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.local_offer_outlined,
+              color: AppTheme.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _text(row['name'], fallback: 'Fee type'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            _money((row['amount'] as num?)?.toDouble() ?? 0),
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _feeTypeBreakdown() {
+    final totals = <String, double>{};
+    for (final fee in _feeStructure) {
+      final items = fee['items'];
+      if (items is! List || items.isEmpty) {
+        final name = _text(fee['component'], fallback: 'Fee');
+        totals[name] =
+            (totals[name] ?? 0) +
+            ((fee['totalAmount'] as num?)?.toDouble() ?? 0);
+        continue;
+      }
+      for (final rawItem in items.whereType<Map>()) {
+        final item = Map<String, dynamic>.from(rawItem);
+        final category = item['fee_category'] is Map
+            ? Map<String, dynamic>.from(item['fee_category'] as Map)
+            : const <String, dynamic>{};
+        final name = _text(
+          item['description'] ?? category['category_name'] ?? category['name'],
+          fallback: 'Fee',
+        );
+        totals[name] =
+            (totals[name] ?? 0) + ((item['amount'] as num?)?.toDouble() ?? 0);
+      }
+    }
+    return totals.entries
+        .map((entry) => {'name': entry.key, 'amount': entry.value})
+        .toList();
+  }
+
   Future<void> _openPaymentRequestForm({
     Map<String, dynamic>? singleFee,
   }) async {
     final pendingFees = singleFee != null
         ? [singleFee]
-        : _feeStructure.where((f) => f['status'] == 'Pending').toList();
+        : _feeStructure
+              .where((f) => ((f['amount'] as num?)?.toDouble() ?? 0) > 0)
+              .toList();
     if (pendingFees.isEmpty) return;
     final student = _childrenData.isEmpty
         ? null
@@ -863,6 +1084,57 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   String _studentRoll(Map<String, dynamic> student) =>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';
+
+  String _installmentLabel(Map<String, dynamic> invoice) {
+    final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
+    final invoiceNumber = _text(invoice['invoice_number']);
+    if (dueDate == null) {
+      return invoiceNumber.isEmpty
+          ? 'Fee installment'
+          : 'Invoice $invoiceNumber';
+    }
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[dueDate.month - 1]} ${dueDate.year}';
+  }
+
+  String _statusFromInvoice(String rawStatus, double balance, Object? dueDate) {
+    if (rawStatus == 'paid' || balance <= 0) return 'Paid';
+    final date = DateTime.tryParse('${dueDate ?? ''}');
+    if (date != null && date.isBefore(DateTime.now())) return 'Due';
+    return 'Upcoming';
+  }
+
+  List<Map<String, dynamic>> _invoiceItems(Map<String, dynamic> invoice) {
+    final raw = invoice['items'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((item) {
+      return Map<String, dynamic>.from(item);
+    }).toList();
+  }
+
+  String _nextDueDateLabel() {
+    final dueRows = _feeStructure
+        .where((row) => (row['amount'] as num?) != null)
+        .where((row) => ((row['amount'] as num?)?.toDouble() ?? 0) > 0)
+        .toList();
+    dueRows.sort((a, b) => _text(a['dueDate']).compareTo(_text(b['dueDate'])));
+    return dueRows.isEmpty ? 'the due date' : _text(dueRows.first['dueDate']);
+  }
+
+  String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
 
   String _paymentStatusLabel(dynamic raw) {
     switch ('${raw ?? ''}'.toLowerCase()) {

@@ -1170,7 +1170,7 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
                 controller: _gradeName,
                 decoration: const InputDecoration(
                   labelText: 'Class / grade name',
-                  helperText: 'Examples: Grade 10, PP1, Play Group',
+                  helperText: 'Examples: PP1, PP2, Play Group',
                 ),
                 validator: (value) => (value ?? '').trim().isEmpty
                     ? 'Class / grade name is required'

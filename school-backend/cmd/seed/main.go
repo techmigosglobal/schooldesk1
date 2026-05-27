@@ -167,10 +167,10 @@ func seedAcademicFixtures(schoolID, yearID string) error {
 	}
 
 	grade := models.Grade{
-		BaseModel:   models.BaseModel{ID: "grade-default-10"},
+		BaseModel:   models.BaseModel{ID: "grade-default-pp1"},
 		SchoolID:    schoolID,
-		GradeNumber: 10,
-		GradeName:   "Grade 10",
+		GradeNumber: 0,
+		GradeName:   "PP1",
 	}
 	if err := database.DB.Where("id = ?", grade.ID).FirstOrCreate(&grade).Error; err != nil {
 		return err
@@ -203,7 +203,7 @@ func seedAcademicFixtures(schoolID, yearID string) error {
 	}
 
 	section := models.Section{
-		BaseModel:      models.BaseModel{ID: "section-default-10a"},
+		BaseModel:      models.BaseModel{ID: "section-default-pp1a"},
 		GradeID:        grade.ID,
 		AcademicYearID: yearID,
 		SectionName:    "A",
