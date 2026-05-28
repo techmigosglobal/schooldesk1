@@ -126,17 +126,17 @@ while (($#)); do
   shift
 done
 
-vps_host="${HOSTINGER_SSH_HOST:-187.127.157.43}"
+vps_host="${HOSTINGER_SSH_HOST:-46.28.44.198}"
 vps_user="${HOSTINGER_SSH_USER:-root}"
 ssh_key="${HOSTINGER_SSH_KEY:-$HOME/.ssh/schooldesk_hostinger_vps}"
-expected_fingerprint="${HOSTINGER_EXPECTED_ED25519_SHA256:-SHA256:ZqqHqq502eUL+j3N5ccdlfVD7nxPUBkGchftOj40atA}"
-remote_root="${HOSTINGER_REMOTE_ROOT:-/opt/schooldesk_V1}"
+expected_fingerprint="${HOSTINGER_EXPECTED_ED25519_SHA256:-SHA256:B/u7sYGr6RwyxXuwcoa5cKHlGhkcg1HAqelU6+WEpP4}"
+remote_root="${HOSTINGER_REMOTE_ROOT:-/opt/schooldesk-backend}"
 compose_file="${HOSTINGER_COMPOSE_FILE:-docker-compose.hostinger-traefik.yml}"
 compose_service="${HOSTINGER_COMPOSE_SERVICE:-go-api}"
 compose_extra_services="${HOSTINGER_COMPOSE_EXTRA_SERVICES:-}"
 compose_profiles="${HOSTINGER_COMPOSE_PROFILES:-}"
-health_url="${HOSTINGER_API_HEALTH_URL:-https://schooldesk-api.187.127.157.43.nip.io/health}"
-login_url="${HOSTINGER_API_LOGIN_URL:-https://schooldesk-api.187.127.157.43.nip.io/api/v1/auth/login}"
+health_url="${HOSTINGER_API_HEALTH_URL:-https://schooldesk-api.46.28.44.198.nip.io/health}"
+login_url="${HOSTINGER_API_LOGIN_URL:-https://schooldesk-api.46.28.44.198.nip.io/api/v1/auth/login}"
 backup_root="${HOSTINGER_BACKUP_ROOT:-/root/schooldesk-backups}"
 known_hosts_file="${HOSTINGER_KNOWN_HOSTS_FILE:-$HOME/.ssh/known_hosts}"
 ssh_target="${vps_user}@${vps_host}"

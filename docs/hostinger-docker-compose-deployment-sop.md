@@ -7,14 +7,14 @@ checkout to the Hostinger VPS.
 
 | Item | Value |
 | --- | --- |
-| VPS SSH | `root@187.127.157.43` |
+| VPS SSH | `root@46.28.44.198` |
 | SSH key | `~/.ssh/schooldesk_hostinger_vps` |
-| Host fingerprint | `SHA256:ZqqHqq502eUL+j3N5ccdlfVD7nxPUBkGchftOj40atA` |
-| Remote root | `/opt/schooldesk_V1` |
+| Host fingerprint | `SHA256:B/u7sYGr6RwyxXuwcoa5cKHlGhkcg1HAqelU6+WEpP4` |
+| Remote root | `/opt/schooldesk-backend` |
 | Compose file | `docker-compose.hostinger-traefik.yml` |
 | API service | `go-api` / `schooldesk-go-api` |
-| Health URL | `https://schooldesk-api.187.127.157.43.nip.io/health` |
-| API base URL | `https://schooldesk-api.187.127.157.43.nip.io/api` |
+| Health URL | `https://schooldesk-api.46.28.44.198.nip.io/health` |
+| API base URL | `https://schooldesk-api.46.28.44.198.nip.io/api` |
 
 ## One-Time Local Setup
 
@@ -44,7 +44,7 @@ This confirms:
 - SSH host fingerprint matches the expected Hostinger server.
 - SSH login works.
 - Docker Compose is present.
-- `/opt/schooldesk_V1/.env` and compose file exist.
+- `/opt/schooldesk-backend/.env` and compose file exist.
 - Current containers are visible.
 - Public health endpoint returns HTTP 200.
 - Optional login smoke passes when credentials are exported.
@@ -135,7 +135,7 @@ Rollback is manual by design.
 3. Restore source:
 
 ```bash
-cd /opt/schooldesk_V1
+cd /opt/schooldesk-backend
 rm -rf school-backend
 tar -xzf /root/schooldesk-backups/deploy-<timestamp>/school-backend-source.tgz
 ```
@@ -153,7 +153,7 @@ docker exec -i schooldesk-postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRE
 
 ```bash
 docker compose -f docker-compose.hostinger-traefik.yml up -d --build go-api
-curl -fsS https://schooldesk-api.187.127.157.43.nip.io/health
+curl -fsS https://schooldesk-api.46.28.44.198.nip.io/health
 ```
 
 ## Rules For Future Deployments

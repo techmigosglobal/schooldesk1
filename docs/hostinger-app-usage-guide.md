@@ -2,8 +2,8 @@
 
 ## Backend
 
-- API base URL: `https://schooldesk-api.187.127.157.43.nip.io/api`
-- Health check: `https://schooldesk-api.187.127.157.43.nip.io/health`
+- API base URL: `https://schooldesk-api.46.28.44.198.nip.io/api`
+- Health check: `https://schooldesk-api.46.28.44.198.nip.io/health`
 - Hostinger VPS template: Ubuntu 24.04 with Docker and Traefik
 
 The API is deployed as Docker services:
@@ -54,9 +54,9 @@ The Parent QA account is linked to seeded admission number `ADM2025001`.
 ## Production Domain Cutover
 
 Before publishing outside QA, point a real domain such as
-`api.yourschool.com` to `187.127.157.43`, update both:
+`api.yourschool.com` to `46.28.44.198`, update both:
 
-- Hostinger `/opt/schooldesk_V1/.env`: `API_HOST=api.yourschool.com`
+- Hostinger `/opt/schooldesk-backend/.env`: `API_HOST=api.yourschool.com`
 - Flutter `env.hostinger.json`: `API_BASE_URL=https://api.yourschool.com/api`
 
 Then recreate the API container and rebuild the AAB.
