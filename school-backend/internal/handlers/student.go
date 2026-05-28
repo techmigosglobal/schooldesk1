@@ -500,26 +500,34 @@ func (h *StudentHandler) UpdateStudent(c *gin.Context) {
 
 func (h *StudentHandler) DeleteStudent(c *gin.Context) {
 	id := c.Param("id")
+	schoolID := scopedSchoolID(c)
 
-	// Soft-delete: mark the student inactive rather than removing the row.
-	// This preserves attendance, fee invoice, exam, and audit records that
-	// reference this student's ID.
-	result := database.DB.Model(&models.Student{}).
-		Where("id = ? AND school_id = ?", id, scopedSchoolID(c)).
-		Update("status", "inactive")
-
-	if result.Error != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var student models.Student
+		if err := tx.First(&student, "id = ? AND school_id = ?", id, schoolID).Error; err != nil {
+			return err
+		}
+		if err := cleanupStudentAssociations(tx, schoolID, id); err != nil {
+			return err
+		}
+		return tx.Model(&student).Updates(map[string]interface{}{
+			"status":             "inactive",
+			"current_section_id": nil,
+			"parent_id":          "",
+			"user_id":            "",
+		}).Error
+	}); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, models.APIResponse{
+				Success: false,
+				Error:   "Student not found",
+			})
+			return
+		}
+		log.Printf("student delete cleanup failed for %s: %v", id, err)
 		c.JSON(http.StatusInternalServerError, models.APIResponse{
 			Success: false,
 			Error:   "Failed to deactivate student",
-		})
-		return
-	}
-	if result.RowsAffected == 0 {
-		// Either the student does not exist or belongs to another school.
-		c.JSON(http.StatusNotFound, models.APIResponse{
-			Success: false,
-			Error:   "Student not found",
 		})
 		return
 	}
@@ -527,8 +535,101 @@ func (h *StudentHandler) DeleteStudent(c *gin.Context) {
 	auditAction(c, "students", "delete", "students", &id)
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
-		Message: "Student deactivated successfully",
+		Message: "Student deactivated and linked records removed successfully",
 	})
+}
+
+func cleanupStudentAssociations(tx *gorm.DB, schoolID, studentID string) error {
+	var invoiceIDs []string
+	if err := tx.Model(&models.FeeInvoice{}).
+		Where("student_id = ?", studentID).
+		Pluck("id", &invoiceIDs).Error; err != nil {
+		return err
+	}
+	if len(invoiceIDs) > 0 {
+		if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.ParentPaymentRequest{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.Payment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.FeeInvoiceItem{}).Error; err != nil {
+			return err
+		}
+	}
+
+	deletes := []struct {
+		query string
+		args  []interface{}
+		model interface{}
+	}{
+		{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.ParentPaymentRequest{}},
+		{"student_id = ?", []interface{}{studentID}, &models.FeeInvoice{}},
+		{"student_id = ?", []interface{}{studentID}, &models.FeeConcession{}},
+		{"student_id = ?", []interface{}{studentID}, &models.ReportCard{}},
+		{"student_id = ?", []interface{}{studentID}, &models.StudentMark{}},
+		{"student_id = ?", []interface{}{studentID}, &models.StudentAttendance{}},
+		{"student_id = ?", []interface{}{studentID}, &models.AttendanceSummary{}},
+		{"student_id = ?", []interface{}{studentID}, &models.StudentLeaveApplication{}},
+		{"student_id = ?", []interface{}{studentID}, &models.HomeworkSubmission{}},
+		{"student_id = ?", []interface{}{studentID}, &models.Homework{}},
+		{"student_id = ?", []interface{}{studentID}, &models.DiaryEntry{}},
+		{"student_id = ?", []interface{}{studentID}, &models.ParentTeacherMeeting{}},
+		{"student_id = ?", []interface{}{studentID}, &models.StudentTransport{}},
+		{"student_id = ?", []interface{}{studentID}, &models.TransferRecord{}},
+		{"student_id = ?", []interface{}{studentID}, &models.MedicalRecord{}},
+		{"student_id = ?", []interface{}{studentID}, &models.StudentDocument{}},
+		{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.ParentStudentLink{}},
+		{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.StudentGuardian{}},
+	}
+	for _, item := range deletes {
+		if err := tx.Where(item.query, item.args...).Delete(item.model).Error; err != nil {
+			return err
+		}
+	}
+
+	var conversationIDs []string
+	if err := tx.Model(&models.MessageConversation{}).
+		Where("school_id = ? AND student_id = ?", schoolID, studentID).
+		Pluck("id", &conversationIDs).Error; err != nil {
+		return err
+	}
+	if len(conversationIDs) > 0 {
+		if err := tx.Where("conversation_id IN ?", conversationIDs).Delete(&models.Message{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", conversationIDs).Delete(&models.MessageConversation{}).Error; err != nil {
+			return err
+		}
+	}
+
+	var enrollmentIDs []string
+	if err := tx.Model(&models.Enrollment{}).
+		Where("student_id = ?", studentID).
+		Pluck("id", &enrollmentIDs).Error; err != nil {
+		return err
+	}
+	if len(enrollmentIDs) > 0 {
+		if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.StudentAttendance{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.StudentMark{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.ReportCard{}).Error; err != nil {
+			return err
+		}
+	}
+	if err := tx.Where("student_id = ?", studentID).Delete(&models.Enrollment{}).Error; err != nil {
+		return err
+	}
+
+	return tx.Model(&models.User{}).
+		Where("school_id = ? AND linked_type = ? AND linked_id = ?", schoolID, "student", studentID).
+		Updates(map[string]interface{}{
+			"is_active":           false,
+			"auth_invalidated_at": time.Now().UTC(),
+		}).Error
 }
 
 func (h *StudentHandler) UploadStudentPhoto(c *gin.Context) {
@@ -801,7 +902,8 @@ func (h *StudentHandler) GetStudentFees(c *gin.Context) {
 	}
 	var invoices []models.FeeInvoice
 	database.DB.
-		Where("student_id = ?", studentID).
+		Joins("JOIN students ON students.id = fee_invoices.student_id").
+		Where("fee_invoices.student_id = ? AND students.school_id = ? AND students.status != ?", studentID, scopedSchoolID(c), "inactive").
 		Preload("Student").
 		Preload("Student.CurrentSection").
 		Preload("Student.CurrentSection.Grade").

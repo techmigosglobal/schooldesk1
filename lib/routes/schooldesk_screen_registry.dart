@@ -185,6 +185,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-inbox-screen',
+      title: 'Operational Inbox',
+      module: 'Communication',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/fee-monitoring-screen',
       title: SchoolDeskGlossary.feeMonitoring,
       module: 'Finance',

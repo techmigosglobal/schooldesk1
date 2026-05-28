@@ -88,11 +88,11 @@ func (h *DashboardHandler) Admin(c *gin.Context) {
 			(SELECT COUNT(*) FROM sections JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ?) AS total_classes,
 			(SELECT COUNT(*) FROM leave_applications JOIN staffs ON staffs.id = leave_applications.staff_id WHERE staffs.school_id = ? AND leave_applications.status = 'pending') AS pending_approvals,
 			(SELECT COUNT(*) FROM notification_logs WHERE school_id = ? AND is_read = false) AS unread_alerts,
-			COALESCE((SELECT SUM(fee_invoices.net_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_invoiced,
-			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_paid,
-			COALESCE((SELECT SUM(fee_invoices.balance) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_balance,
-			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND fee_invoices.status != 'paid') AS pending_invoices,
-			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND fee_invoices.status = 'paid') AS paid_invoices,
+			COALESCE((SELECT SUM(fee_invoices.net_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_invoiced,
+			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_paid,
+			COALESCE((SELECT SUM(fee_invoices.balance) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_balance,
+			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive' AND fee_invoices.status != 'paid') AS pending_invoices,
+			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive' AND fee_invoices.status = 'paid') AS paid_invoices,
 			(SELECT COUNT(*) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?) AS today_sessions,
 			COALESCE((SELECT SUM(attendance_sessions.present_count) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_present,
 			COALESCE((SELECT SUM(attendance_sessions.total_students) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_marked,
@@ -146,11 +146,11 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 				(SELECT COUNT(*) FROM announcements WHERE school_id = ? AND is_urgent = true) AS urgent_notices,
 				(SELECT COUNT(*) FROM events WHERE school_id = ? AND start_date >= date(?)) AS upcoming_events,
 				(SELECT COUNT(*) FROM exams WHERE school_id = ? AND start_date >= ?) AS upcoming_exams,
-			COALESCE((SELECT SUM(fee_invoices.net_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_invoiced,
-			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_paid,
-			COALESCE((SELECT SUM(fee_invoices.balance) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ?), 0) AS total_balance,
-			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND fee_invoices.status != 'paid') AS pending_invoices,
-			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND fee_invoices.status = 'paid') AS paid_invoices,
+			COALESCE((SELECT SUM(fee_invoices.net_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_invoiced,
+			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_paid,
+			COALESCE((SELECT SUM(fee_invoices.balance) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_balance,
+			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive' AND fee_invoices.status != 'paid') AS pending_invoices,
+			(SELECT COUNT(*) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive' AND fee_invoices.status = 'paid') AS paid_invoices,
 				(SELECT COUNT(*) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?) AS today_sessions,
 				COALESCE((SELECT SUM(attendance_sessions.present_count) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_present,
 				COALESCE((SELECT SUM(attendance_sessions.total_students) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_marked
@@ -793,7 +793,11 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 	}
 	if err := database.DB.Raw(`
 		WITH linked_students AS (
-			SELECT student_id FROM parent_student_links WHERE school_id = ? AND parent_user_id = ?
+			SELECT parent_student_links.student_id
+			FROM parent_student_links
+			JOIN students ON students.id = parent_student_links.student_id
+			WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ?
+				AND students.status != 'inactive'
 		)
 		SELECT
 			(SELECT COUNT(*) FROM linked_students) AS linked_children,
@@ -822,7 +826,7 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 		FROM parent_student_links
 		JOIN students ON students.id = parent_student_links.student_id
 		LEFT JOIN fee_invoices ON fee_invoices.student_id = students.id
-		WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ?
+		WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ? AND students.status != 'inactive'
 		GROUP BY students.id, students.first_name, students.last_name, students.admission_number, students.current_section_id
 		ORDER BY students.first_name, students.last_name
 	`, schoolID, userID).Scan(&children).Error; err != nil {

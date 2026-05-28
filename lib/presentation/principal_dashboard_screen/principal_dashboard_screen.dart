@@ -320,7 +320,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   ),
                   _AcademicModuleItem(
                     label: 'Inbox',
-                    route: AppRoutes.approvalCenter,
+                    route: AppRoutes.principalInbox,
                     illustration: SchoolDeskUiIllustrations.principalInbox,
                     fallbackIcon: Icons.mail_rounded,
                     accent: const Color(0xFF0EA5E9),

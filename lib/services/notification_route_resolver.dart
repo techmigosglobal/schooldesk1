@@ -78,6 +78,7 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.parentTeacherChat,
       'teacher' => AppRoutes.teacherCommunication,
+      'principal' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }

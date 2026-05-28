@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/app_navigation.dart';
-import '../../widgets/dashboard_fab_widget.dart';
-import '../../widgets/erp_module_scaffold.dart';
+
 import '../../services/backend_api_client.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/empty_state_widget.dart';
+import '../../widgets/principal_directory_ui.dart';
+
+enum _EventFilter { all, today, upcoming, holidays, approvals, cancelled }
 
 class EventsCalendarScreen extends StatefulWidget {
   const EventsCalendarScreen({super.key});
@@ -13,602 +15,662 @@ class EventsCalendarScreen extends StatefulWidget {
   State<EventsCalendarScreen> createState() => _EventsCalendarScreenState();
 }
 
-class _EventsCalendarScreenState extends State<EventsCalendarScreen>
-    with SingleTickerProviderStateMixin {
-  int _selectedDrawerIndex = 10;
-  late TabController _tabController;
-  int _selectedMonth = 4;
-  List<Map<String, dynamic>> _events = [];
-  List<Map<String, dynamic>> _holidays = [];
-  String _academicYearId = '';
+class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
+  List<_PrincipalEvent> _events = [];
+  List<AcademicYearModel> _academicYears = [];
   bool _loading = true;
+  String? _error;
+  String _query = '';
+  String _selectedAcademicYearId = '';
+  int _selectedMonth = DateTime.now().month;
+  _EventFilter _filter = _EventFilter.all;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _loadData();
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final years = await BackendApiClient.instance.getAcademicYears();
-      final currentYears = years.where((y) => y.isCurrent).toList();
-      final academicYearId = currentYears.isNotEmpty
-          ? currentYears.first.id
-          : (years.isNotEmpty ? years.first.id : '');
-      final events = await BackendApiClient.instance.getEvents(
-        academicYearId: academicYearId.isEmpty ? null : academicYearId,
+      final selectedYearId = _selectedAcademicYearId.isNotEmpty
+          ? _selectedAcademicYearId
+          : _currentAcademicYearId(years);
+      final rows = await BackendApiClient.instance.getEvents(
+        academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
       );
+      final events = rows.map(_PrincipalEvent.fromApi).toList()
+        ..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
       setState(() {
-        _academicYearId = academicYearId;
-        _events = events.map(_eventFromApi).toList();
-        _holidays = _events.where((e) => e['holiday'] == true).toList();
+        _academicYears = years;
+        _selectedAcademicYearId = selectedYearId;
+        _events = events;
         _loading = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
     }
   }
 
-  Map<String, dynamic> _eventFromApi(Map<String, dynamic> event) {
-    final start = DateTime.tryParse((event['start_datetime'] ?? '').toString());
-    final end = DateTime.tryParse((event['end_datetime'] ?? '').toString());
-    final dateLabel = start == null
-        ? ''
-        : '${start.day} ${_monthName(start.month)} ${start.year}';
-    final timeLabel = start == null
-        ? 'TBD'
-        : '${_twoDigits(start.hour)}:${_twoDigits(start.minute)}'
-              '${end == null ? '' : ' - ${_twoDigits(end.hour)}:${_twoDigits(end.minute)}'}';
-    return {
-      'id': event['id'] ?? '',
-      'title': event['event_title'] ?? '',
-      'type': event['event_type'] ?? 'event',
-      'date': dateLabel,
-      'day': start?.day ?? '',
-      'month': start?.month ?? _selectedMonth,
-      'status': 'scheduled',
-      'holiday': event['is_holiday'] == true,
-      'location': event['location'] ?? '',
-      'venue': event['location'] ?? '',
-      'time': timeLabel,
-      'description': event['description'] ?? event['event_title'] ?? '',
-      'name': event['event_title'] ?? '',
-    };
+  String _currentAcademicYearId(List<AcademicYearModel> years) {
+    final current = years.where((year) => year.isCurrent).toList();
+    if (current.isNotEmpty) return current.first.id;
+    return years.isNotEmpty ? years.first.id : '';
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+  List<_PrincipalEvent> get _visibleEvents {
+    final now = DateTime.now();
+    final query = _query.trim().toLowerCase();
+    return _events.where((event) {
+      final matchesSearch =
+          query.isEmpty ||
+          [
+            event.title,
+            event.type,
+            event.status,
+            event.venue,
+            event.audience,
+            event.description,
+          ].join(' ').toLowerCase().contains(query);
+      if (!matchesSearch) return false;
+
+      return switch (_filter) {
+        _EventFilter.all => true,
+        _EventFilter.today => DateUtils.isSameDay(event.start, now),
+        _EventFilter.upcoming =>
+          event.start.isAfter(DateTime(now.year, now.month, now.day)) &&
+              event.status != 'cancelled',
+        _EventFilter.holidays => event.isHoliday,
+        _EventFilter.approvals => event.needsApproval,
+        _EventFilter.cancelled => event.status == 'cancelled',
+      };
+    }).toList();
   }
 
-  List<Map<String, dynamic>> get _monthEvents =>
-      _events.where((e) => e['month'] == _selectedMonth).toList();
+  List<_PrincipalEvent> get _monthEvents => _visibleEvents
+      .where((event) => event.start.month == _selectedMonth)
+      .toList();
+
+  int get _todayCount {
+    final now = DateTime.now();
+    return _events
+        .where((event) => DateUtils.isSameDay(event.start, now))
+        .length;
+  }
+
+  int get _upcomingCount {
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+    return _events
+        .where(
+          (event) =>
+              event.start.isAfter(startOfToday) && event.status != 'cancelled',
+        )
+        .length;
+  }
+
+  int get _holidayCount => _events.where((event) => event.isHoliday).length;
+
+  int get _approvalCount =>
+      _events.where((event) => event.needsApproval).length;
+
+  Future<void> _openCreateEvent() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _EventFormPage(
+          academicYears: _academicYears,
+          selectedAcademicYearId: _selectedAcademicYearId,
+          initialMonth: _selectedMonth,
+        ),
+      ),
+    );
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
+  Future<void> _openDetails(_PrincipalEvent event) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _EventDetailPage(
+          event: event,
+          academicYears: _academicYears,
+          selectedAcademicYearId: _selectedAcademicYearId,
+          onDelete: () => _deleteEvent(event),
+        ),
+      ),
+    );
+    if (changed == true) {
+      await _loadData();
+    }
+  }
+
+  Future<void> _openEditEvent(_PrincipalEvent event) async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _EventFormPage(
+          academicYears: _academicYears,
+          selectedAcademicYearId: event.academicYearId.isEmpty
+              ? _selectedAcademicYearId
+              : event.academicYearId,
+          initialMonth: event.start.month,
+          event: event,
+        ),
+      ),
+    );
+    if (saved == true) {
+      await _loadData();
+    }
+  }
+
+  Future<bool> _confirmDelete(_PrincipalEvent event) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove event?'),
+        content: Text(
+          'This will remove "${event.title}" from the school calendar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<bool> _deleteEvent(_PrincipalEvent event) async {
+    if (event.id.isEmpty) return false;
+    final confirmed = await _confirmDelete(event);
+    if (!confirmed) return false;
+    try {
+      await BackendApiClient.instance.deleteRaw('/events/${event.id}');
+      if (!mounted) return true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${event.title} removed'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to remove event: $error'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final drawer = PrincipalDrawer(
-      selectedIndex: _selectedDrawerIndex,
-      onDestinationSelected: (i) => setState(() => _selectedDrawerIndex = i),
-    );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Calendar',
-        subtitle: 'Plan calendars, events, and holidays for the school year',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return SchoolDeskModuleScaffold(
-      title: 'Calendar',
-      subtitle: 'Plan calendars, events, and holidays for the school year',
-      drawer: drawer,
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const DashboardFabWidget(role: DashboardRole.principal),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            onPressed: _openAddEventPage,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add Event'),
-          ),
-        ],
+    final visible = _monthEvents;
+    return PrincipalDirectoryScaffold(
+      title: 'Events Directory',
+      subtitle: 'Plan events, holidays, approvals, and school calendar dates',
+      loading: _loading,
+      error: _error,
+      onRefresh: _loadData,
+      onAdd: _openCreateEvent,
+      addTooltip: 'Create event',
+      addIcon: Icons.event_available_rounded,
+      isEmpty: !_loading && _error == null && visible.isEmpty,
+      emptyState: EmptyStateWidget(
+        icon: Icons.event_busy_rounded,
+        title: 'No events found',
+        description: _events.isEmpty
+            ? 'Create the first event for the selected academic year.'
+            : 'Adjust search, month, or status filters to see more events.',
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      bottom: TabBar(
-        controller: _tabController,
-        tabs: const [
-          Tab(text: 'Calendar'),
-          Tab(text: 'Events'),
-          Tab(text: 'Holidays'),
-        ],
-      ),
-      body: MediaQuery.of(context).size.width >= 840
-          ? _buildTabletLayout(context)
-          : _buildPhoneLayout(context),
-    );
-  }
-
-  Widget _buildPhoneLayout(BuildContext context) {
-    return TabBarView(
-      controller: _tabController,
-      children: [_buildCalendarTab(), _buildEventsTab(), _buildHolidaysTab()],
-    );
-  }
-
-  Widget _buildTabletLayout(BuildContext context) {
-    return TabBarView(
-      controller: _tabController,
-      children: [_buildCalendarTab(), _buildEventsTab(), _buildHolidaysTab()],
-    );
-  }
-
-  Widget _buildCalendarTab() {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return Column(
-      children: [
-        Container(
-          color: AppTheme.surface,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(12, (i) {
-                final m = i + 1;
-                final selected = _selectedMonth == m;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedMonth = m),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? AppTheme.primary
-                            : AppTheme.surfaceVariant,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        months[i],
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: selected ? Colors.white : AppTheme.muted,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-            ),
+      filters: _buildFilters(),
+      slivers: [
+        SliverToBoxAdapter(
+          child: PrincipalDirectoryMetricStrip(
+            metrics: [
+              PrincipalDirectoryMetric(
+                label: 'Today',
+                value: '$_todayCount',
+                icon: Icons.today_rounded,
+                color: Colors.teal,
+                tone: const Color(0xFFE4FAF6),
+              ),
+              PrincipalDirectoryMetric(
+                label: 'Upcoming',
+                value: '$_upcomingCount',
+                icon: Icons.upcoming_rounded,
+                color: Colors.indigo,
+                tone: const Color(0xFFEAF0FF),
+              ),
+              PrincipalDirectoryMetric(
+                label: 'Holidays',
+                value: '$_holidayCount',
+                icon: Icons.celebration_rounded,
+                color: Colors.green,
+                tone: const Color(0xFFEAFBF0),
+              ),
+              PrincipalDirectoryMetric(
+                label: 'Approvals',
+                value: '$_approvalCount',
+                icon: Icons.fact_check_rounded,
+                color: Colors.orange,
+                tone: const Color(0xFFFFF4E5),
+              ),
+            ],
           ),
         ),
-        Expanded(
-          child: _monthEvents.isEmpty
-              ? const Center(child: Text('No events this month'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _monthEvents.length,
-                  itemBuilder: (_, i) => _buildEventCard(_monthEvents[i]),
-                ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+          sliver: SliverList.separated(
+            itemCount: visible.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) => _EventDirectoryCard(
+              event: visible[index],
+              onTap: () => _openDetails(visible[index]),
+              onEdit: () => _openEditEvent(visible[index]),
+              onDelete: () async {
+                final removed = await _deleteEvent(visible[index]);
+                if (removed) await _loadData();
+              },
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildEventsTab() {
-    final upcoming = _events.where((e) => e['status'] != 'completed').toList();
-    return upcoming.isEmpty
-        ? Center(
-            child: Text(
-              'No upcoming events',
-              style: GoogleFonts.dmSans(color: AppTheme.muted),
-            ),
-          )
-        : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: upcoming.length,
-            itemBuilder: (ctx, i) => _buildEventCard(upcoming[i]),
-          );
-  }
-
-  Widget _buildHolidaysTab() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _holidays.length,
-      itemBuilder: (ctx, i) {
-        final h = _holidays[i];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppTheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withAlpha(20),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.celebration_rounded,
-                  color: AppTheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      h['name'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      h['date'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  h['type'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 10,
-                    color: AppTheme.muted,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  size: 18,
-                  color: AppTheme.error,
-                ),
-                onPressed: () async {
-                  await _deleteEvent(h);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildEventCard(Map<String, dynamic> e) {
-    final typeColors = {
-      'Event': AppTheme.primary,
-      'Meeting': AppTheme.info,
-      'Exam': AppTheme.error,
-      'Academic': AppTheme.warning,
-      'Holiday': AppTheme.success,
-      'Health': Colors.teal,
-      'Staff': Colors.purple,
-      'National': AppTheme.primary,
-      'Cultural': Colors.orange,
-      'Sports': Colors.green,
-    };
-    final color = typeColors[e['type']] ?? AppTheme.muted;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withAlpha(40)),
-      ),
-      child: Row(
+  Widget _buildFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 6),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withAlpha(20),
-              borderRadius: BorderRadius.circular(10),
+          PrincipalDirectorySearchBox(
+            hint: 'Search event, venue, audience...',
+            onChanged: (value) => setState(() => _query = value),
+          ),
+          if (_academicYears.length > 1) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _selectedAcademicYearId.isEmpty
+                  ? null
+                  : _selectedAcademicYearId,
+              decoration: const InputDecoration(
+                labelText: 'Academic year',
+                prefixIcon: Icon(Icons.school_rounded),
+              ),
+              items: _academicYears
+                  .map(
+                    (year) => DropdownMenuItem(
+                      value: year.id,
+                      child: Text(year.yearLabel),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) async {
+                if (value == null || value == _selectedAcademicYearId) return;
+                setState(() => _selectedAcademicYearId = value);
+                await _loadData();
+              },
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          ],
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Text(
-                  e['day'].toString(),
-                  style: GoogleFonts.dmSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: color,
+                for (final filter in _EventFilter.values) ...[
+                  PrincipalDirectoryChip(
+                    label: _filterLabel(filter),
+                    selected: _filter == filter,
+                    icon: _filterIcon(filter),
+                    onTap: () => setState(() => _filter = filter),
                   ),
-                ),
-                Text(
-                  e['month'].toString(),
-                  style: GoogleFonts.dmSans(fontSize: 10, color: color),
-                ),
+                  const SizedBox(width: 8),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        e['title'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withAlpha(20),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        e['type'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: color,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  e['description'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: AppTheme.onSurfaceVariant,
+          const SizedBox(height: 10),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(12, (index) {
+                final month = index + 1;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: PrincipalDirectoryChip(
+                    label: _monthName(month),
+                    selected: _selectedMonth == month,
+                    onTap: () => setState(() => _selectedMonth = month),
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.access_time_rounded,
-                      size: 12,
-                      color: AppTheme.muted,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      e['time'] as String,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: AppTheme.muted,
-                      ),
-                    ),
-                    if ((e['venue'] as String).isNotEmpty) ...[
-                      const SizedBox(width: 10),
-                      const Icon(
-                        Icons.location_on_rounded,
-                        size: 12,
-                        color: AppTheme.muted,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          e['venue'] as String,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            color: AppTheme.muted,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
+                );
+              }),
             ),
-          ),
-          IconButton(
-            icon: const Icon(
-              Icons.delete_outline_rounded,
-              size: 18,
-              color: AppTheme.error,
-            ),
-            onPressed: () async {
-              await _deleteEvent(e);
-            },
           ),
         ],
       ),
     );
   }
 
-  Future<void> _openAddEventPage() async {
-    final added = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => _AddEventPage(
-          academicYearId: _academicYearId,
-          initialMonth: _selectedMonth,
-        ),
-      ),
-    );
-    if (!mounted || added != true) return;
-    await _loadData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Event added'),
-        backgroundColor: AppTheme.success,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  String _filterLabel(_EventFilter filter) {
+    return switch (filter) {
+      _EventFilter.all => 'All',
+      _EventFilter.today => 'Today',
+      _EventFilter.upcoming => 'Upcoming',
+      _EventFilter.holidays => 'Holidays',
+      _EventFilter.approvals => 'Needs approval',
+      _EventFilter.cancelled => 'Cancelled',
+    };
   }
 
-  Future<void> _deleteEvent(Map<String, dynamic> event) async {
-    final id = '${event['id'] ?? ''}';
-    if (id.isEmpty) return;
-    try {
-      await BackendApiClient.instance.deleteRaw('/events/$id');
-      await _loadData();
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Event removed')));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Event remove failed: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    }
-  }
-
-  String _twoDigits(int value) => value.toString().padLeft(2, '0');
-
-  String _monthName(int month) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    if (month < 1 || month > 12) return '';
-    return months[month - 1];
+  IconData _filterIcon(_EventFilter filter) {
+    return switch (filter) {
+      _EventFilter.all => Icons.all_inclusive_rounded,
+      _EventFilter.today => Icons.today_rounded,
+      _EventFilter.upcoming => Icons.upcoming_rounded,
+      _EventFilter.holidays => Icons.celebration_rounded,
+      _EventFilter.approvals => Icons.fact_check_rounded,
+      _EventFilter.cancelled => Icons.event_busy_rounded,
+    };
   }
 }
 
-class _AddEventPage extends StatefulWidget {
-  final String academicYearId;
-  final int initialMonth;
+class _EventDirectoryCard extends StatelessWidget {
+  final _PrincipalEvent event;
+  final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final Future<void> Function() onDelete;
 
-  const _AddEventPage({
-    required this.academicYearId,
-    required this.initialMonth,
+  const _EventDirectoryCard({
+    required this.event,
+    required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
-  State<_AddEventPage> createState() => _AddEventPageState();
+  Widget build(BuildContext context) {
+    return PrincipalDirectoryCard(
+      icon: event.icon,
+      title: event.title,
+      subtitle: event.description.isEmpty
+          ? '${event.dateLabel} | ${event.timeLabel}'
+          : event.description,
+      status: event.statusLabel,
+      statusColor: event.statusColor,
+      onTap: onTap,
+      chips: [
+        PrincipalInfoPill(icon: Icons.event_rounded, label: event.dateLabel),
+        PrincipalInfoPill(
+          icon: Icons.access_time_rounded,
+          label: event.timeLabel,
+        ),
+        PrincipalInfoPill(
+          icon: Icons.location_on_outlined,
+          label: event.venue.isEmpty ? 'Venue TBD' : event.venue,
+        ),
+        PrincipalInfoPill(icon: Icons.groups_rounded, label: event.audience),
+      ],
+      trailing: PopupMenuButton<String>(
+        tooltip: 'Event options',
+        onSelected: (value) async {
+          if (value == 'view') onTap();
+          if (value == 'edit') onEdit();
+          if (value == 'delete') await onDelete();
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'view', child: Text('View details')),
+          PopupMenuItem(value: 'edit', child: Text('Edit event')),
+          PopupMenuDivider(),
+          PopupMenuItem(value: 'delete', child: Text('Remove event')),
+        ],
+      ),
+    );
+  }
 }
 
-class _AddEventPageState extends State<_AddEventPage> {
+class _EventDetailPage extends StatelessWidget {
+  final _PrincipalEvent event;
+  final List<AcademicYearModel> academicYears;
+  final String selectedAcademicYearId;
+  final Future<bool> Function() onDelete;
+
+  const _EventDetailPage({
+    required this.event,
+    required this.academicYears,
+    required this.selectedAcademicYearId,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PrincipalDetailPage(
+      title: 'Event Details',
+      menuItems: const [
+        PopupMenuItem(value: 'edit', child: Text('Edit event')),
+        PopupMenuDivider(),
+        PopupMenuItem(value: 'delete', child: Text('Remove event')),
+      ],
+      onMenuSelected: (value) async {
+        if (value == 'edit') {
+          final saved = await Navigator.of(context).push<bool>(
+            MaterialPageRoute(
+              builder: (_) => _EventFormPage(
+                academicYears: academicYears,
+                selectedAcademicYearId: event.academicYearId.isEmpty
+                    ? selectedAcademicYearId
+                    : event.academicYearId,
+                initialMonth: event.start.month,
+                event: event,
+              ),
+            ),
+          );
+          if (saved == true && context.mounted) Navigator.pop(context, true);
+        }
+        if (value == 'delete') {
+          final removed = await onDelete();
+          if (removed && context.mounted) Navigator.pop(context, true);
+        }
+      },
+      children: [
+        PrincipalDetailCard(
+          title: event.title,
+          trailing: PrincipalStatusPill(
+            label: event.statusLabel,
+            color: event.statusColor,
+          ),
+          children: [
+            PrincipalDetailRow(label: 'Type', value: event.typeLabel),
+            PrincipalDetailRow(label: 'Date', value: event.dateLabel),
+            PrincipalDetailRow(label: 'Time', value: event.timeLabel),
+            PrincipalDetailRow(
+              label: 'Venue',
+              value: event.venue.isEmpty ? 'Venue TBD' : event.venue,
+            ),
+            PrincipalDetailRow(label: 'Audience', value: event.audience),
+            PrincipalDetailRow(
+              label: 'Holiday',
+              value: event.isHoliday ? 'Yes' : 'No',
+            ),
+          ],
+        ),
+        PrincipalDetailCard(
+          title: 'Description',
+          children: [
+            Text(
+              event.description.isEmpty
+                  ? 'No description added.'
+                  : event.description,
+              style: GoogleFonts.dmSans(
+                height: 1.4,
+                fontWeight: FontWeight.w700,
+                color: principalDirectoryText,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _EventFormPage extends StatefulWidget {
+  final List<AcademicYearModel> academicYears;
+  final String selectedAcademicYearId;
+  final int initialMonth;
+  final _PrincipalEvent? event;
+
+  const _EventFormPage({
+    required this.academicYears,
+    required this.selectedAcademicYearId,
+    required this.initialMonth,
+    this.event,
+  });
+
+  @override
+  State<_EventFormPage> createState() => _EventFormPageState();
+}
+
+class _EventFormPageState extends State<_EventFormPage> {
   final _formKey = GlobalKey<FormState>();
-  final _titleCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
-  final _venueCtrl = TextEditingController();
-  final _timeCtrl = TextEditingController();
-  String _type = 'Event';
-  int _day = 1;
-  late int _month;
+  final _titleController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _venueController = TextEditingController();
+  String _academicYearId = '';
+  String _type = 'event';
+  String _status = 'scheduled';
+  String _audience = 'all';
+  bool _isHoliday = false;
   bool _saving = false;
+  late DateTime _startDate;
+  late DateTime _endDate;
+  TimeOfDay _startTime = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _endTime = const TimeOfDay(hour: 10, minute: 0);
   String? _error;
 
-  static const _eventTypes = [
-    'Event',
-    'Meeting',
-    'Exam',
-    'Academic',
-    'Holiday',
-    'Health',
-    'Staff',
-    'National',
-    'Cultural',
-    'Sports',
+  static const _types = [
+    'event',
+    'meeting',
+    'academic',
+    'exam',
+    'holiday',
+    'sports',
+    'cultural',
+    'staff',
+    'health',
   ];
+
+  static const _statuses = [
+    'scheduled',
+    'pending_approval',
+    'approved',
+    'completed',
+    'cancelled',
+  ];
+
+  static const _audiences = ['all', 'students', 'parents', 'staff', 'teachers'];
 
   @override
   void initState() {
     super.initState();
-    _month = widget.initialMonth;
+    final event = widget.event;
+    final now = DateTime.now();
+    final fallbackDate = DateTime(now.year, widget.initialMonth, 1);
+    _academicYearId =
+        event?.academicYearId ??
+        (widget.selectedAcademicYearId.isNotEmpty
+            ? widget.selectedAcademicYearId
+            : (widget.academicYears.isNotEmpty
+                  ? widget.academicYears.first.id
+                  : ''));
+    _titleController.text = event?.title ?? '';
+    _descriptionController.text = event?.description ?? '';
+    _venueController.text = event?.venue ?? '';
+    _type = event?.type ?? 'event';
+    _status = event?.status ?? 'scheduled';
+    _audience = event?.audienceValue ?? 'all';
+    _isHoliday = event?.isHoliday ?? false;
+    if (!_types.contains(_type)) _type = 'event';
+    if (_status == 'pending') _status = 'pending_approval';
+    if (!_statuses.contains(_status)) _status = 'scheduled';
+    if (!_audiences.contains(_audience)) _audience = 'all';
+    _startDate = event?.start ?? fallbackDate;
+    _endDate = event?.end ?? fallbackDate;
+    _startTime = _timeFromDate(event?.start) ?? _startTime;
+    _endTime = _timeFromDate(event?.end) ?? _endTime;
   }
 
   @override
   void dispose() {
-    _titleCtrl.dispose();
-    _descCtrl.dispose();
-    _venueCtrl.dispose();
-    _timeCtrl.dispose();
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _venueController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    if (widget.academicYearId.isEmpty) {
-      setState(() => _error = 'Create an academic year first');
+    if (_academicYearId.isEmpty) {
+      setState(() => _error = 'Create an academic year before adding events.');
       return;
     }
-
+    if (_endDate.isBefore(_startDate)) {
+      setState(() => _error = 'End date cannot be before start date.');
+      return;
+    }
+    final yearError = _academicYearRangeError();
+    if (yearError != null) {
+      setState(() => _error = yearError);
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final year = DateTime.now().year;
-      final timeParts = _parseEventTime(_timeCtrl.text);
-      final start = DateTime(year, _month, _day, timeParts.$1, timeParts.$2);
-      await BackendApiClient.instance.createEvent(
-        academicYearId: widget.academicYearId,
-        title: _titleCtrl.text.trim(),
-        eventType: _type,
-        start: start,
-        end: start.add(const Duration(hours: 1)),
-        location: _venueCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        isHoliday: _type == 'Holiday',
-      );
+      final payload = {
+        'academic_year_id': _academicYearId,
+        'event_name': _titleController.text.trim(),
+        'event_type': _isHoliday ? 'holiday' : _type,
+        'description': _descriptionController.text.trim(),
+        'start_date': _formatDate(_startDate),
+        'end_date': _formatDate(_endDate),
+        'start_time': _formatTime(_startTime),
+        'end_time': _formatTime(_endTime),
+        'venue': _venueController.text.trim(),
+        'audience_type': _audience,
+        'status': _status,
+        'is_holiday': _isHoliday,
+      };
+      final eventId = widget.event?.id ?? '';
+      if (eventId.isEmpty) {
+        await BackendApiClient.instance.createRaw('/events', payload);
+      } else {
+        await BackendApiClient.instance.updateRaw('/events/$eventId', payload);
+      }
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (!mounted) return;
@@ -619,166 +681,523 @@ class _AddEventPageState extends State<_AddEventPage> {
     }
   }
 
+  String? _academicYearRangeError() {
+    AcademicYearModel? year;
+    for (final item in widget.academicYears) {
+      if (item.id == _academicYearId) {
+        year = item;
+        break;
+      }
+    }
+    if (year == null) return null;
+    final start = DateTime.tryParse(year.startDate);
+    final end = DateTime.tryParse(year.endDate);
+    if (start == null || end == null) return null;
+    final normalizedStart = DateTime(
+      _startDate.year,
+      _startDate.month,
+      _startDate.day,
+    );
+    final normalizedEnd = DateTime(_endDate.year, _endDate.month, _endDate.day);
+    if (normalizedStart.isBefore(
+          DateTime(start.year, start.month, start.day),
+        ) ||
+        normalizedEnd.isAfter(DateTime(end.year, end.month, end.day))) {
+      return 'Event dates must stay inside ${year.yearLabel}.';
+    }
+    return null;
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    setState(() {
+      _startDate = picked;
+      if (_endDate.isBefore(_startDate)) _endDate = picked;
+    });
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: _startDate,
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    setState(() => _endDate = picked);
+  }
+
+  Future<void> _pickTime({required bool start}) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: start ? _startTime : _endTime,
+    );
+    if (picked == null) return;
+    setState(() {
+      if (start) {
+        _startTime = picked;
+      } else {
+        _endTime = picked;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Add Event')),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              TextFormField(
-                controller: _titleCtrl,
-                decoration: const InputDecoration(labelText: 'Event Title'),
-                textInputAction: TextInputAction.next,
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? 'Title required'
-                    : null,
+    final editing = widget.event != null;
+    return PrincipalInputPage(
+      title: editing ? 'Edit Event' : 'Create Event',
+      icon: Icons.event_available_rounded,
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextFormField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Event title',
+                prefixIcon: Icon(Icons.title_rounded),
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      initialValue: _day,
-                      decoration: const InputDecoration(labelText: 'Day'),
-                      items: List.generate(
-                        31,
-                        (i) => DropdownMenuItem(
-                          value: i + 1,
-                          child: Text('${i + 1}'),
-                        ),
-                      ),
-                      onChanged: _saving
-                          ? null
-                          : (value) => setState(() => _day = value ?? _day),
-                      validator: (_) {
-                        final maxDay = DateTime(
-                          DateTime.now().year,
-                          _month + 1,
-                          0,
-                        ).day;
-                        return _day > maxDay ? 'Invalid for month' : null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      initialValue: _month,
-                      decoration: const InputDecoration(labelText: 'Month'),
-                      items: List.generate(
-                        12,
-                        (i) => DropdownMenuItem(
-                          value: i + 1,
-                          child: Text(_monthNameFor(i + 1)),
-                        ),
-                      ),
-                      onChanged: _saving
-                          ? null
-                          : (value) => setState(() => _month = value ?? _month),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
+              textInputAction: TextInputAction.next,
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? 'Title is required' : null,
+            ),
+            const SizedBox(height: 14),
+            if (widget.academicYears.isNotEmpty)
               DropdownButtonFormField<String>(
-                initialValue: _type,
-                decoration: const InputDecoration(labelText: 'Type'),
-                items: _eventTypes
+                initialValue: _academicYearId.isEmpty ? null : _academicYearId,
+                decoration: const InputDecoration(
+                  labelText: 'Academic year',
+                  prefixIcon: Icon(Icons.school_rounded),
+                ),
+                items: widget.academicYears
                     .map(
-                      (type) =>
-                          DropdownMenuItem(value: type, child: Text(type)),
+                      (year) => DropdownMenuItem(
+                        value: year.id,
+                        child: Text(year.yearLabel),
+                      ),
                     )
                     .toList(),
                 onChanged: _saving
                     ? null
-                    : (value) => setState(() => _type = value ?? _type),
+                    : (value) => setState(() => _academicYearId = value ?? ''),
+                validator: (value) =>
+                    (value ?? '').isEmpty ? 'Academic year is required' : null,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _timeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Time',
-                  hintText: '09:00 or 2:30 PM',
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _type,
+              decoration: const InputDecoration(
+                labelText: 'Event type',
+                prefixIcon: Icon(Icons.category_rounded),
+              ),
+              items: _types
+                  .map(
+                    (type) => DropdownMenuItem(
+                      value: type,
+                      child: Text(_titleCase(type)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _type = value ?? _type;
+                      _isHoliday = _type == 'holiday';
+                    }),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _PickerTile(
+                    label: 'Start date',
+                    value: _formatDate(_startDate),
+                    icon: Icons.event_rounded,
+                    onTap: _saving ? null : _pickStartDate,
+                  ),
                 ),
-                textInputAction: TextInputAction.next,
-                validator: (value) {
-                  final trimmed = value?.trim() ?? '';
-                  if (trimmed.isEmpty) return null;
-                  final match = RegExp(
-                    r'^\d{1,2}(?::\d{2})?\s*(AM|PM)?$',
-                    caseSensitive: false,
-                  ).hasMatch(trimmed);
-                  return match ? null : 'Enter a valid time';
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _venueCtrl,
-                decoration: const InputDecoration(labelText: 'Venue'),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descCtrl,
-                maxLines: 4,
-                decoration: const InputDecoration(labelText: 'Description'),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _PickerTile(
+                    label: 'End date',
+                    value: _formatDate(_endDate),
+                    icon: Icons.event_available_rounded,
+                    onTap: _saving ? null : _pickEndDate,
+                  ),
+                ),
               ],
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _saving ? null : _submit,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_rounded),
-                label: Text(_saving ? 'Saving...' : 'Add Event'),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _PickerTile(
+                    label: 'Start time',
+                    value: _formatTimeOfDay(_startTime),
+                    icon: Icons.schedule_rounded,
+                    onTap: _saving ? null : () => _pickTime(start: true),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _PickerTile(
+                    label: 'End time',
+                    value: _formatTimeOfDay(_endTime),
+                    icon: Icons.schedule_send_rounded,
+                    onTap: _saving ? null : () => _pickTime(start: false),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _venueController,
+              decoration: const InputDecoration(
+                labelText: 'Venue',
+                prefixIcon: Icon(Icons.location_on_outlined),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _audience,
+              decoration: const InputDecoration(
+                labelText: 'Audience',
+                prefixIcon: Icon(Icons.groups_rounded),
+              ),
+              items: _audiences
+                  .map(
+                    (audience) => DropdownMenuItem(
+                      value: audience,
+                      child: Text(_titleCase(audience)),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _audience = value ?? _audience),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(
+                labelText: 'Status',
+                prefixIcon: Icon(Icons.verified_rounded),
+              ),
+              items: _statuses
+                  .map(
+                    (status) => DropdownMenuItem(
+                      value: status,
+                      child: Text(_titleCase(status.replaceAll('_', ' '))),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _status = value ?? _status),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _isHoliday,
+              title: const Text('Mark as holiday'),
+              subtitle: const Text('Show this event in holiday filters'),
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() {
+                      _isHoliday = value;
+                      if (value) _type = 'holiday';
+                    }),
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _descriptionController,
+              minLines: 3,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Description',
+                alignLabelWithHint: true,
+                prefixIcon: Icon(Icons.notes_rounded),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              Text(
+                _error!,
+                style: GoogleFonts.dmSans(
+                  color: AppTheme.error,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
-          ),
+            const SizedBox(height: 22),
+            FilledButton.icon(
+              onPressed: _saving ? null : _submit,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_rounded),
+              label: Text(
+                _saving
+                    ? 'Saving...'
+                    : editing
+                    ? 'Save Event'
+                    : 'Create Event',
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  static String _monthNameFor(int month) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return months[month - 1];
+class _PickerTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _PickerTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFDCE8F5)),
+          color: const Color(0xFFF8FBFE),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: principalDirectoryAccent, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: principalDirectoryMuted,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      color: principalDirectoryText,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrincipalEvent {
+  final String id;
+  final String academicYearId;
+  final String title;
+  final String type;
+  final String status;
+  final String description;
+  final String venue;
+  final String audienceValue;
+  final bool isHoliday;
+  final DateTime start;
+  final DateTime end;
+
+  const _PrincipalEvent({
+    required this.id,
+    required this.academicYearId,
+    required this.title,
+    required this.type,
+    required this.status,
+    required this.description,
+    required this.venue,
+    required this.audienceValue,
+    required this.isHoliday,
+    required this.start,
+    required this.end,
+  });
+
+  factory _PrincipalEvent.fromApi(Map<String, dynamic> row) {
+    final start =
+        _parseDateTime(row['start_datetime']) ??
+        _parseDateAndTime(row['start_date'], row['start_time']) ??
+        DateTime.now();
+    final end =
+        _parseDateTime(row['end_datetime']) ??
+        _parseDateAndTime(
+          row['end_date'] ?? row['start_date'],
+          row['end_time'],
+        ) ??
+        start.add(const Duration(hours: 1));
+    final type = _clean(row['event_type'], fallback: 'event').toLowerCase();
+    final status = _clean(row['status'], fallback: 'scheduled').toLowerCase();
+    return _PrincipalEvent(
+      id: _clean(row['id'] ?? row['event_id']),
+      academicYearId: _clean(row['academic_year_id']),
+      title: _clean(row['event_title'] ?? row['event_name'], fallback: 'Event'),
+      type: type,
+      status: status,
+      description: _clean(row['description']),
+      venue: _clean(row['venue'] ?? row['location']),
+      audienceValue: _clean(
+        row['audience_type'] ?? row['audience'],
+        fallback: 'all',
+      ).toLowerCase(),
+      isHoliday:
+          row['is_holiday'] == true ||
+          row['holiday'] == true ||
+          type == 'holiday',
+      start: start,
+      end: end,
+    );
   }
 
-  static (int, int) _parseEventTime(String value) {
-    final match = RegExp(
-      r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?',
-      caseSensitive: false,
-    ).firstMatch(value.trim());
-    if (match == null) return (9, 0);
-    var hour = int.tryParse(match.group(1) ?? '') ?? 9;
-    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
-    final meridiem = (match.group(3) ?? '').toUpperCase();
-    if (meridiem == 'PM' && hour < 12) hour += 12;
-    if (meridiem == 'AM' && hour == 12) hour = 0;
-    return (hour.clamp(0, 23), minute.clamp(0, 59));
+  bool get needsApproval =>
+      status == 'pending' || status == 'pending_approval' || status == 'draft';
+
+  String get statusLabel => _titleCase(status.replaceAll('_', ' '));
+
+  String get typeLabel => _titleCase(type.replaceAll('_', ' '));
+
+  String get audience => _titleCase(audienceValue.replaceAll('_', ' '));
+
+  String get dateLabel {
+    if (_formatDate(start) == _formatDate(end)) {
+      return '${start.day} ${_monthName(start.month)} ${start.year}';
+    }
+    return '${start.day} ${_monthName(start.month)} - ${end.day} ${_monthName(end.month)}';
   }
+
+  String get timeLabel {
+    return '${_formatTimeOfDay(TimeOfDay.fromDateTime(start))} - ${_formatTimeOfDay(TimeOfDay.fromDateTime(end))}';
+  }
+
+  IconData get icon {
+    if (isHoliday) return Icons.celebration_rounded;
+    return switch (type) {
+      'meeting' => Icons.groups_2_rounded,
+      'exam' => Icons.assignment_rounded,
+      'academic' => Icons.school_rounded,
+      'sports' => Icons.sports_soccer_rounded,
+      'cultural' => Icons.theater_comedy_rounded,
+      'staff' => Icons.badge_rounded,
+      'health' => Icons.health_and_safety_rounded,
+      _ => Icons.event_rounded,
+    };
+  }
+
+  Color get statusColor {
+    return switch (status) {
+      'approved' || 'scheduled' => Colors.green,
+      'completed' => Colors.indigo,
+      'cancelled' => AppTheme.error,
+      'pending' || 'pending_approval' || 'draft' => Colors.orange,
+      _ => principalDirectoryAccent,
+    };
+  }
+}
+
+String _clean(Object? value, {String fallback = ''}) {
+  final text = '${value ?? ''}'.trim();
+  if (text.isEmpty || text == 'null') return fallback;
+  return text;
+}
+
+DateTime? _parseDateTime(Object? value) {
+  final text = _clean(value);
+  if (text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+DateTime? _parseDateAndTime(Object? date, Object? time) {
+  final dateText = _clean(date);
+  if (dateText.isEmpty) return null;
+  final timeText = _clean(time, fallback: '00:00:00');
+  return DateTime.tryParse('${dateText.split('T').first}T$timeText');
+}
+
+TimeOfDay? _timeFromDate(DateTime? date) {
+  if (date == null) return null;
+  return TimeOfDay(hour: date.hour, minute: date.minute);
+}
+
+String _formatDate(DateTime date) {
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year}-$month-$day';
+}
+
+String _formatTime(TimeOfDay time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour:$minute:00';
+}
+
+String _formatTimeOfDay(TimeOfDay time) {
+  final hour = time.hour.toString().padLeft(2, '0');
+  final minute = time.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _titleCase(String value) {
+  return value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+      .join(' ');
+}
+
+String _monthName(int month) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  if (month < 1 || month > 12) return '';
+  return months[month - 1];
 }

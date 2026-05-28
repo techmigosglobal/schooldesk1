@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/backend_api_client.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/dashboard_fab_widget.dart';
-import '../../widgets/erp_components.dart';
-import '../../widgets/erp_module_scaffold.dart';
-import '../../widgets/teacher_navigation.dart';
+import '../../widgets/teacher_flow_ui.dart';
 
 @immutable
 class TeacherHomeworkFormArgs {
@@ -35,7 +32,6 @@ class TeacherHomeworkSubmissionsArgs {
   const TeacherHomeworkSubmissionsArgs({required this.homework});
 }
 
-@immutable
 class TeacherHomeworkResult {
   final String message;
 
@@ -56,44 +52,41 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _subjectController = TextEditingController();
-  final _instructionsController = TextEditingController();
+  final _descriptionController = TextEditingController();
   final _dueDateController = TextEditingController();
   String _sectionId = '';
   String _studentId = '';
+  String _homeworkType = 'Homework';
   bool _saving = false;
-
-  List<Map<String, dynamic>> get _classOptions {
-    final rows = widget.args.assignedClasses
-        .where((row) => _text(row['id']).isNotEmpty)
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
-    if (rows.isNotEmpty) return rows;
-    return [
-      {'id': '', 'label': widget.args.defaultClassName},
-    ];
-  }
+  String? _error;
 
   @override
   void initState() {
     super.initState();
     final homework = widget.args.homework;
-    _titleController.text = _text(homework?['title']);
-    _subjectController.text = _text(
-      homework?['subject'],
+    _titleController.text = teacherFlowText(homework?['title']);
+    _subjectController.text = teacherFlowText(
+      homework?['subject'] ?? homework?['subject_id'],
       fallback: widget.args.defaultSubject,
     );
-    _instructionsController.text = _text(homework?['instructions']);
-    _dueDateController.text = _dateOnly(
-      _text(homework?['dueDate']),
-      fallback: _dateInput(DateTime.now().add(const Duration(days: 3))),
+    _descriptionController.text = teacherFlowText(
+      homework?['description'] ?? homework?['instructions'],
     );
+    _dueDateController.text = teacherFlowDateOnly(
+      homework?['submission_date'] ?? homework?['due_date'],
+    );
+    if (_dueDateController.text.isEmpty) {
+      _dueDateController.text = teacherFlowDate(
+        DateTime.now().add(const Duration(days: 3)),
+      );
+    }
     _sectionId = _initialId(
-      _text(homework?['section_id']),
-      _classOptions.map((row) => _text(row['id'])),
+      teacherFlowText(homework?['section_id']),
+      _classOptions.map((row) => teacherFlowText(row['id'])),
     );
-    _studentId = _initialId(_text(homework?['student_id']), [
+    _studentId = _initialId(teacherFlowText(homework?['student_id']), [
       '',
-      ...widget.args.students.map((row) => _text(row['id'])),
+      ...widget.args.students.map((row) => teacherFlowText(row['id'])),
     ]);
   }
 
@@ -101,207 +94,255 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   void dispose() {
     _titleController.dispose();
     _subjectController.dispose();
-    _instructionsController.dispose();
+    _descriptionController.dispose();
     _dueDateController.dispose();
     super.dispose();
   }
 
+  List<Map<String, dynamic>> get _classOptions {
+    final rows = widget.args.assignedClasses
+        .where((row) => teacherFlowText(row['id']).isNotEmpty)
+        .toList();
+    if (rows.isNotEmpty) return rows;
+    return [
+      {'id': '', 'label': widget.args.defaultClassName},
+    ];
+  }
+
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    if (!_formKey.currentState!.validate()) return;
+    if (widget.args.teacherStaffId.trim().isEmpty) {
+      setState(() => _error = 'Teacher staff profile is missing.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final homeworkId = teacherFlowText(widget.args.homework?['id']);
+      if (homeworkId.isEmpty) {
+        await BackendApiClient.instance.createHomework(
+          title: _titleController.text.trim(),
+          subject: _subjectController.text.trim(),
+          className: widget.args.defaultClassName,
+          sectionId: _sectionId,
+          teacherId: widget.args.teacherStaffId,
+          description: '$_homeworkType: ${_descriptionController.text.trim()}',
+          dueDate: _dueDateController.text.trim(),
+          studentId: _studentId,
+        );
+      } else {
+        await BackendApiClient.instance.updateHomework(
+          homeworkId,
+          title: _titleController.text.trim(),
+          subject: _subjectController.text.trim(),
+          className: widget.args.defaultClassName,
+          sectionId: _sectionId,
+          teacherId: widget.args.teacherStaffId,
+          description: '$_homeworkType: ${_descriptionController.text.trim()}',
+          dueDate: _dueDateController.text.trim(),
+          studentId: _studentId,
+        );
+      }
+      if (mounted) {
+        Navigator.pop(
+          context,
+          TeacherHomeworkResult(
+            widget.args.isEditing ? 'Homework updated' : 'Homework shared',
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.toString();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final ready = widget.args.teacherStaffId.trim().isNotEmpty;
-    return SchoolDeskModuleScaffold(
-      title: widget.args.isEditing ? 'Edit Homework' : 'New Homework',
-      subtitle: 'Create class work with backend-linked class and student scope',
-      drawer: TeacherDrawer(selectedIndex: 3, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.teacher,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    return TeacherFlowScaffold(
+      title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
+      subtitle: 'Minimal typing flow with class defaults',
+      selectedIndex: 3,
+      child: TeacherFlowScrollView(
         children: [
-          if (ready)
-            Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _titleController,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                    validator: (value) => _required(value, 'Enter a title.'),
+          TeacherCurrentClassCard(
+            greeting: 'Homework details',
+            classLabel: widget.args.defaultClassName,
+            subject: widget.args.defaultSubject,
+            timeLabel: 'Parents and students are notified after save',
+          ),
+          const SizedBox(height: 18),
+          Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    prefixIcon: Icon(Icons.title_rounded),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _sectionId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Class'),
-                    items: _classOptions
-                        .map(
-                          (row) => DropdownMenuItem(
-                            value: _text(row['id']),
-                            child: Text(_classLabel(row)),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _sectionId = value ?? ''),
+                  validator: (value) =>
+                      _required(value, 'Enter a homework title.'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _sectionId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Class',
+                    prefixIcon: Icon(Icons.class_rounded),
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _subjectController,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Subject'),
-                    validator: (value) => _required(value, 'Enter subject.'),
+                  items: _classOptions
+                      .map(
+                        (row) => DropdownMenuItem(
+                          value: teacherFlowText(row['id']),
+                          child: Text(_classLabel(row)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _sectionId = value ?? ''),
+                  validator: (value) =>
+                      _required(value, 'Select a class section.'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _subjectController,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject',
+                    prefixIcon: Icon(Icons.menu_book_rounded),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: _studentId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Student scope',
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('Entire class'),
-                      ),
-                      ...widget.args.students
-                          .where((student) => _text(student['id']).isNotEmpty)
+                  validator: (value) => _required(value, 'Enter subject.'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _homeworkType,
+                  decoration: const InputDecoration(
+                    labelText: 'Work type',
+                    prefixIcon: Icon(Icons.category_rounded),
+                  ),
+                  items:
+                      const [
+                            'Homework',
+                            'Classwork',
+                            'Project',
+                            'Revision',
+                            'Bring Materials',
+                            'Exam Reminder',
+                          ]
                           .map(
-                            (student) => DropdownMenuItem(
-                              value: _text(student['id']),
-                              child: Text(_studentLabel(student)),
+                            (type) => DropdownMenuItem(
+                              value: type,
+                              child: Text(type),
                             ),
-                          ),
-                    ],
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _studentId = value ?? ''),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _dueDateController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.datetime,
-                    decoration: const InputDecoration(
-                      labelText: 'Due date',
-                      helperText: 'YYYY-MM-DD',
-                    ),
-                    validator: _dateValidator,
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _instructionsController,
-                    enabled: !_saving,
-                    minLines: 4,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Instructions',
-                      alignLabelWithHint: true,
-                    ),
-                    validator: (value) =>
-                        _required(value, 'Enter homework instructions.'),
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.send_rounded, size: 18),
-                    label: Text(_saving ? 'Saving...' : _saveLabel),
+                          .toList(),
+                  onChanged: _saving
+                      ? null
+                      : (value) =>
+                            setState(() => _homeworkType = value ?? 'Homework'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _studentId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Student scope',
+                    prefixIcon: Icon(Icons.groups_rounded),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                    label: const Text('Back to Homework'),
+                  items: [
+                    const DropdownMenuItem(
+                      value: '',
+                      child: Text('Full class'),
+                    ),
+                    ...widget.args.students.map(
+                      (student) => DropdownMenuItem(
+                        value: teacherFlowText(student['id']),
+                        child: Text(
+                          teacherFlowText(student['name'], fallback: 'Student'),
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _studentId = value ?? ''),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _dueDateController,
+                  decoration: const InputDecoration(
+                    labelText: 'Due date',
+                    hintText: 'YYYY-MM-DD',
+                    prefixIcon: Icon(Icons.event_rounded),
                   ),
+                  validator: (value) => _required(value, 'Enter due date.'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descriptionController,
+                  minLines: 4,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Instructions',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                  validator: (value) => _required(value, 'Enter instructions.'),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: AppTheme.error)),
                 ],
-              ),
-            )
-          else
-            const SchoolDeskStatusPanel.empty(
-              title: 'Teacher profile required',
-              message:
-                  'A linked teacher staff profile is required before homework can be assigned.',
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _submit,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(
+                    _saving
+                        ? 'Saving...'
+                        : widget.args.isEditing
+                        ? 'Save Homework'
+                        : 'Share Homework',
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: 84),
+          ),
         ],
       ),
     );
   }
 
-  String get _saveLabel =>
-      widget.args.isEditing ? 'Save homework' : 'Post homework';
+  String _initialId(String current, Iterable<String> allowed) {
+    if (allowed.contains(current)) return current;
+    return allowed.isNotEmpty ? allowed.first : '';
+  }
 
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
-    try {
-      final homework = widget.args.homework;
-      final sectionLabel = _classLabel(
-        _classOptions.firstWhere(
-          (row) => _text(row['id']) == _sectionId,
-          orElse: () => {'label': widget.args.defaultClassName},
-        ),
-      );
-      final dueDate = DateTime.parse(
-        _dueDateController.text.trim(),
-      ).toUtc().toIso8601String();
-      if (homework == null) {
-        await BackendApiClient.instance.createHomework(
-          title: _titleController.text.trim(),
-          subject: _subjectController.text.trim(),
-          className: sectionLabel,
-          sectionId: _sectionId,
-          teacherId: widget.args.teacherStaffId,
-          studentId: _studentId,
-          description: _instructionsController.text.trim(),
-          dueDate: dueDate,
-        );
-      } else {
-        await BackendApiClient.instance.updateHomework(
-          _text(homework['id']),
-          title: _titleController.text.trim(),
-          subject: _subjectController.text.trim(),
-          className: sectionLabel,
-          sectionId: _sectionId,
-          teacherId: widget.args.teacherStaffId,
-          studentId: _studentId,
-          description: _instructionsController.text.trim(),
-          dueDate: dueDate,
-          status: _text(homework['status']) == 'completed'
-              ? 'completed'
-              : 'pending',
-        );
-      }
-      if (!mounted) return;
-      Navigator.pop(
-        context,
-        TeacherHomeworkResult(
-          widget.args.isEditing
-              ? 'Homework updated successfully'
-              : 'Homework posted successfully',
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Homework save failed: ${_cleanError(error)}'),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  String? _required(String? value, String message) {
+    return (value ?? '').trim().isEmpty ? message : null;
+  }
+
+  String _classLabel(Map<String, dynamic> row) {
+    final label = teacherFlowText(row['label']);
+    if (label.isNotEmpty) return label;
+    final grade = teacherFlowText(row['grade_name']);
+    final section = teacherFlowText(row['section_name']);
+    return [grade, section].where((part) => part.isNotEmpty).join(' ');
   }
 }
 
@@ -317,284 +358,14 @@ class TeacherHomeworkSubmissionsScreen extends StatefulWidget {
 
 class _TeacherHomeworkSubmissionsScreenState
     extends State<TeacherHomeworkSubmissionsScreen> {
-  final _gradeController = TextEditingController();
-  final _remarksController = TextEditingController();
-  Map<String, dynamic>? _response;
-  String _reviewingId = '';
-  String _reviewStatus = 'reviewed';
   bool _loading = true;
-  bool _saving = false;
   String? _error;
+  List<Map<String, dynamic>> _submissions = const [];
 
   @override
   void initState() {
     super.initState();
     _loadSubmissions();
-  }
-
-  @override
-  void dispose() {
-    _gradeController.dispose();
-    _remarksController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: 'Homework Submissions',
-      subtitle: _text(widget.args.homework['title'], fallback: 'Homework'),
-      drawer: TeacherDrawer(selectedIndex: 3, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.teacher,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: _loadSubmissions,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    final submissions = _submissions;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _summaryCard(),
-        const SizedBox(height: 12),
-        if (submissions.isEmpty)
-          const SchoolDeskStatusPanel.empty(
-            title: 'No submissions yet',
-            message:
-                'Student submissions will appear here after parents submit homework.',
-          )
-        else
-          ...submissions.map(_submissionCard),
-        const SizedBox(height: 84),
-      ],
-    );
-  }
-
-  Widget _summaryCard() {
-    final summary = Map<String, dynamic>.from(
-      _response?['summary'] as Map? ?? {},
-    );
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          _summaryMetric('Submitted', _intText(summary['submitted'])),
-          _summaryMetric('Pending', _intText(summary['pending'])),
-          _summaryMetric('Total', _intText(summary['total'])),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryMetric(String label, String value) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: AppTheme.muted)),
-        ],
-      ),
-    );
-  }
-
-  Widget _submissionCard(Map<String, dynamic> row) {
-    final id = _text(row['id']);
-    final isReviewing = _reviewingId == id;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _studentName(row),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              _statusChip(_text(row['status'], fallback: 'submitted')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(_text(row['answer_text'], fallback: 'No written answer.')),
-          if (_text(row['attachment_url']).isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              _text(row['attachment_url']),
-              style: const TextStyle(color: AppTheme.primary),
-            ),
-          ],
-          if (_text(row['grade']).isNotEmpty ||
-              _text(row['remarks']).isNotEmpty) ...[
-            const Divider(height: 18),
-            Text('Grade: ${_text(row['grade'], fallback: '-')}'),
-            Text('Remarks: ${_text(row['remarks'], fallback: '-')}'),
-          ],
-          const SizedBox(height: 10),
-          if (isReviewing) _reviewForm(row) else _reviewButton(row),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusChip(String status) {
-    final color = status == 'reviewed'
-        ? AppTheme.success
-        : status == 'needs_revision'
-        ? AppTheme.warning
-        : AppTheme.primary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(24),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status.replaceAll('_', ' '),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _reviewButton(Map<String, dynamic> row) {
-    return OutlinedButton.icon(
-      onPressed: _saving
-          ? null
-          : () {
-              setState(() {
-                _reviewingId = _text(row['id']);
-                _reviewStatus = _text(row['status']) == 'needs_revision'
-                    ? 'needs_revision'
-                    : 'reviewed';
-                _gradeController.text = _text(row['grade']);
-                _remarksController.text = _text(row['remarks']);
-              });
-            },
-      icon: const Icon(Icons.rate_review_outlined, size: 18),
-      label: const Text('Review submission'),
-    );
-  }
-
-  Widget _reviewForm(Map<String, dynamic> row) {
-    return Column(
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: _reviewStatus,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Review status'),
-          items: const [
-            DropdownMenuItem(value: 'reviewed', child: Text('Reviewed')),
-            DropdownMenuItem(
-              value: 'needs_revision',
-              child: Text('Needs revision'),
-            ),
-          ],
-          onChanged: _saving
-              ? null
-              : (value) => setState(() => _reviewStatus = value ?? 'reviewed'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _gradeController,
-          enabled: !_saving,
-          decoration: const InputDecoration(labelText: 'Grade'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _remarksController,
-          enabled: !_saving,
-          minLines: 3,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            labelText: 'Remarks',
-            alignLabelWithHint: true,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: _saving ? null : () => _saveReview(row),
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.check_rounded, size: 18),
-                label: Text(_saving ? 'Saving...' : 'Save review'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            OutlinedButton(
-              onPressed: _saving
-                  ? null
-                  : () => setState(() {
-                      _reviewingId = '';
-                      _gradeController.clear();
-                      _remarksController.clear();
-                    }),
-              child: const Text('Cancel'),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  List<Map<String, dynamic>> get _submissions {
-    final rows = _response?['submissions'];
-    if (rows is! List) return const [];
-    return rows
-        .whereType<Map>()
-        .map((row) => Map<String, dynamic>.from(row))
-        .toList();
   }
 
   Future<void> _loadSubmissions() async {
@@ -603,129 +374,106 @@ class _TeacherHomeworkSubmissionsScreenState
       _error = null;
     });
     try {
-      final response = await BackendApiClient.instance.getHomeworkSubmissions(
-        _text(widget.args.homework['id']),
+      final homeworkId = teacherFlowText(widget.args.homework['id']);
+      final payload = await BackendApiClient.instance.getHomeworkSubmissions(
+        homeworkId,
       );
       if (!mounted) return;
       setState(() {
-        _response = response;
+        _submissions = teacherFlowList(
+          payload['submissions'] ?? payload['data'],
+        );
         _loading = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load homework submissions.';
         _loading = false;
+        _error = error.toString();
       });
     }
   }
 
-  Future<void> _saveReview(Map<String, dynamic> row) async {
-    if (_reviewStatus == 'needs_revision' &&
-        _remarksController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Remarks are required for revision.')),
-      );
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await BackendApiClient.instance.reviewHomeworkSubmission(
-        _text(widget.args.homework['id']),
-        _text(row['id']),
-        status: _reviewStatus,
-        grade: _gradeController.text.trim(),
-        remarks: _remarksController.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        _reviewingId = '';
-        _gradeController.clear();
-        _remarksController.clear();
-      });
-      await _loadSubmissions();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Review failed: ${_cleanError(error)}'),
-          backgroundColor: AppTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  Future<void> _review(Map<String, dynamic> submission, String status) async {
+    final homeworkId = teacherFlowText(widget.args.homework['id']);
+    final submissionId = teacherFlowText(submission['id']);
+    await BackendApiClient.instance.reviewHomeworkSubmission(
+      homeworkId,
+      submissionId,
+      status: status,
+      remarks: status == 'approved' ? 'Reviewed by teacher' : 'Needs revision',
+    );
+    await _loadSubmissions();
   }
-}
 
-String? _required(String? value, String message) {
-  if ((value ?? '').trim().isEmpty) return message;
-  return null;
-}
-
-String? _dateValidator(String? value) {
-  final text = (value ?? '').trim();
-  if (text.isEmpty) return 'Enter due date.';
-  final parsed = DateTime.tryParse(text);
-  if (parsed == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
-    return 'Use YYYY-MM-DD.';
+  @override
+  Widget build(BuildContext context) {
+    final title = teacherFlowText(
+      widget.args.homework['title'],
+      fallback: 'Homework',
+    );
+    return TeacherFlowScaffold(
+      title: 'Submissions',
+      subtitle: title,
+      selectedIndex: 3,
+      loading: _loading,
+      error: _error,
+      onRefresh: _loadSubmissions,
+      child: TeacherFlowScrollView(
+        children: [
+          TeacherCurrentClassCard(
+            greeting: 'Review queue',
+            classLabel: title,
+            subject: '${_submissions.length} submissions',
+            timeLabel: 'Approve or request revision',
+          ),
+          const SizedBox(height: 18),
+          if (_submissions.isEmpty)
+            const TeacherFlowCard(
+              icon: Icons.inbox_rounded,
+              title: 'No submissions yet',
+              subtitle: 'Student submissions will appear here.',
+            )
+          else
+            ..._submissions.map(
+              (submission) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TeacherFlowCard(
+                  icon: Icons.file_present_rounded,
+                  title: teacherFlowText(
+                    submission['student_name'] ?? submission['student_id'],
+                    fallback: 'Student',
+                  ),
+                  subtitle: teacherFlowText(
+                    submission['answer_text'] ?? submission['remarks'],
+                    fallback: 'No answer text',
+                  ),
+                  status: teacherFlowTitleCase(
+                    teacherFlowText(
+                      submission['status'],
+                      fallback: 'submitted',
+                    ),
+                  ),
+                  body: TeacherFlowActionWrap(
+                    actions: [
+                      TeacherFlowAction(
+                        label: 'Approve',
+                        icon: Icons.check_rounded,
+                        filled: true,
+                        onTap: () => _review(submission, 'approved'),
+                      ),
+                      TeacherFlowAction(
+                        label: 'Needs Revision',
+                        icon: Icons.replay_rounded,
+                        onTap: () => _review(submission, 'revision_requested'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
-  return null;
-}
-
-String _dateInput(DateTime value) =>
-    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-
-String _dateOnly(String value, {required String fallback}) {
-  final parsed = DateTime.tryParse(value);
-  if (parsed == null) return fallback;
-  return _dateInput(parsed);
-}
-
-String _initialId(String preferred, Iterable<String> options) {
-  final values = options.map((value) => value.trim()).toSet();
-  if (values.contains(preferred.trim())) return preferred.trim();
-  return values.isEmpty ? '' : values.first;
-}
-
-String _classLabel(Map<String, dynamic> row) {
-  final label = _text(row['label']);
-  if (label.isNotEmpty) return label;
-  final grade = _text(row['grade_name'], fallback: _text(row['grade']));
-  final section = _text(row['section_name'], fallback: _text(row['name']));
-  final combined = [grade, section].where((part) => part.isNotEmpty).join(' ');
-  return combined.isEmpty ? 'Assigned class' : combined;
-}
-
-String _studentLabel(Map<String, dynamic> row) {
-  final name = _text(row['name']);
-  if (name.isNotEmpty) return name;
-  final first = _text(row['first_name']);
-  final last = _text(row['last_name']);
-  final combined = '$first $last'.trim();
-  return combined.isEmpty ? 'Student' : combined;
-}
-
-String _studentName(Map<String, dynamic> row) {
-  final student = row['student'];
-  if (student is Map) return _studentLabel(Map<String, dynamic>.from(student));
-  return _text(row['student_name'], fallback: _text(row['student_id']));
-}
-
-String _text(dynamic value, {String fallback = ''}) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? fallback : text;
-}
-
-String _intText(dynamic value) {
-  if (value is num) return value.round().toString();
-  return int.tryParse(value?.toString() ?? '')?.toString() ?? '0';
-}
-
-String _cleanError(Object error) {
-  final raw = error.toString();
-  final marker = raw.indexOf('message:');
-  if (marker >= 0) return raw.substring(marker + 8).trim();
-  return raw.replaceFirst('Exception:', '').trim();
 }

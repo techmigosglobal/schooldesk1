@@ -248,7 +248,7 @@ func (h *FeeHandler) GetInvoices(c *gin.Context) {
 func scopedFeeInvoiceQuery(c *gin.Context) *gorm.DB {
 	query := database.DB.Model(&models.FeeInvoice{}).
 		Joins("JOIN students ON students.id = fee_invoices.student_id").
-		Where("students.school_id = ?", scopedSchoolID(c))
+		Where("students.school_id = ? AND students.status != ?", scopedSchoolID(c), "inactive")
 
 	switch currentRole(c) {
 	case "parent":
@@ -805,7 +805,8 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 
 func scopedPaymentRequestQuery(c *gin.Context) *gorm.DB {
 	query := database.DB.Model(&models.ParentPaymentRequest{}).
-		Where("parent_payment_requests.school_id = ?", scopedSchoolID(c))
+		Joins("JOIN students ON students.id = parent_payment_requests.student_id").
+		Where("parent_payment_requests.school_id = ? AND students.status != ?", scopedSchoolID(c), "inactive")
 	switch currentRole(c) {
 	case "parent":
 		query = query.Where("parent_payment_requests.parent_user_id = ?", currentUserID(c))
@@ -840,9 +841,13 @@ func generateParentPaymentReference() string {
 func (h *FeeHandler) GetConcessions(c *gin.Context) {
 	studentID := c.Query("student_id")
 	var concessions []models.FeeConcession
-	query := database.DB.Preload("FeeCategory").Preload("Student")
+	query := database.DB.Model(&models.FeeConcession{}).
+		Joins("JOIN students ON students.id = fee_concessions.student_id").
+		Where("students.school_id = ? AND students.status != ?", scopedSchoolID(c), "inactive").
+		Preload("FeeCategory").
+		Preload("Student")
 	if studentID != "" {
-		query = query.Where("student_id = ?", studentID)
+		query = query.Where("fee_concessions.student_id = ?", studentID)
 	}
 	query.Find(&concessions)
 

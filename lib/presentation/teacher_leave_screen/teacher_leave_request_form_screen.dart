@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../services/backend_api_client.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/dashboard_fab_widget.dart';
-import '../../widgets/erp_components.dart';
-import '../../widgets/erp_module_scaffold.dart';
-import '../../widgets/teacher_navigation.dart';
+import '../../widgets/teacher_flow_ui.dart';
 
 @immutable
 class TeacherLeaveRequestFormArgs {
@@ -49,18 +45,17 @@ class _TeacherLeaveRequestFormScreenState
   String _leaveTypeId = '';
   bool _halfDay = false;
   bool _saving = false;
-
-  bool get _ready =>
-      widget.args.staffId.trim().isNotEmpty &&
-      widget.args.leaveTypes.any((type) => _text(type['id']).isNotEmpty);
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    final tomorrow = _dateInput(DateTime.now().add(const Duration(days: 1)));
+    final tomorrow = teacherFlowDate(
+      DateTime.now().add(const Duration(days: 1)),
+    );
     _fromDateController = TextEditingController(text: tomorrow);
     _toDateController = TextEditingController(text: tomorrow);
-    _leaveTypeId = _initialLeaveTypeId();
+    _leaveTypeId = _firstLeaveTypeId();
   }
 
   @override
@@ -71,267 +66,13 @@ class _TeacherLeaveRequestFormScreenState
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: 'Apply Leave',
-      subtitle: 'Submit a teacher leave request for approval',
-      drawer: TeacherDrawer(selectedIndex: 10, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.teacher,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (_ready)
-            Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _staffContext(),
-                  const SizedBox(height: 14),
-                  DropdownButtonFormField<String>(
-                    initialValue: _leaveTypeId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Leave type'),
-                    items: widget.args.leaveTypes
-                        .where((type) => _text(type['id']).isNotEmpty)
-                        .map(
-                          (type) => DropdownMenuItem(
-                            value: _text(type['id']),
-                            child: Text(
-                              _leaveTypeName(type),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    validator: (value) =>
-                        _required(value, 'Select leave type.'),
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _leaveTypeId = value ?? ''),
-                  ),
-                  const SizedBox(height: 12),
-                  _selectedBalanceCard(),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _dateField(
-                          controller: _fromDateController,
-                          label: 'From date',
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _dateField(
-                          controller: _toDateController,
-                          label: 'To date',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    value: _halfDay,
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() {
-                            _halfDay = value;
-                            if (value) {
-                              _toDateController.text = _fromDateController.text;
-                            }
-                          }),
-                    title: Text(
-                      'Half-day leave',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _reasonController,
-                    enabled: !_saving,
-                    minLines: 4,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Reason',
-                      hintText: 'Write the reason for this leave request',
-                      alignLabelWithHint: true,
-                    ),
-                    validator: (value) {
-                      if ((value ?? '').trim().length < 5) {
-                        return 'Enter a clear reason.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _submit,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.send_rounded, size: 18),
-                    label: Text(_saving ? 'Submitting...' : 'Submit Request'),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                    label: const Text('Back to Leave History'),
-                  ),
-                ],
-              ),
-            )
-          else
-            const SchoolDeskStatusPanel.empty(
-              title: 'Teacher leave setup required',
-              message:
-                  'A linked staff profile and backend leave types are required before a teacher can apply for leave.',
-            ),
-          const SizedBox(height: 84),
-        ],
-      ),
-    );
-  }
-
-  Widget _staffContext() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.badge_outlined, color: AppTheme.primary),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.args.staffName.trim().isEmpty
-                      ? 'Current teacher'
-                      : widget.args.staffName,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Staff ID: ${widget.args.staffId}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: AppTheme.muted,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _selectedBalanceCard() {
-    final balance = _balanceForType(_leaveTypeId);
-    if (balance.isEmpty) {
-      return _softPanel(
-        'No balance row exists for this leave type yet. The backend will still validate staff and leave type access.',
-      );
-    }
-    final total = _number(balance['total_entitled']);
-    final used = _number(balance['used_days']);
-    final pending = _number(balance['pending_days']);
-    final remaining = _number(balance['remaining_days']);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.infoContainer,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.info.withAlpha(70)),
-      ),
-      child: Wrap(
-        runSpacing: 8,
-        spacing: 16,
-        children: [
-          _metric('Entitled', _days(total)),
-          _metric('Used', _days(used)),
-          _metric('Pending', _days(pending)),
-          _metric('Remaining', _days(remaining)),
-        ],
-      ),
-    );
-  }
-
-  Widget _metric(String label, String value) {
-    return SizedBox(
-      width: 110,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: GoogleFonts.dmSans(
-              fontWeight: FontWeight.w700,
-              color: AppTheme.info,
-            ),
-          ),
-          Text(
-            label,
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dateField({
-    required TextEditingController controller,
-    required String label,
-  }) {
-    return TextFormField(
-      controller: controller,
-      enabled: !_saving,
-      keyboardType: TextInputType.datetime,
-      decoration: InputDecoration(labelText: label, helperText: 'YYYY-MM-DD'),
-      validator: _dateValidator,
-      onChanged: (value) {
-        if (_halfDay && controller == _fromDateController) {
-          _toDateController.text = value;
-        }
-      },
-    );
-  }
-
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    final from = DateTime.parse(_fromDateController.text.trim());
-    final to = DateTime.parse(_toDateController.text.trim());
-    if (to.isBefore(from)) {
-      _showError('To date cannot be before from date.');
-      return;
-    }
-    if (_halfDay && _fromDateController.text != _toDateController.text) {
-      _showError('Half-day leave must start and end on the same date.');
-      return;
-    }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await BackendApiClient.instance.submitLeaveApplication(
         LeaveApplicationRequest(
@@ -343,100 +84,180 @@ class _TeacherLeaveRequestFormScreenState
           reason: _reasonController.text.trim(),
         ),
       );
-      if (!mounted) return;
-      Navigator.pop(
-        context,
-        const TeacherLeaveRequestResult('Leave request submitted for approval'),
-      );
+      if (mounted) {
+        Navigator.pop(
+          context,
+          const TeacherLeaveRequestResult('Leave request submitted'),
+        );
+      }
     } catch (error) {
-      _showError('Leave request failed: ${_cleanError(error)}');
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = error.toString();
+      });
     }
   }
 
-  String _initialLeaveTypeId() {
-    final withBalance = widget.args.balances
-        .map((balance) => _text(balance['leave_type_id']))
-        .firstWhere((id) => id.isNotEmpty, orElse: () => '');
-    if (withBalance.isNotEmpty) return withBalance;
-    return widget.args.leaveTypes
-        .map((type) => _text(type['id']))
-        .firstWhere((id) => id.isNotEmpty, orElse: () => '');
+  @override
+  Widget build(BuildContext context) {
+    return TeacherFlowScaffold(
+      title: 'Apply Leave',
+      subtitle: 'Submit leave for admin review',
+      selectedIndex: 10,
+      child: TeacherFlowScrollView(
+        children: [
+          TeacherCurrentClassCard(
+            greeting: 'Leave application',
+            classLabel: widget.args.staffName,
+            subject: 'Approval required',
+            timeLabel: _halfDay ? 'Half day' : 'Full day',
+          ),
+          const SizedBox(height: 18),
+          Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: _leaveTypeId.isEmpty ? null : _leaveTypeId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Leave type',
+                    prefixIcon: Icon(Icons.category_rounded),
+                  ),
+                  items: widget.args.leaveTypes
+                      .where((type) => teacherFlowText(type['id']).isNotEmpty)
+                      .map(
+                        (type) => DropdownMenuItem(
+                          value: teacherFlowText(type['id']),
+                          child: Text(_leaveTypeName(type)),
+                        ),
+                      )
+                      .toList(),
+                  validator: (value) =>
+                      (value ?? '').isEmpty ? 'Select leave type.' : null,
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _leaveTypeId = value ?? ''),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _fromDateController,
+                        decoration: const InputDecoration(
+                          labelText: 'From date',
+                          hintText: 'YYYY-MM-DD',
+                          prefixIcon: Icon(Icons.event_rounded),
+                        ),
+                        validator: (value) =>
+                            (value ?? '').trim().isEmpty ? 'Required' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _toDateController,
+                        decoration: const InputDecoration(
+                          labelText: 'To date',
+                          hintText: 'YYYY-MM-DD',
+                          prefixIcon: Icon(Icons.event_available_rounded),
+                        ),
+                        validator: (value) =>
+                            (value ?? '').trim().isEmpty ? 'Required' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _halfDay,
+                  title: const Text('Permission hours / half day'),
+                  subtitle: const Text('Use for short leave requests'),
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _halfDay = value),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _reasonController,
+                  minLines: 4,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason',
+                    alignLabelWithHint: true,
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                  validator: (value) =>
+                      (value ?? '').trim().isEmpty ? 'Enter reason.' : null,
+                ),
+                const SizedBox(height: 12),
+                _BalancePreview(
+                  leaveTypeId: _leaveTypeId,
+                  balances: widget.args.balances,
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                ],
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: _saving ? null : _submit,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(_saving ? 'Submitting...' : 'Submit Leave'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  Map<String, dynamic> _balanceForType(String leaveTypeId) {
-    return widget.args.balances.firstWhere(
-      (balance) => _text(balance['leave_type_id']) == leaveTypeId,
-      orElse: () => const <String, dynamic>{},
-    );
+  String _firstLeaveTypeId() {
+    for (final type in widget.args.leaveTypes) {
+      final id = teacherFlowText(type['id']);
+      if (id.isNotEmpty) return id;
+    }
+    return '';
   }
 
   String _leaveTypeName(Map<String, dynamic> type) {
-    return _text(type['leave_name'], fallback: _text(type['name']));
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+    return teacherFlowText(
+      type['name'] ?? type['leave_type'] ?? type['type_name'],
+      fallback: teacherFlowText(type['id'], fallback: 'Leave'),
     );
   }
 }
 
-Widget _softPanel(String message) {
-  return Container(
-    width: double.infinity,
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: AppTheme.surfaceVariant,
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(
-      message,
-      style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
-    ),
-  );
-}
+class _BalancePreview extends StatelessWidget {
+  final String leaveTypeId;
+  final List<Map<String, dynamic>> balances;
 
-String? _required(String? value, String message) {
-  if (value == null || value.trim().isEmpty) return message;
-  return null;
-}
+  const _BalancePreview({required this.leaveTypeId, required this.balances});
 
-String? _dateValidator(String? value) {
-  final text = (value ?? '').trim();
-  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)) {
-    return 'Use YYYY-MM-DD.';
+  @override
+  Widget build(BuildContext context) {
+    final match = balances.where(
+      (row) => teacherFlowText(row['leave_type_id']) == leaveTypeId,
+    );
+    final row = match.isEmpty ? const <String, dynamic>{} : match.first;
+    return TeacherFlowCard(
+      icon: Icons.account_balance_wallet_rounded,
+      title: 'Leave Balance',
+      subtitle: row.isEmpty
+          ? 'Balance will be verified by backend during approval.'
+          : '${teacherFlowText(row['remaining_days'] ?? row['balance'], fallback: '0')} day(s) remaining',
+      status: 'Live',
+      statusColor: teacherFlowAccent,
+    );
   }
-  return DateTime.tryParse(text) == null ? 'Enter a valid date.' : null;
-}
-
-String _dateInput(DateTime date) =>
-    '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
-String _text(Object? value, {String fallback = ''}) {
-  final text = '${value ?? ''}'.trim();
-  if (text.isEmpty || text == 'null') return fallback;
-  return text;
-}
-
-double _number(Object? value) {
-  if (value is num) return value.toDouble();
-  return double.tryParse('${value ?? ''}') ?? 0;
-}
-
-String _days(double value) {
-  final formatted = value == value.roundToDouble()
-      ? value.toStringAsFixed(0)
-      : value.toStringAsFixed(1);
-  return '$formatted day${value == 1 ? '' : 's'}';
-}
-
-String _cleanError(Object error) {
-  final raw = error.toString();
-  final server = RegExp(r'ServerException\([^)]*\):\s*(.*)').firstMatch(raw);
-  if (server != null) return server.group(1)?.trim() ?? raw;
-  final network = RegExp(r'NetworkException\([^)]*\):\s*(.*)').firstMatch(raw);
-  if (network != null) return network.group(1)?.trim() ?? raw;
-  return raw.replaceFirst('Exception: ', '').trim();
 }

@@ -351,7 +351,7 @@ class PrincipalShellBottomBar extends StatelessWidget {
         label: 'Inbox',
         icon: Icons.mail_outline_rounded,
         activeIcon: Icons.mail_rounded,
-        route: AppRoutes.approvalCenter,
+        route: AppRoutes.principalInbox,
       ),
       _PrincipalShellDestination(
         label: SchoolDeskGlossary.profile,

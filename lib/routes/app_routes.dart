@@ -54,6 +54,7 @@ import '../presentation/principal_attendance_screen/principal_attendance_screen.
 import '../presentation/principal_classes_screen/principal_classes_screen.dart';
 import '../presentation/principal_analytics_screen/principal_analytics_screen.dart';
 import '../presentation/principal_command_center_screens/principal_academic_command_screens.dart';
+import '../presentation/principal_inbox_screen/principal_operational_inbox_screen.dart';
 import '../presentation/principal_subjects_screen/principal_subjects_screen.dart';
 import '../presentation/profile_management_screen/profile_management_screen.dart';
 import '../presentation/report_card_generator_screen/report_card_generator_screen.dart';
@@ -99,6 +100,7 @@ class AppRoutes {
   static const String staffForm = '/staff-management-screen/form';
   static const String studentOversight = '/student-oversight-screen';
   static const String approvalCenter = '/approval-center-screen';
+  static const String principalInbox = '/principal-inbox-screen';
   static const String feeMonitoring = '/fee-monitoring-screen';
   static const String timetableManagement = '/timetable-management-screen';
   static const String syllabusMonitoring = '/syllabus-monitoring-screen';
@@ -231,6 +233,7 @@ class AppRoutes {
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
+    principalInbox: (context) => const PrincipalOperationalInboxScreen(),
     feeMonitoring: (context) => const FeeMonitoringScreen(),
     timetableManagement: (context) => const TimetableManagementScreen(),
     syllabusMonitoring: (context) => const SyllabusMonitoringScreen(),
@@ -476,6 +479,7 @@ class AppRoutes {
     staffForm,
     studentOversight,
     approvalCenter,
+    principalInbox,
     feeMonitoring,
     communicationCenter,
     complaintManagement,

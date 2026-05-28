@@ -110,7 +110,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           ],
         ),
         SchoolDeskNavigationSection(
-          label: 'Classroom',
+          label: 'Classroom Flow',
           items: [
             const SchoolDeskNavigationItem(
               index: 1,
@@ -130,14 +130,21 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: 3,
               icon: Icons.assignment_outlined,
               activeIcon: Icons.assignment_rounded,
-              label: 'Homework',
+              label: 'Homework / Diary',
               route: AppRoutes.teacherHomework,
               badgeCount: RoleAccessService.teacherHomeworkDue,
+            ),
+            const SchoolDeskNavigationItem(
+              index: 13,
+              icon: Icons.menu_book_outlined,
+              activeIcon: Icons.menu_book_rounded,
+              label: 'Class Diary',
+              route: AppRoutes.teacherDiary,
             ),
           ],
         ),
         const SchoolDeskNavigationSection(
-          label: 'Academics',
+          label: 'Learning Support',
           items: [
             SchoolDeskNavigationItem(
               index: 5,
@@ -189,7 +196,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           ],
         ),
         const SchoolDeskNavigationSection(
-          label: 'Management',
+          label: 'Operations',
           items: [
             SchoolDeskNavigationItem(
               index: 10,
@@ -211,13 +218,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               activeIcon: Icons.bar_chart_rounded,
               label: 'Reports',
               route: AppRoutes.teacherReports,
-            ),
-            SchoolDeskNavigationItem(
-              index: 13,
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book_rounded,
-              label: 'Class Diary',
-              route: AppRoutes.teacherDiary,
             ),
           ],
         ),

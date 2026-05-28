@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../routes/app_routes.dart';
 import '../../services/backend_api_client.dart';
 import '../../services/role_access_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/dashboard_fab_widget.dart';
-import '../../widgets/erp_module_scaffold.dart';
-import '../../widgets/teacher_navigation.dart';
+import '../../widgets/teacher_flow_ui.dart';
 
 class TeacherReportsScreen extends StatefulWidget {
   const TeacherReportsScreen({super.key});
@@ -17,399 +14,282 @@ class TeacherReportsScreen extends StatefulWidget {
 }
 
 class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
-  int _selectedNavIndex = 12;
-  late final String _selectedClass;
   bool _loading = true;
+  String? _error;
   String? _exportingReport;
+  List<AttendanceSessionModel> _sessions = const [];
+  List<Map<String, dynamic>> _homework = const [];
+  List<Map<String, dynamic>> _notes = const [];
+  List<Map<String, dynamic>> _incidents = const [];
+  List<Map<String, dynamic>> _exports = const [];
 
-  final List<Map<String, dynamic>> _reportTypes = [
-    {
-      'title': 'Class Attendance Report',
-      'icon': Icons.how_to_reg_rounded,
-      'color': AppTheme.primary,
-      'desc': 'Daily/monthly attendance summary for your class',
-      'type': 'attendance',
-    },
-    {
-      'title': 'Student Marks Report',
-      'icon': Icons.bar_chart_rounded,
-      'color': AppTheme.secondary,
-      'desc': 'Test scores and performance trends',
-      'type': 'marks',
-    },
-    {
-      'title': 'Homework Submission Report',
-      'icon': Icons.assignment_turned_in_rounded,
-      'color': AppTheme.accent,
-      'desc': 'Homework completion rates for your class',
-      'type': 'homework',
-    },
-    {
-      'title': 'Syllabus Progress Report',
-      'icon': Icons.menu_book_rounded,
-      'color': const Color(0xFF6C3483),
-      'desc': 'Chapter completion status for your class',
-      'type': 'syllabus',
-    },
-    {
-      'title': 'Weak Students Report',
-      'icon': Icons.warning_rounded,
-      'color': AppTheme.error,
-      'desc': 'Students needing academic support',
-      'type': 'weak',
-    },
-    {
-      'title': 'Discipline Report',
-      'icon': Icons.report_problem_rounded,
-      'color': AppTheme.warning,
-      'desc': 'Incidents and disciplinary actions',
-      'type': 'discipline',
-    },
+  static const _reportTypes = [
+    _TeacherReportType(
+      title: 'Class Attendance Report',
+      type: 'attendance',
+      icon: Icons.how_to_reg_rounded,
+      color: AppTheme.primary,
+      description: 'Daily and period-wise attendance evidence',
+    ),
+    _TeacherReportType(
+      title: 'Homework Submission Report',
+      type: 'homework',
+      icon: Icons.assignment_turned_in_rounded,
+      color: teacherFlowAccent,
+      description: 'Assigned work and submission follow-up',
+    ),
+    _TeacherReportType(
+      title: 'Student Support Report',
+      type: 'support',
+      icon: Icons.support_rounded,
+      color: AppTheme.warning,
+      description: 'Notes, conduct items, and support actions',
+    ),
+    _TeacherReportType(
+      title: 'Report Cards Export',
+      type: 'report_cards',
+      icon: Icons.picture_as_pdf_rounded,
+      color: AppTheme.secondary,
+      description: 'Jump into generated academic report cards',
+    ),
   ];
-
-  Map<String, List<Map<String, dynamic>>> _attendanceSummary = {};
 
   @override
   void initState() {
     super.initState();
-    _selectedClass = RoleAccessService.teacherClassName;
-    _loadData();
+    _loadReports();
   }
 
-  Future<void> _loadData() async {
-    final sessions = await BackendApiClient.instance.getAttendanceSessions(
-      sectionId: RoleAccessService.teacherClassId,
-    );
-    final present = sessions.fold<int>(
-      0,
-      (sum, session) => sum + session.presentCount,
-    );
-    final marked = sessions.fold<int>(
-      0,
-      (sum, session) => sum + session.totalStudents,
-    );
-    final absent = marked > present ? marked - present : 0;
+  Future<void> _loadReports() async {
     setState(() {
-      _attendanceSummary = {
-        _selectedClass: [
-          {
-            'month': 'Backend',
-            'present': present,
-            'absent': absent,
-            'late': 0,
-            'total': marked,
-          },
-        ],
-      };
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      await RoleAccessService.initialize();
+      final api = BackendApiClient.instance;
+      final results = await Future.wait<dynamic>([
+        api.getAttendanceSessions(sectionId: RoleAccessService.teacherClassId),
+        api.getHomework(
+          sectionId: RoleAccessService.teacherClassId,
+          teacherId: RoleAccessService.teacherStaffId,
+        ),
+        _optionalRaw('/student-notes'),
+        _optionalRaw('/discipline-incidents'),
+        _optionalRaw('/exams/report-cards/exports'),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _sessions = (results[0] as List)
+            .whereType<AttendanceSessionModel>()
+            .toList();
+        _homework = (results[1] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+        _notes = (results[2] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .where(_belongsToTeacher)
+            .toList();
+        _incidents = (results[3] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .where(_belongsToTeacher)
+            .toList();
+        _exports = (results[4] as List)
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _optionalRaw(String path) async {
+    try {
+      return await BackendApiClient.instance.getRawList(path);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  bool _belongsToTeacher(Map<String, dynamic> row) {
+    final teacherId = teacherFlowText(row['teacher_id'] ?? row['staff_id']);
+    final studentId = teacherFlowText(row['student_id']);
+    if (teacherId.isNotEmpty && teacherId == RoleAccessService.teacherStaffId) {
+      return true;
+    }
+    if (studentId.isEmpty) return false;
+    return RoleAccessService.teacherClassStudents.any(
+      (student) => teacherFlowText(student['id']) == studentId,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final drawer = TeacherDrawer(
-      selectedIndex: _selectedNavIndex,
-      onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
+    final marked = _sessions.fold<int>(
+      0,
+      (total, session) => total + session.totalStudents,
     );
-    if (_loading) {
-      return SchoolDeskModuleScaffold(
-        title: 'Reports',
-        subtitle: 'Create class reports and jump into report cards',
-        drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return SchoolDeskModuleScaffold(
+    final present = _sessions.fold<int>(
+      0,
+      (total, session) => total + session.presentCount,
+    );
+    final attendancePercent = marked == 0 ? 0 : (present / marked) * 100;
+    return TeacherFlowScaffold(
       title: 'Reports',
-      subtitle: 'Create class reports and jump into report cards',
-      drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.teacher,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+      subtitle: 'Class evidence, exports, and report card actions',
+      selectedIndex: 12,
+      loading: _loading,
+      error: _error,
+      onRefresh: _loadReports,
       actions: [
-        TextButton.icon(
+        IconButton(
+          tooltip: 'Report Cards',
           onPressed: () =>
               Navigator.pushNamed(context, AppRoutes.reportCardGenerator),
-          icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-          label: Text(
-            'Report Cards',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          icon: const Icon(Icons.picture_as_pdf_rounded),
         ),
       ],
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildClassSelector(),
-            const SizedBox(height: 20),
-            Text(
-              'Available Reports',
-              style: GoogleFonts.dmSans(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220,
-                mainAxisExtent: 130,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: _reportTypes.length,
-              itemBuilder: (context, i) => _buildReportCard(_reportTypes[i]),
-            ),
-            const SizedBox(height: 20),
-            _buildAttendanceSummary(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClassSelector() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: TeacherFlowScrollView(
         children: [
-          Text(
-            'Select Class',
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+          TeacherCurrentClassCard(
+            greeting: 'Class reporting desk',
+            classLabel: teacherCurrentClassLabel(),
+            subject: RoleAccessService.teacherSubject,
+            timeLabel: '${_exports.length} export requests',
           ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [_selectedClass].map((c) {
-                final isSelected = _selectedClass == c;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() {}),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppTheme.primary
-                            : AppTheme.surfaceVariant,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'Class $c',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected
-                              ? Colors.white
-                              : AppTheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReportCard(Map<String, dynamic> r) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => _openReportPreview(r),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.outlineVariant),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: (r['color'] as Color).withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 18),
+          TeacherFlowMetricGrid(
+            metrics: [
+              TeacherFlowMetric(
+                label: 'Attendance',
+                value: '${attendancePercent.toStringAsFixed(0)}%',
+                icon: Icons.how_to_reg_rounded,
+                color: AppTheme.primary,
+                tone: const Color(0xFFEAF3FF),
               ),
-              child: Icon(
-                r['icon'] as IconData,
-                color: r['color'] as Color,
-                size: 20,
+              TeacherFlowMetric(
+                label: 'Homework',
+                value: '${_homework.length}',
+                icon: Icons.assignment_rounded,
+                color: teacherFlowAccent,
+                tone: const Color(0xFFEAFBF5),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              r['title'] as String,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+              TeacherFlowMetric(
+                label: 'Notes',
+                value: '${_notes.length}',
+                icon: Icons.sticky_note_2_rounded,
+                color: AppTheme.warning,
+                tone: const Color(0xFFFFF7E6),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                const Icon(
-                  Icons.download_rounded,
-                  size: 12,
-                  color: AppTheme.muted,
-                ),
-                const SizedBox(width: 3),
-                Text(
-                  'Export',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 10,
-                    color: AppTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttendanceSummary() {
-    final data = _attendanceSummary[_selectedClass] ?? [];
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Attendance Summary - Class $_selectedClass',
-                style: GoogleFonts.dmSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              TextButton(
-                onPressed: () => _exportReport('Attendance Report'),
-                child: Text(
-                  'Export',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: AppTheme.primary,
-                  ),
-                ),
+              TeacherFlowMetric(
+                label: 'Conduct',
+                value: '${_incidents.length}',
+                icon: Icons.health_and_safety_rounded,
+                color: AppTheme.error,
+                tone: const Color(0xFFFFF0F0),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ...data.map((d) => _buildMonthRow(d)),
+          const SizedBox(height: 18),
+          const TeacherFlowSectionHeader(title: 'Create Report Export'),
+          const SizedBox(height: 10),
+          ..._reportTypes.map(
+            (report) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _reportCard(report),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const TeacherFlowSectionHeader(title: 'Recent Export Requests'),
+          const SizedBox(height: 10),
+          if (_exports.isEmpty)
+            const TeacherFlowCard(
+              icon: Icons.cloud_download_outlined,
+              title: 'No export requests',
+              subtitle: 'Generated teacher report exports will appear here.',
+            )
+          else
+            ..._exports
+                .take(8)
+                .map(
+                  (row) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: TeacherFlowCard(
+                      icon: Icons.cloud_done_rounded,
+                      title: teacherFlowText(
+                        row['report_title'] ?? row['report'],
+                        fallback: 'Report export',
+                      ),
+                      subtitle: teacherFlowText(
+                        row['created_at'],
+                        fallback: 'Requested from teacher reports',
+                      ),
+                      status: teacherFlowTitleCase(
+                        teacherFlowText(row['status'], fallback: 'requested'),
+                      ),
+                      statusColor: teacherFlowAccent,
+                    ),
+                  ),
+                ),
         ],
       ),
     );
   }
 
-  Widget _buildMonthRow(Map<String, dynamic> d) {
-    final total =
-        d['total'] as int? ?? (d['present'] as int) + (d['absent'] as int);
-    final pct = total > 0 ? (d['present'] as int) / total : 0.0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 70,
-            child: Text(
-              d['month'] as String,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: AppTheme.onSurfaceVariant,
-              ),
-            ),
+  Widget _reportCard(_TeacherReportType report) {
+    final exporting = _exportingReport == report.title;
+    return TeacherFlowCard(
+      icon: report.icon,
+      title: report.title,
+      subtitle: report.description,
+      status: exporting ? 'Exporting' : 'Ready',
+      statusColor: exporting ? AppTheme.warning : report.color,
+      body: TeacherFlowActionWrap(
+        actions: [
+          TeacherFlowAction(
+            label: 'PDF',
+            icon: Icons.picture_as_pdf_rounded,
+            filled: true,
+            onTap: exporting ? null : () => _exportReport(report, 'pdf'),
           ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    backgroundColor: AppTheme.errorContainer,
-                    color: AppTheme.success,
-                    minHeight: 8,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${d['present']} present - ${d['absent']} absent - ${d['late']} late',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 10,
-                    color: AppTheme.muted,
-                  ),
-                ),
-              ],
-            ),
+          TeacherFlowAction(
+            label: 'CSV',
+            icon: Icons.table_chart_rounded,
+            onTap: exporting ? null : () => _exportReport(report, 'csv'),
           ),
+          if (report.type == 'report_cards')
+            TeacherFlowAction(
+              label: 'Open Cards',
+              icon: Icons.open_in_new_rounded,
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.reportCardGenerator),
+            ),
         ],
       ),
     );
   }
 
-  Future<void> _openReportPreview(Map<String, dynamic> report) async {
-    final format = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => _TeacherReportPreviewPage(
-          report: report,
-          className: _selectedClass,
-        ),
-      ),
-    );
-    if (!mounted || format == null) return;
-    await _exportReport('${report['title']} (${format.toUpperCase()})');
-  }
-
-  Future<void> _exportReport(String name) async {
+  Future<void> _exportReport(_TeacherReportType report, String format) async {
     if (_exportingReport != null) return;
-    setState(() => _exportingReport = name);
+    setState(() => _exportingReport = report.title);
     try {
       final export = await BackendApiClient.instance.createReportExport(
         '/exams/report-cards/exports',
-        reportTitle: name,
-        format: name.toLowerCase().contains('csv') ? 'csv' : 'pdf',
-        reportType: 'teacher_report',
+        reportTitle: '${report.title} (${format.toUpperCase()})',
+        format: format,
+        reportType: 'teacher_${report.type}',
         scope: 'teacher',
         parameters: {
-          'class': _selectedClass,
+          'class': RoleAccessService.teacherClassName,
           'section_id': RoleAccessService.teacherClassId,
           'teacher_id': RoleAccessService.teacherStaffId,
           'requested_at': DateTime.now().toUtc().toIso8601String(),
@@ -419,18 +299,17 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '$name export ${export['status'] ?? 'requested'} for Class $_selectedClass',
+            '${report.title} export ${export['status'] ?? 'requested'}',
           ),
-          backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
+      await _loadReports();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Report export failed: $error'),
-          backgroundColor: AppTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -440,85 +319,18 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   }
 }
 
-class _TeacherReportPreviewPage extends StatelessWidget {
-  final Map<String, dynamic> report;
-  final String className;
+class _TeacherReportType {
+  final String title;
+  final String type;
+  final IconData icon;
+  final Color color;
+  final String description;
 
-  const _TeacherReportPreviewPage({
-    required this.report,
-    required this.className,
+  const _TeacherReportType({
+    required this.title,
+    required this.type,
+    required this.icon,
+    required this.color,
+    required this.description,
   });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Report Preview')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: (report['color'] as Color).withAlpha(20),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    report['icon'] as IconData,
-                    color: report['color'] as Color,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        report['title'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        'Class $className',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          color: AppTheme.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              report['desc'] as String,
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                color: AppTheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context, 'csv'),
-              icon: const Icon(Icons.table_chart_rounded, size: 16),
-              label: const Text('Export CSV'),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(context, 'pdf'),
-              icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
-              label: const Text('Export PDF'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

@@ -282,6 +282,9 @@ func autoMigrate() error {
 	if err := backfillTablesMDLegacy(); err != nil {
 		return err
 	}
+	if err := cleanupInactiveStudentOperationalRows(); err != nil {
+		return err
+	}
 	if DB.Dialector.Name() == "postgres" {
 		DB.Exec(`
 			DO $$ BEGIN
@@ -319,6 +322,124 @@ func autoMigrate() error {
 	}
 
 	return nil
+}
+
+func cleanupInactiveStudentOperationalRows() error {
+	if DB == nil {
+		return nil
+	}
+
+	var students []struct {
+		ID       string
+		SchoolID string
+	}
+	if err := DB.Model(&models.Student{}).
+		Select("id, school_id").
+		Where("status = ?", "inactive").
+		Scan(&students).Error; err != nil {
+		return err
+	}
+	for _, student := range students {
+		if err := cleanupInactiveStudentOperationalRow(student.SchoolID, student.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupInactiveStudentOperationalRow(schoolID, studentID string) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var invoiceIDs []string
+		if err := tx.Model(&models.FeeInvoice{}).
+			Where("student_id = ?", studentID).
+			Pluck("id", &invoiceIDs).Error; err != nil {
+			return err
+		}
+		if len(invoiceIDs) > 0 {
+			if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.ParentPaymentRequest{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.Payment{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("invoice_id IN ?", invoiceIDs).Delete(&models.FeeInvoiceItem{}).Error; err != nil {
+				return err
+			}
+		}
+
+		deletes := []struct {
+			query string
+			args  []interface{}
+			model interface{}
+		}{
+			{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.ParentPaymentRequest{}},
+			{"student_id = ?", []interface{}{studentID}, &models.FeeInvoice{}},
+			{"student_id = ?", []interface{}{studentID}, &models.FeeConcession{}},
+			{"student_id = ?", []interface{}{studentID}, &models.ReportCard{}},
+			{"student_id = ?", []interface{}{studentID}, &models.StudentMark{}},
+			{"student_id = ?", []interface{}{studentID}, &models.StudentAttendance{}},
+			{"student_id = ?", []interface{}{studentID}, &models.AttendanceSummary{}},
+			{"student_id = ?", []interface{}{studentID}, &models.StudentLeaveApplication{}},
+			{"student_id = ?", []interface{}{studentID}, &models.HomeworkSubmission{}},
+			{"student_id = ?", []interface{}{studentID}, &models.Homework{}},
+			{"student_id = ?", []interface{}{studentID}, &models.DiaryEntry{}},
+			{"student_id = ?", []interface{}{studentID}, &models.ParentTeacherMeeting{}},
+			{"student_id = ?", []interface{}{studentID}, &models.StudentTransport{}},
+			{"student_id = ?", []interface{}{studentID}, &models.TransferRecord{}},
+			{"student_id = ?", []interface{}{studentID}, &models.MedicalRecord{}},
+			{"student_id = ?", []interface{}{studentID}, &models.StudentDocument{}},
+			{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.ParentStudentLink{}},
+			{"school_id = ? AND student_id = ?", []interface{}{schoolID, studentID}, &models.StudentGuardian{}},
+		}
+		for _, item := range deletes {
+			if err := tx.Where(item.query, item.args...).Delete(item.model).Error; err != nil {
+				return err
+			}
+		}
+
+		var conversationIDs []string
+		if err := tx.Model(&models.MessageConversation{}).
+			Where("school_id = ? AND student_id = ?", schoolID, studentID).
+			Pluck("id", &conversationIDs).Error; err != nil {
+			return err
+		}
+		if len(conversationIDs) > 0 {
+			if err := tx.Where("conversation_id IN ?", conversationIDs).Delete(&models.Message{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("id IN ?", conversationIDs).Delete(&models.MessageConversation{}).Error; err != nil {
+				return err
+			}
+		}
+
+		var enrollmentIDs []string
+		if err := tx.Model(&models.Enrollment{}).
+			Where("student_id = ?", studentID).
+			Pluck("id", &enrollmentIDs).Error; err != nil {
+			return err
+		}
+		if len(enrollmentIDs) > 0 {
+			if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.StudentAttendance{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.StudentMark{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("enrollment_id IN ?", enrollmentIDs).Delete(&models.ReportCard{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("student_id = ?", studentID).Delete(&models.Enrollment{}).Error; err != nil {
+			return err
+		}
+
+		return tx.Model(&models.User{}).
+			Where("school_id = ? AND linked_type = ? AND linked_id = ?", schoolID, "student", studentID).
+			Updates(map[string]interface{}{
+				"is_active":           false,
+				"auth_invalidated_at": time.Now().UTC(),
+			}).Error
+	})
 }
 
 func normalizeTimetableTimeColumnsBeforeAutoMigrate() error {

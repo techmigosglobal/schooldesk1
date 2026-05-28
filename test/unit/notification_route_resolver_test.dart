@@ -57,5 +57,14 @@ void main() {
       expect(homework.route, AppRoutes.parentHomework);
       expect(exam.route, AppRoutes.teacherPerformance);
     });
+
+    test('routes principal messages to the communication center', () {
+      final target = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'message'},
+        currentRole: 'principal',
+      );
+
+      expect(target.route, AppRoutes.communicationCenter);
+    });
   });
 }

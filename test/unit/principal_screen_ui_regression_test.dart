@@ -406,10 +406,46 @@ void main() {
 
       expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
       expect(dashboard, contains('SchoolDeskUiIllustrations.principalFees'));
-      expect(dashboard, contains('route: AppRoutes.approvalCenter'));
+      expect(dashboard, contains('route: AppRoutes.principalInbox'));
       expect(dashboard, contains('pendingApprovals'));
     },
   );
+
+  test('principal events and inbox use directory workflows', () {
+    final events = File(
+      'lib/presentation/events_calendar_screen/events_calendar_screen.dart',
+    ).readAsStringSync();
+    final inbox = File(
+      'lib/presentation/principal_inbox_screen/principal_operational_inbox_screen.dart',
+    ).readAsStringSync();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
+    final dashboard = File(
+      'lib/presentation/principal_dashboard_screen/principal_dashboard_screen.dart',
+    ).readAsStringSync();
+    final appNavigation = File(
+      'lib/widgets/app_navigation.dart',
+    ).readAsStringSync();
+
+    expect(events, contains('Events Directory'));
+    expect(events, contains('PrincipalDirectoryScaffold'));
+    expect(events, contains('Event Details'));
+    expect(events, contains('Create Event'));
+    expect(events, contains("createRaw('/events'"));
+    expect(events, contains("updateRaw('/events/\$eventId'"));
+    expect(events, contains("deleteRaw('/events/\${event.id}'"));
+    expect(inbox, contains('Operational Inbox'));
+    expect(inbox, contains('NotificationService.getInstance'));
+    expect(inbox, contains("getRawList(source.path)"));
+    expect(inbox, contains("'/events/approvals'"));
+    expect(inbox, contains('decideLeaveApplication'));
+    expect(inbox, contains('markAsRead'));
+    expect(routes, contains('static const String principalInbox'));
+    expect(routes, contains('PrincipalOperationalInboxScreen'));
+    expect(guard, contains("AppRoutes.principalInbox: {'principal'}"));
+    expect(dashboard, contains('route: AppRoutes.principalInbox'));
+    expect(appNavigation, contains('route: AppRoutes.principalInbox'));
+  });
 
   test(
     'principal attendance UI uses directory workflow while backend remains wired',
@@ -535,7 +571,7 @@ void main() {
         ),
       );
       expect(moduleScaffold, contains("label: principal ? 'Inbox'"));
-      expect(moduleScaffold, contains('AppRoutes.approvalCenter'));
+      expect(moduleScaffold, contains('AppRoutes.principalInbox'));
     },
   );
 
@@ -799,7 +835,8 @@ void main() {
     expect(backend, contains('UploadStudentDocument'));
     expect(students, contains('moved to inactive records'));
     expect(client, contains('Future<void> deleteStudent(String id)'));
-    expect(backend, contains('Update("status", "inactive")'));
+    expect(backend, contains('cleanupStudentAssociations'));
+    expect(backend, contains('"status":             "inactive"'));
   });
 
   test('principal student and teacher directories harden compact layouts', () {

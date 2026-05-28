@@ -27,6 +27,7 @@ class RouteAccessGuard {
     AppRoutes.staffForm: {'principal', 'admin'},
     AppRoutes.studentOversight: {'principal'},
     AppRoutes.approvalCenter: {'principal'},
+    AppRoutes.principalInbox: {'principal'},
     AppRoutes.feeMonitoring: {'principal'},
     AppRoutes.timetableManagement: {'principal'},
     AppRoutes.syllabusMonitoring: {'principal'},

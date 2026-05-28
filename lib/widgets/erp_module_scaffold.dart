@@ -644,7 +644,7 @@ class _ModuleBottomActionBar extends StatelessWidget {
     final normalizedRole = role.trim().toLowerCase();
     final principal = normalizedRole == 'principal';
     final inboxRoute = principal
-        ? AppRoutes.approvalCenter
+        ? AppRoutes.principalInbox
         : AppRoutes.notificationCenter;
     return [
       _BottomAction(
@@ -671,7 +671,7 @@ class _ModuleBottomActionBar extends StatelessWidget {
             : Icons.notifications_rounded,
         route: inboxRoute,
         selected: currentRoute == inboxRoute,
-        badgeCount: principal ? 0 : unreadCount,
+        badgeCount: unreadCount,
       ),
       _BottomAction(
         label: SchoolDeskGlossary.profile,

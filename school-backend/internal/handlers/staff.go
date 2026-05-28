@@ -669,9 +669,15 @@ func (h *StaffHandler) DeleteStaff(c *gin.Context) {
 			Update("class_teacher_id", nil).Error; err != nil {
 			return err
 		}
+		if err := cleanupStaffAssociations(tx, schoolID, id); err != nil {
+			return err
+		}
 		if err := tx.Model(&models.User{}).
 			Where("linked_type = ? AND linked_id = ?", "staff", id).
-			Update("is_active", false).Error; err != nil {
+			Updates(map[string]interface{}{
+				"is_active":           false,
+				"auth_invalidated_at": time.Now().UTC(),
+			}).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&staff).Error
@@ -685,6 +691,71 @@ func (h *StaffHandler) DeleteStaff(c *gin.Context) {
 	}
 	auditAction(c, "staff", "delete", "staff", &id)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Staff deleted successfully"})
+}
+
+func cleanupStaffAssociations(tx *gorm.DB, schoolID, staffID string) error {
+	deletes := []struct {
+		query string
+		args  []interface{}
+		model interface{}
+	}{
+		{"staff_id = ?", []interface{}{staffID}, &models.StaffSubject{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.StaffQualification{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.StaffDocument{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.StaffAttendance{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.LeaveBalance{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.LeaveApplication{}},
+		{"staff_id = ?", []interface{}{staffID}, &models.Payroll{}},
+		{"teacher_id = ?", []interface{}{staffID}, &models.ParentTeacherMeeting{}},
+		{"created_by = ?", []interface{}{staffID}, &models.Announcement{}},
+		{"teacher_id = ?", []interface{}{staffID}, &models.Homework{}},
+		{"teacher_id = ?", []interface{}{staffID}, &models.DiaryEntry{}},
+		{"original_staff_id = ? OR substitute_staff_id = ?", []interface{}{staffID, staffID}, &models.Substitution{}},
+	}
+	for _, item := range deletes {
+		if err := tx.Where(item.query, item.args...).Delete(item.model).Error; err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Exec("DELETE FROM homework WHERE school_id = ? AND staff_id = ?", schoolID, staffID).Error; err != nil {
+		return err
+	}
+	if err := tx.Exec("DELETE FROM events WHERE school_id = ? AND organizer_id = ?", schoolID, staffID).Error; err != nil {
+		return err
+	}
+	if err := tx.Model(&models.Department{}).
+		Where("school_id = ? AND hod_staff_id = ?", schoolID, staffID).
+		Update("hod_staff_id", nil).Error; err != nil {
+		return err
+	}
+	if err := tx.Model(&models.AttendanceSession{}).
+		Where("staff_id = ?", staffID).
+		Update("staff_id", "").Error; err != nil {
+		return err
+	}
+	if err := tx.Model(&models.StudentAttendance{}).
+		Where("marked_by = ?", staffID).
+		Update("marked_by", nil).Error; err != nil {
+		return err
+	}
+
+	var conversationIDs []string
+	if err := tx.Model(&models.MessageConversation{}).
+		Where("school_id = ? AND teacher_id = ?", schoolID, staffID).
+		Pluck("id", &conversationIDs).Error; err != nil {
+		return err
+	}
+	if len(conversationIDs) > 0 {
+		if err := tx.Where("conversation_id IN ?", conversationIDs).Delete(&models.Message{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", conversationIDs).Delete(&models.MessageConversation{}).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (h *StaffHandler) GetStaffLeaveBalance(c *gin.Context) {

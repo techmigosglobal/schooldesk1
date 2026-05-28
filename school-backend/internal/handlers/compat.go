@@ -859,6 +859,11 @@ func (h *CompatibilityHandler) AssignFee(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	if countRows(database.DB.Model(&models.Student{}).
+		Where("id = ? AND school_id = ? AND status != ?", req.StudentID, scopedSchoolID(c), "inactive")) == 0 {
+		fail(c, http.StatusBadRequest, "student does not belong to this school")
+		return
+	}
 	due, err := parseDate(req.DueDate)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "Invalid due_date format. Use YYYY-MM-DD")
@@ -891,7 +896,8 @@ func (h *CompatibilityHandler) GetStudentFees(c *gin.Context) {
 	}
 	var rows []models.FeeInvoice
 	if err := database.DB.
-		Where("student_id = ?", studentID).
+		Joins("JOIN students ON students.id = fee_invoices.student_id").
+		Where("fee_invoices.student_id = ? AND students.school_id = ? AND students.status != ?", studentID, scopedSchoolID(c), "inactive").
 		Preload("Student").
 		Preload("Student.CurrentSection").
 		Preload("Student.CurrentSection.Grade").
@@ -923,6 +929,11 @@ func (h *CompatibilityHandler) PayFee(c *gin.Context) {
 		}
 	}
 	invoiceID := c.Param("id")
+	var invoice models.FeeInvoice
+	if err := scopedFeeInvoiceQuery(c).First(&invoice, "fee_invoices.id = ?", invoiceID).Error; err != nil {
+		fail(c, http.StatusNotFound, "Invoice not found")
+		return
+	}
 	payment := models.Payment{
 		InvoiceID:     invoiceID,
 		ReceiptNumber: "RCPT-" + uuid.NewString(),
@@ -934,24 +945,23 @@ func (h *CompatibilityHandler) PayFee(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to record payment")
 		return
 	}
-	var invoice models.FeeInvoice
-	if err := database.DB.First(&invoice, "id = ?", invoiceID).Error; err == nil {
-		invoice.PaidAmount += req.Amount
-		invoice.Balance -= req.Amount
-		if invoice.Balance <= 0 {
-			invoice.Balance = 0
-			invoice.Status = "paid"
-		} else {
-			invoice.Status = "partial"
-		}
-		_ = database.DB.Save(&invoice).Error
+	invoice.PaidAmount += req.Amount
+	invoice.Balance -= req.Amount
+	if invoice.Balance <= 0 {
+		invoice.Balance = 0
+		invoice.Status = "paid"
+	} else {
+		invoice.Status = "partial"
 	}
+	_ = database.DB.Save(&invoice).Error
 	success(c, http.StatusOK, payment, "Fee payment recorded successfully")
 }
 
 func (h *CompatibilityHandler) GetOverdueFees(c *gin.Context) {
 	var rows []models.FeeInvoice
-	if err := database.DB.Where("due_date < ? AND status != ?", time.Now().UTC(), "paid").Find(&rows).Error; err != nil {
+	if err := preloadFeeInvoiceDetails(scopedFeeInvoiceQuery(c)).
+		Where("fee_invoices.due_date < ? AND fee_invoices.status != ?", time.Now().UTC(), "paid").
+		Find(&rows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load overdue fees")
 		return
 	}
@@ -965,8 +975,9 @@ func (h *CompatibilityHandler) GetFeeStats(c *gin.Context) {
 		Balance float64
 		Overdue int64
 	}
-	_ = database.DB.Model(&models.FeeInvoice{}).Select("COALESCE(SUM(net_amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid, COALESCE(SUM(balance), 0) AS balance").Scan(&row).Error
-	database.DB.Model(&models.FeeInvoice{}).Where("due_date < ? AND status != ?", time.Now().UTC(), "paid").Count(&row.Overdue)
+	query := scopedFeeInvoiceQuery(c)
+	_ = query.Select("COALESCE(SUM(fee_invoices.net_amount), 0) AS total, COALESCE(SUM(fee_invoices.paid_amount), 0) AS paid, COALESCE(SUM(fee_invoices.balance), 0) AS balance").Scan(&row).Error
+	scopedFeeInvoiceQuery(c).Where("fee_invoices.due_date < ? AND fee_invoices.status != ?", time.Now().UTC(), "paid").Count(&row.Overdue)
 	success(c, http.StatusOK, gin.H{"total": row.Total, "paid": row.Paid, "balance": row.Balance, "overdue": row.Overdue}, "")
 }
 
