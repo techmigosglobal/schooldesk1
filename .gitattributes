@@ -1,0 +1,24 @@
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.ttf binary
+*.otf binary
+*.jar binary
+*.aar binary
+*.keystore binary
+*.jks binary
+
+*.freezed.dart linguist-generated=true
+*.g.dart linguist-generated=true
+*.mocks.dart linguist-generated=true

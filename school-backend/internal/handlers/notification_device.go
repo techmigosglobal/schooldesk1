@@ -22,8 +22,8 @@ func NewNotificationDeviceHandler() *NotificationDeviceHandler {
 }
 
 const (
-	maxNotificationTokenLength = 4096
-	maxNotificationDeviceIDLength = 128
+	maxNotificationTokenLength      = 4096
+	maxNotificationDeviceIDLength   = 128
 	maxNotificationAppVersionLength = 64
 )
 

@@ -44,7 +44,7 @@ void main() {
       ).readAsStringSync();
 
       expect(source, contains('Fee Dashboard'));
-      expect(source, contains("String _selectedView = 'Student Fees'"));
+      expect(source, contains("String _selectedView = 'Overview'"));
       expect(
         source,
         contains('List<Map<String, dynamic>> _recentPayments = [];'),
@@ -61,7 +61,7 @@ void main() {
       expect(source, contains('PrincipalDirectoryScaffold'));
       expect(source, contains('PrincipalDirectoryChip'));
       expect(source, contains("createRaw('/fees/structures'"));
-      expect(source, contains("createRaw(\n        '/fees/invoices'"));
+      expect(source, contains("createRaw('/fees/invoices/generate'"));
       expect(source, contains('class _ManualFeeEntrySheet'));
       expect(source, contains('class _CashPaymentPage'));
       expect(source, contains('class _FeeInvoiceDetailPage'));
@@ -636,23 +636,26 @@ void main() {
     expect(drawer, contains('route: AppRoutes.principalExams'));
     expect(drawer, contains('route: AppRoutes.principalResults'));
 
-    expect(screen, contains('Timetable Command Center'));
+    expect(screen, contains('Timetable Builder'));
     expect(screen, contains('class _TimetableModePicker'));
-    expect(screen, contains('_TimetableMode.today'));
-    expect(screen, contains('Class-wise'));
-    expect(screen, contains('Teacher-wise'));
-    expect(screen, contains('Subject-wise'));
-    expect(screen, contains('Room-wise'));
+    expect(screen, contains('_TimetableMode.periods'));
+    expect(screen, contains('Created Periods'));
+    expect(screen, contains('Class Coverage'));
+    expect(screen, contains('Teacher Load'));
+    expect(screen, contains('Subject Coverage'));
+    expect(screen, contains('Room Usage'));
     expect(screen, contains('Conflict Alerts'));
-    expect(screen, contains('Ongoing Classes'));
-    expect(screen, contains('Emergency substitutions'));
+    expect(screen, contains('Add Timetable Period'));
+    expect(screen, contains('class _TimetableSlotInputForm'));
 
-    expect(screen, contains('Exams Command Center'));
-    expect(screen, contains('Exam Dashboard'));
-    expect(screen, contains('Exam Creation'));
+    expect(screen, contains('Exam Workflow'));
+    expect(screen, contains('1. Readiness'));
+    expect(screen, contains('2. Scheduled Exams'));
     expect(screen, contains('Assign invigilators'));
-    expect(screen, contains('Monitoring Panel'));
-    expect(screen, contains('Evaluation Tracking'));
+    expect(screen, contains('3. Live Monitoring'));
+    expect(screen, contains('4. Evaluation'));
+    expect(screen, contains('5. Publish'));
+    expect(screen, contains('Create Exam'));
 
     expect(screen, contains('Results Command Center'));
     expect(screen, contains('Result Dashboard'));

@@ -85,16 +85,16 @@ type Route struct {
 
 type RouteStop struct {
 	BaseModel
-	RouteID            string             `gorm:"type:text;not null" json:"route_id"`
-	StopName           string             `gorm:"type:text;not null" json:"stop_name"`
-	SequenceNumber     int                `json:"sequence_number"`
-	PickupTime         string             `gorm:"type:text" json:"pickup_time"`
-	DropTime           string             `gorm:"type:text" json:"drop_time"`
-	Landmark           string             `gorm:"type:text" json:"landmark"`
-	Latitude           float64            `json:"latitude"`
-	Longitude          float64            `json:"longitude"`
-	Route              *Route             `gorm:"foreignKey:RouteID" json:"route,omitempty"`
-	StudentTransports  []StudentTransport `gorm:"foreignKey:StopID" json:"student_transports,omitempty"`
+	RouteID           string             `gorm:"type:text;not null" json:"route_id"`
+	StopName          string             `gorm:"type:text;not null" json:"stop_name"`
+	SequenceNumber    int                `json:"sequence_number"`
+	PickupTime        string             `gorm:"type:text" json:"pickup_time"`
+	DropTime          string             `gorm:"type:text" json:"drop_time"`
+	Landmark          string             `gorm:"type:text" json:"landmark"`
+	Latitude          float64            `json:"latitude"`
+	Longitude         float64            `json:"longitude"`
+	Route             *Route             `gorm:"foreignKey:RouteID" json:"route,omitempty"`
+	StudentTransports []StudentTransport `gorm:"foreignKey:StopID" json:"student_transports,omitempty"`
 }
 
 type StudentTransport struct {
