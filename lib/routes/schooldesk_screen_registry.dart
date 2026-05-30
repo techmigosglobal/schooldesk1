@@ -86,6 +86,13 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/guided-assistant-screen',
+      title: 'Guided Assistant',
+      module: 'Operations',
+      portal: 'shared',
+      isShared: true,
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-school-profile-screen',
       title: SchoolDeskGlossary.schoolProfile,
       module: 'Governance',

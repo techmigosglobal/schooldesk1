@@ -216,6 +216,8 @@ func autoMigrate() error {
 		&models.UserSession{},
 		&models.OTPVerification{},
 		&models.AuditLog{},
+		&models.WorkflowSession{},
+		&models.WorkflowLog{},
 	); err != nil {
 		return err
 	}

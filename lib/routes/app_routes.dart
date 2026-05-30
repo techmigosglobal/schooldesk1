@@ -31,6 +31,7 @@ import '../presentation/fee_monitoring_screen/fee_monitoring_screen.dart';
 import '../presentation/fee_payment_receipt_screen/fee_payment_receipt_screen.dart';
 import '../presentation/global_search_screen/global_search_screen.dart';
 import '../presentation/guardian_directory_screen/guardian_directory_screen.dart';
+import '../presentation/guided_assistant_screen/guided_assistant_screen.dart';
 import '../presentation/homework_messaging_screen/homework_messaging_screen.dart';
 import '../presentation/id_card_generation_screen/id_card_generation_screen.dart';
 import '../presentation/landing_page_screen/landing_page_screen.dart';
@@ -96,6 +97,7 @@ class AppRoutes {
   static const String onboarding = '/onboarding-screen';
   static const String principalLogin = '/principal-login-screen';
   static const String principalDashboard = '/principal-dashboard-screen';
+  static const String guidedAssistant = '/guided-assistant-screen';
   static const String staffManagement = '/staff-management-screen';
   static const String staffForm = '/staff-management-screen/form';
   static const String studentOversight = '/student-oversight-screen';
@@ -228,6 +230,7 @@ class AppRoutes {
     onboarding: (context) => const AuthLoginScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
+    guidedAssistant: (context) => const GuidedAssistantScreen(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
@@ -458,6 +461,7 @@ class AppRoutes {
 
   static const Set<String> _roleWorkflowVisibleRoutes = {
     principalDashboard,
+    guidedAssistant,
     principalSchoolProfile,
     principalUserManagement,
     guardianDirectory,

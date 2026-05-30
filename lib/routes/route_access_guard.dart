@@ -23,6 +23,7 @@ class RouteAccessGuard {
 
   static const Map<String, Set<String>> _routeRoles = {
     AppRoutes.principalDashboard: {'principal'},
+    AppRoutes.guidedAssistant: {'principal', 'admin'},
     AppRoutes.staffManagement: {'principal', 'admin'},
     AppRoutes.staffForm: {'principal', 'admin'},
     AppRoutes.studentOversight: {'principal'},

@@ -145,6 +145,7 @@ func main() {
 	principalClassesHandler := handlers.NewPrincipalClassesHandler()
 	principalSubjectsHandler := handlers.NewPrincipalSubjectsHandler()
 	principalAcademicCommandHandler := handlers.NewPrincipalAcademicCommandHandler()
+	assistantWorkflowHandler := handlers.NewAssistantWorkflowHandler()
 	reportExportHandler := handlers.NewReportExportHandler()
 	compatHandler := handlers.NewCompatibilityHandler()
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
@@ -204,6 +205,23 @@ func main() {
 			principal.POST("/exams/actions", middleware.RateLimitMiddleware("principal_exam_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveExamAction)
 			principal.GET("/results", principalAcademicCommandHandler.ResultsOverview)
 			principal.POST("/results/actions", middleware.RateLimitMiddleware("principal_result_action", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalAcademicCommandHandler.SaveResultAction)
+		}
+
+		assistant := api.Group("/assistant")
+		assistant.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Admin", "Principal"))
+		{
+			assistant.GET("/workflows", assistantWorkflowHandler.Catalog)
+			assistant.POST("/intent", assistantWorkflowHandler.DetectIntent)
+			assistant.GET("/sessions", assistantWorkflowHandler.ListSessions)
+			assistant.POST("/sessions", middleware.RateLimitMiddleware("assistant_session_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), assistantWorkflowHandler.CreateSession)
+			assistant.GET("/sessions/:id", assistantWorkflowHandler.GetSession)
+			assistant.PUT("/sessions/:id/steps/:step_id", assistantWorkflowHandler.SaveStep)
+			assistant.PATCH("/sessions/:id/steps/:step_id", assistantWorkflowHandler.SaveStep)
+			assistant.POST("/sessions/:id/validate", assistantWorkflowHandler.ValidateSession)
+			assistant.POST("/sessions/:id/execute", middleware.RateLimitMiddleware("assistant_session_execute", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), assistantWorkflowHandler.ExecuteSession)
+			assistant.DELETE("/sessions/:id", assistantWorkflowHandler.CancelSession)
+			assistant.GET("/templates/:workflow_type", assistantWorkflowHandler.ExportTemplate)
+			assistant.POST("/sessions/:id/import-preview", assistantWorkflowHandler.ImportPreview)
 		}
 
 		schools := api.Group("/schools")

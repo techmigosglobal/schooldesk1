@@ -127,6 +127,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalDashboard,
             ),
             SchoolDeskNavigationItem(
+              index: 17,
+              icon: Icons.assistant_direction_outlined,
+              activeIcon: Icons.assistant_direction_rounded,
+              label: 'Guided Assistant',
+              route: AppRoutes.guidedAssistant,
+            ),
+            SchoolDeskNavigationItem(
               index: 14,
               icon: Icons.apartment_outlined,
               activeIcon: Icons.apartment_rounded,
