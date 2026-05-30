@@ -230,6 +230,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               _AcademicModuleGrid(
                 items: [
                   _AcademicModuleItem(
+                    label: 'Guided Assistant',
+                    route: AppRoutes.guidedAssistant,
+                    illustration:
+                        SchoolDeskUiIllustrations.principalGuidedAssistant,
+                    fallbackIcon: Icons.assistant_direction_outlined,
+                    accent: const Color(0xFF0E9384),
+                    cardColor: const Color(0xFFE7FAF6),
+                  ),
+                  _AcademicModuleItem(
                     label: 'Students',
                     route: AppRoutes.studentOversight,
                     illustration: SchoolDeskUiIllustrations.principalStudents,

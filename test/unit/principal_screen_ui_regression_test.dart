@@ -323,6 +323,12 @@ void main() {
     expect(dashboard, contains('.toDouble()'));
     expect(dashboard, contains('mainAxisExtent: tileExtent'));
     expect(dashboard, contains('maxLines: 2'));
+    expect(dashboard, contains("label: 'Guided Assistant'"));
+    expect(dashboard, contains('route: AppRoutes.guidedAssistant'));
+    expect(
+      dashboard,
+      contains('SchoolDeskUiIllustrations.principalGuidedAssistant'),
+    );
     expect(dashboard, contains('SchoolDeskUiIllustrations.principalStudents'));
     expect(dashboard, contains("label: 'Staff Management'"));
     expect(dashboard, contains("label: 'Guardians'"));
@@ -341,6 +347,7 @@ void main() {
 
     for (final asset in <String>[
       'assets/images/ui/principal-students.svg',
+      'assets/images/ui/principal-guided-assistant.svg',
       'assets/images/ui/principal-staff-management.svg',
       'assets/images/ui/principal-guardians.svg',
       'assets/images/ui/principal-classes.svg',
@@ -393,6 +400,13 @@ void main() {
       expect(routes, contains('static const String principalAttendance'));
       expect(routes, contains('PrincipalAttendanceScreen'));
       expect(guard, contains("AppRoutes.principalAttendance: {'principal'}"));
+      expect(dashboard, contains('AppRoutes.guidedAssistant'));
+      expect(routes, contains('static const String guidedAssistant'));
+      expect(routes, contains('GuidedAssistantScreen'));
+      expect(
+        guard,
+        contains("AppRoutes.guidedAssistant: {'principal', 'admin'}"),
+      );
 
       for (final route in <String>[
         'principalTimetable',
