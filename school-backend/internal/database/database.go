@@ -78,7 +78,7 @@ func Initialize(cfg *config.Config) error {
 		log.Println("Database migrations completed")
 	}
 
-	if err := ensureDefaultRolePermissions(); err != nil {
+	if err := EnsureDefaultRolePermissions(); err != nil {
 		log.Printf("Warning: role permission backfill failed: %v", err)
 	}
 
@@ -854,7 +854,9 @@ func inList(value string, items ...string) bool {
 	return false
 }
 
-func ensureDefaultRolePermissions() error {
+// EnsureDefaultRolePermissions backfills the system permissions for seeded
+// roles. It is exported so bootstrap utilities can run it after creating roles.
+func EnsureDefaultRolePermissions() error {
 	var roles []models.Role
 	if err := DB.Where("LOWER(role_name) IN ?", []string{"admin", "principal", "teacher", "parent"}).Find(&roles).Error; err != nil {
 		return err

@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"school-backend/internal/config"
@@ -42,6 +44,8 @@ func seedPrincipal() (principalCredentials, error) {
 	yearID := envOr("SEED_ACADEMIC_YEAR_ID", "academic-year-default")
 	roleID := envOr("SEED_PRINCIPAL_ROLE_ID", "role-principal-default")
 	staffID := envOr("SEED_PRINCIPAL_STAFF_ID", "staff-principal-default")
+	seedAcademicYear := envBool("SEED_ACADEMIC_YEAR", true)
+	seedFixtures := envBool("SEED_ACADEMIC_FIXTURES", seedAcademicYear)
 
 	now := time.Now().UTC()
 	var schoolCount int64
@@ -51,7 +55,7 @@ func seedPrincipal() (principalCredentials, error) {
 	if schoolCount == 0 {
 		if err := database.DB.Create(&models.School{
 			BaseModel:        models.BaseModel{ID: schoolID},
-			Name:             "SchoolDesk Local School",
+			Name:             envOr("SEED_SCHOOL_NAME", "SchoolDesk"),
 			SchoolType:       "cbse",
 			AffiliationBoard: "CBSE",
 			Email:            "office@schooldesk.local",
@@ -61,23 +65,30 @@ func seedPrincipal() (principalCredentials, error) {
 			return principalCredentials{}, err
 		}
 	}
-	if err := database.DB.Where("id = ?", yearID).FirstOrCreate(&models.AcademicYear{}, models.AcademicYear{
-		BaseModel: models.BaseModel{ID: yearID},
-		SchoolID:  schoolID,
-		YearLabel: "2026-2027",
-		Year:      "2026-2027",
-		StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:   time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC),
-		IsCurrent: true,
-		Status:    "active",
-	}).Error; err != nil {
-		return principalCredentials{}, err
+	if seedAcademicYear {
+		if err := database.DB.Where("id = ?", yearID).FirstOrCreate(&models.AcademicYear{}, models.AcademicYear{
+			BaseModel: models.BaseModel{ID: yearID},
+			SchoolID:  schoolID,
+			YearLabel: "2026-2027",
+			Year:      "2026-2027",
+			StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:   time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC),
+			IsCurrent: true,
+			Status:    "active",
+		}).Error; err != nil {
+			return principalCredentials{}, err
+		}
 	}
-	if err := seedAcademicFixtures(schoolID, yearID); err != nil {
-		return principalCredentials{}, err
+	if seedFixtures {
+		if err := seedAcademicFixtures(schoolID, yearID); err != nil {
+			return principalCredentials{}, err
+		}
 	}
 	roles, err := seedRoles(schoolID, roleID)
 	if err != nil {
+		return principalCredentials{}, err
+	}
+	if err := database.EnsureDefaultRolePermissions(); err != nil {
 		return principalCredentials{}, err
 	}
 	role := roles["Principal"]
@@ -217,6 +228,18 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func seedRoles(schoolID string, principalRoleID string) (map[string]models.Role, error) {

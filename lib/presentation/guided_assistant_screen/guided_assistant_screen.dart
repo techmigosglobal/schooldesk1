@@ -30,6 +30,7 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
   List<AcademicYearModel> _academicYears = [];
   List<StaffModel> _staff = [];
   List<SectionModel> _sections = [];
+  Map<String, dynamic> _readiness = {};
   Map<String, dynamic>? _session;
   Map<String, dynamic> _draft = {};
   Map<String, dynamic> _validation = {};
@@ -71,6 +72,7 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
       setState(() {
         _actionCards = _listMap(catalog['action_cards']);
         _workflows = _listMap(catalog['workflows']);
+        _readiness = _map(catalog['readiness']);
         _sessions = _listMap(results[1]);
         _academicYears = results[2] as List<AcademicYearModel>;
         _staff = (results[3] as PaginatedList<StaffModel>).data;
@@ -197,11 +199,7 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
                 onResume: _resumeSession,
               );
               final suggestions = _AssistantSuggestionsPanel(
-                suggestions: const [
-                  'Create class can continue into sections, subjects, fees, timetable, and notifications.',
-                  'Student admission will ask parent details and class fee assignment.',
-                  'Teacher onboarding will suggest subject mapping before timetable generation.',
-                ],
+                suggestions: _landingSuggestions,
               );
               if (!wide) {
                 return Column(
@@ -421,15 +419,25 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
     return _FormGrid(
       children: [
         _textField('class_details', 'class_name', 'Class name'),
-        _dropdownField(
-          stepId: 'class_details',
-          field: 'academic_year_id',
-          label: 'Academic year',
-          items: [
-            for (final year in _academicYears)
-              DropdownMenuItem(value: year.id, child: Text(year.yearLabel)),
-          ],
+        if (_academicYears.isNotEmpty)
+          _dropdownField(
+            stepId: 'class_details',
+            field: 'academic_year_id',
+            label: 'Existing academic year',
+            items: [
+              for (final year in _academicYears)
+                DropdownMenuItem(value: year.id, child: Text(year.yearLabel)),
+            ],
+          ),
+        _textField(
+          'class_details',
+          'academic_year_label',
+          _academicYears.isEmpty
+              ? 'Academic year label'
+              : 'New academic year label',
         ),
+        _textField('class_details', 'start_date', 'Start date'),
+        _textField('class_details', 'end_date', 'End date'),
         _textField(
           'class_details',
           'section_count',
@@ -817,6 +825,15 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
             onTap: () =>
                 setState(() => _setField('class_details', 'capacity', 30)),
           ),
+          _QuickReplyChip(
+            label: '2026-2027 year',
+            icon: Icons.event_available_outlined,
+            onTap: () => setState(() {
+              _setField('class_details', 'academic_year_label', '2026-2027');
+              _setField('class_details', 'start_date', '2026-04-01');
+              _setField('class_details', 'end_date', '2027-03-31');
+            }),
+          ),
         ],
         if (stepId == 'subjects')
           _QuickReplyChip(
@@ -1080,12 +1097,64 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
   }
 
   Future<void> _nextStep(String stepId) async {
+    final issue = _localStepIssue(stepId);
+    if (issue != null) {
+      _showError(issue);
+      return;
+    }
     await _saveStep(stepId, completed: true);
     if (!mounted) return;
     setState(() {
       final maxIndex = _currentSteps.isEmpty ? 0 : _currentSteps.length - 1;
       _stepIndex = (_stepIndex + 1).clamp(0, maxIndex).toInt();
     });
+  }
+
+  String? _localStepIssue(String stepId) {
+    switch (stepId) {
+      case 'class_details':
+        if (_field('class_details', 'class_name').isEmpty) {
+          return 'Class name is required before the next question.';
+        }
+        if (_field('class_details', 'academic_year_id').isEmpty &&
+            _field('class_details', 'academic_year_label').isEmpty) {
+          return 'Select an academic year or enter a new academic year label.';
+        }
+        final capacity = num.tryParse(_field('class_details', 'capacity')) ?? 0;
+        if (capacity <= 0) {
+          return 'Capacity must be greater than zero.';
+        }
+        break;
+      case 'student_details':
+        if (_field('student_details', 'first_name').isEmpty ||
+            _field('student_details', 'date_of_birth').isEmpty ||
+            _field('student_details', 'gender').isEmpty) {
+          return 'Student name, date of birth, and gender are required.';
+        }
+        break;
+      case 'staff_details':
+        if (_field('staff_details', 'first_name').isEmpty ||
+            _field('staff_details', 'last_name').isEmpty) {
+          return 'Teacher first name and last name are required.';
+        }
+        break;
+      case 'fee_details':
+        if (_field('fee_details', 'academic_year_id').isEmpty &&
+            _field('fee_details', 'academic_year_label').isEmpty) {
+          return 'Academic year is required for fee setup.';
+        }
+        if (_field('fee_details', 'grade_id').isEmpty &&
+            _field('fee_details', 'grade_name').isEmpty) {
+          return 'Class or grade is required for fee setup.';
+        }
+        break;
+      case 'fee_items':
+        if (_list('fee_items').isEmpty) {
+          return 'Add at least one fee item before review.';
+        }
+        break;
+    }
+    return null;
   }
 
   Future<void> _saveStep(String stepId, {required bool completed}) async {
@@ -1442,6 +1511,18 @@ class _GuidedAssistantScreenState extends State<GuidedAssistantScreen> {
       return _text(card['title']).toLowerCase().contains(query) ||
           _text(card['category']).toLowerCase().contains(query);
     }).toList();
+  }
+
+  List<String> get _landingSuggestions {
+    final readinessSuggestions = _textList(_map(_readiness)['suggestions']);
+    if (readinessSuggestions.isNotEmpty) {
+      return readinessSuggestions;
+    }
+    return const [
+      'Create class can continue into sections, subjects, fees, timetable, and notifications.',
+      'Student admission will ask parent details and class fee assignment.',
+      'Teacher onboarding will suggest subject mapping before timetable generation.',
+    ];
   }
 
   String get _role => (_api.currentRoleName ?? 'principal').toLowerCase();

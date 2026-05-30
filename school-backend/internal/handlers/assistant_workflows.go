@@ -75,6 +75,7 @@ func (h *AssistantWorkflowHandler) Catalog(c *gin.Context) {
 			"message":      "Good Morning, What would you like to do today?",
 			"action_cards": assistantActionCards(defs),
 			"workflows":    defs,
+			"readiness":    assistantCatalogReadiness(scopedSchoolID(c)),
 			"guardrails": []string{
 				"Guided steps only",
 				"Draft autosave before execution",
@@ -419,7 +420,9 @@ func (h *AssistantWorkflowHandler) validateWorkflow(c *gin.Context, def assistan
 
 	switch def.Type {
 	case "create_class":
-		require("class_details", "academic_year_id", "Academic year is required")
+		if workflowString(data, "class_details", "academic_year_id") == "" && workflowString(data, "class_details", "academic_year_label") == "" {
+			addIssue("error", "class_details", "academic_year_label", "Select an academic year or enter a new academic year label")
+		}
 		className := firstNonEmpty(workflowString(data, "class_details", "class_name"), workflowString(data, "class_details", "grade_name"))
 		if className == "" && workflowString(data, "class_details", "grade_id") == "" {
 			addIssue("error", "class_details", "class_name", "Class name or existing grade is required")
@@ -469,7 +472,9 @@ func (h *AssistantWorkflowHandler) validateWorkflow(c *gin.Context, def assistan
 			addIssue("warning", "subject_mapping", "subjects", "Map the teacher to subjects/classes")
 		}
 	case "fee_setup":
-		require("fee_details", "academic_year_id", "Academic year is required")
+		if workflowString(data, "fee_details", "academic_year_id") == "" && workflowString(data, "fee_details", "academic_year_label") == "" {
+			addIssue("error", "fee_details", "academic_year_label", "Academic year is required")
+		}
 		if workflowString(data, "fee_details", "grade_id") == "" && workflowString(data, "fee_details", "grade_name") == "" {
 			addIssue("error", "fee_details", "grade_id", "Class or grade is required")
 		}
@@ -502,7 +507,7 @@ func (h *AssistantWorkflowHandler) validateDuplicateClassSections(c *gin.Context
 		return
 	}
 	for _, section := range normalizedWorkflowSections(data) {
-		name := strings.ToLower(strings.TrimSpace(fmt.Sprint(section["section_name"])))
+		name := strings.ToLower(workflowRawString(section["section_name"]))
 		if name == "" {
 			continue
 		}
@@ -535,7 +540,6 @@ func (h *AssistantWorkflowHandler) executeWorkflow(c *gin.Context, def assistant
 
 func (h *AssistantWorkflowHandler) executeCreateClass(c *gin.Context, data map[string]interface{}) (gin.H, error) {
 	schoolID := scopedSchoolID(c)
-	academicYearID := workflowString(data, "class_details", "academic_year_id")
 	gradeID := workflowString(data, "class_details", "grade_id")
 	gradeName := firstNonEmpty(workflowString(data, "class_details", "grade_name"), workflowString(data, "class_details", "class_name"))
 	gradeNumber := workflowInt(data, "class_details", "grade_number")
@@ -552,6 +556,11 @@ func (h *AssistantWorkflowHandler) executeCreateClass(c *gin.Context, data map[s
 	var warnings []string
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		academicYear, err := resolveAssistantAcademicYear(tx, schoolID, workflowNestedMap(data, "class_details"))
+		if err != nil {
+			return err
+		}
+		academicYearID := academicYear.ID
 		grade, err := resolveAssistantGrade(tx, schoolID, gradeID, gradeName, gradeNumber)
 		if err != nil {
 			return err
@@ -567,7 +576,7 @@ func (h *AssistantWorkflowHandler) executeCreateClass(c *gin.Context, data map[s
 		}
 		createdSubjects = subjects
 		for _, input := range sectionsInput {
-			name := strings.TrimSpace(fmt.Sprint(input["section_name"]))
+			name := workflowRawString(input["section_name"])
 			if name == "" {
 				return errors.New("section_name is required")
 			}
@@ -594,7 +603,7 @@ func (h *AssistantWorkflowHandler) executeCreateClass(c *gin.Context, data map[s
 				classTeacher = &classTeacherID
 			}
 			var roomID *string
-			if roomValue := strings.TrimSpace(fmt.Sprint(input["room_id"])); roomValue != "" {
+			if roomValue := workflowRawString(input["room_id"]); roomValue != "" {
 				if err := tx.First(&models.Room{}, "id = ? AND school_id = ?", roomValue, schoolID).Error; err != nil {
 					return errors.New("room must belong to this school")
 				}
@@ -671,14 +680,14 @@ func (h *AssistantWorkflowHandler) executeStudentOnboarding(c *gin.Context, data
 	var invoiceID string
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		student, _, err := createStudentForSchool(tx, schoolID, models.CreateStudentRequest{
-			FirstName:        strings.TrimSpace(fmt.Sprint(details["first_name"])),
-			LastName:         strings.TrimSpace(fmt.Sprint(details["last_name"])),
-			DateOfBirth:      strings.TrimSpace(fmt.Sprint(details["date_of_birth"])),
-			Gender:           strings.TrimSpace(fmt.Sprint(details["gender"])),
-			AdmissionNumber:  strings.TrimSpace(fmt.Sprint(details["admission_number"])),
-			StudentCode:      strings.TrimSpace(fmt.Sprint(details["student_code"])),
-			CurrentSectionID: strings.TrimSpace(fmt.Sprint(details["current_section_id"])),
-			AdmissionDate:    firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["admission_date"])), time.Now().UTC().Format("2006-01-02")),
+			FirstName:        workflowRawString(details["first_name"]),
+			LastName:         workflowRawString(details["last_name"]),
+			DateOfBirth:      workflowRawString(details["date_of_birth"]),
+			Gender:           workflowRawString(details["gender"]),
+			AdmissionNumber:  workflowRawString(details["admission_number"]),
+			StudentCode:      workflowRawString(details["student_code"]),
+			CurrentSectionID: workflowRawString(details["current_section_id"]),
+			AdmissionDate:    firstNonEmpty(workflowRawString(details["admission_date"]), time.Now().UTC().Format("2006-01-02")),
 			Status:           "active",
 		})
 		if err != nil {
@@ -686,15 +695,15 @@ func (h *AssistantWorkflowHandler) executeStudentOnboarding(c *gin.Context, data
 		}
 		createdStudent = student
 		guardian := workflowNestedMap(data, "guardian_details")
-		if strings.TrimSpace(fmt.Sprint(guardian["full_name"])) != "" {
+		if workflowRawString(guardian["full_name"]) != "" {
 			row := models.Guardian{
 				SchoolID:     schoolID,
 				StudentID:    student.ID,
-				FullName:     strings.TrimSpace(fmt.Sprint(guardian["full_name"])),
-				Relationship: firstNonEmpty(strings.TrimSpace(fmt.Sprint(guardian["relationship"])), "Parent"),
-				Phone:        strings.TrimSpace(fmt.Sprint(guardian["phone"])),
-				Email:        strings.TrimSpace(fmt.Sprint(guardian["email"])),
-				Occupation:   strings.TrimSpace(fmt.Sprint(guardian["occupation"])),
+				FullName:     workflowRawString(guardian["full_name"]),
+				Relationship: firstNonEmpty(workflowRawString(guardian["relationship"]), "Parent"),
+				Phone:        workflowRawString(guardian["phone"]),
+				Email:        workflowRawString(guardian["email"]),
+				Occupation:   workflowRawString(guardian["occupation"]),
 				IsPrimary:    true,
 				CanPickup:    workflowBool(data, "guardian_details", "can_pickup"),
 			}
@@ -724,30 +733,30 @@ func (h *AssistantWorkflowHandler) executeTeacherOnboarding(c *gin.Context, data
 	var staff models.Staff
 	var userID string
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		staffCode := strings.TrimSpace(fmt.Sprint(details["staff_code"]))
+		staffCode := workflowRawString(details["staff_code"])
 		if staffCode == "" {
 			staffCode = fmt.Sprintf("EMP-%d", time.Now().UTC().Unix())
 		}
 		if err := ensureStaffCodeAvailable(tx, schoolID, staffCode, ""); err != nil {
 			return err
 		}
-		departmentID, err := h.staffHandler.resolveDepartmentID(tx, schoolID, strings.TrimSpace(fmt.Sprint(details["department_id"])), strings.TrimSpace(fmt.Sprint(details["department_name"])))
+		departmentID, err := h.staffHandler.resolveDepartmentID(tx, schoolID, workflowRawString(details["department_id"]), workflowRawString(details["department_name"]))
 		if err != nil {
 			return err
 		}
-		dob, _ := time.Parse("2006-01-02", firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["date_of_birth"])), "1990-01-01"))
-		joinDate, _ := time.Parse("2006-01-02", firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["join_date"])), time.Now().UTC().Format("2006-01-02")))
+		dob, _ := time.Parse("2006-01-02", firstNonEmpty(workflowRawString(details["date_of_birth"]), "1990-01-01"))
+		joinDate, _ := time.Parse("2006-01-02", firstNonEmpty(workflowRawString(details["join_date"]), time.Now().UTC().Format("2006-01-02")))
 		staff = models.Staff{
 			SchoolID:       schoolID,
 			StaffCode:      staffCode,
-			FirstName:      strings.TrimSpace(fmt.Sprint(details["first_name"])),
-			LastName:       strings.TrimSpace(fmt.Sprint(details["last_name"])),
-			Email:          strings.TrimSpace(fmt.Sprint(details["email"])),
-			Phone:          strings.TrimSpace(fmt.Sprint(details["phone"])),
+			FirstName:      workflowRawString(details["first_name"]),
+			LastName:       workflowRawString(details["last_name"]),
+			Email:          workflowRawString(details["email"]),
+			Phone:          workflowRawString(details["phone"]),
 			DateOfBirth:    dob,
-			Gender:         firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["gender"])), "unspecified"),
-			Designation:    firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["designation"])), "Teacher"),
-			EmploymentType: firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["employment_type"])), "full_time"),
+			Gender:         firstNonEmpty(workflowRawString(details["gender"]), "unspecified"),
+			Designation:    firstNonEmpty(workflowRawString(details["designation"]), "Teacher"),
+			EmploymentType: firstNonEmpty(workflowRawString(details["employment_type"]), "full_time"),
 			JoinDate:       joinDate,
 			Status:         "active",
 		}
@@ -757,16 +766,16 @@ func (h *AssistantWorkflowHandler) executeTeacherOnboarding(c *gin.Context, data
 		if err := tx.Create(&staff).Error; err != nil {
 			return err
 		}
-		if password := strings.TrimSpace(fmt.Sprint(details["password"])); password != "" {
-			user, err := h.staffHandler.createStaffUser(tx, schoolID, staff, strings.TrimSpace(fmt.Sprint(details["username"])), password, "Teacher", true)
+		if password := workflowRawString(details["password"]); password != "" {
+			user, err := h.staffHandler.createStaffUser(tx, schoolID, staff, workflowRawString(details["username"]), password, "Teacher", true)
 			if err != nil {
 				return err
 			}
 			userID = user.ID
 		}
 		for _, item := range workflowList(data, "subject_mapping") {
-			subjectID := strings.TrimSpace(fmt.Sprint(item["subject_id"]))
-			gradeID := strings.TrimSpace(fmt.Sprint(item["grade_id"]))
+			subjectID := workflowRawString(item["subject_id"])
+			gradeID := workflowRawString(item["grade_id"])
 			if subjectID == "" || gradeID == "" {
 				continue
 			}
@@ -774,7 +783,7 @@ func (h *AssistantWorkflowHandler) executeTeacherOnboarding(c *gin.Context, data
 				return errors.New("teacher subject mapping must belong to this school")
 			}
 			var sectionID *string
-			if v := strings.TrimSpace(fmt.Sprint(item["section_id"])); v != "" {
+			if v := workflowRawString(item["section_id"]); v != "" {
 				if !sectionBelongsToSchool(v, schoolID) {
 					return errors.New("teacher section mapping must belong to this school")
 				}
@@ -803,11 +812,15 @@ func (h *AssistantWorkflowHandler) executeFeeSetup(c *gin.Context, data map[stri
 	details := workflowNestedMap(data, "fee_details")
 	var structures []models.FeeStructure
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		grade, err := resolveAssistantGrade(tx, schoolID, strings.TrimSpace(fmt.Sprint(details["grade_id"])), strings.TrimSpace(fmt.Sprint(details["grade_name"])), int(workflowInt64(details["grade_number"])))
+		academicYear, err := resolveAssistantAcademicYear(tx, schoolID, details)
 		if err != nil {
 			return err
 		}
-		structures, err = applyAssistantFeeItems(tx, schoolID, grade.ID, strings.TrimSpace(fmt.Sprint(details["academic_year_id"])), workflowList(data, "fee_items"))
+		grade, err := resolveAssistantGrade(tx, schoolID, workflowRawString(details["grade_id"]), workflowRawString(details["grade_name"]), int(workflowInt64(details["grade_number"])))
+		if err != nil {
+			return err
+		}
+		structures, err = applyAssistantFeeItems(tx, schoolID, grade.ID, academicYear.ID, workflowList(data, "fee_items"))
 		return err
 	})
 	if err != nil {
@@ -819,7 +832,7 @@ func (h *AssistantWorkflowHandler) executeFeeSetup(c *gin.Context, data map[stri
 func (h *AssistantWorkflowHandler) executeTimetableSetup(c *gin.Context, data map[string]interface{}) (gin.H, error) {
 	schoolID := scopedSchoolID(c)
 	details := workflowNestedMap(data, "timetable_details")
-	sectionID := strings.TrimSpace(fmt.Sprint(details["section_id"]))
+	sectionID := workflowRawString(details["section_id"])
 	created := 0
 	var logs []string
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
@@ -831,6 +844,97 @@ func (h *AssistantWorkflowHandler) executeTimetableSetup(c *gin.Context, data ma
 		return nil, err
 	}
 	return gin.H{"created_entities": gin.H{"timetable_slots": created}, "warnings": logs}, nil
+}
+
+func resolveAssistantAcademicYear(tx *gorm.DB, schoolID string, details map[string]interface{}) (models.AcademicYear, error) {
+	academicYearID := workflowRawString(details["academic_year_id"])
+	if academicYearID != "" {
+		var year models.AcademicYear
+		if err := tx.First(&year, "id = ? AND school_id = ?", academicYearID, schoolID).Error; err != nil {
+			return models.AcademicYear{}, errors.New("academic year must belong to this school")
+		}
+		if err := ensureAssistantDefaultTerm(tx, year); err != nil {
+			return models.AcademicYear{}, err
+		}
+		return year, nil
+	}
+
+	label := firstNonEmpty(
+		workflowRawString(details["academic_year_label"]),
+		workflowRawString(details["year_label"]),
+		workflowRawString(details["academic_year"]),
+	)
+	if label == "" {
+		return models.AcademicYear{}, errors.New("academic year is required")
+	}
+
+	var existing models.AcademicYear
+	err := tx.Where("school_id = ? AND LOWER(year_label) = ?", schoolID, strings.ToLower(label)).First(&existing).Error
+	if err == nil {
+		if err := ensureAssistantDefaultTerm(tx, existing); err != nil {
+			return models.AcademicYear{}, err
+		}
+		return existing, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.AcademicYear{}, err
+	}
+
+	startDate, endDate := assistantAcademicYearDates(label, workflowRawString(details["start_date"]), workflowRawString(details["end_date"]))
+	if err := tx.Model(&models.AcademicYear{}).Where("school_id = ?", schoolID).Update("is_current", false).Error; err != nil {
+		return models.AcademicYear{}, err
+	}
+	year := models.AcademicYear{
+		SchoolID:  schoolID,
+		YearLabel: label,
+		Year:      label,
+		StartDate: startDate,
+		EndDate:   endDate,
+		IsCurrent: true,
+		Status:    "active",
+	}
+	if err := tx.Create(&year).Error; err != nil {
+		return models.AcademicYear{}, err
+	}
+	if err := ensureAssistantDefaultTerm(tx, year); err != nil {
+		return models.AcademicYear{}, err
+	}
+	return year, nil
+}
+
+func assistantAcademicYearDates(label, startDateRaw, endDateRaw string) (time.Time, time.Time) {
+	startDate, startErr := time.Parse("2006-01-02", startDateRaw)
+	endDate, endErr := time.Parse("2006-01-02", endDateRaw)
+	if startErr == nil && endErr == nil && endDate.After(startDate) {
+		return startDate, endDate
+	}
+	yearPattern := regexp.MustCompile(`(20\d{2})`)
+	match := yearPattern.FindStringSubmatch(label)
+	startYear := time.Now().UTC().Year()
+	if len(match) > 1 {
+		if parsed, err := strconv.Atoi(match[1]); err == nil {
+			startYear = parsed
+		}
+	}
+	return time.Date(startYear, 4, 1, 0, 0, 0, 0, time.UTC), time.Date(startYear+1, 3, 31, 0, 0, 0, 0, time.UTC)
+}
+
+func ensureAssistantDefaultTerm(tx *gorm.DB, year models.AcademicYear) error {
+	if year.ID == "" {
+		return errors.New("academic year is required")
+	}
+	if countRows(tx.Model(&models.Term{}).Where("academic_year_id = ?", year.ID)) > 0 {
+		return nil
+	}
+	term := models.Term{
+		AcademicYearID: year.ID,
+		TermNumber:     1,
+		TermName:       "Term 1",
+		StartDate:      year.StartDate,
+		EndDate:        year.EndDate,
+		IsCurrent:      true,
+	}
+	return tx.Create(&term).Error
 }
 
 func resolveAssistantGrade(tx *gorm.DB, schoolID, gradeID, gradeName string, gradeNumber int) (models.Grade, error) {
@@ -907,7 +1011,7 @@ func applyAssistantFeeItems(tx *gorm.DB, schoolID, gradeID, academicYearID strin
 }
 
 func resolveAssistantFeeCategory(tx *gorm.DB, schoolID string, item map[string]interface{}) (string, error) {
-	categoryID := strings.TrimSpace(fmt.Sprint(item["fee_category_id"]))
+	categoryID := workflowRawString(item["fee_category_id"])
 	if categoryID != "" {
 		var category models.FeeCategory
 		if err := tx.First(&category, "id = ? AND school_id = ?", categoryID, schoolID).Error; err != nil {
@@ -915,11 +1019,11 @@ func resolveAssistantFeeCategory(tx *gorm.DB, schoolID string, item map[string]i
 		}
 		return category.ID, nil
 	}
-	categoryName := firstNonEmpty(strings.TrimSpace(fmt.Sprint(item["category_name"])), strings.TrimSpace(fmt.Sprint(item["name"])))
+	categoryName := firstNonEmpty(workflowRawString(item["category_name"]), workflowRawString(item["name"]))
 	if categoryName == "" {
 		return "", errors.New("fee category is required")
 	}
-	frequency := firstNonEmpty(strings.ToLower(strings.TrimSpace(fmt.Sprint(item["frequency"]))), "term")
+	frequency := firstNonEmpty(strings.ToLower(workflowRawString(item["frequency"])), "term")
 	var category models.FeeCategory
 	err := tx.Where("school_id = ? AND LOWER(category_name) = ?", schoolID, strings.ToLower(categoryName)).First(&category).Error
 	if err == nil {
@@ -973,7 +1077,7 @@ func applyAssistantSubjects(tx *gorm.DB, schoolID, gradeID string, items []map[s
 }
 
 func resolveAssistantSubject(tx *gorm.DB, schoolID string, item map[string]interface{}) (models.Subject, error) {
-	subjectID := strings.TrimSpace(fmt.Sprint(item["subject_id"]))
+	subjectID := workflowRawString(item["subject_id"])
 	if subjectID != "" {
 		var subject models.Subject
 		if err := tx.First(&subject, "id = ? AND school_id = ?", subjectID, schoolID).Error; err != nil {
@@ -981,15 +1085,15 @@ func resolveAssistantSubject(tx *gorm.DB, schoolID string, item map[string]inter
 		}
 		return subject, nil
 	}
-	name := firstNonEmpty(strings.TrimSpace(fmt.Sprint(item["subject_name"])), strings.TrimSpace(fmt.Sprint(item["name"])))
+	name := firstNonEmpty(workflowRawString(item["subject_name"]), workflowRawString(item["name"]))
 	if name == "" {
 		return models.Subject{}, nil
 	}
-	deptID, err := resolveAssistantDepartment(tx, schoolID, strings.TrimSpace(fmt.Sprint(item["department_id"])), strings.TrimSpace(fmt.Sprint(item["department_name"])))
+	deptID, err := resolveAssistantDepartment(tx, schoolID, workflowRawString(item["department_id"]), workflowRawString(item["department_name"]))
 	if err != nil {
 		return models.Subject{}, err
 	}
-	code := strings.TrimSpace(fmt.Sprint(item["subject_code"]))
+	code := workflowRawString(item["subject_code"])
 	var subject models.Subject
 	query := tx.Where("school_id = ? AND LOWER(subject_name) = ?", schoolID, strings.ToLower(name))
 	if code != "" {
@@ -1007,7 +1111,7 @@ func resolveAssistantSubject(tx *gorm.DB, schoolID string, item map[string]inter
 		DepartmentID: deptID,
 		SubjectName:  name,
 		SubjectCode:  code,
-		SubjectType:  firstNonEmpty(strings.TrimSpace(fmt.Sprint(item["subject_type"])), "core"),
+		SubjectType:  firstNonEmpty(workflowRawString(item["subject_type"]), "core"),
 	}
 	if err := tx.Create(&subject).Error; err != nil {
 		return models.Subject{}, err
@@ -1044,16 +1148,16 @@ func applyAssistantSubjectTeachers(tx *gorm.DB, schoolID, gradeID, sectionID str
 		subjectByName[strings.ToLower(subject.SubjectName)] = subject.ID
 	}
 	for _, mapping := range mappings {
-		teacherID := strings.TrimSpace(fmt.Sprint(mapping["teacher_id"]))
+		teacherID := workflowRawString(mapping["teacher_id"])
 		if teacherID == "" {
 			continue
 		}
 		if err := tx.First(&models.Staff{}, "id = ? AND school_id = ? AND status = ?", teacherID, schoolID, "active").Error; err != nil {
 			return errors.New("subject teacher must be active staff in this school")
 		}
-		subjectID := strings.TrimSpace(fmt.Sprint(mapping["subject_id"]))
+		subjectID := workflowRawString(mapping["subject_id"])
 		if subjectID == "" {
-			subjectID = subjectByName[strings.ToLower(strings.TrimSpace(fmt.Sprint(mapping["subject_name"])))]
+			subjectID = subjectByName[strings.ToLower(workflowRawString(mapping["subject_name"]))]
 		}
 		if subjectID == "" {
 			continue
@@ -1084,12 +1188,30 @@ func generateAssistantTimetable(tx *gorm.DB, schoolID string, sectionIDs []strin
 	if len(details) == 0 {
 		details = workflowNestedMap(data, "timetable_details")
 	}
-	academicYearID := firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["academic_year_id"])), workflowString(data, "class_details", "academic_year_id"))
-	termID := strings.TrimSpace(fmt.Sprint(details["term_id"]))
+	academicYearID := firstNonEmpty(workflowRawString(details["academic_year_id"]), workflowString(data, "class_details", "academic_year_id"))
+	if academicYearID == "" && len(sectionIDs) > 0 {
+		var section models.Section
+		if err := tx.First(&section, "id = ?", sectionIDs[0]).Error; err == nil {
+			academicYearID = section.AcademicYearID
+		}
+	}
+	if academicYearID == "" {
+		return 0, nil, errors.New("academic year is required before generating timetable")
+	}
+	termID := workflowRawString(details["term_id"])
 	if termID == "" {
 		var term models.Term
 		if err := tx.First(&term, "academic_year_id = ?", academicYearID).Error; err != nil {
-			return 0, nil, errors.New("term_id is required before generating timetable")
+			var year models.AcademicYear
+			if loadErr := tx.First(&year, "id = ? AND school_id = ?", academicYearID, schoolID).Error; loadErr != nil {
+				return 0, nil, errors.New("term_id is required before generating timetable")
+			}
+			if createErr := ensureAssistantDefaultTerm(tx, year); createErr != nil {
+				return 0, nil, createErr
+			}
+			if retryErr := tx.First(&term, "academic_year_id = ?", academicYearID).Error; retryErr != nil {
+				return 0, nil, errors.New("term_id is required before generating timetable")
+			}
 		}
 		termID = term.ID
 	}
@@ -1100,7 +1222,7 @@ func generateAssistantTimetable(tx *gorm.DB, schoolID string, sectionIDs []strin
 	periodsPerDay := int(firstPositiveInt(workflowInt64(details["periods_per_day"]), 7))
 	duration := int(firstPositiveInt(workflowInt64(details["period_duration_minutes"]), 40))
 	gap := int(firstPositiveInt(workflowInt64(details["gap_minutes"]), 5))
-	startTime := firstNonEmpty(strings.TrimSpace(fmt.Sprint(details["start_time"])), "09:00")
+	startTime := firstNonEmpty(workflowRawString(details["start_time"]), "09:00")
 	created := 0
 	warnings := []string{}
 	for _, sectionID := range sectionIDs {
@@ -1286,7 +1408,7 @@ func assistantWorkflowDefinitions() []assistantWorkflowDefinition {
 			Description:  "Create a class with sections, subjects, teachers, fees, timetable, settings, and notifications.",
 			Dependencies: []string{"academic_years", "grades", "sections", "subjects", "staff", "fees", "timetable", "notifications", "audit_logs"},
 			Steps: []assistantWorkflowStep{
-				{ID: "class_details", Title: "Class details", Prompt: "Capture class name, academic year, sections, and capacity.", Fields: []string{"class_name", "academic_year_id", "section_count", "capacity"}},
+				{ID: "class_details", Title: "Class details", Prompt: "Capture class name, academic year, sections, and capacity.", Fields: []string{"class_name", "academic_year_id", "academic_year_label", "start_date", "end_date", "section_count", "capacity"}},
 				{ID: "sections", Title: "Sections", Prompt: "Create sections and assign rooms.", Fields: []string{"section_name", "room_id", "capacity"}},
 				{ID: "subjects", Title: "Subjects", Prompt: "Choose or add compulsory and elective subjects.", Fields: []string{"subject_name", "subject_type", "periods_per_week"}},
 				{ID: "class_teacher", Title: "Class teacher", Prompt: "Assign class teacher and check workload.", Fields: []string{"class_teacher_id"}},
@@ -1299,7 +1421,7 @@ func assistantWorkflowDefinitions() []assistantWorkflowDefinition {
 		},
 		{Type: "student_onboarding", Title: "Add Students", Category: "Admissions", TargetRoute: "/student-oversight-screen", Execution: "transactional", Description: "Student admission with guardian, class enrollment, and optional fee assignment.", Dependencies: []string{"students", "guardians", "enrollments", "fees"}, Steps: []assistantWorkflowStep{{ID: "student_details", Title: "Student details", Prompt: "Capture admission and class details.", Fields: []string{"first_name", "last_name", "date_of_birth", "gender", "current_section_id"}}, {ID: "guardian_details", Title: "Parent or guardian", Prompt: "Capture parent or guardian details.", Fields: []string{"full_name", "relationship", "phone", "email"}}, {ID: "fee_assignment", Title: "Fee assignment", Prompt: "Assign existing class fee structure if needed.", Fields: []string{"create_invoice"}}, {ID: "review", Title: "Review & confirmation", Prompt: "Review student onboarding before execution.", Fields: []string{"confirm"}}}},
 		{Type: "teacher_onboarding", Title: "Staff Management", Category: "People", TargetRoute: "/staff-management-screen", Execution: "transactional", Description: "Teacher creation with login and subject/class mapping.", Dependencies: []string{"staff", "users", "subjects", "grades", "sections"}, Steps: []assistantWorkflowStep{{ID: "staff_details", Title: "Teacher details", Prompt: "Capture teacher profile and optional login.", Fields: []string{"staff_code", "first_name", "last_name", "email", "phone"}}, {ID: "subject_mapping", Title: "Subject mapping", Prompt: "Assign subjects, grades, and sections.", Fields: []string{"subject_id", "grade_id", "section_id"}}, {ID: "review", Title: "Review & confirmation", Prompt: "Review teacher onboarding before execution.", Fields: []string{"confirm"}}}},
-		{Type: "fee_setup", Title: "Fees", Category: "Finance", TargetRoute: "/fee-monitoring-screen", Execution: "transactional", Description: "Create class fee structures with due schedules.", Dependencies: []string{"fee_categories", "fee_structures", "academic_years", "grades"}, Steps: []assistantWorkflowStep{{ID: "fee_details", Title: "Fee scope", Prompt: "Choose academic year and class.", Fields: []string{"academic_year_id", "grade_id", "grade_name"}}, {ID: "fee_items", Title: "Fee items", Prompt: "Add amount, frequency, and due day.", Fields: []string{"category_name", "amount", "frequency", "due_day"}}, {ID: "review", Title: "Review & confirmation", Prompt: "Review fee setup before execution.", Fields: []string{"confirm"}}}},
+		{Type: "fee_setup", Title: "Fees", Category: "Finance", TargetRoute: "/fee-monitoring-screen", Execution: "transactional", Description: "Create class fee structures with due schedules.", Dependencies: []string{"fee_categories", "fee_structures", "academic_years", "grades"}, Steps: []assistantWorkflowStep{{ID: "fee_details", Title: "Fee scope", Prompt: "Choose or create academic year and class.", Fields: []string{"academic_year_id", "academic_year_label", "start_date", "end_date", "grade_id", "grade_name"}}, {ID: "fee_items", Title: "Fee items", Prompt: "Add amount, frequency, and due day.", Fields: []string{"category_name", "amount", "frequency", "due_day"}}, {ID: "review", Title: "Review & confirmation", Prompt: "Review fee setup before execution.", Fields: []string{"confirm"}}}},
 		{Type: "timetable_setup", Title: "Timetable", Category: "Academics", TargetRoute: "/principal-timetable-screen", Execution: "transactional", Description: "Generate timetable slots from subject-teacher mappings.", Dependencies: []string{"sections", "staff_subjects", "terms", "timetable_slots"}, Steps: []assistantWorkflowStep{{ID: "timetable_details", Title: "Timetable scope", Prompt: "Choose section, academic year, and term.", Fields: []string{"section_id", "academic_year_id", "term_id"}}, {ID: "timetable", Title: "Generation rules", Prompt: "Set days, periods, and timings.", Fields: []string{"days", "periods_per_day", "start_time"}}, {ID: "review", Title: "Review & confirmation", Prompt: "Review timetable before execution.", Fields: []string{"confirm"}}}},
 	}
 }
@@ -1313,6 +1435,44 @@ func assistantActionCards(defs []assistantWorkflowDefinition) []gin.H {
 		cards = append(cards, gin.H{"title": title, "workflow_type": strings.ToLower(strings.ReplaceAll(title, " ", "_")), "category": "Connected ERP", "target_route": ""})
 	}
 	return cards
+}
+
+func assistantCatalogReadiness(schoolID string) gin.H {
+	count := func(model interface{}, query string, args ...interface{}) int64 {
+		db := database.DB.Model(model)
+		if query != "" {
+			db = db.Where(query, args...)
+		}
+		var total int64
+		_ = db.Count(&total).Error
+		return total
+	}
+	stats := gin.H{
+		"academic_years": count(&models.AcademicYear{}, "school_id = ?", schoolID),
+		"classes":        count(&models.Section{}, "academic_year_id IN (SELECT id FROM academic_years WHERE school_id = ?)", schoolID),
+		"students":       count(&models.Student{}, "school_id = ?", schoolID),
+		"staff":          count(&models.Staff{}, "school_id = ? AND status = ?", schoolID, "active"),
+		"subjects":       count(&models.Subject{}, "school_id = ?", schoolID),
+		"fee_structures": count(&models.FeeStructure{}, "school_id = ?", schoolID),
+		"timetable":      count(&models.TimetableSlot{}, "section_id IN (SELECT id FROM sections WHERE academic_year_id IN (SELECT id FROM academic_years WHERE school_id = ?))", schoolID),
+	}
+	suggestions := []string{}
+	if stats["academic_years"].(int64) == 0 {
+		suggestions = append(suggestions, "Start with Create Class; the assistant can create the first academic year and term during the workflow.")
+	}
+	if stats["staff"].(int64) <= 1 {
+		suggestions = append(suggestions, "Onboard teachers before assigning class teachers or generating a complete timetable.")
+	}
+	if stats["classes"].(int64) == 0 {
+		suggestions = append(suggestions, "Create the first class with sections, subjects, fees, and timetable in one guided review.")
+	}
+	if stats["fee_structures"].(int64) == 0 {
+		suggestions = append(suggestions, "Add fee items during class creation so student admission can generate invoices later.")
+	}
+	if len(suggestions) == 0 {
+		suggestions = append(suggestions, "Your setup has the core data needed for connected assistant workflows.")
+	}
+	return gin.H{"stats": stats, "suggestions": suggestions}
 }
 
 func assistantDefinitionByType(workflowType string) (assistantWorkflowDefinition, bool) {
@@ -1405,14 +1565,17 @@ func normalizeImportedAssistantData(workflowType string, raw map[string]interfac
 	case "create_class":
 		result := map[string]interface{}{
 			"class_details": map[string]interface{}{
-				"class_name":       raw["class_name"],
-				"grade_name":       raw["class_name"],
-				"academic_year_id": raw["academic_year_id"],
-				"section_count":    workflowInt64(raw["section_count"]),
-				"capacity":         workflowInt64(raw["capacity"]),
+				"class_name":          raw["class_name"],
+				"grade_name":          raw["class_name"],
+				"academic_year_id":    raw["academic_year_id"],
+				"academic_year_label": raw["academic_year_label"],
+				"start_date":          raw["start_date"],
+				"end_date":            raw["end_date"],
+				"section_count":       workflowInt64(raw["section_count"]),
+				"capacity":            workflowInt64(raw["capacity"]),
 			},
 		}
-		if names := strings.TrimSpace(fmt.Sprint(raw["section_names"])); names != "" {
+		if names := workflowRawString(raw["section_names"]); names != "" {
 			sections := []map[string]interface{}{}
 			for _, name := range strings.Split(names, "|") {
 				if strings.TrimSpace(name) != "" {
@@ -1421,22 +1584,139 @@ func normalizeImportedAssistantData(workflowType string, raw map[string]interfac
 			}
 			result["sections"] = sections
 		}
+		if subjects := pipeList(raw["subjects"]); len(subjects) > 0 {
+			rows := []map[string]interface{}{}
+			for _, subject := range subjects {
+				rows = append(rows, map[string]interface{}{"subject_name": subject, "subject_type": "core", "periods_per_week": 5})
+			}
+			result["subjects"] = rows
+		}
+		if fees := parseAssistantFeePairs(raw["fees"]); len(fees) > 0 {
+			result["fee_structure"] = fees
+		}
 		return result
+	case "student_onboarding":
+		return map[string]interface{}{
+			"student_details": map[string]interface{}{
+				"first_name":         raw["first_name"],
+				"last_name":          raw["last_name"],
+				"date_of_birth":      raw["date_of_birth"],
+				"gender":             raw["gender"],
+				"current_section_id": raw["current_section_id"],
+				"admission_number":   raw["admission_number"],
+				"student_code":       raw["student_code"],
+			},
+			"guardian_details": map[string]interface{}{
+				"full_name":    firstNonEmpty(workflowRawString(raw["guardian_name"]), workflowRawString(raw["guardian_full_name"])),
+				"relationship": raw["guardian_relationship"],
+				"phone":        raw["guardian_phone"],
+				"email":        raw["guardian_email"],
+			},
+			"fee_assignment": map[string]interface{}{"create_invoice": workflowBool(raw, "", "create_invoice")},
+		}
+	case "teacher_onboarding":
+		mappings := []map[string]interface{}{}
+		subjectIDs := pipeList(raw["subject_ids"])
+		gradeIDs := pipeList(raw["grade_ids"])
+		for i, subjectID := range subjectIDs {
+			gradeID := ""
+			if i < len(gradeIDs) {
+				gradeID = gradeIDs[i]
+			}
+			mappings = append(mappings, map[string]interface{}{"subject_id": subjectID, "grade_id": gradeID})
+		}
+		return map[string]interface{}{
+			"staff_details": map[string]interface{}{
+				"staff_code":      raw["staff_code"],
+				"first_name":      raw["first_name"],
+				"last_name":       raw["last_name"],
+				"email":           raw["email"],
+				"phone":           raw["phone"],
+				"username":        raw["username"],
+				"password":        raw["password"],
+				"department_name": raw["department_name"],
+				"designation":     raw["designation"],
+			},
+			"subject_mapping": mappings,
+		}
+	case "fee_setup":
+		return map[string]interface{}{
+			"fee_details": map[string]interface{}{
+				"academic_year_id":    raw["academic_year_id"],
+				"academic_year_label": raw["academic_year_label"],
+				"start_date":          raw["start_date"],
+				"end_date":            raw["end_date"],
+				"grade_id":            raw["grade_id"],
+				"grade_name":          raw["grade_name"],
+			},
+			"fee_items": []map[string]interface{}{{
+				"category_name": raw["category_name"],
+				"amount":        workflowFloat64(raw["amount"]),
+				"frequency":     raw["frequency"],
+				"due_day":       workflowInt64(raw["due_day"]),
+			}},
+		}
+	case "timetable_setup":
+		return map[string]interface{}{
+			"timetable_details": map[string]interface{}{
+				"section_id":       raw["section_id"],
+				"academic_year_id": raw["academic_year_id"],
+				"term_id":          raw["term_id"],
+			},
+			"timetable": map[string]interface{}{
+				"days":            raw["days"],
+				"periods_per_day": workflowInt64(raw["periods_per_day"]),
+				"start_time":      raw["start_time"],
+				"auto_generate":   true,
+			},
+		}
 	default:
 		return raw
 	}
 }
 
+func pipeList(value interface{}) []string {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" || text == "<nil>" {
+		return []string{}
+	}
+	parts := strings.FieldsFunc(text, func(r rune) bool { return r == '|' || r == ',' })
+	result := []string{}
+	for _, part := range parts {
+		if item := strings.TrimSpace(part); item != "" {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func parseAssistantFeePairs(value interface{}) []map[string]interface{} {
+	rows := []map[string]interface{}{}
+	for _, pair := range pipeList(value) {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		rows = append(rows, map[string]interface{}{
+			"category_name": strings.TrimSpace(parts[0]),
+			"amount":        workflowFloat64(strings.TrimSpace(parts[1])),
+			"frequency":     "term",
+			"due_day":       10,
+		})
+	}
+	return rows
+}
+
 func assistantTemplateHeaders(workflowType string) []string {
 	switch workflowType {
 	case "create_class":
-		return []string{"class_name", "academic_year_id", "section_count", "capacity", "section_names", "subjects", "fees"}
+		return []string{"class_name", "academic_year_id", "academic_year_label", "start_date", "end_date", "section_count", "capacity", "section_names", "subjects", "fees"}
 	case "student_onboarding":
-		return []string{"first_name", "last_name", "date_of_birth", "gender", "current_section_id", "guardian_name", "guardian_phone"}
+		return []string{"first_name", "last_name", "date_of_birth", "gender", "current_section_id", "admission_number", "guardian_name", "guardian_relationship", "guardian_phone", "guardian_email", "create_invoice"}
 	case "teacher_onboarding":
-		return []string{"staff_code", "first_name", "last_name", "email", "phone", "subject_ids", "grade_ids"}
+		return []string{"staff_code", "first_name", "last_name", "email", "phone", "username", "password", "department_name", "designation", "subject_ids", "grade_ids"}
 	case "fee_setup":
-		return []string{"academic_year_id", "grade_id", "grade_name", "category_name", "amount", "frequency", "due_day"}
+		return []string{"academic_year_id", "academic_year_label", "start_date", "end_date", "grade_id", "grade_name", "category_name", "amount", "frequency", "due_day"}
 	case "timetable_setup":
 		return []string{"section_id", "academic_year_id", "term_id", "days", "periods_per_day", "start_time"}
 	default:
@@ -1447,7 +1727,7 @@ func assistantTemplateHeaders(workflowType string) []string {
 func assistantTemplateSample(workflowType string) []string {
 	switch workflowType {
 	case "create_class":
-		return []string{"PP1", "academic-year-id", "2", "30", "A|B", "English|Math", "Tuition=1000|Books=500"}
+		return []string{"PP1", "", "2026-2027", "2026-04-01", "2027-03-31", "2", "30", "A|B", "English|Math", "Tuition=1000|Books=500"}
 	default:
 		headers := assistantTemplateHeaders(workflowType)
 		values := make([]string, len(headers))
@@ -1468,6 +1748,10 @@ func assistantTextTemplate(workflowType string) string {
 
 func workflowString(data map[string]interface{}, stepID, field string) string {
 	value := workflowValue(data, stepID, field)
+	return workflowRawString(value)
+}
+
+func workflowRawString(value interface{}) string {
 	text := strings.TrimSpace(fmt.Sprint(value))
 	if text == "<nil>" {
 		return ""
