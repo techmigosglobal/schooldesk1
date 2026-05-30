@@ -836,6 +836,14 @@ func notificationPriority(isUrgent bool) string {
 func notificationRoute(referenceType, role string) string {
 	role = strings.ToLower(strings.TrimSpace(role))
 	switch strings.ToLower(strings.TrimSpace(referenceType)) {
+	case "attendance", "staff_attendance":
+		if role == "admin" {
+			return "/admin-attendance-screen"
+		}
+		if role == "teacher" {
+			return "/teacher-my-attendance-screen"
+		}
+		return "/principal-attendance-screen"
 	case "announcement", "notice":
 		switch role {
 		case "parent":

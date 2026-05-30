@@ -229,6 +229,11 @@ func autoMigrate() error {
 	// Phase 3: operational domains.
 	if err := DB.AutoMigrate(
 		&models.TimetableSlot{},
+		&models.TimetableTemplate{},
+		&models.TimetableConstraint{},
+		&models.TimetableGenerationJob{},
+		&models.TimetableGenerationLog{},
+		&models.TimetableOverride{},
 		&models.Substitution{},
 		&models.AttendanceSession{},
 		&models.StudentAttendance{},

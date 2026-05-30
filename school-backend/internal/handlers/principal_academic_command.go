@@ -69,6 +69,7 @@ func (h *PrincipalAcademicCommandHandler) TimetableOverview(c *gin.Context) {
 	substitutions := todaySubstitutionRows(schoolID, todayStart, todayEnd)
 	absentTeachers := todayAbsentTeachers(schoolID, todayStart, todayEnd)
 	freePeriods := todayFreePeriodRows(todaySlots, sections)
+	workflowGaps := timetableWorkflowGaps(slots, sections, conflicts, freePeriods)
 
 	success(c, http.StatusOK, gin.H{
 		"summary": gin.H{
@@ -97,7 +98,8 @@ func (h *PrincipalAcademicCommandHandler) TimetableOverview(c *gin.Context) {
 			"substitute_teachers": substitutions,
 			"free_periods":        freePeriods,
 		},
-		"actions": recentPrincipalActions(schoolID, principalTimetableActionsResource, 8),
+		"workflow_gaps": buildPrincipalOperationalGapSummary(workflowGaps),
+		"actions":       recentPrincipalActions(schoolID, principalTimetableActionsResource, 8),
 	}, "")
 }
 
@@ -131,6 +133,13 @@ func (h *PrincipalAcademicCommandHandler) ExamsOverview(c *gin.Context) {
 	dashboard := examDashboardRows(exams, now)
 	monitoring := examMonitoringRows(exams, todayStart, todayEnd)
 	evaluation := examEvaluationRows(exams)
+	delayedEvaluations := delayedEvaluationRows(evaluation, now)
+	examTypes := principalExamTypeOptions(schoolID)
+	grades := principalSubjectGradeOptions(schoolID)
+	subjects := principalSubjectOptions(schoolID)
+	rooms := principalRoomOptions(schoolID)
+	staff := principalSubjectTeacherOptions(schoolID)
+	workflowGaps := examWorkflowGaps(exams, evaluation, delayedEvaluations, examTypes, grades, subjects, staff)
 
 	success(c, http.StatusOK, gin.H{
 		"summary": gin.H{
@@ -144,11 +153,11 @@ func (h *PrincipalAcademicCommandHandler) ExamsOverview(c *gin.Context) {
 		},
 		"exam_dashboard": dashboard,
 		"creation_controls": gin.H{
-			"exam_types": principalExamTypeOptions(schoolID),
-			"grades":     principalSubjectGradeOptions(schoolID),
-			"subjects":   principalSubjectOptions(schoolID),
-			"rooms":      principalRoomOptions(schoolID),
-			"staff":      principalSubjectTeacherOptions(schoolID),
+			"exam_types": examTypes,
+			"grades":     grades,
+			"subjects":   subjects,
+			"rooms":      rooms,
+			"staff":      staff,
 		},
 		"monitoring_panel": gin.H{
 			"live_exam_progress":        monitoring,
@@ -159,9 +168,10 @@ func (h *PrincipalAcademicCommandHandler) ExamsOverview(c *gin.Context) {
 		"evaluation_tracking": gin.H{
 			"marks_pending":          evaluation,
 			"teachers_yet_to_submit": teacherSubmissionRows(evaluation),
-			"delayed_evaluations":    delayedEvaluationRows(evaluation, now),
+			"delayed_evaluations":    delayedEvaluations,
 		},
-		"actions": recentPrincipalActions(schoolID, principalExamActionsResource, 8),
+		"workflow_gaps": buildPrincipalOperationalGapSummary(workflowGaps),
+		"actions":       recentPrincipalActions(schoolID, principalExamActionsResource, 8),
 	}, "")
 }
 
@@ -174,13 +184,15 @@ func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
 	marks := resultMarkRows(schoolID)
 	reportCards := resultReportCardRows(schoolID)
 	attendance := resultAttendanceRows(schoolID)
+	weakStudents := weakStudentRows(marks, attendance)
+	workflowGaps := resultsWorkflowGaps(marks, reportCards, weakStudents, attendance)
 
 	success(c, http.StatusOK, gin.H{
 		"summary": gin.H{
 			"overall_school_performance": overallResultAverage(marks, reportCards),
 			"pass_percentage":            resultPassPercentage(marks, reportCards),
 			"top_performing_classes":     topResultClasses(marks, 3),
-			"weak_students":              len(weakStudentRows(marks, attendance)),
+			"weak_students":              len(weakStudents),
 			"subject_analysis_count":     len(subjectAnalysisRows(marks)),
 			"report_cards":               len(reportCards),
 			"latest_publish_action":      latestPrincipalAction(schoolID, principalResultActionsResource, ""),
@@ -188,14 +200,14 @@ func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
 		"result_dashboard": gin.H{
 			"class_performance":      classPerformanceRows(marks),
 			"subject_wise_analysis":  subjectAnalysisRows(marks),
-			"attendance_correlation": weakStudentRows(marks, attendance),
+			"attendance_correlation": weakStudents,
 		},
 		"toppers": gin.H{
 			"school_toppers":  schoolTopperRows(reportCards, marks),
 			"class_toppers":   classTopperRows(reportCards, marks),
 			"subject_toppers": subjectTopperRowsFromMarks(marks),
 		},
-		"weak_students": weakStudentRows(marks, attendance),
+		"weak_students": weakStudents,
 		"reports": gin.H{
 			"export_options": []gin.H{
 				{"label": "PDF report cards", "format": "pdf", "route": "/exams/report-cards/exports"},
@@ -204,7 +216,8 @@ func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
 			},
 			"recent_exports": recentReportExports(schoolID),
 		},
-		"actions": recentPrincipalActions(schoolID, principalResultActionsResource, 8),
+		"workflow_gaps": buildPrincipalOperationalGapSummary(workflowGaps),
+		"actions":       recentPrincipalActions(schoolID, principalResultActionsResource, 8),
 	}, "")
 }
 
@@ -553,6 +566,80 @@ func timetableConflictAlerts(slots []models.TimetableSlot, sections []models.Sec
 		})
 	}
 	return alerts
+}
+
+func timetableWorkflowGaps(slots []models.TimetableSlot, sections []models.Section, conflicts []gin.H, freePeriods []gin.H) []principalOperationalGap {
+	gaps := []principalOperationalGap{}
+	slotsBySection := map[string]int{}
+	incompleteSlots := int64(0)
+	for _, slot := range slots {
+		slotsBySection[slot.SectionID]++
+		if strings.TrimSpace(slot.SubjectID) == "" || strings.TrimSpace(slot.StaffID) == "" {
+			incompleteSlots++
+		}
+	}
+	for _, section := range sections {
+		if slotsBySection[section.ID] > 0 {
+			continue
+		}
+		label := principalClassLabel(section)
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "timetable-no-periods:" + section.ID,
+			Category:    "Timetable",
+			Severity:    "warning",
+			Title:       "No periods configured",
+			Message:     label + " has no class periods. Add timetable periods before attendance and daily operations depend on it.",
+			ActionLabel: "Add periods",
+			Route:       "principalTimetable",
+			EntityType:  "section",
+			EntityID:    section.ID,
+			EntityLabel: label,
+			Count:       1,
+		})
+	}
+	if len(conflicts) > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "timetable-conflicts",
+			Category:    "Timetable",
+			Severity:    "critical",
+			Title:       "Timetable conflicts unresolved",
+			Message:     pluralize(int64(len(conflicts)), "conflict") + " must be fixed before publishing the timetable.",
+			ActionLabel: "Resolve conflicts",
+			Route:       "principalTimetable",
+			EntityType:  "timetable",
+			EntityLabel: "Conflict alerts",
+			Count:       int64(len(conflicts)),
+		})
+	}
+	if incompleteSlots > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "timetable-incomplete-slots",
+			Category:    "Timetable",
+			Severity:    "warning",
+			Title:       "Period links incomplete",
+			Message:     pluralize(incompleteSlots, "period") + " need a subject and teacher before the schedule is operational.",
+			ActionLabel: "Complete slots",
+			Route:       "principalTimetable",
+			EntityType:  "timetable",
+			EntityLabel: "Incomplete periods",
+			Count:       incompleteSlots,
+		})
+	}
+	if len(freePeriods) > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "timetable-free-periods",
+			Category:    "Timetable",
+			Severity:    "info",
+			Title:       "Free periods detected",
+			Message:     pluralize(int64(len(freePeriods)), "free period") + " appear in today's class coverage.",
+			ActionLabel: "Review coverage",
+			Route:       "principalTimetable",
+			EntityType:  "timetable",
+			EntityLabel: "Today's coverage",
+			Count:       int64(len(freePeriods)),
+		})
+	}
+	return limitPrincipalWorkflowGaps(gaps)
 }
 
 func ongoingClassRows(slots []models.TimetableSlot, now time.Time) []gin.H {
@@ -1085,6 +1172,133 @@ func delayedEvaluationRows(evaluation []gin.H, now time.Time) []gin.H {
 		rows = append(rows, row)
 	}
 	return rows
+}
+
+func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluations []gin.H, examTypes []gin.H, grades []gin.H, subjects []gin.H, staff []gin.H) []principalOperationalGap {
+	gaps := []principalOperationalGap{}
+	if len(examTypes) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-types-missing",
+			Category:    "Exams",
+			Severity:    "critical",
+			Title:       "Exam types missing",
+			Message:     "Create exam types before scheduling tests, midterms, or finals.",
+			ActionLabel: "Create exam type",
+			Route:       "principalExams",
+			EntityType:  "exam_type",
+			EntityLabel: "Exam readiness",
+			Count:       1,
+		})
+	}
+	if len(grades) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-classes-missing",
+			Category:    "Classes",
+			Severity:    "critical",
+			Title:       "Classes missing",
+			Message:     "Create classes before exams can be attached to learners.",
+			ActionLabel: "Create class",
+			Route:       "principalClasses",
+			EntityType:  "class",
+			EntityLabel: "Exam readiness",
+			Count:       1,
+		})
+	}
+	if len(subjects) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-subjects-missing",
+			Category:    "Subjects",
+			Severity:    "critical",
+			Title:       "Subjects missing",
+			Message:     "Map subjects before exam schedules can be created.",
+			ActionLabel: "Map subjects",
+			Route:       "principalSubjects",
+			EntityType:  "subject",
+			EntityLabel: "Exam readiness",
+			Count:       1,
+		})
+	}
+	if len(staff) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-staff-missing",
+			Category:    "Staff",
+			Severity:    "warning",
+			Title:       "Invigilator pool missing",
+			Message:     "Add active staff before invigilation and evaluation can be assigned.",
+			ActionLabel: "Review staff",
+			Route:       "staffManagement",
+			EntityType:  "staff",
+			EntityLabel: "Exam readiness",
+			Count:       1,
+		})
+	}
+	if len(exams) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exams-not-created",
+			Category:    "Exams",
+			Severity:    "info",
+			Title:       "No exams created",
+			Message:     "Create an exam, then add subject-wise schedules and evaluation tracking.",
+			ActionLabel: "Create exam",
+			Route:       "principalExams",
+			EntityType:  "exam",
+			EntityLabel: "Exam workflow",
+			Count:       1,
+		})
+	}
+	missingSchedules := int64(0)
+	for _, exam := range exams {
+		if len(exam.Schedules) == 0 {
+			missingSchedules++
+		}
+	}
+	if missingSchedules > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-schedules-missing",
+			Category:    "Exams",
+			Severity:    "warning",
+			Title:       "Exam schedules incomplete",
+			Message:     pluralize(missingSchedules, "exam") + " need subject-wise schedule rows.",
+			ActionLabel: "Schedule exams",
+			Route:       "principalExams",
+			EntityType:  "exam",
+			EntityLabel: "Schedule",
+			Count:       missingSchedules,
+		})
+	}
+	pendingMarks := int64(0)
+	for _, row := range evaluation {
+		pendingMarks += int64FromAny(row["marks_pending"])
+	}
+	if pendingMarks > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-marks-pending",
+			Category:    "Exams",
+			Severity:    "warning",
+			Title:       "Marks pending",
+			Message:     pluralize(pendingMarks, "mark entry") + " must be completed before report cards are reliable.",
+			ActionLabel: "Follow up",
+			Route:       "principalExams",
+			EntityType:  "exam",
+			EntityLabel: "Evaluation",
+			Count:       pendingMarks,
+		})
+	}
+	if len(delayedEvaluations) > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "exam-evaluation-delayed",
+			Category:    "Exams",
+			Severity:    "critical",
+			Title:       "Evaluation delayed",
+			Message:     pluralize(int64(len(delayedEvaluations)), "schedule") + " are delayed by more than 72 hours.",
+			ActionLabel: "Escalate",
+			Route:       "principalExams",
+			EntityType:  "exam",
+			EntityLabel: "Evaluation",
+			Count:       int64(len(delayedEvaluations)),
+		})
+	}
+	return limitPrincipalWorkflowGaps(gaps)
 }
 
 func frontendIssueRows(schoolID, resource, entityKey string) []gin.H {
@@ -1646,6 +1860,74 @@ func weakStudentRows(marks []principalResultMarkRow, attendance map[string]float
 		return rows[:12]
 	}
 	return rows
+}
+
+func resultsWorkflowGaps(marks []principalResultMarkRow, reportCards []principalResultReportRow, weakStudents []gin.H, attendance map[string]float64) []principalOperationalGap {
+	gaps := []principalOperationalGap{}
+	if len(marks) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "results-marks-missing",
+			Category:    "Results",
+			Severity:    "critical",
+			Title:       "Marks not entered",
+			Message:     "Enter exam marks before report cards, rankings, and progress reports can be generated.",
+			ActionLabel: "Review exams",
+			Route:       "principalExams",
+			EntityType:  "result",
+			EntityLabel: "Marks",
+			Count:       1,
+		})
+	}
+	if len(marks) > 0 && len(reportCards) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "results-report-cards-missing",
+			Category:    "Results",
+			Severity:    "warning",
+			Title:       "Report cards not generated",
+			Message:     "Marks exist, but report cards have not been generated for principal review.",
+			ActionLabel: "Generate report cards",
+			Route:       "principalResults",
+			EntityType:  "result",
+			EntityLabel: "Report cards",
+			Count:       1,
+		})
+	}
+	if len(weakStudents) > 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "results-weak-students",
+			Category:    "Results",
+			Severity:    "warning",
+			Title:       "Weak student follow-up needed",
+			Message:     pluralize(int64(len(weakStudents)), "student") + " need academic follow-up from the results workflow.",
+			ActionLabel: "Create follow-up",
+			Route:       "principalResults",
+			EntityType:  "result",
+			EntityLabel: "Weak students",
+			Count:       int64(len(weakStudents)),
+		})
+	}
+	if len(marks) > 0 && len(attendance) == 0 {
+		gaps = append(gaps, principalOperationalGap{
+			ID:          "results-attendance-correlation-missing",
+			Category:    "Attendance",
+			Severity:    "info",
+			Title:       "Attendance correlation missing",
+			Message:     "Attendance summaries are not available, so report cards cannot include attendance risk signals yet.",
+			ActionLabel: "Review attendance",
+			Route:       "principalAttendance",
+			EntityType:  "attendance",
+			EntityLabel: "Attendance summary",
+			Count:       1,
+		})
+	}
+	return limitPrincipalWorkflowGaps(gaps)
+}
+
+func limitPrincipalWorkflowGaps(gaps []principalOperationalGap) []principalOperationalGap {
+	if len(gaps) > 8 {
+		return gaps[:8]
+	}
+	return gaps
 }
 
 func recentReportExports(schoolID string) []gin.H {

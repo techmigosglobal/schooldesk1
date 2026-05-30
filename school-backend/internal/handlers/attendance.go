@@ -385,11 +385,13 @@ func upsertStaffAttendance(
 	var attendance models.StaffAttendance
 	err := tx.Where("staff_id = ? AND date >= ? AND date < ?", staffID, start, end).First(&attendance).Error
 	if err == nil {
+		checkInRecorded := false
 		if status != "" {
 			attendance.Status = status
 		}
 		if checkIn != nil && attendance.CheckIn == nil {
 			attendance.CheckIn = checkIn
+			checkInRecorded = true
 		}
 		if checkOut != nil {
 			attendance.CheckOut = checkOut
@@ -407,7 +409,7 @@ func upsertStaffAttendance(
 		if err := tx.Save(&attendance).Error; err != nil {
 			return attendance, false, err
 		}
-		return attendance, false, nil
+		return attendance, checkInRecorded, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return attendance, false, err
@@ -430,7 +432,7 @@ func upsertStaffAttendance(
 	if err := tx.Create(&attendance).Error; err != nil {
 		return attendance, false, err
 	}
-	return attendance, true, nil
+	return attendance, checkIn != nil, nil
 }
 
 func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
@@ -603,28 +605,85 @@ func (h *AttendanceHandler) ScanStaffQR(c *gin.Context) {
 	}
 
 	now := time.Now().UTC()
-	attendance, created, err := upsertStaffAttendance(
-		database.DB,
-		staffID,
-		date,
-		"present",
-		&now,
-		nil,
-		"qr",
-		"qr:"+payload.Nonce,
-		attendanceStringPtr(currentUserID(c)),
-	)
+	var attendance models.StaffAttendance
+	var punchRecorded bool
+	var notificationLogs []models.NotificationLog
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		var upsertErr error
+		attendance, punchRecorded, upsertErr = upsertStaffAttendance(
+			tx,
+			staffID,
+			date,
+			"present",
+			&now,
+			nil,
+			"qr",
+			"qr:"+payload.Nonce,
+			attendanceStringPtr(currentUserID(c)),
+		)
+		if upsertErr != nil {
+			return upsertErr
+		}
+		if !punchRecorded {
+			return nil
+		}
+		var notifyErr error
+		notificationLogs, notifyErr = createStaffPunchInNotificationsTx(
+			tx,
+			c,
+			schoolID,
+			attendance,
+			now,
+		)
+		return notifyErr
+	})
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to record staff attendance")
 		return
 	}
 	message := "Staff attendance recorded"
-	if !created {
+	if !punchRecorded {
 		message = "Staff attendance already recorded"
 	}
 	id := attendance.ID
-	auditAction(c, "attendance", "create", "staff_attendances", &id)
+	if punchRecorded {
+		auditAction(c, "attendance", "punch_in", "staff_attendances", &id)
+		enqueuePushNotifications(notificationLogs)
+	}
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: message, Data: attendance})
+}
+
+func createStaffPunchInNotificationsTx(
+	tx *gorm.DB,
+	c *gin.Context,
+	schoolID string,
+	attendance models.StaffAttendance,
+	checkIn time.Time,
+) ([]models.NotificationLog, error) {
+	staffName := strings.TrimSpace(attendance.StaffID)
+	var staff models.Staff
+	if err := tx.First(&staff, "id = ? AND school_id = ?", attendance.StaffID, schoolID).Error; err == nil {
+		name := strings.TrimSpace(strings.TrimSpace(staff.FirstName) + " " + strings.TrimSpace(staff.LastName))
+		if name != "" {
+			staffName = name
+		}
+	}
+	if staffName == "" {
+		staffName = "A staff member"
+	}
+	body := staffName + " punched in at " + checkIn.In(staffAttendanceLocation()).Format("15:04") + "."
+	return createNotificationLogsForRolesTx(
+		tx,
+		schoolID,
+		[]string{"principal", "admin"},
+		currentUserID(c),
+		"Staff punch-in recorded",
+		body,
+		"attendance",
+		"medium",
+		"staff_attendance",
+		attendance.ID,
+	)
 }
 
 func (h *AttendanceHandler) GetMyStaffAttendanceToday(c *gin.Context) {
