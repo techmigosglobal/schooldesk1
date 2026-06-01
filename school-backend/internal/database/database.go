@@ -264,6 +264,8 @@ func autoMigrate() error {
 		&models.StudentLeaveApplication{},
 		&models.Payroll{},
 		&models.FrontendRecord{},
+		&models.BulkImportJob{},
+		&models.BulkImportError{},
 	); err != nil {
 		return err
 	}

@@ -851,6 +851,77 @@ class BackendApiClient {
     }
   }
 
+  // ─── Bulk Import ──────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> bulkImport({
+    required String importType,
+    required String filePath,
+    bool dryRun = true,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'import_type': importType,
+        'dry_run': dryRun,
+        'file': await MultipartFile.fromFile(filePath, filename: 'import.csv'),
+      });
+
+      final response = await _dio.post(
+        '/admin/bulk-import',
+        data: formData,
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return data;
+      }
+      throw ServerException(message: data['error'] ?? 'Bulk import failed');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> downloadBulkImportTemplate(String importType) async {
+    try {
+      final response = await _dio.get(
+        '/admin/bulk-import/template',
+        queryParameters: {'import_type': importType},
+        options: Options(responseType: ResponseType.stream),
+      );
+
+      if (response.statusCode != 200) {
+        throw ServerException(message: 'Failed to download template');
+      }
+
+      // Note: Actual file download handling would be implemented in the UI layer
+      developer.log('Template download initiated for type: $importType');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getBulkImportHistory({
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/admin/bulk-import/history',
+        queryParameters: {
+          'page': page,
+          'page_size': pageSize,
+        },
+      );
+
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return data;
+      }
+      throw ServerException(message: data['error'] ?? 'Failed to fetch import history');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<void> assignParentStudents({
     required String parentUserId,
     required List<String> admissionNumbers,

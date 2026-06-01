@@ -128,6 +128,7 @@ func main() {
 	dashboardHandler := handlers.NewDashboardHandler()
 	reportExportHandler := handlers.NewReportExportHandler()
 	compatHandler := handlers.NewCompatibilityHandler()
+	bulkImportHandler := handlers.NewBulkImportHandler()
 
 	api := r.Group("/api/v1")
 	{
@@ -410,6 +411,14 @@ func main() {
 		users.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			users.GET("", middleware.RBACMiddleware("Admin", "Principal"), userHandler.GetUsers)
+		}
+
+		admin := api.Group("/admin")
+		admin.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			admin.POST("/bulk-import", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("bulk_import", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), bulkImportHandler.BulkImport)
+			admin.GET("/bulk-import/template", middleware.RBACMiddleware("Principal"), bulkImportHandler.GetImportTemplate)
+			admin.GET("/bulk-import/history", middleware.RBACMiddleware("Principal"), bulkImportHandler.GetImportHistory)
 		}
 
 		guardians := api.Group("/guardians")
