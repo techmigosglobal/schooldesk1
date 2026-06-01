@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"school-backend/internal/database"
@@ -90,5 +91,40 @@ func TestAssistantBulkImportBuildsConnectedClassDraft(t *testing.T) {
 	}
 	if len(workflowList(parsed, "fee_structure")) != 2 {
 		t.Fatalf("fees = %d, want 2", len(workflowList(parsed, "fee_structure")))
+	}
+}
+
+func TestAssistantCatalogCardsAreOnlyRunnableSurfaces(t *testing.T) {
+	defs := assistantWorkflowDefinitions()
+	knownWorkflows := map[string]bool{}
+	for _, def := range defs {
+		knownWorkflows[def.Type] = true
+	}
+
+	cards := assistantActionCards(defs, "Principal")
+	if len(cards) == 0 {
+		t.Fatal("assistant action cards should not be empty")
+	}
+	for _, card := range cards {
+		title := workflowRawString(card["title"])
+		workflowType := workflowRawString(card["workflow_type"])
+		targetRoute := workflowRawString(card["target_route"])
+		if strings.EqualFold(title, "Transport") || strings.EqualFold(title, "Library") || strings.EqualFold(title, "Inventory") {
+			t.Fatalf("unwired action card %q should not be exposed", title)
+		}
+		if !knownWorkflows[workflowType] && targetRoute == "" {
+			t.Fatalf("connected card %q does not have a live route", title)
+		}
+	}
+}
+
+func TestAssistantTemplatesDoNotPrefillExampleRows(t *testing.T) {
+	headers := assistantTemplateHeaders("create_class")
+	template := strings.Join(headers, ",") + "\n"
+	if strings.Contains(template, "PP1") || strings.Contains(template, "Tuition=1000") {
+		t.Fatalf("template must not prefill example data: %q", template)
+	}
+	if !strings.HasSuffix(template, "\n") {
+		t.Fatalf("template should contain only a header row and newline: %q", template)
 	}
 }

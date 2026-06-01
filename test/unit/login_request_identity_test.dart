@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/services/backend_api_client.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 void main() {
   test('plain username stays the primary login identity', () {

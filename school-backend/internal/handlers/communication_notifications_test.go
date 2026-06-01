@@ -88,6 +88,50 @@ func TestAnnouncementCreatesScopedNotificationsAndFiltersAudience(t *testing.T) 
 	}
 }
 
+func TestCreateEventValidatesAcademicYearScopeAndDates(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	handler := NewAnnouncementHandler()
+
+	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.POST("/events", handler.CreateEvent)
+
+	rejectYear := httptest.NewRecorder()
+	router.ServeHTTP(rejectYear, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"external-year","event_title":"Sports Day","event_type":"event","start_datetime":"2026-08-01T09:00:00Z","end_datetime":"2026-08-01T12:00:00Z"}`),
+	))
+	if rejectYear.Code != http.StatusBadRequest {
+		t.Fatalf("cross-school year status=%d body=%s", rejectYear.Code, rejectYear.Body.String())
+	}
+	if !strings.Contains(rejectYear.Body.String(), "academic year must belong to this school") {
+		t.Fatalf("cross-school response should explain academic year: %s", rejectYear.Body.String())
+	}
+
+	rejectDates := httptest.NewRecorder()
+	router.ServeHTTP(rejectDates, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","event_title":"Sports Day","event_type":"event","start_datetime":"2026-08-01T12:00:00Z","end_datetime":"2026-08-01T09:00:00Z"}`),
+	))
+	if rejectDates.Code != http.StatusBadRequest {
+		t.Fatalf("invalid dates status=%d body=%s", rejectDates.Code, rejectDates.Body.String())
+	}
+	if !strings.Contains(rejectDates.Body.String(), "end_datetime cannot be before start_datetime") {
+		t.Fatalf("date response should explain ordering: %s", rejectDates.Body.String())
+	}
+
+	create := httptest.NewRecorder()
+	router.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","event_title":"Sports Day","event_type":"event","start_datetime":"2026-08-01T09:00:00Z","end_datetime":"2026-08-01T12:00:00Z"}`),
+	))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create event status=%d body=%s", create.Code, create.Body.String())
+	}
+}
+
 func TestDeleteNoticeRemovesAnnouncementNotifications(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	notice := models.Announcement{
@@ -111,7 +155,7 @@ func TestDeleteNoticeRemovesAnnouncementNotifications(t *testing.T) {
 	}
 
 	router := scopedPolicyRouter("Admin", "user-policy-admin", "", "", "admin@policy.test", f.schoolID)
-	router.DELETE("/notices/:id", NewCompatibilityHandler().DeleteNotice)
+	router.DELETE("/notices/:id", NewOperationalAliasHandler().DeleteNotice)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/notices/"+notice.ID, nil))
 	if resp.Code != http.StatusOK {

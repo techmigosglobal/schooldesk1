@@ -48,7 +48,7 @@ func TestCreateUserWithPrincipalApprovalCreatesInactiveParentAndApprovalRecord(t
 		c.Set("email", "admin@example.test")
 		c.Next()
 	})
-	handler := NewCompatibilityHandler()
+	handler := NewUserManagementHandler()
 	router.POST("/users", handler.CreateUser)
 
 	response := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestPrincipalCanCreateActiveParentWithoutApproval(t *testing.T) {
 		c.Set("email", "principal@example.test")
 		c.Next()
 	})
-	handler := NewCompatibilityHandler()
+	handler := NewUserManagementHandler()
 	router.POST("/users", handler.CreateUser)
 
 	response := httptest.NewRecorder()

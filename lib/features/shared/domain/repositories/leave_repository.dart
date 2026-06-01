@@ -1,5 +1,5 @@
-import '../entities/leave_request.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/leave_request.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for leave request operations.
 abstract class LeaveRepository {

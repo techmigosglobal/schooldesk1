@@ -17,9 +17,16 @@ import (
 
 var JWTSecret []byte
 var allowedOrigins = map[string]struct{}{}
+var devMode bool
 
 func SetJWTSecret(secret string) {
 	JWTSecret = []byte(secret)
+}
+
+// SetDevMode enables loose localhost CORS for local Flutter web development.
+// In dev mode, any http://localhost:* or http://127.0.0.1:* origin is allowed.
+func SetDevMode(enabled bool) {
+	devMode = enabled
 }
 
 func SetAllowedOrigins(origins []string) {
@@ -259,7 +266,7 @@ func CORSMiddleware() gin.HandlerFunc {
 }
 
 func isOriginAllowed(origin string) bool {
-	if len(allowedOrigins) == 0 {
+	if len(allowedOrigins) == 0 && !devMode {
 		return false
 	}
 	if _, ok := allowedOrigins[origin]; ok {
@@ -271,8 +278,17 @@ func isOriginAllowed(origin string) bool {
 		return false
 	}
 	normalized := strings.TrimSuffix(parsed.Scheme+"://"+parsed.Host, "/")
-	_, ok := allowedOrigins[normalized]
-	return ok
+	if _, ok := allowedOrigins[normalized]; ok {
+		return true
+	}
+	// In dev mode: allow any localhost / 127.0.0.1 origin regardless of port
+	if devMode && parsed.Scheme == "http" {
+		host := parsed.Hostname()
+		if host == "localhost" || host == "127.0.0.1" {
+			return true
+		}
+	}
+	return false
 }
 
 func respondError(c *gin.Context, status int, message string) {

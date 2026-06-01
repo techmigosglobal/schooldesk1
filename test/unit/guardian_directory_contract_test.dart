@@ -2,12 +2,16 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test(
     'guardian dashboard card opens dedicated directory instead of user access',
     () {
       final dashboard = File(
-        'lib/presentation/principal_dashboard_screen/principal_dashboard_screen.dart',
+        'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
       ).readAsStringSync();
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
       final guard = File(
@@ -41,7 +45,7 @@ void main() {
     'guardian directory uses parent accounts, child links, and guardian records',
     () {
       final source = File(
-        'lib/presentation/guardian_directory_screen/guardian_directory_screen.dart',
+        'lib/features/people/presentation/screens/guardian_directory_screen/guardian_directory_screen.dart',
       ).readAsStringSync();
 
       expect(source, contains('All Parents & Guardians Directory'));
@@ -69,13 +73,11 @@ void main() {
   test(
     'guardian parent-student assignment resolves by id and student code',
     () {
-      final client = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final client = readBackendApiSources();
       final userBackend = File(
         'school-backend/internal/handlers/user.go',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
       final backend = File(
         'school-backend/internal/handlers/parent_link.go',
       ).readAsStringSync();

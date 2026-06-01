@@ -2,6 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test('parent module routes are visible through the temporary route gate', () {
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
@@ -32,25 +36,25 @@ void main() {
 
   test('parent module screens stay backed by live APIs', () {
     final dashboard = File(
-      'lib/presentation/parent_dashboard_screen/parent_dashboard_screen.dart',
+      'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     ).readAsStringSync();
     final attendance = File(
-      'lib/presentation/parent_attendance_screen/parent_attendance_screen.dart',
+      'lib/features/attendance/presentation/screens/parent_attendance_screen/parent_attendance_screen.dart',
     ).readAsStringSync();
     final homework = File(
-      'lib/presentation/parent_homework_screen/parent_homework_screen.dart',
+      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
     ).readAsStringSync();
     final homeworkSubmit = File(
-      'lib/presentation/parent_homework_screen/parent_homework_submission_screen.dart',
+      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart',
     ).readAsStringSync();
     final fees = File(
-      'lib/presentation/parent_fees_screen/parent_fees_screen.dart',
+      'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
     ).readAsStringSync();
     final progress = File(
-      'lib/presentation/parent_academic_progress_screen/parent_academic_progress_screen.dart',
+      'lib/features/reports/presentation/screens/parent_academic_progress_screen/parent_academic_progress_screen.dart',
     ).readAsStringSync();
     final leaveForm = File(
-      'lib/presentation/parent_leave_screen/parent_leave_request_form_screen.dart',
+      'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart',
     ).readAsStringSync();
 
     expect(dashboard, contains("api.getDashboard('parent')"));
@@ -68,11 +72,46 @@ void main() {
     expect(leaveForm, isNot(contains('static const _leaveTypes')));
   });
 
+  test('parent child summaries surface backend operational fields', () {
+    final api = readBackendApiSources();
+    final data = File(
+      'lib/core/services/backend_data_service.dart',
+    ).readAsStringSync();
+    final parentLinks = File(
+      'school-backend/internal/handlers/parent_link.go',
+    ).readAsStringSync();
+
+    expect(
+      parentLinks,
+      contains('studentResponseRows(database.DB, schoolID, students)'),
+    );
+    expect(
+      parentLinks,
+      contains('Preload("Student.CurrentSection.ClassTeacher")'),
+    );
+    expect(api, contains('_parentStudentDashboardMap'));
+    expect(
+      api,
+      isNot(contains("row['attendance'] = row['attendance'] ?? 'N/A'")),
+    );
+    expect(
+      api,
+      isNot(
+        contains("row['classTeacher'] = row['classTeacher'] ?? 'Not assigned'"),
+      ),
+    );
+    expect(data, contains("'photo': student.photoUrl"));
+    expect(data, contains("'rollNo': student.admissionNumber.isNotEmpty"));
+    expect(data, contains("'attendance': student.attendancePercent"));
+    expect(data, contains("'feesDue': student.feeBalance"));
+    expect(data, contains("'classTeacher': classTeacherName"));
+  });
+
   test('parent frontend records are scoped to the current parent user', () {
     final frontendRecord = File(
       'school-backend/internal/handlers/frontend_record.go',
     ).readAsStringSync();
-    final main = File('school-backend/main.go').readAsStringSync();
+    final main = readBackendRouteSources();
 
     expect(frontendRecord, contains('parentOwnsRecords'));
     expect(frontendRecord, contains('"notice-acknowledgements"'));

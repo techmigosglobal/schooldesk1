@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/widgets/loading_skeleton_widget.dart';
+import 'package:schooldesk1/core/widgets/loading_skeleton_widget.dart';
 
 void main() {
   group('LoadingSkeletonWidget', () {

@@ -110,6 +110,7 @@ type Subject struct {
 	SubjectName  string      `gorm:"type:text;not null" json:"subject_name"`
 	SubjectCode  string      `gorm:"type:text" json:"subject_code"`
 	SubjectType  string      `gorm:"type:text" json:"subject_type"`
+	SubjectColor string      `gorm:"type:text" json:"subject_color"`
 	CreditHours  float64     `json:"credit_hours"`
 	School       *School     `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
 	Department   *Department `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
@@ -127,24 +128,30 @@ type Grade struct {
 
 type GradeSubject struct {
 	BaseModel
-	GradeID        string   `gorm:"type:text;not null" json:"grade_id"`
-	SubjectID      string   `gorm:"type:text;not null" json:"subject_id"`
-	PeriodsPerWeek int      `json:"periods_per_week"`
-	MaxMarks       int      `json:"max_marks"`
-	PassMarks      int      `json:"pass_marks"`
-	IsMandatory    bool     `gorm:"default:true" json:"is_mandatory"`
-	Grade          *Grade   `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
-	Subject        *Subject `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
+	SchoolID       string        `gorm:"type:text;not null;index" json:"school_id"`
+	AcademicYearID string        `gorm:"type:text;not null;index" json:"academic_year_id"`
+	GradeID        string        `gorm:"type:text;not null" json:"grade_id"`
+	SubjectID      string        `gorm:"type:text;not null" json:"subject_id"`
+	PeriodsPerWeek int           `json:"periods_per_week"`
+	MaxMarks       int           `json:"max_marks"`
+	PassMarks      int           `json:"pass_marks"`
+	IsMandatory    bool          `gorm:"default:true" json:"is_mandatory"`
+	School         *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
+	AcademicYear   *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
+	Grade          *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
+	Subject        *Subject      `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
 }
 
 type Section struct {
 	BaseModel
+	SchoolID       string        `gorm:"type:text;index" json:"school_id"`
 	GradeID        string        `gorm:"type:text;not null" json:"grade_id"`
 	AcademicYearID string        `gorm:"type:text;not null" json:"academic_year_id"`
 	SectionName    string        `gorm:"type:text;not null" json:"section_name"`
 	ClassTeacherID *string       `gorm:"type:text" json:"class_teacher_id"`
 	RoomID         *string       `gorm:"type:text" json:"room_id"`
 	Capacity       int           `json:"capacity"`
+	School         *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
 	Grade          *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
 	AcademicYear   *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
 	ClassTeacher   *Staff        `gorm:"foreignKey:ClassTeacherID" json:"class_teacher,omitempty"`

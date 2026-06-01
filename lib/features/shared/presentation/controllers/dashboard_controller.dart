@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../services/backend_api_client.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 /// Dashboard KPI data model.
 class DashboardKpi {

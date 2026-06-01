@@ -421,7 +421,7 @@ func validateStudentEnrollmentForSession(schoolID string, session models.Attenda
 		Joins("JOIN students ON students.id = enrollments.student_id").
 		Joins("JOIN sections ON sections.id = enrollments.section_id").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
-		Where("enrollments.id = ? AND enrollments.student_id = ? AND enrollments.section_id = ?", enrollmentID, studentID, session.SectionID).
+		Where("enrollments.id = ? AND enrollments.student_id = ? AND enrollments.section_id = ? AND enrollments.academic_year_id = ?", enrollmentID, studentID, session.SectionID, session.AcademicYearID).
 		Where("students.school_id = ? AND grades.school_id = ? AND students.status != ?", schoolID, schoolID, "inactive"))
 	if count == 0 {
 		return fmt.Errorf("student enrollment does not belong to this attendance session")

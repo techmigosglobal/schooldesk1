@@ -5,9 +5,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/presentation/teacher_classes_screen/teacher_classes_screen.dart';
-import 'package:schooldesk1/services/backend_api_client.dart';
-import 'package:schooldesk1/services/role_access_service.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/teacher_classes_screen/teacher_classes_screen.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 
 void main() {
   late _FakeBackendAdapter adapter;

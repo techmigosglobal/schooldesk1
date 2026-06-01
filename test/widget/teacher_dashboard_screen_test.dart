@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/presentation/teacher_dashboard_screen/teacher_dashboard_screen.dart';
-import 'package:schooldesk1/services/role_access_service.dart';
-import 'package:schooldesk1/widgets/erp_components.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
 
 void main() {
   setUp(() {

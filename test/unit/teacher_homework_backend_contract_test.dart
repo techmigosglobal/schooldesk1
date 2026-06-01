@@ -2,27 +2,31 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test('teacher and parent homework use routed screens with real submissions', () {
     final teacherScreen = File(
-      'lib/presentation/teacher_homework_screen/teacher_homework_screen.dart',
+      'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_screen.dart',
     ).readAsStringSync();
     final teacherForms = File(
-      'lib/presentation/teacher_homework_screen/teacher_homework_form_screens.dart',
+      'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart',
     ).readAsStringSync();
     final parentScreen = File(
-      'lib/presentation/parent_homework_screen/parent_homework_screen.dart',
+      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
     ).readAsStringSync();
     final parentForm = File(
-      'lib/presentation/parent_homework_screen/parent_homework_submission_screen.dart',
+      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart',
     ).readAsStringSync();
-    final api = File('lib/services/backend_api_client.dart').readAsStringSync();
+    final api = readBackendApiSources();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
     final registry = File(
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
-    final main = File('school-backend/main.go').readAsStringSync();
+    final main = readBackendRouteSources();
     final models = File(
       'school-backend/internal/models/hr_comms.go',
     ).readAsStringSync();

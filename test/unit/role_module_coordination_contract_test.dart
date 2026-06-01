@@ -2,15 +2,19 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test(
     'admin timetable configuration feeds teacher attendance through scoped slots',
     () {
       final adminTimetable = File(
-        'lib/presentation/admin_timetable_screen/admin_timetable_screen.dart',
+        'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
       ).readAsStringSync();
       final teacherAttendance = File(
-        'lib/presentation/teacher_attendance_screen/teacher_attendance_screen.dart',
+        'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
       ).readAsStringSync();
       final timetableHandler = File(
         'school-backend/internal/handlers/timetable.go',
@@ -45,15 +49,15 @@ void main() {
     'homework lifecycle connects teacher posting, parent submission, and review',
     () {
       final teacherForms = File(
-        'lib/presentation/teacher_homework_screen/teacher_homework_form_screens.dart',
+        'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart',
       ).readAsStringSync();
       final parentHomework = File(
-        'lib/presentation/parent_homework_screen/parent_homework_screen.dart',
+        'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
       ).readAsStringSync();
       final parentSubmission = File(
-        'lib/presentation/parent_homework_screen/parent_homework_submission_screen.dart',
+        'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
       final submissionHandler = File(
         'school-backend/internal/handlers/homework_submission.go',
       ).readAsStringSync();
@@ -89,10 +93,10 @@ void main() {
     'communication and notifications coordinate chat, read receipts, push, and navigation',
     () {
       final teacherChat = File(
-        'lib/presentation/teacher_communication_screen/teacher_communication_screen.dart',
+        'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
       ).readAsStringSync();
       final parentChat = File(
-        'lib/presentation/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
+        'lib/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
       ).readAsStringSync();
       final crud = File(
         'school-backend/internal/handlers/crud.go',
@@ -101,15 +105,13 @@ void main() {
         'school-backend/internal/handlers/communication_notifications.go',
       ).readAsStringSync();
       final notificationCenter = File(
-        'lib/presentation/notification_center_screen/notification_center_screen.dart',
+        'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
       ).readAsStringSync();
       final pushService = File(
-        'lib/services/push_notification_service.dart',
+        'lib/core/services/push_notification_service.dart',
       ).readAsStringSync();
-      final apiClient = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final apiClient = readBackendApiSources();
+      final main = readBackendRouteSources();
 
       expect(teacherChat, contains("createRaw('/messages'"));
       expect(parentChat, contains("createRaw('/messages'"));
@@ -135,18 +137,16 @@ void main() {
     'fee workflow coordinates parent payment request, admin decision, and balance updates',
     () {
       final parentForm = File(
-        'lib/presentation/parent_fees_screen/parent_payment_request_form_screen.dart',
+        'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
       ).readAsStringSync();
       final adminDecision = File(
-        'lib/presentation/admin_fees_screen/admin_payment_request_decision_screen.dart',
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart',
       ).readAsStringSync();
       final adminFeeForms = File(
-        'lib/presentation/admin_fees_screen/admin_fee_form_screens.dart',
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
       ).readAsStringSync();
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final api = readBackendApiSources();
+      final main = readBackendRouteSources();
       final feeHandler = File(
         'school-backend/internal/handlers/fee.go',
       ).readAsStringSync();
@@ -178,18 +178,18 @@ void main() {
     'exam marks coordinate admin entry, parent progress, principal records, and report exports',
     () {
       final adminExamForms = File(
-        'lib/presentation/admin_exams_screen/admin_exam_form_screens.dart',
+        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart',
       ).readAsStringSync();
       final parentProgress = File(
-        'lib/presentation/parent_academic_progress_screen/parent_academic_progress_screen.dart',
+        'lib/features/reports/presentation/screens/parent_academic_progress_screen/parent_academic_progress_screen.dart',
       ).readAsStringSync();
       final backendData = File(
-        'lib/services/backend_data_service.dart',
+        'lib/core/services/backend_data_service.dart',
       ).readAsStringSync();
       final examHandler = File(
         'school-backend/internal/handlers/exam.go',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
 
       expect(adminExamForms, contains('AdminExamMarksEntryScreen'));
       expect(
@@ -206,10 +206,7 @@ void main() {
       expect(examHandler, contains('validateMarkValue'));
       expect(main, contains('exams.GET("/schedules/:schedule_id/marks"'));
       expect(main, contains('exams.POST("/schedules/:schedule_id/marks"'));
-      expect(
-        main,
-        contains('reportExportResource("/exams/report-cards/exports"'),
-      );
+      expect(main, contains('exams.GET("/report-cards/exports"'));
     },
   );
 
@@ -217,21 +214,21 @@ void main() {
     'approval workflow coordinates admin requests with principal decision center',
     () {
       final accountForm = File(
-        'lib/presentation/admin_user_access_screen/account_access_form_screen.dart',
+        'lib/features/people/presentation/screens/admin_user_access_screen/account_access_form_screen.dart',
       ).readAsStringSync();
       final staffForm = File(
-        'lib/presentation/staff_management_screen/staff_form_screen.dart',
+        'lib/features/people/presentation/screens/staff_management_screen/staff_form_screen.dart',
       ).readAsStringSync();
       final students = File(
-        'lib/presentation/admin_students_screen/admin_students_screen.dart',
+        'lib/features/people/presentation/screens/admin_students_screen/admin_students_screen.dart',
       ).readAsStringSync();
       final backendData = File(
-        'lib/services/backend_data_service.dart',
+        'lib/core/services/backend_data_service.dart',
       ).readAsStringSync();
       final approvalCenter = File(
-        'lib/presentation/approval_center_screen/approval_center_screen.dart',
+        'lib/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
 
       expect(
         accountForm,
@@ -246,19 +243,12 @@ void main() {
       expect(approvalCenter, contains('_decideGenericApproval'));
       expect(
         main,
-        contains(
-          'accountApprovalsCompat := protected.Group("/account-approvals")',
-        ),
+        contains('accountApprovals := api.Group("/account-approvals")'),
       );
+      expect(main, contains('classApprovals := api.Group("/class-approvals")'));
       expect(
         main,
-        contains('classApprovalsCompat := protected.Group("/class-approvals")'),
-      );
-      expect(
-        main,
-        contains(
-          'studentApprovalsCompat := protected.Group("/student-approvals")',
-        ),
+        contains('studentApprovals := api.Group("/student-approvals")'),
       );
     },
   );
@@ -267,18 +257,16 @@ void main() {
     'profile/avatar configuration is shared by all roles and guarded server-side',
     () {
       final teacherDashboard = File(
-        'lib/presentation/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+        'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
       ).readAsStringSync();
       final profile = File(
-        'lib/presentation/profile_management_screen/profile_management_screen.dart',
+        'lib/features/profile/presentation/screens/profile_management_screen/profile_management_screen.dart',
       ).readAsStringSync();
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final api = readBackendApiSources();
       final auth = File(
         'school-backend/internal/handlers/auth.go',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
 
       expect(teacherDashboard, contains('AppRoutes.profileScreen'));
       expect(profile, contains('uploadProfileAvatar('));
@@ -297,17 +285,15 @@ void main() {
   test(
     'advanced parent linking and child switching are wired across parent screens',
     () {
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final api = readBackendApiSources();
       final assignment = File(
-        'lib/presentation/admin_user_access_screen/account_child_assignment_screen.dart',
+        'lib/features/people/presentation/screens/admin_user_access_screen/account_child_assignment_screen.dart',
       ).readAsStringSync();
       final dashboard = File(
-        'lib/presentation/parent_dashboard_screen/parent_dashboard_screen.dart',
+        'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
       ).readAsStringSync();
       final roleAccess = File(
-        'lib/services/role_access_service.dart',
+        'lib/core/services/role_access_service.dart',
       ).readAsStringSync();
       final parentLink = File(
         'school-backend/internal/handlers/parent_link.go',
@@ -368,17 +354,15 @@ void main() {
         'school-backend/internal/handlers/communication_notifications.go',
       ).readAsStringSync();
       final routeResolver = File(
-        'lib/services/notification_route_resolver.dart',
+        'lib/core/services/notification_route_resolver.dart',
       ).readAsStringSync();
       final parentLeave = File(
-        'lib/presentation/parent_leave_screen/parent_leave_screen.dart',
+        'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
       ).readAsStringSync();
       final parentLeaveForm = File(
-        'lib/presentation/parent_leave_screen/parent_leave_request_form_screen.dart',
+        'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart',
       ).readAsStringSync();
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final api = readBackendApiSources();
       final localVerifier = File(
         'school-backend/cmd/local-api-verify/main.go',
       ).readAsStringSync();
@@ -420,7 +404,7 @@ void main() {
   test(
     'advanced transport and library are retired from current route exposure',
     () {
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
       final studentHandler = File(
         'school-backend/internal/handlers/student.go',
       ).readAsStringSync();
@@ -428,9 +412,7 @@ void main() {
         'school-backend/internal/models/library_transport.go',
       ).readAsStringSync();
       final appRoutes = File('lib/routes/app_routes.dart').readAsStringSync();
-      final docs = File(
-        'docs/production-readiness-testcase-sheet-2026-05-16.md',
-      ).readAsStringSync();
+      final prd = File('docs/PRD.md').readAsStringSync();
 
       expect(main, isNot(contains('transport := api.Group("/transport")')));
       expect(main, isNot(contains('library := api.Group("/library")')));
@@ -446,10 +428,7 @@ void main() {
       expect(models, contains('type StudentTransport struct'));
       expect(appRoutes, isNot(contains('/transport-')));
       expect(appRoutes, isNot(contains('/library-')));
-      expect(docs, contains('ADV-015'));
-      expect(docs, contains('Transport is out of the current product scope'));
-      expect(docs, contains('ADV-016'));
-      expect(docs, contains('Library is out of the current product scope'));
+      expect(prd, contains('No transport or library route exposure'));
     },
   );
 }

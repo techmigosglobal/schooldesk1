@@ -5,24 +5,26 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('ui issue polish keeps mobile FABs and filter chips usable', () {
     final complaints = File(
-      'lib/presentation/complaint_management_screen/complaint_management_screen.dart',
+      'lib/features/communication/presentation/screens/complaint_management_screen/complaint_management_screen.dart',
     ).readAsStringSync();
     final students = File(
-      'lib/presentation/admin_students_screen/admin_students_screen.dart',
+      'lib/features/people/presentation/screens/admin_students_screen/admin_students_screen.dart',
     ).readAsStringSync();
     final fees = File(
-      'lib/presentation/admin_fees_screen/admin_fees_screen.dart',
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
     final receipt = File(
-      'lib/presentation/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
+      'lib/features/finance/presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
     ).readAsStringSync();
     final parentFees = File(
-      'lib/presentation/parent_fees_screen/parent_fees_screen.dart',
+      'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
     ).readAsStringSync();
     final oversightFilters = File(
-      'lib/presentation/student_oversight_screen/widgets/student_filter_bar_widget.dart',
+      'lib/features/people/presentation/screens/student_oversight_screen/widgets/student_filter_bar_widget.dart',
     ).readAsStringSync();
-    final pdfService = File('lib/services/pdf_service.dart').readAsStringSync();
+    final pdfService = File(
+      'lib/core/services/pdf_service.dart',
+    ).readAsStringSync();
 
     expect(complaints, contains('FloatingActionButton.extended'));
     expect(complaints, contains('FloatingActionButtonLocation.endFloat'));
@@ -47,14 +49,32 @@ void main() {
     expect(pdfService, contains('Printing.sharePdf'));
   });
 
-  test('local production-readiness artifacts exist', () {
+  test('source-only documentation contract is enforced', () {
     for (final path in [
       '.github/workflows/local-docker-ci.yml',
-      'docs/api-contract-consolidation-2026-05-17.md',
-      'docs/local-docker-ops-runbook-2026-05-17.md',
-      'docs/wireless-mobile-testing-plan-2026-05-17.md',
+      'README.md',
+      'docs/PRD.md',
+      'docs/SPEC.md',
     ]) {
       expect(File(path).existsSync(), isTrue, reason: '$path should exist');
     }
+
+    final markdownFiles =
+        (Process.runSync('find', [
+                  '.',
+                  '-name',
+                  '*.md',
+                  '-not',
+                  '-path',
+                  './.git/*',
+                ]).stdout
+                as String)
+            .trim()
+            .split('\n')
+            .where((path) => path.isNotEmpty)
+            .map((path) => path.replaceFirst('./', ''))
+            .toSet();
+
+    expect(markdownFiles, {'README.md', 'docs/PRD.md', 'docs/SPEC.md'});
   });
 }

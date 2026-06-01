@@ -1,5 +1,5 @@
-import '../entities/student.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/student.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for student operations.
 /// Implementations should be API-backed in production.

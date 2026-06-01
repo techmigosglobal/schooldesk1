@@ -1,4 +1,4 @@
-import 'app_routes.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class RouteAccessGuard {
   RouteAccessGuard._();

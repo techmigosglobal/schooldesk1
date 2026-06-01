@@ -45,7 +45,7 @@ func TestDeleteUserCanPermanentlyRemoveInactiveAccount(t *testing.T) {
 		c.Set("role_name", "Principal")
 		c.Next()
 	})
-	handler := NewCompatibilityHandler()
+	handler := NewUserManagementHandler()
 	router.DELETE("/users/:id", handler.DeleteUser)
 
 	response := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestDeleteUserPermanentRefusesActiveAccount(t *testing.T) {
 		c.Set("role_name", "Principal")
 		c.Next()
 	})
-	handler := NewCompatibilityHandler()
+	handler := NewUserManagementHandler()
 	router.DELETE("/users/:id", handler.DeleteUser)
 
 	response := httptest.NewRecorder()

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/presentation/approval_center_screen/approval_center_screen.dart';
-import 'package:schooldesk1/presentation/approval_center_screen/widgets/approval_item_widget.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
+import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart';
+import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
 
 void main() {
   Future<List<FlutterErrorDetails>> collectFlutterErrors(

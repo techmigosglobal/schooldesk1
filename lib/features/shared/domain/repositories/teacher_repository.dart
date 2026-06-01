@@ -1,5 +1,5 @@
-import '../entities/teacher.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/teacher.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for teacher/staff operations.
 abstract class TeacherRepository {

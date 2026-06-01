@@ -99,7 +99,16 @@ func TestDeleteStaffClearsAssignmentsAndOwnedRecords(t *testing.T) {
 		t.Fatalf("delete staff status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	assertZeroRows(t, &models.Staff{}, "id = ?", f.teacherStaffID)
+	var staff models.Staff
+	if err := database.DB.First(&staff, "id = ?", f.teacherStaffID).Error; err != nil {
+		t.Fatalf("staff should remain as inactive audit row: %v", err)
+	}
+	if staff.Status != "inactive" {
+		t.Fatalf("staff status=%q, want inactive", staff.Status)
+	}
+	if staff.ExitDate == nil {
+		t.Fatalf("staff exit_date should be set when deactivated")
+	}
 	assertZeroRows(t, &models.StaffSubject{}, "staff_id = ?", f.teacherStaffID)
 	assertZeroRows(t, &models.StaffQualification{}, "staff_id = ?", f.teacherStaffID)
 	assertZeroRows(t, &models.StaffDocument{}, "staff_id = ?", f.teacherStaffID)

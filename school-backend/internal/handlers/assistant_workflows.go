@@ -73,7 +73,7 @@ func (h *AssistantWorkflowHandler) Catalog(c *gin.Context) {
 		Success: true,
 		Data: gin.H{
 			"message":      "Good Morning, What would you like to do today?",
-			"action_cards": assistantActionCards(defs),
+			"action_cards": assistantActionCards(defs, currentRole(c)),
 			"workflows":    defs,
 			"readiness":    assistantCatalogReadiness(scopedSchoolID(c)),
 			"guardrails": []string{
@@ -279,6 +279,17 @@ func (h *AssistantWorkflowHandler) ExecuteSession(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	switch strings.ToLower(strings.TrimSpace(row.Status)) {
+	case "executed":
+		fail(c, http.StatusConflict, "Assistant workflow is already executed")
+		return
+	case "executing":
+		fail(c, http.StatusConflict, "Assistant workflow is already executing")
+		return
+	case "canceled":
+		fail(c, http.StatusConflict, "Canceled assistant workflow cannot be executed")
+		return
+	}
 	if !req.Confirm {
 		fail(c, http.StatusBadRequest, "Explicit confirmation is required before execution")
 		return
@@ -339,6 +350,10 @@ func (h *AssistantWorkflowHandler) CancelSession(c *gin.Context) {
 		fail(c, http.StatusNotFound, "Assistant workflow not found")
 		return
 	}
+	if strings.EqualFold(row.Status, "executed") {
+		fail(c, http.StatusConflict, "Executed assistant workflow cannot be canceled")
+		return
+	}
 	now := time.Now().UTC()
 	updated, err := h.store.Patch(c.Request.Context(), row.ID, services.WorkflowSessionPatch{
 		Status:        "canceled",
@@ -361,12 +376,11 @@ func (h *AssistantWorkflowHandler) ExportTemplate(c *gin.Context) {
 		return
 	}
 	headers := assistantTemplateHeaders(workflowType)
-	sample := assistantTemplateSample(workflowType)
 	success(c, http.StatusOK, gin.H{
 		"workflow_type": def.Type,
 		"title":         def.Title,
 		"csv_headers":   headers,
-		"sample_csv":    strings.Join(headers, ",") + "\n" + strings.Join(sample, ","),
+		"csv_template":  strings.Join(headers, ",") + "\n",
 		"txt_format":    assistantTextTemplate(workflowType),
 	}, "")
 }
@@ -427,8 +441,8 @@ func (h *AssistantWorkflowHandler) validateWorkflow(c *gin.Context, def assistan
 		if className == "" && workflowString(data, "class_details", "grade_id") == "" {
 			addIssue("error", "class_details", "class_name", "Class name or existing grade is required")
 		}
-		if workflowInt(data, "class_details", "capacity") <= 0 {
-			addIssue("error", "class_details", "capacity", "Capacity must be greater than zero")
+		if workflowInt(data, "class_details", "capacity") <= 0 && !workflowHasSectionCapacity(data) {
+			addIssue("error", "sections", "capacity", "Every section capacity must be greater than zero")
 		}
 		if ay := workflowString(data, "class_details", "academic_year_id"); ay != "" && !academicYearBelongsToSchool(ay, scopedSchoolID(c)) {
 			addIssue("error", "class_details", "academic_year_id", "Academic year must belong to this school")
@@ -740,10 +754,6 @@ func (h *AssistantWorkflowHandler) executeTeacherOnboarding(c *gin.Context, data
 		if err := ensureStaffCodeAvailable(tx, schoolID, staffCode, ""); err != nil {
 			return err
 		}
-		departmentID, err := h.staffHandler.resolveDepartmentID(tx, schoolID, workflowRawString(details["department_id"]), workflowRawString(details["department_name"]))
-		if err != nil {
-			return err
-		}
 		dob, _ := time.Parse("2006-01-02", firstNonEmpty(workflowRawString(details["date_of_birth"]), "1990-01-01"))
 		joinDate, _ := time.Parse("2006-01-02", firstNonEmpty(workflowRawString(details["join_date"]), time.Now().UTC().Format("2006-01-02")))
 		staff = models.Staff{
@@ -759,9 +769,6 @@ func (h *AssistantWorkflowHandler) executeTeacherOnboarding(c *gin.Context, data
 			EmploymentType: firstNonEmpty(workflowRawString(details["employment_type"]), "full_time"),
 			JoinDate:       joinDate,
 			Status:         "active",
-		}
-		if departmentID != "" {
-			staff.DepartmentID = &departmentID
 		}
 		if err := tx.Create(&staff).Error; err != nil {
 			return err
@@ -1348,7 +1355,7 @@ func (h *AssistantWorkflowHandler) reviewSummary(def assistantWorkflowDefinition
 			"staff":             strings.TrimSpace(workflowString(data, "staff_details", "first_name") + " " + workflowString(data, "staff_details", "last_name")),
 			"sections":          normalizedWorkflowSections(data),
 			"subjects":          workflowList(data, "subjects"),
-			"fees":              firstNonEmpty(strconv.Itoa(len(workflowList(data, "fee_structure"))), strconv.Itoa(len(workflowList(data, "fee_items")))),
+			"fees":              len(workflowList(data, "fee_structure")) + len(workflowList(data, "fee_items")),
 			"timetable_enabled": workflowBool(data, "timetable", "auto_generate"),
 		},
 	}
@@ -1426,15 +1433,33 @@ func assistantWorkflowDefinitions() []assistantWorkflowDefinition {
 	}
 }
 
-func assistantActionCards(defs []assistantWorkflowDefinition) []gin.H {
+func assistantActionCards(defs []assistantWorkflowDefinition, role string) []gin.H {
 	cards := []gin.H{}
 	for _, def := range defs {
 		cards = append(cards, gin.H{"title": def.Title, "workflow_type": def.Type, "category": def.Category, "target_route": def.TargetRoute})
 	}
-	for _, title := range []string{"Attendance", "Exams", "Notifications", "Reports", "Transport", "Library", "Inventory"} {
-		cards = append(cards, gin.H{"title": title, "workflow_type": strings.ToLower(strings.ReplaceAll(title, " ", "_")), "category": "Connected ERP", "target_route": ""})
+	for _, card := range connectedAssistantCards(role) {
+		cards = append(cards, card)
 	}
 	return cards
+}
+
+func connectedAssistantCards(role string) []gin.H {
+	principal := strings.EqualFold(role, "principal")
+	attendanceRoute := "/admin-attendance-screen"
+	examsRoute := "/admin-exams-screen"
+	reportsRoute := "/admin-reports-screen"
+	if principal {
+		attendanceRoute = "/principal-attendance-screen"
+		examsRoute = "/principal-exams-screen"
+		reportsRoute = "/principal-results-screen"
+	}
+	return []gin.H{
+		{"title": "Attendance", "workflow_type": "attendance", "category": "Connected ERP", "target_route": attendanceRoute},
+		{"title": "Exams", "workflow_type": "exams", "category": "Connected ERP", "target_route": examsRoute},
+		{"title": "Notifications", "workflow_type": "notifications", "category": "Connected ERP", "target_route": "/notification-center-screen"},
+		{"title": "Reports", "workflow_type": "reports", "category": "Connected ERP", "target_route": reportsRoute},
+	}
 }
 
 func assistantCatalogReadiness(schoolID string) gin.H {
@@ -1627,15 +1652,14 @@ func normalizeImportedAssistantData(workflowType string, raw map[string]interfac
 		}
 		return map[string]interface{}{
 			"staff_details": map[string]interface{}{
-				"staff_code":      raw["staff_code"],
-				"first_name":      raw["first_name"],
-				"last_name":       raw["last_name"],
-				"email":           raw["email"],
-				"phone":           raw["phone"],
-				"username":        raw["username"],
-				"password":        raw["password"],
-				"department_name": raw["department_name"],
-				"designation":     raw["designation"],
+				"staff_code":  raw["staff_code"],
+				"first_name":  raw["first_name"],
+				"last_name":   raw["last_name"],
+				"email":       raw["email"],
+				"phone":       raw["phone"],
+				"username":    raw["username"],
+				"password":    raw["password"],
+				"designation": raw["designation"],
 			},
 			"subject_mapping": mappings,
 		}
@@ -1714,27 +1738,13 @@ func assistantTemplateHeaders(workflowType string) []string {
 	case "student_onboarding":
 		return []string{"first_name", "last_name", "date_of_birth", "gender", "current_section_id", "admission_number", "guardian_name", "guardian_relationship", "guardian_phone", "guardian_email", "create_invoice"}
 	case "teacher_onboarding":
-		return []string{"staff_code", "first_name", "last_name", "email", "phone", "username", "password", "department_name", "designation", "subject_ids", "grade_ids"}
+		return []string{"staff_code", "first_name", "last_name", "email", "phone", "username", "password", "designation", "subject_ids", "grade_ids"}
 	case "fee_setup":
 		return []string{"academic_year_id", "academic_year_label", "start_date", "end_date", "grade_id", "grade_name", "category_name", "amount", "frequency", "due_day"}
 	case "timetable_setup":
 		return []string{"section_id", "academic_year_id", "term_id", "days", "periods_per_day", "start_time"}
 	default:
 		return []string{"key", "value"}
-	}
-}
-
-func assistantTemplateSample(workflowType string) []string {
-	switch workflowType {
-	case "create_class":
-		return []string{"PP1", "", "2026-2027", "2026-04-01", "2027-03-31", "2", "30", "A|B", "English|Math", "Tuition=1000|Books=500"}
-	default:
-		headers := assistantTemplateHeaders(workflowType)
-		values := make([]string, len(headers))
-		for i, header := range headers {
-			values[i] = header + "-value"
-		}
-		return values
 	}
 }
 
@@ -1892,6 +1902,15 @@ func normalizedWorkflowSections(data map[string]interface{}) []map[string]interf
 		result = append(result, map[string]interface{}{"section_name": string(rune('A' + i)), "capacity": capacity})
 	}
 	return result
+}
+
+func workflowHasSectionCapacity(data map[string]interface{}) bool {
+	for _, section := range normalizedWorkflowSections(data) {
+		if workflowInt64(section["capacity"]) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func firstPositiveInt(values ...int64) int64 {

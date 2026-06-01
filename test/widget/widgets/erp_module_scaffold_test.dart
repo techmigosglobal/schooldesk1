@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/services/backend_api_client.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
-import 'package:schooldesk1/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 
 void main() {
   testWidgets('SchoolDeskModuleScaffold exposes accessible page chrome', (

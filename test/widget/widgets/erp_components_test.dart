@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/services/feature_availability_service.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
-import 'package:schooldesk1/widgets/erp_components.dart';
+import 'package:schooldesk1/core/services/feature_availability_service.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
 
 void main() {
   Widget wrap(Widget child) {

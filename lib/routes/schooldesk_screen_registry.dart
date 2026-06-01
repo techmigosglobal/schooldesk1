@@ -1,5 +1,5 @@
-import '../core/constants/schooldesk_glossary.dart';
-import '../services/feature_availability_service.dart';
+import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
+import 'package:schooldesk1/core/services/feature_availability_service.dart';
 
 class SchoolDeskScreenMetadata {
   final String route;

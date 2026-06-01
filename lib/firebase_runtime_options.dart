@@ -1,7 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
-import 'core/config/env_config.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 class FirebaseRuntimeOptions {
   FirebaseRuntimeOptions._();

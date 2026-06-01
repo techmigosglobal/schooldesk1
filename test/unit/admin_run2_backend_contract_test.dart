@@ -2,22 +2,28 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test('student write contracts expose principal direct and admin approval paths', () {
-    final main = File('school-backend/main.go').readAsStringSync();
+    final main = readBackendRouteSources();
 
     expect(
       main,
       contains(
-        'students.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.UpdateStudent)',
+        'students.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal")',
       ),
     );
+    expect(main, contains('studentHandler.UpdateStudent'));
     expect(
       main,
       contains(
-        'students.POST("/enrollments", middleware.RBACMiddleware("Admin", "Principal"), studentHandler.CreateEnrollment)',
+        'students.POST("/enrollments", middleware.RBACMiddleware("Admin", "Principal")',
       ),
     );
+    expect(main, contains('studentHandler.CreateEnrollment'));
     expect(
       main,
       contains(
@@ -27,9 +33,10 @@ void main() {
     expect(
       main,
       contains(
-        'attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.MarkStaffAttendance)',
+        'attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal")',
       ),
     );
+    expect(main, contains('attendanceHandler.MarkStaffAttendance'));
     expect(
       main,
       contains(
@@ -40,7 +47,7 @@ void main() {
 
   test('admin finance screen normalizes backend fee and invoice shapes', () {
     final source = File(
-      'lib/presentation/admin_fees_screen/admin_fees_screen.dart',
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
 
     expect(source, contains('Map<String, dynamic> _normalizeFeeStructure('));
@@ -57,17 +64,17 @@ void main() {
 
   test('admin payment requests use routed review screens and decision API', () {
     final adminFees = File(
-      'lib/presentation/admin_fees_screen/admin_fees_screen.dart',
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
     final requestsScreen = File(
-      'lib/presentation/admin_fees_screen/admin_payment_requests_screen.dart',
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart',
     ).readAsStringSync();
     final decisionScreen = File(
-      'lib/presentation/admin_fees_screen/admin_payment_request_decision_screen.dart',
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
-    final api = File('lib/services/backend_api_client.dart').readAsStringSync();
+    final api = readBackendApiSources();
 
     expect(adminFees, contains('AppRoutes.adminPaymentRequests'));
     expect(routes, contains('adminPaymentRequests'));
@@ -85,59 +92,54 @@ void main() {
     expect(decisionScreen, isNot(contains('showDialog(')));
   });
 
-  test(
-    'admin fee write actions use routed input screens without popup forms',
-    () {
-      final adminFees = File(
-        'lib/presentation/admin_fees_screen/admin_fees_screen.dart',
-      ).readAsStringSync();
-      final feeForms = File(
-        'lib/presentation/admin_fees_screen/admin_fee_form_screens.dart',
-      ).readAsStringSync();
-      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-      final guard = File(
-        'lib/routes/route_access_guard.dart',
-      ).readAsStringSync();
-      final registry = File(
-        'lib/routes/schooldesk_screen_registry.dart',
-      ).readAsStringSync();
+  test('admin fee write actions use routed input screens without popup forms', () {
+    final adminFees = File(
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
+    ).readAsStringSync();
+    final feeForms = File(
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
+    ).readAsStringSync();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
+    final registry = File(
+      'lib/routes/schooldesk_screen_registry.dart',
+    ).readAsStringSync();
 
-      expect(adminFees, contains('AppRoutes.adminFeeStructureForm'));
-      expect(adminFees, contains('AppRoutes.adminInvoiceGenerationForm'));
-      expect(adminFees, contains('AppRoutes.adminPaymentRecordForm'));
-      expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
-      expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
-      expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
-      expect(adminFees, isNot(contains('_showEditFeeDialog')));
-      expect(adminFees, isNot(contains('showDialog(')));
-      expect(feeForms, contains('AdminFeeStructureFormScreen'));
-      expect(feeForms, contains('AdminInvoiceGenerationFormScreen'));
-      expect(feeForms, contains('AdminPaymentRecordFormScreen'));
-      expect(feeForms, contains("createRaw('/fees/structures'"));
-      expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
-      expect(feeForms, contains('recordPayment('));
-      expect(feeForms, isNot(contains('showDialog(')));
-      expect(routes, contains('adminFeeStructureForm'));
-      expect(routes, contains('adminInvoiceGenerationForm'));
-      expect(routes, contains('adminPaymentRecordForm'));
-      expect(guard, contains('AppRoutes.adminFeeStructureForm: {\'admin\'}'));
-      expect(
-        guard,
-        contains('AppRoutes.adminInvoiceGenerationForm: {\'admin\'}'),
-      );
-      expect(guard, contains('AppRoutes.adminPaymentRecordForm: {\'admin\'}'));
-      expect(registry, contains('/admin-fees-screen/structures/form'));
-      expect(registry, contains('/admin-fees-screen/invoices/generate'));
-      expect(registry, contains('/admin-fees-screen/payments/record'));
-    },
-  );
+    expect(adminFees, contains('AppRoutes.adminFeeStructureForm'));
+    expect(adminFees, contains('AppRoutes.adminInvoiceGenerationForm'));
+    expect(adminFees, contains('AppRoutes.adminPaymentRecordForm'));
+    expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
+    expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
+    expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
+    expect(adminFees, isNot(contains('_showEditFeeDialog')));
+    expect(adminFees, isNot(contains('showDialog(')));
+    expect(feeForms, contains('AdminFeeStructureFormScreen'));
+    expect(feeForms, contains('AdminInvoiceGenerationFormScreen'));
+    expect(feeForms, contains('AdminPaymentRecordFormScreen'));
+    expect(feeForms, contains("createRaw('/fees/structures'"));
+    expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
+    expect(feeForms, contains('recordPayment('));
+    expect(feeForms, isNot(contains('showDialog(')));
+    expect(routes, contains('adminFeeStructureForm'));
+    expect(routes, contains('adminInvoiceGenerationForm'));
+    expect(routes, contains('adminPaymentRecordForm'));
+    expect(guard, contains('AppRoutes.adminFeeStructureForm: {\'admin\'}'));
+    expect(
+      guard,
+      contains('AppRoutes.adminInvoiceGenerationForm: {\'admin\'}'),
+    );
+    expect(guard, contains('AppRoutes.adminPaymentRecordForm: {\'admin\'}'));
+    expect(registry, contains('/admin-fees-screen/structures/form'));
+    expect(registry, contains('/admin-fees-screen/invoices/generate'));
+    expect(registry, contains('/admin-fees-screen/payments/record'));
+  });
 
   test('parent payment requests use routed input screen without popup form', () {
     final parentFees = File(
-      'lib/presentation/parent_fees_screen/parent_fees_screen.dart',
+      'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
     ).readAsStringSync();
     final paymentForm = File(
-      'lib/presentation/parent_fees_screen/parent_payment_request_form_screen.dart',
+      'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -160,10 +162,10 @@ void main() {
 
   test('admin timetable mutations persist through backend slot APIs', () {
     final source = File(
-      'lib/presentation/admin_timetable_screen/admin_timetable_screen.dart',
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
     ).readAsStringSync();
     final forms = File(
-      'lib/presentation/admin_timetable_screen/admin_timetable_form_screens.dart',
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -220,18 +222,18 @@ void main() {
   });
 
   test('classes expose real class-teacher assignments from sections', () {
-    final api = File('lib/services/backend_api_client.dart').readAsStringSync();
+    final api = readBackendApiSources();
     final data = File(
-      'lib/services/backend_data_service.dart',
+      'lib/core/services/backend_data_service.dart',
     ).readAsStringSync();
     final academicScreen = File(
-      'lib/presentation/academic_management_screen/academic_management_screen.dart',
+      'lib/features/academics/presentation/screens/academic_management_screen/academic_management_screen.dart',
     ).readAsStringSync();
     final academicForms = File(
-      'lib/presentation/academic_management_screen/academic_management_form_screens.dart',
+      'lib/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart',
     ).readAsStringSync();
     final timetableScreen = File(
-      'lib/presentation/admin_timetable_screen/admin_timetable_screen.dart',
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
     ).readAsStringSync();
 
     expect(api, contains('final String classTeacherId;'));
@@ -251,7 +253,7 @@ void main() {
 
   test('admin attendance classes and exports are backend-derived', () {
     final source = File(
-      'lib/presentation/admin_attendance_screen/admin_attendance_screen.dart',
+      'lib/features/attendance/presentation/screens/admin_attendance_screen/admin_attendance_screen.dart',
     ).readAsStringSync();
 
     expect(source, isNot(contains("String _selectedClass = 'Class 5A'")));
@@ -265,14 +267,12 @@ void main() {
     'admin exams render backend schedules and avoid fake local-only actions',
     () {
       final source = File(
-        'lib/presentation/admin_exams_screen/admin_exams_screen.dart',
+        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exams_screen.dart',
       ).readAsStringSync();
       final forms = File(
-        'lib/presentation/admin_exams_screen/admin_exam_form_screens.dart',
+        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart',
       ).readAsStringSync();
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final api = readBackendApiSources();
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
       final guard = File(
         'lib/routes/route_access_guard.dart',
@@ -280,7 +280,7 @@ void main() {
       final registry = File(
         'lib/routes/schooldesk_screen_registry.dart',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
 
       expect(source, contains("getRawList("));
       expect(source, contains("'/exams/schedules'"));

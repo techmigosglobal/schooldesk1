@@ -1,5 +1,5 @@
-import '../entities/attendance_record.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/attendance_record.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for attendance operations.
 abstract class AttendanceRepository {

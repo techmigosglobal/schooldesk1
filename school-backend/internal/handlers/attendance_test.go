@@ -20,12 +20,26 @@ func TestCreateAttendanceSession(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	assert.NoError(t, database.SetupTestDB())
 
+	school := models.School{BaseModel: models.BaseModel{ID: "school-attendance-test"}, Name: "Attendance School", SchoolType: "cbse"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-attendance-test"}, SchoolID: school.ID, YearLabel: "2024-2025", StartDate: time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2025, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true, Status: "active"}
+	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-attendance-test"}, SchoolID: school.ID, GradeNumber: 1, GradeName: "Class 1"}
+	section := models.Section{BaseModel: models.BaseModel{ID: "test-section-id"}, SchoolID: school.ID, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A"}
+	department := models.Department{BaseModel: models.BaseModel{ID: "dept-attendance-test"}, SchoolID: school.ID, DepartmentName: "Academics"}
+	subject := models.Subject{BaseModel: models.BaseModel{ID: "test-subject-id"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Math"}
+	staff := models.Staff{BaseModel: models.BaseModel{ID: "test-staff-id"}, SchoolID: school.ID, StaffCode: "T-ATT", FirstName: "Test", LastName: "Teacher", Status: "active"}
+	gradeSubject := models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-attendance-test"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SubjectID: subject.ID, IsMandatory: true}
+	staffSubject := models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-attendance-test"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: staff.ID, GradeID: grade.ID, SubjectID: subject.ID, SectionID: &section.ID, IsPrimary: true}
+	for _, seed := range []any{&school, &year, &grade, &section, &department, &subject, &staff, &gradeSubject, &staffSubject} {
+		assert.NoError(t, database.DB.Create(seed).Error)
+	}
+
 	reqBody := map[string]interface{}{
-		"section_id":    "test-section-id",
-		"subject_id":    "test-subject-id",
-		"staff_id":      "test-staff-id",
-		"date":          "2024-04-30",
-		"period_number": 1,
+		"academic_year_id": year.ID,
+		"section_id":       section.ID,
+		"subject_id":       subject.ID,
+		"staff_id":         staff.ID,
+		"date":             "2024-04-30",
+		"period_number":    1,
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -34,6 +48,11 @@ func TestCreateAttendanceSession(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	r := gin.Default()
+	r.Use(func(c *gin.Context) {
+		c.Set("school_id", school.ID)
+		c.Set("role_name", "Admin")
+		c.Next()
+	})
 	r.POST("/attendance/sessions", func(c *gin.Context) {
 		h := NewAttendanceHandler()
 		h.CreateAttendanceSession(c)

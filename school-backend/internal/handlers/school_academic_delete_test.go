@@ -41,6 +41,7 @@ func setupAcademicDeleteDB(t *testing.T) *gorm.DB {
 		&models.FeeInvoice{},
 		&models.TimetableSlot{},
 		&models.Substitution{},
+		&models.Exam{},
 		&models.ExamSchedule{},
 		&models.StudentMark{},
 		&models.ReportCard{},
@@ -66,10 +67,124 @@ func academicDeleteRouter() *gin.Engine {
 		c.Next()
 	})
 	handler := NewSchoolHandler()
+	router.POST("/academic-years", handler.CreateAcademicYear)
+	router.PUT("/academic-years/:id", handler.UpdateAcademicYear)
+	router.DELETE("/academic-years/:id", handler.DeleteAcademicYear)
 	router.DELETE("/subjects/:id", handler.DeleteSubject)
 	router.DELETE("/sections/:id", handler.DeleteSection)
 	router.DELETE("/grades/:id", handler.DeleteGrade)
 	return router
+}
+
+func TestCreateAcademicYearCurrentDeactivatesExistingCurrentYear(t *testing.T) {
+	db := setupAcademicDeleteDB(t)
+	if err := db.Create(&models.AcademicYear{
+		BaseModel: models.BaseModel{ID: "year-existing"},
+		SchoolID:  "school-test",
+		YearLabel: "2025-2026",
+		Year:      "2025-2026",
+		StartDate: mustParseAcademicDeleteDate(t, "2025-04-01"),
+		EndDate:   mustParseAcademicDeleteDate(t, "2026-03-31"),
+		IsCurrent: true,
+		Status:    "active",
+	}).Error; err != nil {
+		t.Fatalf("create existing year: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	academicDeleteRouter().ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodPost, "/academic-years", strings.NewReader(`{"year_label":"2026-2027","start_date":"2026-04-01","end_date":"2027-03-31","is_current":true}`)),
+	)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", response.Code, response.Body.String())
+	}
+	var currentCount int64
+	db.Model(&models.AcademicYear{}).Where("school_id = ? AND is_current = ?", "school-test", true).Count(&currentCount)
+	if currentCount != 1 {
+		t.Fatalf("current year count = %d, want 1", currentCount)
+	}
+	var existing models.AcademicYear
+	if err := db.First(&existing, "id = ?", "year-existing").Error; err != nil {
+		t.Fatalf("reload existing year: %v", err)
+	}
+	if existing.IsCurrent {
+		t.Fatalf("existing year should have been deactivated")
+	}
+}
+
+func TestCreateAcademicYearRejectsInvalidDateRange(t *testing.T) {
+	setupAcademicDeleteDB(t)
+
+	response := httptest.NewRecorder()
+	academicDeleteRouter().ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodPost, "/academic-years", strings.NewReader(`{"year_label":"2026-2027","start_date":"2027-04-01","end_date":"2026-03-31","is_current":true}`)),
+	)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("create status = %d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "end_date cannot be before start_date") {
+		t.Fatalf("create response should explain date range: %s", response.Body.String())
+	}
+}
+
+func TestDeleteAcademicYearRejectsLinkedExam(t *testing.T) {
+	db := setupAcademicDeleteDB(t)
+	year := models.AcademicYear{
+		BaseModel: models.BaseModel{ID: "year-test"},
+		SchoolID:  "school-test",
+		YearLabel: "2026-2027",
+		StartDate: mustParseAcademicDeleteDate(t, "2026-04-01"),
+		EndDate:   mustParseAcademicDeleteDate(t, "2027-03-31"),
+		Status:    "active",
+	}
+	term := models.Term{
+		BaseModel:      models.BaseModel{ID: "term-test"},
+		AcademicYearID: year.ID,
+		TermNumber:     1,
+		TermName:       "Term 1",
+		StartDate:      year.StartDate,
+		EndDate:        year.EndDate,
+	}
+	examType := models.ExamType{
+		BaseModel: models.BaseModel{ID: "exam-type-test"},
+		SchoolID:  "school-test",
+		Name:      "Midterm",
+	}
+	exam := models.Exam{
+		BaseModel:      models.BaseModel{ID: "exam-test"},
+		SchoolID:       "school-test",
+		AcademicYearID: year.ID,
+		TermID:         term.ID,
+		ExamTypeID:     examType.ID,
+		ExamName:       "Midterm",
+		StartDate:      mustParseAcademicDeleteDate(t, "2026-08-01"),
+		EndDate:        mustParseAcademicDeleteDate(t, "2026-08-03"),
+	}
+	for _, seed := range []any{&year, &term, &examType, &exam} {
+		if err := db.Create(seed).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+	if err := db.Delete(&models.Term{}, "id = ?", term.ID).Error; err != nil {
+		t.Fatalf("remove term to isolate exam reference: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	academicDeleteRouter().ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodDelete, "/academic-years/year-test", nil),
+	)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("delete status = %d body=%s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), "linked exams") {
+		t.Fatalf("delete response should explain linked exams: %s", response.Body.String())
+	}
 }
 
 func TestDeleteSubjectCleansLinkedEmptyTimetableSlot(t *testing.T) {
@@ -136,13 +251,14 @@ func TestDeleteSubjectRejectsLinkedAttendanceSession(t *testing.T) {
 		t.Fatalf("create subject: %v", err)
 	}
 	if err := db.Create(&models.AttendanceSession{
-		BaseModel:     models.BaseModel{ID: "attendance-session-test"},
-		SectionID:     "section-test",
-		SubjectID:     "subject-test",
-		StaffID:       "staff-test",
-		Date:          mustParseAcademicDeleteDate(t, "2026-05-27"),
-		PeriodNumber:  1,
-		TotalStudents: 1,
+		BaseModel:      models.BaseModel{ID: "attendance-session-test"},
+		SectionID:      "section-test",
+		AcademicYearID: "year-test",
+		SubjectID:      "subject-test",
+		StaffID:        "staff-test",
+		Date:           mustParseAcademicDeleteDate(t, "2026-05-27"),
+		PeriodNumber:   1,
+		TotalStudents:  1,
 	}).Error; err != nil {
 		t.Fatalf("create attendance session: %v", err)
 	}

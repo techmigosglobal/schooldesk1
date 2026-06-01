@@ -2,19 +2,26 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test('Tables.md roots are bridged through the generated Retrofit client', () {
-    final backendApi = File(
-      'lib/services/backend_api_client.dart',
-    ).readAsStringSync();
+    final backendApi = readBackendApiSources();
     final generatedApi = File(
-      'lib/services/generated/schooldesk_api_client.dart',
+      'lib/core/network/generated/schooldesk_api_client.dart',
     ).readAsStringSync();
     final envConfig = File(
       'lib/core/config/env_config.dart',
     ).readAsStringSync();
 
-    expect(backendApi, contains("import 'generated/schooldesk_api.dart';"));
+    expect(
+      backendApi,
+      contains(
+        "import 'package:schooldesk1/core/network/schooldesk_api.dart';",
+      ),
+    );
     expect(backendApi, contains('SchoolDeskApi.instance.client.homework('));
     expect(
       backendApi,
@@ -31,14 +38,11 @@ void main() {
       generatedApi,
       contains("Future<PaginatedEnvelope> listTablesMdRoot"),
     );
-    expect(
-      envConfig,
-      contains('ApiConfig.v1BaseUrlFrom(_configuredApiBaseUrl)'),
-    );
+    expect(envConfig, contains('v1BaseUrlFrom(_configuredApiBaseUrl)'));
   });
 
   test('active UI files do not import Dio directly for migrated API roots', () {
-    final activeUiFiles = Directory('lib/presentation')
+    final activeUiFiles = Directory('lib/features')
         .listSync(recursive: true)
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'));
@@ -58,9 +62,9 @@ void main() {
     () {
       final appRoutes = File('lib/routes/app_routes.dart').readAsStringSync();
       final teacherNavigation = File(
-        'lib/widgets/teacher_navigation.dart',
+        'lib/core/widgets/teacher_navigation.dart',
       ).readAsStringSync();
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
 
       expect(appRoutes, isNot(contains('/teacher-lesson-planner-screen')));
       expect(appRoutes, isNot(contains('/teacher-resources-screen')));
@@ -73,4 +77,25 @@ void main() {
       expect(main, isNot(contains('api.Group("/library")')));
     },
   );
+
+  test('backend data service walks paginated directories', () {
+    final backendDataService = File(
+      'lib/core/services/backend_data_service.dart',
+    ).readAsStringSync();
+    final backendApi = readBackendApiSources();
+
+    expect(backendDataService, contains('Future<List<T>> _fetchAll<T>('));
+    expect(backendDataService, contains('result.hasMore'));
+    expect(backendDataService, isNot(contains('pageSize: 100')));
+    expect(
+      backendDataService,
+      isNot(contains('getStudents(page: 1, pageSize: 100)')),
+    );
+    expect(
+      backendApi,
+      contains('Future<PaginatedList<Map<String, dynamic>>> getInvoicesPage'),
+    );
+    expect(backendDataService, contains('while (true)'));
+    expect(backendDataService, contains('result.hasMore'));
+  });
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/entities/student.dart';
-import '../../domain/repositories/student_repository.dart';
+import 'package:schooldesk1/features/shared/domain/entities/student.dart';
+import 'package:schooldesk1/features/shared/domain/repositories/student_repository.dart';
 
 /// State management controller for student operations.
 /// Used by Admin, Principal, and Teacher screens.

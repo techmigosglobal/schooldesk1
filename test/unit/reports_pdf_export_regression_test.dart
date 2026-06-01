@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('principal reports PDF export does not use stale demo arguments', () {
     final source = File(
-      'lib/presentation/reports_analytics_screen/reports_analytics_screen.dart',
+      'lib/features/reports/presentation/screens/reports_analytics_screen/reports_analytics_screen.dart',
     ).readAsStringSync();
 
     expect(source, isNot(contains("className: 'Class 5A'")));

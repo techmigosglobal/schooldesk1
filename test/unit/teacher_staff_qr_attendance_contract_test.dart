@@ -2,29 +2,35 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
-  test('teacher staff QR attendance V1 is routed and backend-backed', () {
+  test('teacher staff QR attendance V1 is backend-backed and isolated', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
     final registry = File(
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
-    final nav = File('lib/widgets/teacher_navigation.dart').readAsStringSync();
+    final nav = File(
+      'lib/core/widgets/teacher_navigation.dart',
+    ).readAsStringSync();
     final dashboard = File(
-      'lib/presentation/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+      'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
     ).readAsStringSync();
     final myAttendance = File(
-      'lib/presentation/teacher_my_attendance_screen/teacher_my_attendance_screen.dart',
+      'lib/features/attendance/presentation/screens/teacher_my_attendance_screen/teacher_my_attendance_screen.dart',
     ).readAsStringSync();
     final adminAttendance = File(
-      'lib/presentation/admin_attendance_screen/admin_attendance_screen.dart',
+      'lib/features/attendance/presentation/screens/admin_attendance_screen/admin_attendance_screen.dart',
     ).readAsStringSync();
     final qrPanel = File(
-      'lib/widgets/staff_qr_attendance_panel.dart',
+      'lib/core/widgets/staff_qr_attendance_panel.dart',
     ).readAsStringSync();
-    final api = File('lib/services/backend_api_client.dart').readAsStringSync();
-    final main = File('school-backend/main.go').readAsStringSync();
+    final api = readBackendApiSources();
+    final main = readBackendRouteSources();
     final handler = File(
       'school-backend/internal/handlers/attendance.go',
     ).readAsStringSync();
@@ -52,7 +58,8 @@ void main() {
     expect(myAttendance, contains('getMyStaffAttendanceToday()'));
     expect(myAttendance, contains('Semantics('));
 
-    expect(adminAttendance, contains('StaffQrAttendancePanel'));
+    expect(adminAttendance, isNot(contains('StaffQrAttendancePanel')));
+    expect(qrPanel, contains('StaffQrAttendancePanel'));
     expect(qrPanel, contains('QrImageView'));
     expect(qrPanel, contains('secondsRemaining'));
     expect(qrPanel, contains('Recent scans'));

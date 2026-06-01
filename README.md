@@ -124,12 +124,10 @@ flutter_app/
 ├── android/            # Android-specific configuration
 ├── ios/                # iOS-specific configuration
 ├── lib/
-│   ├── core/           # Core utilities and services
-│   ├── presentation/   # UI screens and widgets
+│   ├── app/            # App bootstrap, providers, and module registry
+│   ├── core/           # Config, network, services, theme, and shared widgets
+│   ├── features/       # Feature-first modules with domain-owned screens
 │   ├── routes/         # Application routing
-│   ├── services/       # Local storage and data services
-│   ├── theme/          # Theme configuration
-│   ├── widgets/        # Reusable UI components
 │   └── main.dart       # Application entry point
 ├── assets/             # Static assets (images, fonts, etc.)
 ├── pubspec.yaml        # Project dependencies and configuration

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import './failures.dart';
-import 'exceptions.dart';
+import 'package:schooldesk1/core/errors/failures.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
 
 /// Centralized error handler — maps exceptions to typed Failures.
 /// Use in repository implementations inside catch blocks.

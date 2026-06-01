@@ -102,7 +102,7 @@ func loadConfig() config {
 		mode = "safe"
 	}
 	return config{
-		baseURL:   envOr("API_BASE_URL", "http://127.0.0.1:8080/api"),
+		baseURL:   envOr("API_BASE_URL", "http://127.0.0.1:8080/api/v1"),
 		healthURL: envOr("HEALTH_URL", "http://127.0.0.1:8080/health"),
 		mode:      mode,
 		delay:     time.Duration(delayMS) * time.Millisecond,
@@ -152,7 +152,7 @@ func (v *verifier) run() {
 		v.addFail("Principal session is required", "local verifier", "Principal", "Cannot continue without a Principal token")
 		return
 	}
-	v.expect("Principal profile restore", http.MethodGet, "/auth/me", "Principal", "Principal", nil, http.StatusOK)
+	v.expect("Principal profile restore", http.MethodGet, "/auth/profile", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal current school profile", http.MethodGet, "/schools/current", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal dashboard", http.MethodGet, "/dashboard/principal", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal registers notification device token", http.MethodPost, "/notifications/device-tokens", "Principal", "Principal", map[string]any{

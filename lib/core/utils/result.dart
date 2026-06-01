@@ -1,4 +1,4 @@
-import '../errors/failures.dart';
+import 'package:schooldesk1/core/errors/failures.dart';
 
 /// A simple Result type — either a [Success] with data or a [Failure].
 /// Replaces `Either<Failure, T>` without requiring dartz package.

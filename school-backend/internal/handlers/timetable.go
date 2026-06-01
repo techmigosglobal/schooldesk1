@@ -883,24 +883,16 @@ func validateTimetableSlotRequest(c *gin.Context, req models.CreateTimetableSlot
 	if schoolID == "" {
 		return &timetableValidationError{Status: http.StatusForbidden, Message: "school scope missing in token"}
 	}
-	if err := database.DB.
-		Joins("JOIN grades ON grades.id = sections.grade_id").
-		First(&models.Section{}, "sections.id = ? AND grades.school_id = ?", req.SectionID, schoolID).Error; err != nil {
-		return &timetableValidationError{Status: http.StatusBadRequest, Message: "section does not belong to this school"}
-	}
-	if err := database.DB.First(&models.AcademicYear{}, "id = ? AND school_id = ?", req.AcademicYearID, schoolID).Error; err != nil {
-		return &timetableValidationError{Status: http.StatusBadRequest, Message: "academic year does not belong to this school"}
+	if err := academicDomainService().EnsureAcademicYearWritable(schoolID, req.AcademicYearID); err != nil {
+		return &timetableValidationError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	if err := database.DB.
 		Joins("JOIN academic_years ON academic_years.id = terms.academic_year_id").
 		First(&models.Term{}, "terms.id = ? AND terms.academic_year_id = ? AND academic_years.school_id = ?", req.TermID, req.AcademicYearID, schoolID).Error; err != nil {
 		return &timetableValidationError{Status: http.StatusBadRequest, Message: "term does not belong to this academic year"}
 	}
-	if err := database.DB.First(&models.Subject{}, "id = ? AND school_id = ?", req.SubjectID, schoolID).Error; err != nil {
-		return &timetableValidationError{Status: http.StatusBadRequest, Message: "subject does not belong to this school"}
-	}
-	if err := database.DB.First(&models.Staff{}, "id = ? AND school_id = ? AND (status = '' OR LOWER(status) = ?)", req.StaffID, schoolID, "active").Error; err != nil {
-		return &timetableValidationError{Status: http.StatusBadRequest, Message: "staff does not belong to this school or is inactive"}
+	if err := academicDomainService().ValidateTimetableSlotRefs(schoolID, req.AcademicYearID, req.SectionID, req.SubjectID, req.StaffID); err != nil {
+		return &timetableValidationError{Status: http.StatusBadRequest, Message: err.Error()}
 	}
 	if strings.TrimSpace(req.RoomID) != "" {
 		if err := database.DB.First(&models.Room{}, "id = ? AND school_id = ?", req.RoomID, schoolID).Error; err != nil {

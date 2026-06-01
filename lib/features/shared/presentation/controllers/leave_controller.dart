@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/entities/leave_request.dart';
-import '../../domain/repositories/leave_repository.dart';
+import 'package:schooldesk1/features/shared/domain/entities/leave_request.dart';
+import 'package:schooldesk1/features/shared/domain/repositories/leave_repository.dart';
 
 /// State management controller for leave request operations.
 class LeaveController extends ChangeNotifier {

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
-import 'package:schooldesk1/theme/design_tokens.dart';
-import 'package:schooldesk1/widgets/erp_navigation.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 void main() {
   testWidgets('SchoolDeskNavigationDrawer renders role navigation accessibly', (

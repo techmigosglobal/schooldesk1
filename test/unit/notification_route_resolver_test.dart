@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/services/notification_route_resolver.dart';
+import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 
 void main() {
   group('NotificationRouteResolver', () {

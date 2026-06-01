@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
-import 'package:schooldesk1/widgets/schooldesk_route_frame.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 
 void main() {
   test('every active route has product metadata for the redesign shell', () {

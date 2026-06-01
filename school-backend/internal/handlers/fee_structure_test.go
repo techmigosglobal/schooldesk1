@@ -69,6 +69,26 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 		t.Fatalf("create status=%d body=%s", create.Code, create.Body.String())
 	}
 
+	otherYear := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-other-fees"}, SchoolID: "other-school", YearLabel: "2026-2027", StartDate: year.StartDate, EndDate: year.EndDate}
+	if err := db.Create(&otherYear).Error; err != nil {
+		t.Fatalf("create other year: %v", err)
+	}
+	rejectOtherYear := httptest.NewRecorder()
+	router.ServeHTTP(
+		rejectOtherYear,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/fees/structures",
+			strings.NewReader(`{"academic_year_id":"year-other-fees","grade_id":"grade-fees","fee_category_id":"cat-fees","amount":2500}`),
+		),
+	)
+	if rejectOtherYear.Code != http.StatusBadRequest {
+		t.Fatalf("cross-school year status=%d body=%s", rejectOtherYear.Code, rejectOtherYear.Body.String())
+	}
+	if !strings.Contains(rejectOtherYear.Body.String(), "academic year must belong to this school") {
+		t.Fatalf("cross-school response should explain academic year: %s", rejectOtherYear.Body.String())
+	}
+
 	var structure models.FeeStructure
 	if err := db.Where("school_id = ? AND grade_id = ?", school.ID, grade.ID).First(&structure).Error; err != nil {
 		t.Fatalf("structure not scoped/created: %v", err)

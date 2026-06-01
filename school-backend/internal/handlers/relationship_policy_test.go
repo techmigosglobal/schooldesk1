@@ -82,8 +82,8 @@ func setupRelationshipPolicyFixture(t *testing.T) relationshipFixture {
 		&models.Subject{BaseModel: models.BaseModel{ID: f.otherSubjectID}, SchoolID: f.schoolID, DepartmentID: deptID, SubjectName: "Science", SubjectCode: "SCI"},
 		&models.Staff{BaseModel: models.BaseModel{ID: f.teacherStaffID}, SchoolID: f.schoolID, StaffCode: "T-POL-1", FirstName: "Assigned", LastName: "Teacher", Email: "assigned.teacher@policy.test", DateOfBirth: now.AddDate(-32, 0, 0), Gender: "female", Designation: "Teacher", EmploymentType: "full-time", JoinDate: now.AddDate(-5, 0, 0), Status: "active"},
 		&models.Staff{BaseModel: models.BaseModel{ID: f.otherStaffID}, SchoolID: f.schoolID, StaffCode: "T-POL-2", FirstName: "Other", LastName: "Teacher", Email: "other.teacher@policy.test", DateOfBirth: now.AddDate(-34, 0, 0), Gender: "male", Designation: "Teacher", EmploymentType: "full-time", JoinDate: now.AddDate(-5, 0, 0), Status: "active"},
-		&models.Section{BaseModel: models.BaseModel{ID: f.sectionID}, GradeID: gradeID, AcademicYearID: f.yearID, SectionName: "A", ClassTeacherID: &f.teacherStaffID, Capacity: 40},
-		&models.Section{BaseModel: models.BaseModel{ID: f.otherSectionID}, GradeID: gradeID, AcademicYearID: f.yearID, SectionName: "B", ClassTeacherID: &f.otherStaffID, Capacity: 40},
+		&models.Section{BaseModel: models.BaseModel{ID: f.sectionID}, SchoolID: f.schoolID, GradeID: gradeID, AcademicYearID: f.yearID, SectionName: "A", ClassTeacherID: &f.teacherStaffID, Capacity: 40},
+		&models.Section{BaseModel: models.BaseModel{ID: f.otherSectionID}, SchoolID: f.schoolID, GradeID: gradeID, AcademicYearID: f.yearID, SectionName: "B", ClassTeacherID: &f.otherStaffID, Capacity: 40},
 		&models.Role{BaseModel: models.BaseModel{ID: adminRoleID}, SchoolID: f.schoolID, RoleName: "Admin", IsSystemRole: true},
 		&models.Role{BaseModel: models.BaseModel{ID: principalRoleID}, SchoolID: f.schoolID, RoleName: "Principal", IsSystemRole: true},
 		&models.Role{BaseModel: models.BaseModel{ID: teacherRoleID}, SchoolID: f.schoolID, RoleName: "Teacher", IsSystemRole: true},
@@ -120,7 +120,10 @@ func setupRelationshipPolicyFixture(t *testing.T) relationshipFixture {
 		&models.Enrollment{BaseModel: models.BaseModel{ID: f.otherEnrollmentID}, StudentID: f.otherStudentID, SectionID: f.otherSectionID, AcademicYearID: f.yearID, RollNumber: "2", EnrollmentDate: now, Status: "enrolled"},
 		&models.ParentStudentLink{SchoolID: f.schoolID, ParentUserID: f.parentUserID, StudentID: f.studentID, StudentAdmissionNumber: "POL-ADM-1"},
 		&models.ParentStudentLink{SchoolID: f.schoolID, ParentUserID: f.otherParentUserID, StudentID: f.otherStudentID, StudentAdmissionNumber: "POL-ADM-2"},
-		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-policy"}, StaffID: f.teacherStaffID, SubjectID: f.subjectID, GradeID: gradeID, IsPrimary: true},
+		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-policy-math"}, SchoolID: f.schoolID, AcademicYearID: f.yearID, GradeID: gradeID, SubjectID: f.subjectID, IsMandatory: true},
+		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-policy-science"}, SchoolID: f.schoolID, AcademicYearID: f.yearID, GradeID: gradeID, SubjectID: f.otherSubjectID, IsMandatory: true},
+		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-policy"}, SchoolID: f.schoolID, AcademicYearID: f.yearID, StaffID: f.teacherStaffID, SubjectID: f.subjectID, GradeID: gradeID, SectionID: &f.sectionID, IsPrimary: true},
+		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-policy-other"}, SchoolID: f.schoolID, AcademicYearID: f.yearID, StaffID: f.otherStaffID, SubjectID: f.otherSubjectID, GradeID: gradeID, SectionID: &f.otherSectionID, IsPrimary: true},
 		&models.TimetableSlot{BaseModel: models.BaseModel{ID: f.timetableSlotID}, SectionID: f.sectionID, AcademicYearID: f.yearID, TermID: f.termID, DayOfWeek: 5, PeriodNumber: 1, StartTime: mustTimetableTestClock(t, "09:00"), EndTime: mustTimetableTestClock(t, "09:45"), SubjectID: f.subjectID, StaffID: f.teacherStaffID, SlotType: "regular"},
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-linked"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.sectionID, TeacherID: f.teacherStaffID, StudentID: f.studentID, Title: "Linked Diary", Subject: "Mathematics"},
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-other"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.otherSectionID, TeacherID: f.otherStaffID, StudentID: f.otherStudentID, Title: "Other Diary", Subject: "Science"},
@@ -240,6 +243,7 @@ func TestStudentDashboardCompatIsParentManagedAndLinkedScoped(t *testing.T) {
 	session := models.AttendanceSession{
 		BaseModel:       models.BaseModel{ID: "attendance-policy-parent-dashboard"},
 		SectionID:       f.sectionID,
+		AcademicYearID:  f.yearID,
 		TimetableSlotID: &f.timetableSlotID,
 		SubjectID:       f.subjectID,
 		StaffID:         f.teacherStaffID,
@@ -275,7 +279,7 @@ func TestStudentDashboardCompatIsParentManagedAndLinkedScoped(t *testing.T) {
 		}
 	}
 
-	handler := NewCompatibilityHandler()
+	handler := NewOperationalAliasHandler()
 	router := scopedPolicyRouter("Parent", f.parentUserID, "", "", "parent@policy.test", f.schoolID)
 	router.GET("/dashboard/student", handler.StudentDashboard)
 
@@ -333,14 +337,15 @@ func TestPrincipalStudentListIncludesOperationalSummaries(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	now := time.Date(2026, 5, 8, 9, 0, 0, 0, time.UTC)
 	session := models.AttendanceSession{
-		BaseModel:     models.BaseModel{ID: "attendance-policy-summary"},
-		SectionID:     f.sectionID,
-		SubjectID:     f.subjectID,
-		StaffID:       f.teacherStaffID,
-		Date:          now,
-		PeriodNumber:  1,
-		TotalStudents: 1,
-		PresentCount:  1,
+		BaseModel:      models.BaseModel{ID: "attendance-policy-summary"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           now,
+		PeriodNumber:   1,
+		TotalStudents:  1,
+		PresentCount:   1,
 	}
 	mark := models.StudentMark{
 		BaseModel:      models.BaseModel{ID: "mark-policy-summary"},
@@ -429,7 +434,7 @@ func TestTeacherCannotCreateAttendanceSessionForUnassignedSection(t *testing.T) 
 	router.ServeHTTP(response, httptest.NewRequest(
 		http.MethodPost,
 		"/attendance/sessions",
-		strings.NewReader(`{"section_id":"`+f.otherSectionID+`","subject_id":"`+f.otherSubjectID+`","staff_id":"`+f.teacherStaffID+`","date":"2026-05-08","period_number":1}`),
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","section_id":"`+f.otherSectionID+`","subject_id":"`+f.otherSubjectID+`","staff_id":"`+f.teacherStaffID+`","date":"2026-05-08","period_number":1}`),
 	))
 
 	if response.Code != http.StatusForbidden {
@@ -442,6 +447,7 @@ func TestAttendanceMarkRejectsStudentOutsideSessionSection(t *testing.T) {
 	session := models.AttendanceSession{
 		BaseModel:       models.BaseModel{ID: "attendance-policy-session"},
 		SectionID:       f.sectionID,
+		AcademicYearID:  f.yearID,
 		TimetableSlotID: &f.timetableSlotID,
 		SubjectID:       f.subjectID,
 		StaffID:         f.teacherStaffID,
@@ -745,13 +751,13 @@ func TestTeacherStudentSubresourcesRejectOutsideSection(t *testing.T) {
 
 	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
 	studentHandler := NewStudentHandler()
-	compatHandler := NewCompatibilityHandler()
+	aliasHandler := NewOperationalAliasHandler()
 
 	router.GET("/students/:id/attendance", studentHandler.GetStudentAttendance)
 	router.GET("/students/:id/fees", studentHandler.GetStudentFees)
 	router.GET("/students/:id/marks", studentHandler.GetStudentMarks)
 	router.GET("/students/:id/transport", studentHandler.GetStudentTransport)
-	router.GET("/compat/students/:id/marks", compatHandler.GetStudentGrades)
+	router.GET("/compat/students/:id/marks", aliasHandler.GetStudentGrades)
 
 	for _, tc := range []struct {
 		name string

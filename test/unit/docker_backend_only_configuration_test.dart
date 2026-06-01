@@ -16,7 +16,7 @@ void main() {
       'pubspec.yaml',
       'lib/core/config/env_config.dart',
       'lib/core/app_export.dart',
-      'lib/services/backend_api_client.dart',
+      'lib/core/network/backend_api_client.dart',
     ];
 
     for (final path in files) {

@@ -129,9 +129,25 @@ func (h *AnnouncementHandler) CreateEvent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := academicDomainService().EnsureAcademicYearWritable(scopedSchoolID(c), req.AcademicYearID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
-	startTime, _ := time.Parse(time.RFC3339, req.StartDatetime)
-	endTime, _ := time.Parse(time.RFC3339, req.EndDatetime)
+	startTime, err := time.Parse(time.RFC3339, strings.TrimSpace(req.StartDatetime))
+	if err != nil {
+		fail(c, http.StatusBadRequest, "start_datetime must use RFC3339 format")
+		return
+	}
+	endTime, err := time.Parse(time.RFC3339, strings.TrimSpace(req.EndDatetime))
+	if err != nil {
+		fail(c, http.StatusBadRequest, "end_datetime must use RFC3339 format")
+		return
+	}
+	if endTime.Before(startTime) {
+		fail(c, http.StatusBadRequest, "end_datetime cannot be before start_datetime")
+		return
+	}
 
 	event := models.EventCalendar{
 		SchoolID:       scopedSchoolID(c),

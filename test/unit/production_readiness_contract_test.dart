@@ -2,16 +2,18 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'backend_api_sources.dart';
+
+import 'backend_route_sources.dart';
+
 void main() {
   test(
     'teacher attendance is driven by staff timetable slots and enrollments',
     () {
       final source = File(
-        'lib/presentation/teacher_attendance_screen/teacher_attendance_screen.dart',
+        'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
       ).readAsStringSync();
-      final api = File(
-        'lib/services/backend_api_client.dart',
-      ).readAsStringSync();
+      final api = readBackendApiSources();
 
       expect(source, contains('RoleAccessService.initialize()'));
       expect(source, contains('RoleAccessService.teacherStaffId'));
@@ -37,7 +39,7 @@ void main() {
     'teacher communication is chat-first and scoped to real conversations',
     () {
       final source = File(
-        'lib/presentation/teacher_communication_screen/teacher_communication_screen.dart',
+        'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
       ).readAsStringSync();
 
       expect(source, contains("Tab(text: 'Chats')"));
@@ -60,7 +62,7 @@ void main() {
     'admin communication filters backend notices without local-only templates',
     () {
       final source = File(
-        'lib/presentation/admin_communication_screen/admin_communication_screen.dart',
+        'lib/features/communication/presentation/screens/admin_communication_screen/admin_communication_screen.dart',
       ).readAsStringSync();
 
       expect(source, contains('getAnnouncements()'));
@@ -82,7 +84,15 @@ void main() {
   test(
     'push notifications are queued for all roles and sent by isolated worker',
     () {
-      final main = File('school-backend/main.go').readAsStringSync();
+      final main = readBackendRouteSources();
+      final database = File(
+        'school-backend/internal/database/database.go',
+      ).readAsStringSync();
+      final databaseFiles = Directory('school-backend/internal/database')
+          .listSync()
+          .whereType<File>()
+          .map((file) => file.uri.pathSegments.last)
+          .toSet();
       final notifications = File(
         'school-backend/internal/handlers/communication_notifications.go',
       ).readAsStringSync();
@@ -99,7 +109,9 @@ void main() {
       expect(main, contains('cfg.EnableFCMPush && cfg.AppMode == "worker"'));
       expect(main, contains('notifications.POST("/device-tokens"'));
       expect(main, contains('notifications.DELETE("/device-tokens"'));
-      expect(main, contains('notificationsCompat.POST("/device-tokens"'));
+      expect(main, isNot(contains('compatAPI := r.Group("/api")')));
+      expect(database, isNot(contains('ensureCompatibilitySchema')));
+      expect(databaseFiles, isNot(contains('compat_schema.go')));
       expect(notifications, contains('createNotificationLogsForRolesTx('));
       expect(notifications, contains('LOWER(users.role) IN ?'));
       expect(notifications, isNot(contains('users.role_slug')));

@@ -80,6 +80,7 @@ type principalClassSubjectMapping struct {
 	SubjectName    string `json:"subject_name"`
 	SubjectCode    string `json:"subject_code"`
 	SubjectType    string `json:"subject_type"`
+	SubjectColor   string `json:"subject_color"`
 	DepartmentID   string `json:"department_id"`
 	DepartmentName string `json:"department_name"`
 	GradeSubjectID string `json:"grade_subject_id"`
@@ -405,6 +406,35 @@ func (h *PrincipalClassesHandler) UpdateClassSetup(c *gin.Context) {
 	success(c, http.StatusOK, response, "Class setup updated successfully")
 }
 
+func (h *PrincipalClassesHandler) DeleteClass(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	sectionID := strings.TrimSpace(c.Param("section_id"))
+	if sectionID == "" {
+		fail(c, http.StatusBadRequest, "section_id is required")
+		return
+	}
+
+	var section models.Section
+	if err := database.DB.
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		First(&section, "sections.id = ? AND grades.school_id = ?", sectionID, schoolID).Error; err != nil {
+		fail(c, http.StatusNotFound, "Class section not found")
+		return
+	}
+
+	if err := deleteSectionRecordsForSchool(sectionID, schoolID); err != nil {
+		if errors.Is(err, errSectionHasActiveStudents) {
+			fail(c, http.StatusConflict, "Cannot delete while linked students are active")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "Failed to delete class")
+		return
+	}
+
+	auditAction(c, "principal/classes", "delete", "sections", &section.ID)
+	success(c, http.StatusOK, gin.H{"id": sectionID}, "Class removed successfully")
+}
+
 func (h *PrincipalClassesHandler) applyClassSetupBundle(tx *gorm.DB, schoolID string, section *models.Section, req principalClassSetupRequest) error {
 	if err := h.applyClassFeeItems(tx, schoolID, section, req.FeeItems, req.DeletedFeeStructureIDs); err != nil {
 		return err
@@ -570,7 +600,7 @@ func (h *PrincipalClassesHandler) applyClassSubjectMappings(tx *gorm.DB, schoolI
 	cleanStaffDeleted := compactStrings(deletedStaffSubjectIDs)
 	if len(cleanStaffDeleted) > 0 {
 		if err := tx.
-			Where("grade_id = ? AND (section_id = ? OR section_id IS NULL OR section_id = '') AND id IN ?", section.GradeID, section.ID, cleanStaffDeleted).
+			Where("academic_year_id = ? AND grade_id = ? AND (section_id = ? OR section_id IS NULL OR section_id = '') AND id IN ?", section.AcademicYearID, section.GradeID, section.ID, cleanStaffDeleted).
 			Delete(&models.StaffSubject{}).Error; err != nil {
 			return fmt.Errorf("failed to delete removed teacher subject rows: %w", err)
 		}
@@ -578,7 +608,7 @@ func (h *PrincipalClassesHandler) applyClassSubjectMappings(tx *gorm.DB, schoolI
 	cleanGradeDeleted := compactStrings(deletedGradeSubjectIDs)
 	if len(cleanGradeDeleted) > 0 {
 		if err := tx.
-			Where("grade_id = ? AND id IN ?", section.GradeID, cleanGradeDeleted).
+			Where("academic_year_id = ? AND grade_id = ? AND id IN ?", section.AcademicYearID, section.GradeID, cleanGradeDeleted).
 			Delete(&models.GradeSubject{}).Error; err != nil {
 			return fmt.Errorf("failed to delete removed class subject rows: %w", err)
 		}
@@ -598,7 +628,7 @@ func (h *PrincipalClassesHandler) applyClassSubjectMappings(tx *gorm.DB, schoolI
 		if subject.ID == "" {
 			continue
 		}
-		gradeSubject, err := h.upsertClassGradeSubject(tx, schoolID, section.GradeID, subject.ID, mapping)
+		gradeSubject, err := h.upsertClassGradeSubject(tx, schoolID, section.AcademicYearID, section.GradeID, subject.ID, mapping)
 		if err != nil {
 			return err
 		}
@@ -624,7 +654,7 @@ func (h *PrincipalClassesHandler) deleteClassSubjectMapping(tx *gorm.DB, section
 		}
 	}
 	if strings.TrimSpace(mapping.GradeSubjectID) != "" {
-		if err := tx.Delete(&models.GradeSubject{}, "id = ? AND grade_id = ?", strings.TrimSpace(mapping.GradeSubjectID), section.GradeID).Error; err != nil {
+		if err := tx.Delete(&models.GradeSubject{}, "id = ? AND academic_year_id = ? AND grade_id = ?", strings.TrimSpace(mapping.GradeSubjectID), section.AcademicYearID, section.GradeID).Error; err != nil {
 			return fmt.Errorf("failed to delete class subject: %w", err)
 		}
 	}
@@ -637,7 +667,7 @@ func (h *PrincipalClassesHandler) deleteClassStaffSubject(tx *gorm.DB, section *
 		return nil
 	}
 	if err := tx.
-		Where("id = ? AND grade_id = ? AND (section_id = ? OR section_id IS NULL OR section_id = '')", id, section.GradeID, section.ID).
+		Where("id = ? AND academic_year_id = ? AND grade_id = ? AND (section_id = ? OR section_id IS NULL OR section_id = '')", id, section.AcademicYearID, section.GradeID, section.ID).
 		Delete(&models.StaffSubject{}).Error; err != nil {
 		return fmt.Errorf("failed to delete teacher assignment: %w", err)
 	}
@@ -676,6 +706,7 @@ func (h *PrincipalClassesHandler) resolveClassSubject(tx *gorm.DB, schoolID stri
 		subject.SubjectName = subjectName
 		subject.SubjectCode = strings.TrimSpace(mapping.SubjectCode)
 		subject.SubjectType = subjectType
+		subject.SubjectColor = strings.TrimSpace(mapping.SubjectColor)
 		if err := tx.Save(&subject).Error; err != nil {
 			return models.Subject{}, err
 		}
@@ -690,6 +721,7 @@ func (h *PrincipalClassesHandler) resolveClassSubject(tx *gorm.DB, schoolID stri
 		SubjectName:  subjectName,
 		SubjectCode:  strings.TrimSpace(mapping.SubjectCode),
 		SubjectType:  subjectType,
+		SubjectColor: strings.TrimSpace(mapping.SubjectColor),
 	}
 	if err := tx.Create(&subject).Error; err != nil {
 		return models.Subject{}, fmt.Errorf("failed to create subject: %w", err)
@@ -697,7 +729,7 @@ func (h *PrincipalClassesHandler) resolveClassSubject(tx *gorm.DB, schoolID stri
 	return subject, nil
 }
 
-func (h *PrincipalClassesHandler) upsertClassGradeSubject(tx *gorm.DB, schoolID, gradeID, subjectID string, mapping principalClassSubjectMapping) (models.GradeSubject, error) {
+func (h *PrincipalClassesHandler) upsertClassGradeSubject(tx *gorm.DB, schoolID, academicYearID, gradeID, subjectID string, mapping principalClassSubjectMapping) (models.GradeSubject, error) {
 	periodsPerWeek := mapping.PeriodsPerWeek
 	if periodsPerWeek < 0 {
 		return models.GradeSubject{}, errors.New("periods_per_week cannot be negative")
@@ -720,7 +752,7 @@ func (h *PrincipalClassesHandler) upsertClassGradeSubject(tx *gorm.DB, schoolID,
 	if gradeSubjectID != "" {
 		err := tx.
 			Joins("JOIN grades ON grades.id = grade_subjects.grade_id").
-			Where("grade_subjects.id = ? AND grade_subjects.grade_id = ? AND grades.school_id = ?", gradeSubjectID, gradeID, schoolID).
+			Where("grade_subjects.id = ? AND grade_subjects.academic_year_id = ? AND grade_subjects.grade_id = ? AND grades.school_id = ?", gradeSubjectID, academicYearID, gradeID, schoolID).
 			First(&gradeSubject).Error
 		if err != nil {
 			return models.GradeSubject{}, errors.New("class subject mapping not found")
@@ -728,12 +760,14 @@ func (h *PrincipalClassesHandler) upsertClassGradeSubject(tx *gorm.DB, schoolID,
 	} else {
 		err := tx.
 			Joins("JOIN grades ON grades.id = grade_subjects.grade_id").
-			Where("grades.school_id = ? AND grade_subjects.grade_id = ? AND grade_subjects.subject_id = ?", schoolID, gradeID, subjectID).
+			Where("grades.school_id = ? AND grade_subjects.academic_year_id = ? AND grade_subjects.grade_id = ? AND grade_subjects.subject_id = ?", schoolID, academicYearID, gradeID, subjectID).
 			First(&gradeSubject).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return models.GradeSubject{}, err
 		}
 	}
+	gradeSubject.SchoolID = schoolID
+	gradeSubject.AcademicYearID = academicYearID
 	gradeSubject.GradeID = gradeID
 	gradeSubject.SubjectID = subjectID
 	gradeSubject.PeriodsPerWeek = periodsPerWeek
@@ -782,6 +816,8 @@ func (h *PrincipalClassesHandler) upsertClassStaffSubject(tx *gorm.DB, schoolID 
 		}
 	}
 	row.StaffID = teacherID
+	row.SchoolID = schoolID
+	row.AcademicYearID = section.AcademicYearID
 	row.SubjectID = subjectID
 	row.GradeID = gradeID
 	row.SectionID = &sectionID
@@ -810,7 +846,7 @@ func (h *PrincipalClassesHandler) classSetupResponse(tx *gorm.DB, schoolID strin
 	_ = tx.
 		Preload("Subject").
 		Joins("JOIN grades ON grades.id = grade_subjects.grade_id").
-		Where("grades.school_id = ? AND grade_subjects.grade_id = ?", schoolID, section.GradeID).
+		Where("grades.school_id = ? AND grade_subjects.academic_year_id = ? AND grade_subjects.grade_id = ?", schoolID, section.AcademicYearID, section.GradeID).
 		Order("grade_subjects.created_at ASC").
 		Find(&gradeSubjects).Error
 
@@ -821,7 +857,7 @@ func (h *PrincipalClassesHandler) classSetupResponse(tx *gorm.DB, schoolID strin
 		Preload("Grade").
 		Preload("Section").
 		Joins("JOIN staffs ON staffs.id = staff_subjects.staff_id").
-		Where("staffs.school_id = ? AND staff_subjects.grade_id = ? AND (staff_subjects.section_id = ? OR staff_subjects.section_id IS NULL OR staff_subjects.section_id = '')", schoolID, section.GradeID, section.ID).
+		Where("staffs.school_id = ? AND staff_subjects.academic_year_id = ? AND staff_subjects.grade_id = ? AND (staff_subjects.section_id = ? OR staff_subjects.section_id IS NULL OR staff_subjects.section_id = '')", schoolID, section.AcademicYearID, section.GradeID, section.ID).
 		Order("staff_subjects.created_at ASC").
 		Find(&staffSubjects).Error
 

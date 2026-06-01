@@ -125,6 +125,10 @@ func (h *FeeHandler) CreateFeeStructure(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := validateFeeStructureRefs(scopedSchoolID(c), req.AcademicYearID, req.GradeID, req.FeeCategoryID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	structure := models.FeeStructure{
 		SchoolID:       scopedSchoolID(c),
@@ -191,6 +195,22 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No fee structure fields provided"})
 		return
 	}
+	academicYearID := structure.AcademicYearID
+	if req.AcademicYearID != "" {
+		academicYearID = req.AcademicYearID
+	}
+	gradeID := structure.GradeID
+	if req.GradeID != "" {
+		gradeID = req.GradeID
+	}
+	feeCategoryID := structure.FeeCategoryID
+	if req.FeeCategoryID != "" {
+		feeCategoryID = req.FeeCategoryID
+	}
+	if err := validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	if err := database.DB.Model(&structure).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update fee structure"})
@@ -203,6 +223,21 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 
 	auditAction(c, "fees", "update", "fee_structures", &id)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: structure})
+}
+
+func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID string) error {
+	if err := academicDomainService().EnsureAcademicYearWritable(schoolID, academicYearID); err != nil {
+		return err
+	}
+	if countRows(database.DB.Model(&models.Grade{}).
+		Where("id = ? AND school_id = ?", strings.TrimSpace(gradeID), schoolID)) == 0 {
+		return fmt.Errorf("grade must belong to this school")
+	}
+	if countRows(database.DB.Model(&models.FeeCategory{}).
+		Where("id = ? AND school_id = ?", strings.TrimSpace(feeCategoryID), schoolID)) == 0 {
+		return fmt.Errorf("fee category must belong to this school")
+	}
+	return nil
 }
 
 func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {

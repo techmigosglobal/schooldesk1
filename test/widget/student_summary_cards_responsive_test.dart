@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:schooldesk1/presentation/student_oversight_screen/widgets/student_summary_cards_widget.dart';
-import 'package:schooldesk1/theme/app_theme.dart';
+import 'package:schooldesk1/features/people/presentation/screens/student_oversight_screen/widgets/student_summary_cards_widget.dart';
+import 'package:schooldesk1/core/theme/app_theme.dart';
 
 void main() {
   testWidgets('StudentSummaryCardsWidget avoids overflow on phone widths', (

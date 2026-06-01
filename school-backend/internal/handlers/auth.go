@@ -65,7 +65,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	jti := uuid.NewString()
-	tokenTTL := 24 * time.Hour
+	tokenTTL := 15 * time.Minute
 	token, err := middleware.GenerateToken(
 		user.ID,
 		user.Email,
@@ -218,7 +218,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	}
 
 	jti := uuid.NewString()
-	accessTTL := 24 * time.Hour
+	accessTTL := 15 * time.Minute
 	token, err := middleware.GenerateToken(
 		payload["user_id"],
 		payload["email"],

@@ -200,6 +200,7 @@ type Substitution struct {
 type AttendanceSession struct {
 	BaseModel
 	SectionID          string              `gorm:"type:text;not null" json:"section_id"`
+	AcademicYearID     string              `gorm:"type:text;not null;index" json:"academic_year_id"`
 	TimetableSlotID    *string             `gorm:"type:text" json:"timetable_slot_id"`
 	SubjectID          string              `gorm:"type:text;not null" json:"subject_id"`
 	StaffID            string              `gorm:"type:text;not null" json:"staff_id"`
@@ -210,6 +211,7 @@ type AttendanceSession struct {
 	IsFinalized        bool                `gorm:"default:false" json:"is_finalized"`
 	CreatedAt          time.Time           `json:"created_at"`
 	Section            *Section            `gorm:"foreignKey:SectionID" json:"section,omitempty"`
+	AcademicYear       *AcademicYear       `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
 	Subject            *Subject            `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
 	Staff              *Staff              `gorm:"foreignKey:StaffID" json:"staff,omitempty"`
 	StudentAttendances []StudentAttendance `gorm:"foreignKey:SessionID" json:"student_attendances,omitempty"`

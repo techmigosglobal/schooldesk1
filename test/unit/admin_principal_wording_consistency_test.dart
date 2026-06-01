@@ -65,8 +65,8 @@ void main() {
       'Create staff profiles and send account changes for Principal approval',
     ];
     final sourceFiles = <String>[
-      ..._dartFilesUnder('lib/presentation'),
-      ..._dartFilesUnder('lib/widgets'),
+      ..._dartFilesUnder('lib/features'),
+      ..._dartFilesUnder('lib/core/widgets'),
       'lib/routes/schooldesk_screen_registry.dart',
     ];
 

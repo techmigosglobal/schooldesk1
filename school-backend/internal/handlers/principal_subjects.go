@@ -145,6 +145,7 @@ func (h *PrincipalSubjectsHandler) Overview(c *gin.Context) {
 			"subject_name":                subjectName,
 			"subject_code":                subject.SubjectCode,
 			"subject_type":                subject.SubjectType,
+			"subject_color":               subject.SubjectColor,
 			"department":                  principalDepartmentName(subject.Department),
 			"assigned_teachers":           teacherRows,
 			"assigned_teacher_count":      len(teacherRows),
@@ -301,6 +302,7 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 	}
 
 	var req struct {
+		AcademicYearID string `json:"academic_year_id" binding:"required"`
 		AssignmentID   string `json:"assignment_id"`
 		GradeID        string `json:"grade_id" binding:"required"`
 		SectionID      string `json:"section_id"`
@@ -317,6 +319,7 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 	}
 
 	gradeID := strings.TrimSpace(req.GradeID)
+	academicYearID := strings.TrimSpace(req.AcademicYearID)
 	sectionID := strings.TrimSpace(req.SectionID)
 	teacherID := strings.TrimSpace(req.TeacherID)
 	assignmentID := strings.TrimSpace(req.AssignmentID)
@@ -360,7 +363,7 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 			var section models.Section
 			if err := tx.
 				Joins("JOIN grades ON grades.id = sections.grade_id").
-				First(&section, "sections.id = ? AND sections.grade_id = ? AND grades.school_id = ?", sectionID, gradeID, schoolID).Error; err != nil {
+				First(&section, "sections.id = ? AND sections.academic_year_id = ? AND sections.grade_id = ? AND grades.school_id = ?", sectionID, academicYearID, gradeID, schoolID).Error; err != nil {
 				return errors.New("Section must belong to the selected grade")
 			}
 		}
@@ -373,10 +376,12 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 
 		err := tx.
 			Joins("JOIN grades ON grades.id = grade_subjects.grade_id").
-			Where("grades.school_id = ? AND grade_subjects.subject_id = ? AND grade_subjects.grade_id = ?", schoolID, subjectID, gradeID).
+			Where("grades.school_id = ? AND grade_subjects.academic_year_id = ? AND grade_subjects.subject_id = ? AND grade_subjects.grade_id = ?", schoolID, academicYearID, subjectID, gradeID).
 			First(&gradeSubject).Error
 		if err == gorm.ErrRecordNotFound {
 			gradeSubject = models.GradeSubject{
+				SchoolID:       schoolID,
+				AcademicYearID: academicYearID,
 				GradeID:        gradeID,
 				SubjectID:      subjectID,
 				PeriodsPerWeek: req.PeriodsPerWeek,
@@ -390,6 +395,8 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 		} else if err != nil {
 			return err
 		} else {
+			gradeSubject.SchoolID = schoolID
+			gradeSubject.AcademicYearID = academicYearID
 			gradeSubject.PeriodsPerWeek = req.PeriodsPerWeek
 			gradeSubject.MaxMarks = maxMarks
 			gradeSubject.PassMarks = passMarks
@@ -413,7 +420,7 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 		} else {
 			query := tx.
 				Joins("JOIN staffs ON staffs.id = staff_subjects.staff_id").
-				Where("staffs.school_id = ? AND staff_subjects.subject_id = ? AND staff_subjects.grade_id = ?", schoolID, subjectID, gradeID)
+				Where("staffs.school_id = ? AND staff_subjects.academic_year_id = ? AND staff_subjects.subject_id = ? AND staff_subjects.grade_id = ?", schoolID, academicYearID, subjectID, gradeID)
 			if sectionID == "" {
 				query = query.Where("staff_subjects.section_id IS NULL OR staff_subjects.section_id = ''")
 			} else {
@@ -425,6 +432,8 @@ func (h *PrincipalSubjectsHandler) SaveMapping(c *gin.Context) {
 			}
 		}
 		row.StaffID = teacherID
+		row.SchoolID = schoolID
+		row.AcademicYearID = academicYearID
 		row.SubjectID = subjectID
 		row.GradeID = gradeID
 		row.SectionID = sectionPtr
@@ -945,6 +954,10 @@ func optionalString(value string) *string {
 func upsertSubjectTeacherAssignment(schoolID, subjectID, teacherID, gradeID string) (models.StaffSubject, error) {
 	var assignment models.StaffSubject
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var year models.AcademicYear
+		if err := tx.First(&year, "school_id = ? AND is_current = ?", schoolID, true).Error; err != nil {
+			return errors.New("current academic year is required")
+		}
 		var staff models.Staff
 		if err := tx.First(&staff, "id = ? AND school_id = ? AND status = ?", teacherID, schoolID, "active").Error; err != nil {
 			return err
@@ -960,10 +973,12 @@ func upsertSubjectTeacherAssignment(schoolID, subjectID, teacherID, gradeID stri
 		var gradeSubject models.GradeSubject
 		err := tx.
 			Joins("JOIN grades ON grades.id = grade_subjects.grade_id").
-			Where("grades.school_id = ? AND grade_subjects.subject_id = ? AND grade_subjects.grade_id = ?", schoolID, subjectID, gradeID).
+			Where("grades.school_id = ? AND grade_subjects.academic_year_id = ? AND grade_subjects.subject_id = ? AND grade_subjects.grade_id = ?", schoolID, year.ID, subjectID, gradeID).
 			First(&gradeSubject).Error
 		if err == gorm.ErrRecordNotFound {
 			gradeSubject = models.GradeSubject{
+				SchoolID:       schoolID,
+				AcademicYearID: year.ID,
 				GradeID:        gradeID,
 				SubjectID:      subjectID,
 				PeriodsPerWeek: 0,
@@ -979,9 +994,11 @@ func upsertSubjectTeacherAssignment(schoolID, subjectID, teacherID, gradeID stri
 		}
 		err = tx.
 			Joins("JOIN staffs ON staffs.id = staff_subjects.staff_id").
-			Where("staffs.school_id = ? AND staff_subjects.subject_id = ? AND staff_subjects.grade_id = ? AND (staff_subjects.section_id IS NULL OR staff_subjects.section_id = '')", schoolID, subjectID, gradeID).
+			Where("staffs.school_id = ? AND staff_subjects.academic_year_id = ? AND staff_subjects.subject_id = ? AND staff_subjects.grade_id = ? AND (staff_subjects.section_id IS NULL OR staff_subjects.section_id = '')", schoolID, year.ID, subjectID, gradeID).
 			First(&assignment).Error
 		if err == nil {
+			assignment.SchoolID = schoolID
+			assignment.AcademicYearID = year.ID
 			assignment.StaffID = teacherID
 			assignment.IsPrimary = true
 			return tx.Save(&assignment).Error
@@ -990,10 +1007,12 @@ func upsertSubjectTeacherAssignment(schoolID, subjectID, teacherID, gradeID stri
 			return err
 		}
 		assignment = models.StaffSubject{
-			StaffID:   teacherID,
-			SubjectID: subjectID,
-			GradeID:   gradeID,
-			IsPrimary: true,
+			SchoolID:       schoolID,
+			AcademicYearID: year.ID,
+			StaffID:        teacherID,
+			SubjectID:      subjectID,
+			GradeID:        gradeID,
+			IsPrimary:      true,
 		}
 		return tx.Create(&assignment).Error
 	})

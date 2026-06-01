@@ -1,5 +1,5 @@
-import '../entities/fee_record.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/fee_record.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for fee operations.
 abstract class FeeRepository {

@@ -115,10 +115,10 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 		}
 	}
 	for _, seed := range []any{
-		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-math"}, GradeID: grade.ID, SubjectID: math.ID, PeriodsPerWeek: 2, IsMandatory: true},
-		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-science"}, GradeID: grade.ID, SubjectID: science.ID, PeriodsPerWeek: 1, IsMandatory: true},
-		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-math"}, StaffID: mathTeacher.ID, SubjectID: math.ID, GradeID: grade.ID, IsPrimary: true},
-		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-science"}, StaffID: scienceTeacher.ID, SubjectID: science.ID, GradeID: grade.ID, IsPrimary: true},
+		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-math"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SubjectID: math.ID, PeriodsPerWeek: 2, IsMandatory: true},
+		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-science"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SubjectID: science.ID, PeriodsPerWeek: 1, IsMandatory: true},
+		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-math"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: mathTeacher.ID, SubjectID: math.ID, GradeID: grade.ID, IsPrimary: true},
+		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-science"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: scienceTeacher.ID, SubjectID: science.ID, GradeID: grade.ID, IsPrimary: true},
 	} {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed relation: %v", err)

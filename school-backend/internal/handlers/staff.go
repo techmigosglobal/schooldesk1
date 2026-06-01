@@ -26,7 +26,6 @@ func NewStaffHandler() *StaffHandler {
 func (h *StaffHandler) GetStaff(c *gin.Context) {
 	page, pageSize := parsePagination(c)
 	schoolID := scopedSchoolID(c)
-	deptID := c.Query("department_id")
 	status := c.Query("status")
 
 	var staff []models.Staff
@@ -35,9 +34,6 @@ func (h *StaffHandler) GetStaff(c *gin.Context) {
 	query := database.DB.Model(&models.Staff{})
 	if schoolID != "" {
 		query = query.Where("school_id = ?", schoolID)
-	}
-	if deptID != "" {
-		query = query.Where("department_id = ?", deptID)
 	}
 	if status != "" {
 		query = query.Where("status = ?", status)
@@ -276,10 +272,6 @@ func (h *StaffHandler) CreateStaff(c *gin.Context) {
 		if err := ensureStaffCodeAvailable(tx, schoolID, staffCode, ""); err != nil {
 			return err
 		}
-		departmentID, err := h.resolveDepartmentID(tx, schoolID, req.DepartmentID, req.DepartmentName)
-		if err != nil {
-			return err
-		}
 		staff := models.Staff{
 			SchoolID:       schoolID,
 			StaffCode:      staffCode,
@@ -297,9 +289,6 @@ func (h *StaffHandler) CreateStaff(c *gin.Context) {
 		}
 		if requestApproval {
 			staff.Status = "pending_approval"
-		}
-		if departmentID != "" {
-			staff.DepartmentID = &departmentID
 		}
 		if err := tx.Create(&staff).Error; err != nil {
 			return err
@@ -476,40 +465,6 @@ func normalizeStaffAccountRole(accountRole string, designation string) string {
 	return "Teacher"
 }
 
-func (h *StaffHandler) resolveDepartmentID(tx *gorm.DB, schoolID string, departmentID string, departmentName string) (string, error) {
-	deptValue := strings.TrimSpace(departmentID)
-	nameValue := strings.TrimSpace(departmentName)
-	if nameValue == "" {
-		nameValue = deptValue
-	}
-	if deptValue != "" {
-		var existing models.Department
-		if err := tx.First(&existing, "id = ? AND school_id = ?", deptValue, schoolID).Error; err == nil {
-			return existing.ID, nil
-		}
-	}
-	if nameValue == "" {
-		return "", nil
-	}
-	var dept models.Department
-	err := tx.Where("school_id = ? AND LOWER(department_name) = ?", schoolID, strings.ToLower(nameValue)).First(&dept).Error
-	if err == nil {
-		return dept.ID, nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return "", err
-	}
-	dept = models.Department{
-		SchoolID:       schoolID,
-		DepartmentName: nameValue,
-		Description:    "Created from staff management",
-	}
-	if err := tx.Create(&dept).Error; err != nil {
-		return "", err
-	}
-	return dept.ID, nil
-}
-
 func (h *StaffHandler) UpdateStaff(c *gin.Context) {
 	id := c.Param("id")
 	schoolID := scopedSchoolID(c)
@@ -569,17 +524,6 @@ func (h *StaffHandler) UpdateStaff(c *gin.Context) {
 	if req.JoinDate != "" {
 		staff.JoinDate, _ = time.Parse("2006-01-02", req.JoinDate)
 	}
-	if req.DepartmentID != "" || req.DepartmentName != "" {
-		deptID, err := h.resolveDepartmentID(database.DB, schoolID, req.DepartmentID, req.DepartmentName)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve department"})
-			return
-		}
-		if deptID != "" {
-			staff.DepartmentID = &deptID
-		}
-	}
-
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := ensureStaffCodeAvailable(tx, schoolID, staff.StaffCode, id); err != nil {
 			return err
@@ -680,17 +624,21 @@ func (h *StaffHandler) DeleteStaff(c *gin.Context) {
 			}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&staff).Error
+		exitDate := time.Now().UTC()
+		return tx.Model(&staff).Updates(map[string]interface{}{
+			"status":    "inactive",
+			"exit_date": exitDate,
+		}).Error
 	}); err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Staff not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete staff"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to deactivate staff"})
 		return
 	}
 	auditAction(c, "staff", "delete", "staff", &id)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Staff deleted successfully"})
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Staff deactivated successfully"})
 }
 
 func cleanupStaffAssociations(tx *gorm.DB, schoolID, staffID string) error {

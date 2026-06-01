@@ -231,14 +231,18 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 	if err := database.DB.
 		Where("school_id = ? AND parent_user_id = ?", schoolID, parentUserID).
 		Preload("Student").
+		Preload("Student.Guardians").
+		Preload("Student.MedicalRecord").
+		Preload("Student.Documents").
 		Preload("Student.CurrentSection").
 		Preload("Student.CurrentSection.Grade").
+		Preload("Student.CurrentSection.ClassTeacher").
 		Find(&links).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to fetch linked students")
 		return
 	}
 
-	students := make([]gin.H, 0, len(links))
+	students := make([]models.Student, 0, len(links))
 	for _, link := range links {
 		if link.Student == nil {
 			continue
@@ -246,35 +250,10 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		if strings.EqualFold(strings.TrimSpace(link.Student.Status), "inactive") {
 			continue
 		}
-		student := gin.H{
-			"id":               link.Student.ID,
-			"admission_number": link.Student.AdmissionNumber,
-			"student_code":     link.Student.StudentCode,
-			"first_name":       link.Student.FirstName,
-			"last_name":        link.Student.LastName,
-			"status":           link.Student.Status,
-		}
-		var fees struct {
-			PendingFeeBalance float64
-			PendingInvoices   int64
-		}
-		_ = database.DB.Model(&models.FeeInvoice{}).
-			Select("COALESCE(SUM(balance), 0) AS pending_fee_balance, COUNT(*) AS pending_invoices").
-			Where("student_id = ? AND status != ?", link.Student.ID, "paid").
-			Scan(&fees).Error
-		student["pending_fee_balance"] = fees.PendingFeeBalance
-		student["pending_invoices"] = fees.PendingInvoices
-		if link.Student.CurrentSection != nil {
-			student["current_section_id"] = link.Student.CurrentSection.ID
-			student["section_name"] = link.Student.CurrentSection.SectionName
-			if link.Student.CurrentSection.Grade != nil {
-				student["grade_name"] = link.Student.CurrentSection.Grade.GradeName
-			}
-		}
-		students = append(students, student)
+		students = append(students, *link.Student)
 	}
 
-	success(c, http.StatusOK, students, "")
+	success(c, http.StatusOK, studentResponseRows(database.DB, schoolID, students), "")
 }
 
 func (h *ParentLinkHandler) SetStudentParent(c *gin.Context) {

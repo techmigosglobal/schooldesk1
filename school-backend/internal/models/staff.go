@@ -41,15 +41,19 @@ type StaffQualification struct {
 
 type StaffSubject struct {
 	BaseModel
-	StaffID   string   `gorm:"type:text;not null" json:"staff_id"`
-	SubjectID string   `gorm:"type:text;not null" json:"subject_id"`
-	GradeID   string   `gorm:"type:text;not null" json:"grade_id"`
-	SectionID *string  `gorm:"type:text" json:"section_id"`
-	IsPrimary bool     `gorm:"default:false" json:"is_primary"`
-	Staff     *Staff   `gorm:"foreignKey:StaffID" json:"staff,omitempty"`
-	Subject   *Subject `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
-	Grade     *Grade   `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
-	Section   *Section `gorm:"foreignKey:SectionID" json:"section,omitempty"`
+	SchoolID       string        `gorm:"type:text;not null;index" json:"school_id"`
+	AcademicYearID string        `gorm:"type:text;not null;index" json:"academic_year_id"`
+	StaffID        string        `gorm:"type:text;not null" json:"staff_id"`
+	SubjectID      string        `gorm:"type:text;not null" json:"subject_id"`
+	GradeID        string        `gorm:"type:text;not null" json:"grade_id"`
+	SectionID      *string       `gorm:"type:text" json:"section_id"`
+	IsPrimary      bool          `gorm:"default:false" json:"is_primary"`
+	School         *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
+	AcademicYear   *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
+	Staff          *Staff        `gorm:"foreignKey:StaffID" json:"staff,omitempty"`
+	Subject        *Subject      `gorm:"foreignKey:SubjectID" json:"subject,omitempty"`
+	Grade          *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
+	Section        *Section      `gorm:"foreignKey:SectionID" json:"section,omitempty"`
 }
 
 type StaffDocument struct {

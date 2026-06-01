@@ -65,7 +65,7 @@ func Initialize(cfg *config.Config) error {
 		if err := autoMigrate(); err != nil {
 			return err
 		}
-		if err := ensureCompatibilitySchema(); err != nil {
+		if err := ensureSupplementalSchema(); err != nil {
 			return err
 		}
 		if cfg.EnableRelationshipConstraints {

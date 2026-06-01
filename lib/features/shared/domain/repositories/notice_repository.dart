@@ -1,5 +1,5 @@
-import '../entities/notice.dart';
-import '../../../../core/utils/result.dart';
+import 'package:schooldesk1/features/shared/domain/entities/notice.dart';
+import 'package:schooldesk1/core/utils/result.dart';
 
 /// Abstract repository interface for notice/circular operations.
 abstract class NoticeRepository {

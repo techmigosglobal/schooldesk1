@@ -1,95 +1,28 @@
 import 'package:flutter/material.dart';
 
-import '../presentation/academic_info_screen/academic_info_screen.dart';
-import '../presentation/academic_management_screen/academic_management_form_screens.dart';
-import '../presentation/academic_management_screen/academic_management_screen.dart';
-import '../presentation/admin_attendance_screen/admin_attendance_screen.dart';
-import '../presentation/admin_communication_screen/admin_communication_screen.dart';
-import '../presentation/admin_dashboard_screen/admin_dashboard_screen.dart';
-import '../presentation/admin_documents_screen/admin_documents_screen.dart';
-import '../presentation/admin_exams_screen/admin_exam_form_screens.dart';
-import '../presentation/admin_exams_screen/admin_exams_screen.dart';
-import '../presentation/admin_fees_screen/admin_payment_request_decision_screen.dart';
-import '../presentation/admin_fees_screen/admin_payment_requests_screen.dart';
-import '../presentation/admin_fees_screen/admin_fee_form_screens.dart';
-import '../presentation/admin_fees_screen/admin_fees_screen.dart';
-import '../presentation/admin_helpdesk_screen/admin_helpdesk_screen.dart';
-import '../presentation/auth_login_screen/auth_login_screen.dart';
-import '../presentation/admin_reports_screen/admin_reports_screen.dart';
-import '../presentation/admin_students_screen/admin_students_screen.dart';
-import '../presentation/admin_timetable_screen/admin_timetable_form_screens.dart';
-import '../presentation/admin_timetable_screen/admin_timetable_screen.dart';
-import '../presentation/admin_user_access_screen/account_access_form_screen.dart';
-import '../presentation/admin_user_access_screen/account_child_assignment_screen.dart';
-import '../presentation/admin_user_access_screen/admin_user_access_screen.dart';
-import '../presentation/approval_center_screen/approval_center_screen.dart';
-import '../presentation/communication_center_screen/communication_center_screen.dart';
-import '../presentation/complaint_management_screen/complaint_management_screen.dart';
-import '../presentation/events_calendar_screen/events_calendar_screen.dart';
-import '../presentation/exams_results_screen/exams_results_screen.dart';
-import '../presentation/fee_monitoring_screen/fee_monitoring_screen.dart';
-import '../presentation/fee_payment_receipt_screen/fee_payment_receipt_screen.dart';
-import '../presentation/global_search_screen/global_search_screen.dart';
-import '../presentation/guardian_directory_screen/guardian_directory_screen.dart';
-import '../presentation/guided_assistant_screen/guided_assistant_screen.dart';
-import '../presentation/homework_messaging_screen/homework_messaging_screen.dart';
-import '../presentation/id_card_generation_screen/id_card_generation_screen.dart';
-import '../presentation/landing_page_screen/landing_page_screen.dart';
-import '../presentation/notification_center_screen/notification_center_screen.dart';
-import '../presentation/parent_academic_progress_screen/parent_academic_progress_screen.dart';
-import '../presentation/parent_attendance_screen/parent_attendance_screen.dart';
-import '../presentation/parent_calendar_screen/parent_calendar_screen.dart';
-import '../presentation/parent_dashboard_screen/parent_dashboard_screen.dart';
-import '../presentation/parent_diary_screen/parent_diary_screen.dart';
-import '../presentation/parent_documents_screen/parent_documents_screen.dart';
-import '../presentation/parent_fees_screen/parent_fees_screen.dart';
-import '../presentation/parent_fees_screen/parent_payment_request_form_screen.dart';
-import '../presentation/parent_homework_screen/parent_homework_submission_screen.dart';
-import '../presentation/parent_homework_screen/parent_homework_screen.dart';
-import '../presentation/parent_leave_screen/parent_leave_request_form_screen.dart';
-import '../presentation/parent_leave_screen/parent_leave_screen.dart';
-import '../presentation/parent_notices_screen/parent_notices_screen.dart';
-import '../presentation/parent_teacher_chat_screen/parent_teacher_chat_screen.dart';
-import '../presentation/principal_dashboard_screen/principal_dashboard_screen.dart';
-import '../presentation/principal_attendance_screen/principal_attendance_screen.dart';
-import '../presentation/principal_classes_screen/principal_classes_screen.dart';
-import '../presentation/principal_analytics_screen/principal_analytics_screen.dart';
-import '../presentation/principal_command_center_screens/principal_academic_command_screens.dart';
-import '../presentation/principal_inbox_screen/principal_operational_inbox_screen.dart';
-import '../presentation/principal_subjects_screen/principal_subjects_screen.dart';
-import '../presentation/profile_management_screen/profile_management_screen.dart';
-import '../presentation/report_card_generator_screen/report_card_generator_screen.dart';
-import '../presentation/reports_analytics_screen/reports_analytics_screen.dart';
-import '../presentation/school_profile_screen/school_profile_screen.dart';
-import '../presentation/settings_screen/settings_screen.dart';
-import '../presentation/staff_management_screen/staff_form_screen.dart';
-import '../presentation/staff_management_screen/staff_management_screen.dart';
-import '../presentation/student_oversight_screen/student_oversight_screen.dart';
-import '../presentation/syllabus_monitoring_screen/syllabus_monitoring_screen.dart';
-import '../presentation/teacher_attendance_screen/teacher_attendance_screen.dart';
-import '../presentation/teacher_classes_screen/teacher_classes_screen.dart';
-import '../presentation/teacher_communication_screen/teacher_communication_screen.dart';
-import '../presentation/teacher_dashboard_screen/teacher_dashboard_screen.dart';
-import '../presentation/teacher_diary_screen/teacher_diary_screen.dart';
-import '../presentation/teacher_discipline_screen/teacher_discipline_screen.dart';
-import '../presentation/teacher_homework_screen/teacher_homework_screen.dart';
-import '../presentation/teacher_homework_screen/teacher_homework_form_screens.dart';
-import '../presentation/teacher_leave_screen/teacher_leave_screen.dart';
-import '../presentation/teacher_leave_screen/teacher_leave_request_form_screen.dart';
-import '../presentation/teacher_my_attendance_screen/teacher_my_attendance_screen.dart';
-import '../presentation/teacher_parent_interaction_screen/teacher_parent_interaction_screen.dart';
-import '../presentation/teacher_performance_screen/teacher_performance_screen.dart';
-import '../presentation/teacher_reports_screen/teacher_reports_screen.dart';
-import '../presentation/teacher_student_notes_screen/teacher_student_notes_screen.dart';
-import '../presentation/timetable_management_screen/timetable_management_screen.dart';
-import '../services/backend_api_client.dart';
-import '../widgets/admin_navigation.dart';
-import '../widgets/app_navigation.dart';
-import '../widgets/blank_role_module_screen.dart';
-import '../widgets/parent_navigation.dart';
-import '../widgets/schooldesk_route_frame.dart';
-import '../widgets/teacher_navigation.dart';
-import 'schooldesk_screen_registry.dart';
+import 'package:schooldesk1/features/academics/academics.dart';
+import 'package:schooldesk1/features/attendance/attendance.dart';
+import 'package:schooldesk1/features/communication/communication.dart';
+import 'package:schooldesk1/features/dashboard/dashboard.dart';
+import 'package:schooldesk1/features/documents/documents.dart';
+import 'package:schooldesk1/features/finance/finance.dart';
+import 'package:schooldesk1/features/operations/operations.dart';
+import 'package:schooldesk1/features/auth/auth.dart';
+import 'package:schooldesk1/features/reports/reports.dart';
+import 'package:schooldesk1/features/people/people.dart';
+import 'package:schooldesk1/features/calendar/calendar.dart';
+import 'package:schooldesk1/features/shell/shell.dart';
+import 'package:schooldesk1/features/homework/homework.dart';
+import 'package:schooldesk1/features/leave/leave.dart';
+import 'package:schooldesk1/features/profile/profile.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/blank_role_module_screen.dart';
+import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
+import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
+import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -227,7 +160,7 @@ class AppRoutes {
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
     landingPage: (context) => const LandingPageScreen(),
-    onboarding: (context) => const AuthLoginScreen(),
+    onboarding: (context) => const OnboardingScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
     guidedAssistant: (context) => const GuidedAssistantScreen(),

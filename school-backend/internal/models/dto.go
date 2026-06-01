@@ -41,9 +41,15 @@ type APIResponse struct {
 	Code      string      `json:"code,omitempty"`
 	Message   string      `json:"message,omitempty"`
 	Data      interface{} `json:"data,omitempty"`
-	Error     string      `json:"error,omitempty"`
+	Meta      interface{} `json:"meta,omitempty"`
+	Error     interface{} `json:"error,omitempty"`
 	Details   interface{} `json:"details,omitempty"`
 	RequestID string      `json:"request_id,omitempty"`
+}
+
+type APIError struct {
+	Code    string      `json:"code"`
+	Details interface{} `json:"details,omitempty"`
 }
 
 type PaginatedResponse struct {
@@ -87,14 +93,12 @@ type CreateStaffRequest struct {
 	Phone                    string  `json:"phone"`
 	DateOfBirth              string  `json:"date_of_birth"`
 	Gender                   string  `json:"gender"`
-	DepartmentID             string  `json:"department_id"`
 	Designation              string  `json:"designation"`
 	EmploymentType           string  `json:"employment_type"`
 	JoinDate                 string  `json:"join_date"`
 	BasicSalary              float64 `json:"basic_salary"`
 	Password                 string  `json:"password"`
 	AccountRole              string  `json:"account_role"`
-	DepartmentName           string  `json:"department_name"`
 	RequestPrincipalApproval bool    `json:"request_principal_approval"`
 }
 
@@ -137,6 +141,7 @@ type CreateSubjectRequest struct {
 	SubjectCode    string  `json:"subject_code"`
 	SubjectType    string  `json:"subject_type"`
 	CreditHours    float64 `json:"credit_hours"`
+	SubjectColor   string  `json:"subject_color"`
 }
 
 type CreateEnrollmentRequest struct {

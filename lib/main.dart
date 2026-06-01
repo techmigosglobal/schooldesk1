@@ -1,22 +1,24 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
 
-import '../core/app_export.dart';
-import '../core/config/env_config.dart';
-import '../routes/route_access_guard.dart';
-import '../services/backend_api_client.dart';
-import '../services/push_notification_service.dart';
-import '../services/role_access_service.dart';
-import '../services/theme_provider.dart';
-import '../widgets/custom_error_widget.dart';
+import 'package:schooldesk1/core/app_export.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/di/service_locator.dart';
+import 'package:schooldesk1/routes/route_access_guard.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/theme_provider.dart';
+import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
 
   await BackendApiClient.initialize();
+  await ServiceLocator.initialize();
   EnvConfig.validate();
   unawaited(RoleAccessService.initialize());
   await PushNotificationService.instance.initialize();
@@ -43,22 +45,19 @@ void main() async {
     return SizedBox.shrink();
   };
 
-  // 🚨 CRITICAL: Device orientation lock - DO NOT REMOVE
-  Future.wait([
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
-  ]).then((value) {
-    runApp(
-      MultiProvider(
+  runApp(
+    ProviderScope(
+      child: MultiProvider(
         providers: [
           ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
           ChangeNotifierProvider<AppSettingsProvider>.value(
             value: appSettingsProvider,
           ),
         ],
-        child: const MyApp(),
+        child: const AppProviders(child: MyApp()),
       ),
-    );
-  });
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -83,9 +82,9 @@ class MyApp extends StatelessWidget {
             );
             return MediaQuery(
               data: mediaQuery.copyWith(
-                textScaler: TextScaler.linear(
-                  effectiveTextScale,
-                ).clamp(maxScaleFactor: 1.35),
+                textScaler: TextScaler.linear(effectiveTextScale).clamp(
+                  maxScaleFactor: SchoolDeskResponsive.maxSupportedTextScale,
+                ),
               ),
               child: child!,
             );

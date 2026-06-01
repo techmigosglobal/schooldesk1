@@ -157,7 +157,7 @@ func TestCompleteAPISuite(t *testing.T) {
 
 	s.expect("Teacher list assigned section students", "GET", "/students?section_id="+s.ids["section"], "Teacher", "Teacher", nil, http.StatusOK)
 	s.expectDataID("Teacher create attendance session", "POST", "/attendance/sessions", "Teacher", "Teacher", map[string]any{
-		"section_id": s.ids["section"], "subject_id": s.ids["subject"], "staff_id": s.ids["staff"], "date": "2026-05-01", "period_number": 1,
+		"academic_year_id": s.ids["year"], "section_id": s.ids["section"], "subject_id": s.ids["subject"], "staff_id": s.ids["staff"], "date": "2026-05-01", "period_number": 1,
 	}, http.StatusCreated, "attendance_session")
 	s.expect("Teacher mark attendance", "POST", "/attendance/sessions/"+s.ids["attendance_session"]+"/mark", "Teacher", "Teacher", map[string]any{
 		"attendances": []map[string]any{{"student_id": s.ids["new_student"], "enrollment_id": s.ids["new_enrollment"], "status": "present"}},
@@ -272,13 +272,19 @@ func seedFixtures() error {
 	if err := create(&models.Subject{BaseModel: models.BaseModel{ID: subjectID}, SchoolID: schoolID, DepartmentID: deptID, SubjectName: "Mathematics", SubjectCode: "MATH", SubjectType: "core"}); err != nil {
 		return err
 	}
-	if err := create(&models.Section{BaseModel: models.BaseModel{ID: sectionID}, GradeID: gradeID, AcademicYearID: yearID, SectionName: "A", ClassTeacherID: &staffID, Capacity: 40}); err != nil {
+	if err := create(&models.Section{BaseModel: models.BaseModel{ID: sectionID}, SchoolID: schoolID, GradeID: gradeID, AcademicYearID: yearID, SectionName: "A", ClassTeacherID: &staffID, Capacity: 40}); err != nil {
 		return err
 	}
-	if err := create(&models.Section{BaseModel: models.BaseModel{ID: "section-suite-b"}, GradeID: gradeID, AcademicYearID: yearID, SectionName: "B", Capacity: 40}); err != nil {
+	if err := create(&models.Section{BaseModel: models.BaseModel{ID: "section-suite-b"}, SchoolID: schoolID, GradeID: gradeID, AcademicYearID: yearID, SectionName: "B", Capacity: 40}); err != nil {
 		return err
 	}
 	if err := create(&models.Staff{BaseModel: models.BaseModel{ID: staffID}, SchoolID: schoolID, StaffCode: "T-001", FirstName: "Suite", LastName: "Teacher", Email: "teacher@suite.test", DateOfBirth: now.AddDate(-35, 0, 0), Gender: "female", Designation: "Teacher", EmploymentType: "permanent", JoinDate: now.AddDate(-5, 0, 0), Status: "active"}); err != nil {
+		return err
+	}
+	if err := create(&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-suite"}, SchoolID: schoolID, AcademicYearID: yearID, GradeID: gradeID, SubjectID: subjectID, IsMandatory: true}); err != nil {
+		return err
+	}
+	if err := create(&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-suite"}, SchoolID: schoolID, AcademicYearID: yearID, StaffID: staffID, SubjectID: subjectID, GradeID: gradeID, SectionID: &sectionID, IsPrimary: true}); err != nil {
 		return err
 	}
 	for role, id := range roles {

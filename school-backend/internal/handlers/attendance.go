@@ -51,6 +51,7 @@ type staffQRTokenResponse struct {
 
 func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 	sectionID := c.Query("section_id")
+	academicYearID := c.Query("academic_year_id")
 	date := c.Query("date")
 
 	var sessions []models.AttendanceSession
@@ -71,6 +72,9 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 	if sectionID != "" {
 		query = query.Where("attendance_sessions.section_id = ?", sectionID)
 	}
+	if academicYearID != "" {
+		query = query.Where("attendance_sessions.academic_year_id = ?", academicYearID)
+	}
 	if date != "" {
 		parsed, err := time.Parse("2006-01-02", date)
 		if err != nil {
@@ -89,6 +93,7 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 
 func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 	var req struct {
+		AcademicYearID  string `json:"academic_year_id" binding:"required"`
 		SectionID       string `json:"section_id" binding:"required"`
 		SubjectID       string `json:"subject_id" binding:"required"`
 		StaffID         string `json:"staff_id" binding:"required"`
@@ -115,16 +120,21 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 		fail(c, http.StatusForbidden, "attendance session ownership denied")
 		return
 	}
+	if err := academicDomainService().ValidateTimetableSlotRefs(scopedSchoolID(c), req.AcademicYearID, req.SectionID, req.SubjectID, req.StaffID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	session := models.AttendanceSession{
-		SectionID:     req.SectionID,
-		SubjectID:     req.SubjectID,
-		StaffID:       req.StaffID,
-		Date:          date,
-		PeriodNumber:  req.PeriodNumber,
-		TotalStudents: 0,
-		PresentCount:  0,
-		IsFinalized:   false,
+		SectionID:      req.SectionID,
+		AcademicYearID: req.AcademicYearID,
+		SubjectID:      req.SubjectID,
+		StaffID:        req.StaffID,
+		Date:           date,
+		PeriodNumber:   req.PeriodNumber,
+		TotalStudents:  0,
+		PresentCount:   0,
+		IsFinalized:    false,
 	}
 
 	if req.TimetableSlotID != "" {

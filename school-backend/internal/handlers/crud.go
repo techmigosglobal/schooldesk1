@@ -10,6 +10,8 @@ import (
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
+	"school-backend/internal/repositories"
+	"school-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -209,7 +211,7 @@ func (h *CRUDHandler[T]) applyListFilters(c *gin.Context, query *gorm.DB) *gorm.
 }
 
 func (h *CRUDHandler[T]) applyGradeSubjectListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
-	for _, field := range []string{"grade_id", "subject_id"} {
+	for _, field := range []string{"academic_year_id", "grade_id", "subject_id", "status"} {
 		if value := strings.TrimSpace(c.Query(field)); value != "" {
 			query = query.Where("grade_subjects."+field+" = ?", value)
 		}
@@ -218,7 +220,7 @@ func (h *CRUDHandler[T]) applyGradeSubjectListFilters(c *gin.Context, query *gor
 }
 
 func (h *CRUDHandler[T]) applyStaffSubjectListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
-	for _, field := range []string{"staff_id", "subject_id", "grade_id", "section_id"} {
+	for _, field := range []string{"academic_year_id", "staff_id", "subject_id", "grade_id", "section_id", "status"} {
 		if value := strings.TrimSpace(c.Query(field)); value != "" {
 			query = query.Where("staff_subjects."+field+" = ?", value)
 		}
@@ -430,13 +432,13 @@ func validateGradeSubjectPolicy[T any](c *gin.Context, row *T) error {
 		return errors.New("grade subject access denied")
 	}
 	schoolID := currentSchoolID(c)
-	if !gradeBelongsToSchool(getStringField(row, "GradeID"), schoolID) {
-		return errors.New("grade access denied")
-	}
-	if !subjectBelongsToSchool(getStringField(row, "SubjectID"), schoolID) {
-		return errors.New("subject access denied")
-	}
-	return nil
+	setStringField(row, "SchoolID", schoolID)
+	return academicDomainService().ValidateGradeSubjectMapping(
+		schoolID,
+		getStringField(row, "AcademicYearID"),
+		getStringField(row, "GradeID"),
+		getStringField(row, "SubjectID"),
+	)
 }
 
 func validateStaffSubjectPolicy[T any](c *gin.Context, row *T) error {
@@ -444,25 +446,23 @@ func validateStaffSubjectPolicy[T any](c *gin.Context, row *T) error {
 		return errors.New("staff subject access denied")
 	}
 	schoolID := currentSchoolID(c)
+	setStringField(row, "SchoolID", schoolID)
 	staffID := getStringField(row, "StaffID")
 	subjectID := getStringField(row, "SubjectID")
 	gradeID := getStringField(row, "GradeID")
 	sectionID := getStringField(row, "SectionID")
-	if !staffBelongsToSchool(staffID, schoolID) {
-		return errors.New("staff access denied")
-	}
-	if !subjectBelongsToSchool(subjectID, schoolID) {
-		return errors.New("subject access denied")
-	}
-	if !gradeBelongsToSchool(gradeID, schoolID) {
-		return errors.New("grade access denied")
-	}
-	if sectionID != "" &&
-		(!sectionBelongsToGrade(sectionID, gradeID) ||
-			!sectionBelongsToSchool(sectionID, schoolID)) {
-		return errors.New("section access denied")
-	}
-	return nil
+	return academicDomainService().ValidateStaffSubjectAssignment(
+		schoolID,
+		getStringField(row, "AcademicYearID"),
+		staffID,
+		subjectID,
+		gradeID,
+		sectionID,
+	)
+}
+
+func academicDomainService() *services.AcademicDomainService {
+	return services.NewAcademicDomainService(repositories.NewAcademicRepository(database.DB))
 }
 
 func validateHomeworkDiaryPolicy[T any](c *gin.Context, row *T) error {

@@ -14,23 +14,26 @@ import (
 )
 
 func success(c *gin.Context, status int, data interface{}, message string) {
+	if message == "" {
+		message = "Operation completed successfully"
+	}
 	resp := models.APIResponse{
 		Success:   true,
+		Message:   message,
 		Data:      data,
+		Meta:      gin.H{},
 		RequestID: c.GetString("request_id"),
-	}
-	if message != "" {
-		resp.Message = message
 	}
 	c.JSON(status, resp)
 }
 
 func fail(c *gin.Context, status int, message string) {
+	code := fmt.Sprintf("HTTP_%d", status)
 	c.JSON(status, models.APIResponse{
 		Success:   false,
-		Code:      fmt.Sprintf("HTTP_%d", status),
+		Code:      code,
 		Message:   message,
-		Error:     message,
+		Error:     models.APIError{Code: code},
 		RequestID: c.GetString("request_id"),
 	})
 }

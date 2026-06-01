@@ -617,8 +617,8 @@ func (h *ExamHandler) GetGradingScale(c *gin.Context) {
 
 func validateExamRefs(c *gin.Context, academicYearID, termID, examTypeID string) error {
 	schoolID := scopedSchoolID(c)
-	if countRows(database.DB.Model(&models.AcademicYear{}).Where("id = ? AND school_id = ?", academicYearID, schoolID)) == 0 {
-		return fmt.Errorf("academic year must belong to this school")
+	if err := academicDomainService().EnsureAcademicYearWritable(schoolID, academicYearID); err != nil {
+		return err
 	}
 	if countRows(database.DB.Model(&models.Term{}).
 		Joins("JOIN academic_years ON academic_years.id = terms.academic_year_id").

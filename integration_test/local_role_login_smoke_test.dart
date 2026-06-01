@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:schooldesk1/main.dart' as app;
-import 'package:schooldesk1/services/backend_api_client.dart';
-import 'package:schooldesk1/services/role_access_service.dart';
-import 'package:schooldesk1/services/token_storage_service.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/token_storage_service.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();

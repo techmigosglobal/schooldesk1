@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../../../routes/app_routes.dart';
-import '../../../../services/backend_api_client.dart';
-import '../../../../services/push_notification_service.dart';
-import '../../../../services/role_access_service.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 
 /// Authentication controller — manages login state for all 4 roles.
 class AuthController extends ChangeNotifier {

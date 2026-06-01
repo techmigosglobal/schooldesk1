@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -21,6 +22,8 @@ import (
 )
 
 type SchoolHandler struct{}
+
+var errSectionHasActiveStudents = errors.New("cannot delete while linked students are active")
 
 func NewSchoolHandler() *SchoolHandler {
 	return &SchoolHandler{}
@@ -316,19 +319,32 @@ func (h *SchoolHandler) CreateAcademicYear(c *gin.Context) {
 		return
 	}
 
-	startDate, _ := time.Parse("2006-01-02", req.StartDate)
-	endDate, _ := time.Parse("2006-01-02", req.EndDate)
+	yearLabel := strings.TrimSpace(req.YearLabel)
+	startDate, endDate, ok := parseAcademicYearDates(c, req.StartDate, req.EndDate)
+	if !ok {
+		return
+	}
 
 	year := models.AcademicYear{
 		SchoolID:  scopedSchoolID(c),
-		YearLabel: req.YearLabel,
+		YearLabel: yearLabel,
+		Year:      yearLabel,
 		StartDate: startDate,
 		EndDate:   endDate,
 		IsCurrent: req.IsCurrent,
 		Status:    "active",
 	}
 
-	if err := database.DB.Create(&year).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if req.IsCurrent {
+			if err := tx.Model(&models.AcademicYear{}).
+				Where("school_id = ?", scopedSchoolID(c)).
+				Update("is_current", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Create(&year).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create academic year"})
 		return
 	}
@@ -350,17 +366,26 @@ func (h *SchoolHandler) UpdateAcademicYear(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	startDate, _ := time.Parse("2006-01-02", req.StartDate)
-	endDate, _ := time.Parse("2006-01-02", req.EndDate)
-	year.YearLabel = req.YearLabel
-	year.Year = req.YearLabel
+	yearLabel := strings.TrimSpace(req.YearLabel)
+	startDate, endDate, ok := parseAcademicYearDates(c, req.StartDate, req.EndDate)
+	if !ok {
+		return
+	}
+	year.YearLabel = yearLabel
+	year.Year = yearLabel
 	year.StartDate = startDate
 	year.EndDate = endDate
 	year.IsCurrent = req.IsCurrent
-	if req.IsCurrent {
-		database.DB.Model(&models.AcademicYear{}).Where("school_id = ? AND id <> ?", scopedSchoolID(c), id).Update("is_current", false)
-	}
-	if err := database.DB.Save(&year).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if req.IsCurrent {
+			if err := tx.Model(&models.AcademicYear{}).
+				Where("school_id = ? AND id <> ?", scopedSchoolID(c), id).
+				Update("is_current", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Save(&year).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update academic year"})
 		return
 	}
@@ -389,6 +414,7 @@ func (h *SchoolHandler) DeleteAcademicYear(c *gin.Context) {
 		academicRef("fee invoices", &models.FeeInvoice{}, "academic_year_id = ?", id),
 		academicRef("timetable slots", &models.TimetableSlot{}, "academic_year_id = ?", id),
 		academicRef("events", &models.EventCalendar{}, "academic_year_id = ?", id),
+		academicRef("exams", &models.Exam{}, "academic_year_id = ?", id),
 	) {
 		return
 	}
@@ -398,6 +424,24 @@ func (h *SchoolHandler) DeleteAcademicYear(c *gin.Context) {
 	}
 	auditAction(c, "academic_years", "delete", "academic_years", &id)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Academic year deleted successfully"})
+}
+
+func parseAcademicYearDates(c *gin.Context, startValue, endValue string) (time.Time, time.Time, bool) {
+	startDate, err := time.Parse("2006-01-02", strings.TrimSpace(startValue))
+	if err != nil {
+		fail(c, http.StatusBadRequest, "start_date must use YYYY-MM-DD")
+		return time.Time{}, time.Time{}, false
+	}
+	endDate, err := time.Parse("2006-01-02", strings.TrimSpace(endValue))
+	if err != nil {
+		fail(c, http.StatusBadRequest, "end_date must use YYYY-MM-DD")
+		return time.Time{}, time.Time{}, false
+	}
+	if endDate.Before(startDate) {
+		fail(c, http.StatusBadRequest, "end_date cannot be before start_date")
+		return time.Time{}, time.Time{}, false
+	}
+	return startDate, endDate, true
 }
 
 func (h *SchoolHandler) GetGrades(c *gin.Context) {
@@ -550,9 +594,8 @@ func resolveSectionOptionalRefs(c *gin.Context, req models.CreateSectionRequest)
 		return nil, nil, false
 	}
 
-	var academicYear models.AcademicYear
-	if err := database.DB.First(&academicYear, "id = ? AND school_id = ?", req.AcademicYearID, schoolID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Academic year must belong to this school"})
+	if err := academicDomainService().EnsureAcademicYearWritable(schoolID, req.AcademicYearID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
 		return nil, nil, false
 	}
 
@@ -591,6 +634,7 @@ func (h *SchoolHandler) CreateSection(c *gin.Context) {
 	}
 
 	section := models.Section{
+		SchoolID:       scopedSchoolID(c),
 		GradeID:        req.GradeID,
 		AcademicYearID: req.AcademicYearID,
 		SectionName:    req.SectionName,
@@ -629,6 +673,7 @@ func (h *SchoolHandler) UpdateSection(c *gin.Context) {
 		return
 	}
 	section.GradeID = req.GradeID
+	section.SchoolID = scopedSchoolID(c)
 	section.AcademicYearID = req.AcademicYearID
 	section.SectionName = req.SectionName
 	section.Capacity = req.Capacity
@@ -654,17 +699,28 @@ func (h *SchoolHandler) DeleteSection(c *gin.Context) {
 		return
 	}
 
+	if err := deleteSectionRecordsForSchool(id, schoolID); err != nil {
+		if errors.Is(err, errSectionHasActiveStudents) {
+			c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Cannot delete while linked students are active"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete section"})
+		return
+	}
+	auditAction(c, "sections", "delete", "sections", &id)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Section and linked class records deleted successfully"})
+}
+
+func deleteSectionRecordsForSchool(id, schoolID string) error {
 	activeCount, err := activeSectionStudentCount(id, schoolID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate section links"})
-		return
+		return err
 	}
 	if activeCount > 0 {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "error": "Cannot delete while linked students are active"})
-		return
+		return errSectionHasActiveStudents
 	}
 
-	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM student_attendances WHERE session_id IN (SELECT id FROM attendance_sessions WHERE section_id = ?)", id).Error; err != nil {
 			return err
 		}
@@ -716,12 +772,7 @@ func (h *SchoolHandler) DeleteSection(c *gin.Context) {
 			return err
 		}
 		return tx.Delete(&models.Section{}, "id = ?", id).Error
-	}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete section"})
-		return
-	}
-	auditAction(c, "sections", "delete", "sections", &id)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Section and linked class records deleted successfully"})
+	})
 }
 
 func deleteSectionHomework(tx *gorm.DB, sectionID string) error {
@@ -842,6 +893,7 @@ func (h *SchoolHandler) CreateSubject(c *gin.Context) {
 		SubjectName:  req.SubjectName,
 		SubjectCode:  req.SubjectCode,
 		SubjectType:  req.SubjectType,
+		SubjectColor: req.SubjectColor,
 		CreditHours:  req.CreditHours,
 	}
 
@@ -876,6 +928,7 @@ func (h *SchoolHandler) UpdateSubject(c *gin.Context) {
 	subject.SubjectName = req.SubjectName
 	subject.SubjectCode = req.SubjectCode
 	subject.SubjectType = req.SubjectType
+	subject.SubjectColor = req.SubjectColor
 	subject.CreditHours = req.CreditHours
 	if err := database.DB.Save(&subject).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update subject"})

@@ -32,7 +32,8 @@ func TestRelationshipConstraintStatementsCoverCriticalForeignKeysAndIndexes(t *t
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_school_staff_code",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_parent_student_links_school_parent_student",
 		"CREATE UNIQUE INDEX IF NOT EXISTS idx_enrollments_student_section_year",
-		"CREATE INDEX IF NOT EXISTS idx_student_attendances_session_student",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_student_attendances_session_student_unique",
+		"CREATE UNIQUE INDEX IF NOT EXISTS idx_attendance_sessions_section_year_date_period",
 	}
 	for _, fragment := range expectedFragments {
 		if !strings.Contains(sql, fragment) {
