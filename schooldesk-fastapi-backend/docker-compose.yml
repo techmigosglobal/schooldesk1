@@ -1,0 +1,56 @@
+name: schooldesk_fastapi_local
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.local
+    environment:
+      SCHOOLDESK_DATABASE_URL: postgresql+psycopg://schooldesk:schooldesk@postgres:5432/schooldesk_fastapi
+      SCHOOLDESK_REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8090:8090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: schooldesk
+      POSTGRES_PASSWORD: schooldesk
+      POSTGRES_DB: schooldesk_fastapi
+    ports:
+      - "5433:5432"
+    volumes:
+      - schooldesk_fastapi_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schooldesk -d schooldesk_fastapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - schooldesk_fastapi_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  schooldesk_fastapi_postgres:
+  schooldesk_fastapi_redis:

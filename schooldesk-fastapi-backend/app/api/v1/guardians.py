@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import utcnow
 from app.dependencies.auth import CurrentUser, get_current_user, require_principal_or_admin
+from app.models.catalog import Student, StudentLeaveApplication
 from app.models.goal_task import AuditLog
 from app.models.guardian import Guardian
 
@@ -85,6 +86,21 @@ def list_guardians(
         Guardian.deleted_at.is_(None),
     )
     if student_id:
+        stmt = stmt.where(Guardian.student_id == student_id)
+
+    # RBAC: parents/guardians see only guardians for their linked students
+    if current_user.role in {"parent", "guardian"}:
+        linked_student_ids = db.scalars(
+            select(StudentLeaveApplication.student_id).where(
+                StudentLeaveApplication.school_id == current_user.school_id,
+                StudentLeaveApplication.parent_user_id == current_user.id,
+                StudentLeaveApplication.deleted_at.is_(None),
+            )
+        ).all()
+        if not linked_student_ids:
+            return {"success": True, "data": [], "message": "No linked students"}
+        stmt = stmt.where(Guardian.student_id.in_(linked_student_ids))
+    elif student_id:
         stmt = stmt.where(Guardian.student_id == student_id)
 
     guardians = db.scalars(stmt.order_by(Guardian.is_primary.desc(), Guardian.created_at)).all()

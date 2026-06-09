@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "statuses": [
+    "draft",
+    "submitted",
+    "principal_review",
+    "changes_requested",
+    "approved",
+    "rejected",
+    "applied",
+    "cancelled"
+  ],
+  "modules": [
+    {
+      "key": "students",
+      "label": "Students",
+      "frontend_route": "/admin-students-screen",
+      "backend_resource": "student-approvals",
+      "entity_type": "student",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "staff",
+      "label": "Staff",
+      "frontend_route": "/admin-teachers-screen",
+      "backend_resource": "account-approvals",
+      "entity_type": "staff",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "attendance_operations",
+      "label": "Attendance operations",
+      "frontend_route": "/admin-attendance-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "attendance",
+      "risk_level": "medium",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "fees",
+      "label": "Fees",
+      "frontend_route": "/admin-fees-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "fee",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "timetable",
+      "label": "Timetable",
+      "frontend_route": "/admin-timetable-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "timetable",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "exams",
+      "label": "Exams",
+      "frontend_route": "/admin-exams-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "exam",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "communication",
+      "label": "Communication",
+      "frontend_route": "/admin-communication-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "communication",
+      "risk_level": "medium",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "helpdesk",
+      "label": "Helpdesk",
+      "frontend_route": "/admin-helpdesk-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "helpdesk",
+      "risk_level": "medium",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "documents",
+      "label": "Documents",
+      "frontend_route": "/admin-documents-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "document",
+      "risk_level": "medium",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "user_access",
+      "label": "User Access",
+      "frontend_route": "/admin-user-access-screen",
+      "backend_resource": "account-approvals",
+      "entity_type": "account",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    },
+    {
+      "key": "reports",
+      "label": "Reports",
+      "frontend_route": "/admin-reports-screen",
+      "backend_resource": "approval-requests",
+      "entity_type": "report",
+      "risk_level": "low",
+      "admin": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": false
+      }
+    },
+    {
+      "key": "academic_info",
+      "label": "Academic Info",
+      "frontend_route": "/admin-academic-info-screen",
+      "backend_resource": "class-approvals",
+      "entity_type": "academic_info",
+      "risk_level": "high",
+      "admin": {
+        "view": true,
+        "create_draft": true,
+        "submit_for_approval": true,
+        "edit_pending_request": true,
+        "cancel_own_pending_request": true,
+        "final_approve": false,
+        "final_reject": false,
+        "direct_publish": false,
+        "delete_active_record": false
+      },
+      "principal": {
+        "view": true,
+        "create_draft": false,
+        "submit_for_approval": false,
+        "edit_pending_request": false,
+        "cancel_own_pending_request": false,
+        "final_approve": true,
+        "final_reject": true,
+        "direct_publish": true,
+        "delete_active_record": true
+      }
+    }
+  ]
+}

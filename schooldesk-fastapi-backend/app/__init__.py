@@ -1,0 +1,2 @@
+"""SchoolDesk FastAPI backend package."""
+

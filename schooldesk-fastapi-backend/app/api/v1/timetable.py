@@ -104,11 +104,29 @@ def list_timetable_slots(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
-    require_principal_or_admin(current_user)
     stmt = select(TimetableSlot).where(
         TimetableSlot.school_id == current_user.school_id,
         TimetableSlot.deleted_at.is_(None),
     )
+
+    # RBAC: teachers can only view slots for their sections or subjects
+    if current_user.role == "teacher":
+        section_filter = TimetableSlot.section_id.in_(current_user.class_teacher_sections) if current_user.class_teacher_sections else False
+        if current_user.linked_id:
+            subject_ids = db.scalars(
+                select(StaffSubject.subject_id).where(
+                    StaffSubject.school_id == current_user.school_id,
+                    StaffSubject.staff_id == current_user.linked_id,
+                    StaffSubject.deleted_at.is_(None),
+                )
+            ).all()
+            subject_filter = TimetableSlot.subject_id.in_(subject_ids) if subject_ids else False
+            stmt = stmt.where(section_filter | subject_filter)
+        else:
+            stmt = stmt.where(section_filter)
+    elif current_user.role not in {"principal", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Timetable access denied")
+
     if academic_year_id:
         stmt = stmt.where(TimetableSlot.academic_year_id == academic_year_id)
     if grade_id:
