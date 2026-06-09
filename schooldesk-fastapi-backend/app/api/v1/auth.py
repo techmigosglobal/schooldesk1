@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,7 +13,6 @@ from app.core.database import get_db
 from app.core.logging_config import get_logger
 from app.core.security import create_access_token, decode_access_token, hash_password, verify_password
 from app.dependencies.auth import CurrentUser, get_current_user
-from app.core.limiter import limiter, _limit_for_auth
 from app.models.auth import Role, User
 from app.schemas.auth import ChangePasswordRequest, CurrentUserResponse, LoginRequest, RefreshRequest
 
@@ -62,9 +61,7 @@ def _login_payload(db: Session, settings: Settings, user: User) -> dict[str, Any
 
 
 @router.post("/login")
-@limiter.limit(_limit_for_auth)
 def login(
-    request: Request,
     payload: LoginRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -82,9 +79,7 @@ def login(
 
 
 @router.post("/refresh")
-@limiter.limit(_limit_for_auth)
 def refresh(
-    request: Request,
     payload: RefreshRequest,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),

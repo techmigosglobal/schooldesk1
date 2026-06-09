@@ -32,7 +32,7 @@ part 'api_modules/tables_raw_api.dart';
 part 'api_modules/approval_requests_api.dart';
 
 /// Backend API client for school-desk backend
-/// Handles all HTTP communication with the Go backend
+/// Handles all HTTP communication with the FastAPI backend.
 class BackendApiClient {
   static BackendApiClient? _instance;
   late final Dio _dio;

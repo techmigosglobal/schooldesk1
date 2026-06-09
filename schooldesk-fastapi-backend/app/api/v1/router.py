@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import approvals, auth, compat, exams, goals, health
+from app.api.v1 import app_records, approvals, auth, compat, exams, goals, health
 from app.api.v1 import fees, attendance, timetable, guardians, notifications
 
 router = APIRouter()
@@ -17,3 +17,4 @@ router.include_router(timetable.router)
 router.include_router(guardians.router)
 router.include_router(notifications.router)
 router.include_router(compat.router)
+router.include_router(app_records.router)

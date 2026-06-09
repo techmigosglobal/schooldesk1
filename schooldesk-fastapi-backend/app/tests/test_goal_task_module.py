@@ -74,13 +74,119 @@ def test_local_flutter_web_cors_preflight_is_allowed(tmp_path: Path) -> None:
     assert "POST" in response.headers["access-control-allow-methods"]
 
 
-def test_unimplemented_route_returns_fastapi_not_found_without_gateway(tmp_path: Path) -> None:
+def test_missing_module_routes_are_served_by_fastapi_app_records(tmp_path: Path) -> None:
     with make_test_client(tmp_path) as client:
         token = login(client, "principal", "principal123")
-        response = client.get("/api/v1/unported-module", headers=headers(token))
+        empty = client.get("/api/v1/reports/exports", headers=headers(token))
+        created = client.post(
+            "/api/v1/reports/exports",
+            headers=headers(token),
+            json={"report_name": "Principal summary", "report_type": "pdf"},
+        )
+        listed = client.get("/api/v1/reports/exports", headers=headers(token))
 
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Not Found"
+    assert empty.status_code == 200
+    assert empty.json()["data"] == []
+    assert created.status_code == 200
+    assert created.json()["data"]["report_name"] == "Principal summary"
+    assert listed.status_code == 200
+    assert [row["id"] for row in listed.json()["data"]] == [created.json()["data"]["id"]]
+
+
+def test_repeated_login_never_rate_limits(tmp_path: Path) -> None:
+    with make_test_client(tmp_path) as client:
+        responses = [
+            client.post("/api/v1/auth/login", json={"username": "principal", "password": "principal123"})
+            for _ in range(25)
+        ]
+
+    assert {response.status_code for response in responses} == {200}
+    assert all("Rate limit" not in response.text for response in responses)
+
+
+def test_flutter_called_fastapi_only_module_paths_are_persisted(tmp_path: Path) -> None:
+    paths = [
+        "/api/v1/homework",
+        "/api/v1/events",
+        "/api/v1/attendance/sessions",
+        "/api/v1/message-conversations",
+        "/api/v1/messages",
+        "/api/v1/documents/requests",
+        "/api/v1/reports/exports",
+        "/api/v1/fees/categories",
+        "/api/v1/fees/concessions",
+        "/api/v1/fees/payments",
+        "/api/v1/fees/reminders",
+        "/api/v1/fees/reports/exports",
+        "/api/v1/exams/schedules",
+        "/api/v1/exams/report-cards",
+        "/api/v1/exams/grading-scale",
+        "/api/v1/attendance/reports/exports",
+        "/api/v1/notifications/device-tokens",
+        "/api/v1/parent-teacher-meetings",
+        "/api/v1/principal/exam-advice",
+        "/api/v1/timetable/substitutions",
+    ]
+    with make_test_client(tmp_path) as client:
+        token = login(client, "principal", "principal123")
+        for index, path in enumerate(paths):
+            created = client.post(
+                path,
+                headers=headers(token),
+                json={"title": f"Record {index}", "status": "draft"},
+            )
+            listed = client.get(path, headers=headers(token))
+            assert created.status_code == 200, f"{path}: {created.text}"
+            assert listed.status_code == 200, f"{path}: {listed.text}"
+            assert any(row["id"] == created.json()["data"]["id"] for row in listed.json()["data"])
+
+        homework_id = client.post(
+            "/api/v1/homework",
+            headers=headers(token),
+            json={"title": "Assignment", "status": "published"},
+        ).json()["data"]["id"]
+        submission = client.post(
+            f"/api/v1/homework/{homework_id}/submissions",
+            headers=headers(token),
+            json={"student_id": "student-1", "status": "submitted"},
+        )
+        submissions = client.get(f"/api/v1/homework/{homework_id}/submissions", headers=headers(token))
+
+    assert submission.status_code == 200
+    assert submissions.status_code == 200
+    assert submissions.json()["data"][0]["parent_id"] == homework_id
+
+
+def test_school_setup_updates_single_school_and_returns_auth(tmp_path: Path) -> None:
+    with make_test_client(tmp_path) as client:
+        response = client.post(
+            "/api/v1/schools/setup",
+            json={
+                "school_name": "Green Valley School",
+                "school_type": "school",
+                "affiliation_board": "CBSE",
+                "email": "office@example.test",
+                "phone": "9999999999",
+                "city": "Pune",
+                "state": "Maharashtra",
+                "admin_name": "School Principal",
+                "admin_username": "singleprincipal",
+                "admin_email": "principal@example.test",
+                "admin_password": "Principal123",
+                "admin_role": "Principal",
+            },
+        )
+        assert response.status_code == 201, response.text
+        data = response.json()["data"]
+        token = data["auth"]["token"]
+        schools = client.get("/api/v1/schools", headers=headers(token))
+        current = client.get("/api/v1/schools/current", headers=headers(token))
+
+    assert data["school"]["name"] == "Green Valley School"
+    assert data["auth"]["user"]["role_name"] == "principal"
+    assert schools.status_code == 200
+    assert len(schools.json()["data"]) == 1
+    assert current.json()["data"]["name"] == "Green Valley School"
 
 
 def test_flutter_dashboard_smoke_contracts_return_backend_empty_states(tmp_path: Path) -> None:

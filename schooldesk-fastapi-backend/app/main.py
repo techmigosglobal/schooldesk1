@@ -8,14 +8,11 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.api.v1.router import router
 from app.core.config import Settings, get_settings
 from app.core import database
 from app.core.cache import get_cache
-from app.core.limiter import limiter
 from app.core.logging_config import configure_logging, get_logger
 from app.seed.defaults import seed_defaults
 
@@ -52,9 +49,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Independent FastAPI backend for SchoolDesk modules.",
         lifespan=lifespan,
     )
-
-    # Add rate limiter to app state
-    app.state.limiter = limiter
 
     app.dependency_overrides[get_settings] = lambda: app_settings
     app.add_middleware(
@@ -99,16 +93,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/openapi.json", include_in_schema=False)
     def api_openapi_redirect() -> RedirectResponse:
         return RedirectResponse(url="/openapi.json")
-
-    # Rate limit exception handler
-    @app.exception_handler(RateLimitExceeded)
-    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-        client_ip = get_remote_address(request) if app_settings.environment != "testing" else "test"
-        logger.warning("rate_limit_exceeded", path=request.url.path, ip=client_ip)
-        return JSONResponse(
-            {"detail": "Rate limit exceeded", "retry_after": str(exc.detail)},
-            status_code=429,
-        )
 
     # Global exception handler
     @app.exception_handler(Exception)

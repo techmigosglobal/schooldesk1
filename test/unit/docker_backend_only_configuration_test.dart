@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Flutter runtime is configured only for the Go Docker API backend', () {
+  test('Flutter runtime is configured only for the FastAPI backend', () {
     final removedBackendTerms = [
       String.fromCharCodes([80, 111, 99, 107, 101, 116, 66, 97, 115, 101]),
       String.fromCharCodes([80, 79, 67, 75, 69, 84, 66, 65, 83, 69]),

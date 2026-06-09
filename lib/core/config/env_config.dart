@@ -79,7 +79,7 @@ class EnvConfig {
   static bool get isStaging => appEnv == 'staging';
 
   /// The backend base URL. Always reads from --dart-define=API_BASE_URL first.
-  /// Defaults to the local Docker Go API for development.
+  /// Defaults to the local Docker FastAPI service for development.
   static String get apiBaseUrl {
     if (_configuredApiBaseUrl.isNotEmpty) {
       return v1BaseUrlFrom(_configuredApiBaseUrl);
@@ -109,20 +109,20 @@ class EnvConfig {
       return _productionApiBaseUrl;
     }
     if (kIsWeb) {
-      return 'http://localhost:8080/api';
+      return 'http://localhost:8090/api';
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         if (_localApiHost.isNotEmpty) {
-          return 'http://$_localApiHost:8080/api';
+          return 'http://$_localApiHost:8090/api';
         }
-        return 'http://10.0.2.2:8080/api';
+        return 'http://10.0.2.2:8090/api';
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
-        return 'http://localhost:8080/api';
+        return 'http://localhost:8090/api';
     }
   }
 

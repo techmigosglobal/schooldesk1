@@ -21,35 +21,36 @@ flutter pub get
 flutter run
 ```
 
-## Local Docker Backend
+## Local FastAPI Backend
 
-1. Start the Go API, PostgreSQL, and Redis:
+1. Start the FastAPI backend, PostgreSQL, and Redis:
 
 ```bash
-docker compose up -d
+cd schooldesk-fastapi-backend
+docker compose up --build
 ```
 
 2. Verify the API is healthy:
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8090/health
 ```
 
-3. For a wireless Android device, forward the device port to the local Docker API:
+3. For a wireless Android device, forward the device port to the local FastAPI service:
 
 ```bash
-adb reverse tcp:8080 tcp:8080
+adb reverse tcp:8090 tcp:8090
 ```
 
-4. Run Flutter against the local Docker API:
+4. Run Flutter against the local FastAPI service:
 
 ```bash
 cp env.local.example.json env.json
 flutter run --dart-define-from-file=env.json
 ```
 
-After local verification succeeds, the same Go API stack is the deployment path
-for the Hostinger VPS environment.
+After local verification succeeds, deploy the FastAPI service as the application
+API for the Hostinger VPS environment.
 
 ### Optional Prometheus + Grafana
 

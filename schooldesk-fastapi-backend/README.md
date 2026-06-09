@@ -46,4 +46,4 @@ python -m pytest
 
 The tests use SQLite and disable Redis health checks so they can run without Docker.
 
-Rendered Flutter web smoke should pass against `http://localhost:8090` with the Go API stopped before treating a newly ported route family as verified.
+Rendered Flutter web smoke should pass against `http://localhost:8090` with no Go API running before treating a newly ported route family as verified.

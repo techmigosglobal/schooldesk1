@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import utcnow
+from app.api.v1 import app_records
 from app.dependencies.auth import CurrentUser, get_current_user
 from app.models.goal_task import AuditLog, NotificationLog
 
@@ -130,6 +131,23 @@ def mark_all_notifications_read(
     return {"success": True, "data": {"count": count}, "message": f"{count} notifications marked as read"}
 
 
+@router.post("/device-tokens")
+def register_device_token(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.create_record("notifications/device-tokens", payload, db, current_user)
+
+
+@router.delete("/device-tokens")
+def revoke_device_token(
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.delete_record("notifications/device-tokens", db, current_user)
+
+
 @router.delete("/{notification_id}")
 def delete_notification(
     notification_id: str,
@@ -155,5 +173,4 @@ def delete_notification(
     notification.updated_by = current_user.id
     record_audit(db, current_user, action="delete", entity_id=notification.id)
     db.commit()
-    return {"success": True, "data": None, "message": "Notification deleted"}
     return {"success": True, "data": None, "message": "Notification deleted"}

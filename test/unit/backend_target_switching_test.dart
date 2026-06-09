@@ -19,7 +19,7 @@ void main() {
       final local = jsonDecode(localExample.readAsStringSync()) as Map;
       final hostinger = jsonDecode(hostingerExample.readAsStringSync()) as Map;
 
-      expect(local['API_BASE_URL'], 'http://127.0.0.1:8080/api');
+      expect(local['API_BASE_URL'], 'http://127.0.0.1:8090/api');
       expect(local['APP_ENV'], 'development');
 
       expect(hostinger['API_BASE_URL'], startsWith('https://'));
@@ -38,8 +38,8 @@ void main() {
 
   test('asset origin strips either compat api or v1 api suffix', () {
     expect(
-      EnvConfig.apiOriginFromBaseUrl('http://127.0.0.1:8080/api'),
-      'http://127.0.0.1:8080',
+      EnvConfig.apiOriginFromBaseUrl('http://127.0.0.1:8090/api'),
+      'http://127.0.0.1:8090',
     );
     expect(
       EnvConfig.apiOriginFromBaseUrl('https://api.schooldesk.example/api/v1'),

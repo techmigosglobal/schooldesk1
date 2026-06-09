@@ -11,7 +11,6 @@ from app.core.database import get_db
 from app.core.logging_config import get_logger
 from app.core.security import utcnow
 from app.dependencies.auth import CurrentUser, can_access_task, require_internal_user, require_permission
-from app.core.limiter import limiter, _limit_for_reads, _limit_for_writes
 from app.models.auth import Section, User
 from app.models.goal_task import AuditLog, Goal, GoalKeyResult, NotificationLog, Task, TaskChecklistItem, TaskComment
 from app.schemas.goal_task import (
@@ -203,7 +202,6 @@ def create_task_row(
 
 
 @goals_router.post("", response_model=GoalRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit(_limit_for_writes)
 def create_goal(
     request: Request,
     payload: GoalCreate,
@@ -252,7 +250,6 @@ def create_goal(
 
 
 @goals_router.get("", response_model=list[GoalRead])
-@limiter.limit(_limit_for_reads)
 def list_goals(
     request: Request,
     db: Session = Depends(get_db),
@@ -300,7 +297,6 @@ def get_goal(
 
 
 @goals_router.patch("/{goal_id}", response_model=GoalRead)
-@limiter.limit(_limit_for_writes)
 def update_goal(
     request: Request,
     goal_id: str,
@@ -324,7 +320,6 @@ def update_goal(
 
 
 @goals_router.post("/{goal_id}/activate", response_model=GoalRead)
-@limiter.limit(_limit_for_writes)
 def activate_goal(
     request: Request,
     goal_id: str,
@@ -342,7 +337,6 @@ def activate_goal(
 
 
 @goals_router.post("/{goal_id}/archive", response_model=GoalRead)
-@limiter.limit(_limit_for_writes)
 def archive_goal(
     request: Request,
     goal_id: str,
@@ -365,7 +359,6 @@ def archive_goal(
 
 
 @goals_router.post("/{goal_id}/tasks", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit(_limit_for_writes)
 def create_goal_task(
     request: Request,
     goal_id: str,
@@ -381,7 +374,6 @@ def create_goal_task(
 
 
 @tasks_router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit(_limit_for_writes)
 def create_standalone_task(
     request: Request,
     payload: TaskCreate,
@@ -395,7 +387,6 @@ def create_standalone_task(
 
 
 @tasks_router.get("", response_model=list[TaskRead])
-@limiter.limit(_limit_for_reads)
 def list_tasks(
     request: Request,
     db: Session = Depends(get_db),
@@ -444,7 +435,6 @@ def get_task(
 
 
 @tasks_router.patch("/{task_id}", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def update_task(
     request: Request,
     task_id: str,
@@ -466,7 +456,6 @@ def update_task(
 
 
 @tasks_router.patch("/{task_id}/progress", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def update_task_progress(
     request: Request,
     task_id: str,
@@ -499,7 +488,6 @@ def update_task_progress(
 
 
 @tasks_router.post("/{task_id}/comments", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
-@limiter.limit(_limit_for_writes)
 def add_task_comment(
     request: Request,
     task_id: str,
@@ -528,7 +516,6 @@ def add_task_comment(
 
 
 @tasks_router.patch("/{task_id}/checklist/{item_id}", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def update_checklist_item(
     request: Request,
     task_id: str,
@@ -553,7 +540,6 @@ def update_checklist_item(
 
 
 @tasks_router.post("/{task_id}/complete", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def complete_task(
     request: Request,
     task_id: str,
@@ -573,7 +559,6 @@ def complete_task(
 
 
 @tasks_router.post("/{task_id}/reopen", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def reopen_task(
     request: Request,
     task_id: str,
@@ -593,7 +578,6 @@ def reopen_task(
 
 
 @tasks_router.post("/{task_id}/archive", response_model=TaskRead)
-@limiter.limit(_limit_for_writes)
 def archive_task(
     request: Request,
     task_id: str,

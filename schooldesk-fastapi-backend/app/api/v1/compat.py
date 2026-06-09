@@ -8,11 +8,13 @@ from math import ceil
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import hash_password
+from app.core.config import Settings, get_settings
+from app.core.security import create_access_token, hash_password
 from app.dependencies.auth import CurrentUser, can_access_task, get_current_user
 from app.models.auth import Role, School, Section, User, UserRole
 from app.models.base import now_utc, uuid_str
@@ -35,6 +37,22 @@ from app.models.catalog import (
 from app.models.goal_task import ApprovalRequest, AuditLog, NotificationLog, Task
 
 router = APIRouter(prefix="/api/v1", tags=["flutter-compatibility"])
+
+
+class SchoolSetupRequest(BaseModel):
+    school_name: str
+    school_type: str = "school"
+    affiliation_board: str = ""
+    email: str = ""
+    phone: str = ""
+    city: str = ""
+    state: str = ""
+    admin_name: str
+    admin_username: str = ""
+    admin_email: str = ""
+    admin_phone: str = ""
+    admin_password: str
+    admin_role: str = "principal"
 
 
 def success(data: Any = None, message: str = "Operation completed successfully", **extra: Any) -> dict[str, Any]:
@@ -102,6 +120,33 @@ def school_payload(school: School) -> dict[str, Any]:
         "principal_name": school.principal_name or "",
         "registration_number": school.registration_number or "",
         "logo_url": school.logo_url or "",
+    }
+
+
+def user_payload(db: Session, user: User) -> dict[str, Any]:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "name": user.full_name,
+        "email": "",
+        "phone": "",
+        "avatar": "",
+        "school_id": user.school_id,
+        "role_id": role_id(db, user.school_id, user.role.lower()),
+        "role_name": user.role.lower(),
+        "linked_type": user.linked_type or "",
+        "linked_id": user.linked_id or "",
+        "is_active": user.is_active,
+    }
+
+
+def login_payload(db: Session, settings: Settings, user: User) -> dict[str, Any]:
+    token = create_access_token(settings, user_id=user.id, role=user.role)
+    return {
+        "token": token,
+        "refresh_token": token,
+        "expires_at": 0,
+        "user": user_payload(db, user),
     }
 
 
@@ -905,6 +950,89 @@ def dashboard(
             "today_attendance": {"attendance_pct": 0, "marked": 0, "present": 0},
             "operational_gaps": {"critical": 0, "warning": 0, "items": []},
         }
+    )
+
+
+@router.post("/schools/setup", status_code=status.HTTP_201_CREATED)
+def setup_school(
+    payload: SchoolSetupRequest,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    school_name = clean(payload.school_name)
+    admin_name = clean(payload.admin_name)
+    password = str(payload.admin_password or "")
+    admin_role = clean(payload.admin_role, "principal").lower()
+    if not school_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="school_name is required")
+    if not admin_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin_name is required")
+    if len(password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin_password must be at least 6 characters")
+    if admin_role not in {"principal", "admin"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="admin_role must be Principal or Admin")
+
+    school = db.scalar(select(School).order_by(School.created_at.asc()))
+    if school is None:
+        school = School(
+            name=school_name,
+            school_type=clean(payload.school_type, "school"),
+            affiliation_board=clean(payload.affiliation_board),
+            email=clean(payload.email),
+            phone=clean(payload.phone),
+            city=clean(payload.city),
+            state=clean(payload.state),
+            principal_name=admin_name if admin_role == "principal" else "",
+            registration_number="",
+            logo_url="",
+        )
+        db.add(school)
+        db.flush()
+    else:
+        school.name = school_name
+        school.school_type = clean(payload.school_type, "school")
+        school.affiliation_board = clean(payload.affiliation_board)
+        school.email = clean(payload.email)
+        school.phone = clean(payload.phone)
+        school.city = clean(payload.city)
+        school.state = clean(payload.state)
+        if admin_role == "principal":
+            school.principal_name = admin_name
+
+    for role_name in ("principal", "admin", "teacher", "parent"):
+        role = db.scalar(select(Role).where(Role.school_id == school.id, Role.name == role_name))
+        if role is None:
+            db.add(Role(school_id=school.id, name=role_name))
+    db.flush()
+
+    username = clean(payload.admin_username) or clean(payload.admin_email) or admin_role
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None:
+        user = User(
+            school_id=school.id,
+            username=username,
+            full_name=admin_name,
+            role=admin_role,
+            linked_type="staff" if admin_role == "admin" else None,
+            linked_id="staff-admin" if admin_role == "admin" else None,
+            password_hash=hash_password(password),
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+    else:
+        user.school_id = school.id
+        user.full_name = admin_name
+        user.role = admin_role
+        user.password_hash = hash_password(password)
+        user.is_active = True
+    ensure_user_role(db, user, admin_role)
+    db.commit()
+    db.refresh(school)
+    db.refresh(user)
+    return success(
+        {"school": school_payload(school), "auth": login_payload(db, settings, user)},
+        message="School setup completed",
     )
 
 
@@ -2356,6 +2484,4 @@ def fee_structures(
 @router.get("/fees/invoices")
 def fee_invoices(page: int = 1, page_size: int = 100, current_user: CurrentUser = Depends(get_current_user)) -> dict[str, Any]:
     return page_response([], page=page, page_size=page_size)
-
-
 

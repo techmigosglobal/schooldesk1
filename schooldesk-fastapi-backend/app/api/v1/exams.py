@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import utcnow
 from app.dependencies.auth import CurrentUser, get_current_user, require_principal_or_admin
+from app.api.v1 import app_records
 from app.models.catalog import GradeSubject, Student
 from app.models.exam import Exam, ExamMark
 from app.models.goal_task import AuditLog
@@ -175,6 +176,46 @@ def create_exam(
     db.commit()
     db.refresh(exam)
     return {"success": True, "data": exam_payload(exam), "message": "Exam created"}
+
+
+@router.get("/exams/schedules")
+def list_exam_schedules(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.list_or_get_records("exams/schedules", page, page_size, db, current_user)
+
+
+@router.get("/exams/report-cards")
+def list_exam_report_cards(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.list_or_get_records("exams/report-cards", page, page_size, db, current_user)
+
+
+@router.get("/exams/grading-scale")
+def list_exam_grading_scale(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.list_or_get_records("exams/grading-scale", page, page_size, db, current_user)
+
+
+@router.get("/exams/types")
+def list_exam_types(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    return app_records.list_or_get_records("exams/types", page, page_size, db, current_user)
 
 
 @router.get("/exams/{exam_id}")

@@ -16,8 +16,10 @@ from app.models.attendance import StaffAttendance, StudentAttendance
 from app.models.exam import Exam, ExamMark
 from app.models.timetable import TimetableSlot
 from app.models.guardian import Guardian
+from app.models.app_record import AppRecord
 
 __all__ = [
+    "AppRecord",
     "ApprovalRequest",
     "AcademicTerm",
     "AcademicYear",
