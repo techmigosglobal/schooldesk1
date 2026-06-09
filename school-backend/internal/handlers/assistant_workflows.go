@@ -606,7 +606,7 @@ func (h *AssistantWorkflowHandler) executeCreateClass(c *gin.Context, data map[s
 			if err == nil {
 				return fmt.Errorf("class section %s already exists", name)
 			}
-			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 			var classTeacher *string
@@ -883,7 +883,7 @@ func resolveAssistantAcademicYear(tx *gorm.DB, schoolID string, details map[stri
 		}
 		return existing, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.AcademicYear{}, err
 	}
 
@@ -965,7 +965,7 @@ func resolveAssistantGrade(tx *gorm.DB, schoolID, gradeID, gradeName string, gra
 	if err == nil {
 		return grade, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Grade{}, err
 	}
 	grade = models.Grade{SchoolID: schoolID, GradeNumber: gradeNumber, GradeName: gradeName}
@@ -1036,7 +1036,7 @@ func resolveAssistantFeeCategory(tx *gorm.DB, schoolID string, item map[string]i
 	if err == nil {
 		return category.ID, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
 	}
 	category = models.FeeCategory{SchoolID: schoolID, CategoryName: categoryName, Frequency: frequency}
@@ -1110,7 +1110,7 @@ func resolveAssistantSubject(tx *gorm.DB, schoolID string, item map[string]inter
 	if err == nil {
 		return subject, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Subject{}, err
 	}
 	subject = models.Subject{
@@ -1139,7 +1139,7 @@ func resolveAssistantDepartment(tx *gorm.DB, schoolID, departmentID, departmentN
 	if err == nil {
 		return row.ID, nil
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", err
 	}
 	row = models.Department{SchoolID: schoolID, DepartmentName: name, Description: "Created by guided assistant"}

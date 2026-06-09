@@ -44,6 +44,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	assistantWorkflowHandler := handlers.NewAssistantWorkflowHandler()
 	reportExportHandler := handlers.NewReportExportHandler()
 	aliasHandler := handlers.NewOperationalAliasHandler()
+	parentSelfHandler := handlers.NewParentSelfHandler()
+	teacherSelfHandler := handlers.NewTeacherSelfHandler()
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
 		resource, ok := handlers.TablesMDResourceFor(table)
 		if !ok {
@@ -380,6 +382,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			leave.GET("/applications", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), leaveHandler.GetLeaveApplications)
 			leave.POST("/applications", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("leave_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), leaveHandler.CreateLeaveApplication)
 			leave.PUT("/applications/:id/approve", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("leave_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), leaveHandler.ApproveLeaveApplication)
+			leave.POST("/applications/:id/recall", middleware.RBACMiddleware("Teacher"), teacherSelfHandler.RecallLeaveApplication)
 			leave.GET("/balances", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), leaveHandler.GetLeaveBalances)
 			leave.POST("/balances/initialize", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("leave_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), leaveHandler.InitializeLeaveBalances)
 		}
@@ -487,6 +490,17 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		me.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			me.GET("/students", middleware.RBACMiddleware("Parent"), parentLinkHandler.GetMyStudents)
+			me.GET("/profile", middleware.RBACMiddleware("Parent", "Teacher"), parentSelfHandler.GetMyProfile)
+			me.PATCH("/profile", middleware.RBACMiddleware("Parent", "Teacher"), parentSelfHandler.PatchMyProfile)
+			me.GET("/timetable", middleware.RBACMiddleware("Parent"), parentSelfHandler.GetMyChildTimetable)
+			me.GET("/exam-schedule", middleware.RBACMiddleware("Parent"), parentSelfHandler.GetMyChildExamSchedule)
+		}
+
+		teacherGroup := api.Group("/teacher")
+		teacherGroup.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			teacherGroup.GET("/ptm-slots", middleware.RBACMiddleware("Teacher"), teacherSelfHandler.GetMyPTMSlots)
+			teacherGroup.POST("/ptm-slots", middleware.RBACMiddleware("Teacher"), teacherSelfHandler.CreateMyPTMSlot)
 		}
 
 		users := api.Group("/users")

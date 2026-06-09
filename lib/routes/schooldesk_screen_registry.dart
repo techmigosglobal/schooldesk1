@@ -534,6 +534,12 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
+      route: '/teacher-discipline-screen',
+      title: 'Student Discipline',
+      module: 'Academics',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/teacher-communication-screen',
       title: 'Communication',
       module: 'Communication',

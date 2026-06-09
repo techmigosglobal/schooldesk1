@@ -293,7 +293,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   DateTime? _slotStart(Map<String, dynamic> row) {
-    final time = teacherFlowText(row['time']);
+    var time = teacherFlowText(row['time']);
+    if (time.contains(' - ')) {
+      time = time.split(' - ').first;
+    }
     final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(time);
     if (match == null) return null;
     final now = DateTime.now();

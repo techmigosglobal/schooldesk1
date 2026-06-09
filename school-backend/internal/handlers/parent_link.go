@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
@@ -227,33 +228,151 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		return
 	}
 
-	var links []models.ParentStudentLink
-	if err := database.DB.
-		Where("school_id = ? AND parent_user_id = ?", schoolID, parentUserID).
-		Preload("Student").
-		Preload("Student.Guardians").
-		Preload("Student.MedicalRecord").
-		Preload("Student.Documents").
-		Preload("Student.CurrentSection").
-		Preload("Student.CurrentSection.Grade").
-		Preload("Student.CurrentSection.ClassTeacher").
-		Find(&links).Error; err != nil {
-		fail(c, http.StatusInternalServerError, "Failed to fetch linked students")
+	type studentRow struct {
+		ID                          string  `json:"id"`
+		FirstName                   string  `json:"first_name"`
+		LastName                    string  `json:"last_name"`
+		AdmissionNumber             string  `json:"admission_number"`
+		StudentCode                 string  `json:"student_code"`
+		CurrentSectionID            *string `json:"current_section_id"`
+		Status                      string  `json:"status"`
+		SectionName                 string  `json:"section_name"`
+		GradeName                   string  `json:"grade_name"`
+		ClassTeacherName            string  `json:"class_teacher_name"`
+		AttendancePct               float64 `json:"attendance_pct"`
+		HomeworkDueCount            int64   `json:"homework_due_count"`
+		FeeBalance                  float64 `json:"fee_balance"`
+		FeePendingInvoices          int64   `json:"fee_pending_invoices"`
+		UpcomingExamDate            *string `json:"upcoming_exam_date"`
+		PrimaryGuardianName         string  `json:"primary_guardian_name"`
+		PrimaryGuardianRelationship string  `json:"primary_guardian_relationship"`
+		PrimaryGuardianPhone        string  `json:"primary_guardian_phone"`
+		PrimaryGuardianEmail        string  `json:"primary_guardian_email"`
+	}
+
+	var dbRows []studentRow
+	now := time.Now().UTC()
+	if err := database.DB.Raw(`
+		SELECT
+			students.id AS id,
+			students.first_name AS first_name,
+			students.last_name AS last_name,
+			students.admission_number AS admission_number,
+			students.student_code AS student_code,
+			students.current_section_id AS current_section_id,
+			students.status AS status,
+			COALESCE(sections.section_name, '') AS section_name,
+			COALESCE(grades.grade_name, '') AS grade_name,
+			COALESCE(staffs.first_name || ' ' || staffs.last_name, '') AS class_teacher_name,
+			COALESCE((
+				SELECT CAST(COUNT(CASE WHEN LOWER(sa.status) IN ('present', 'late') THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0)
+				FROM student_attendances sa
+				WHERE sa.student_id = students.id
+			), 0.0) AS attendance_pct,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM homework h
+				WHERE h.school_id = parent_student_links.school_id
+				  AND h.section_id = students.current_section_id
+				  AND h.status NOT IN ('completed', 'closed')
+				  AND NOT EXISTS (
+					  SELECT 1 FROM homework_submissions hs
+					  WHERE hs.homework_id = h.homework_id
+					    AND hs.student_id = students.id
+				  )
+			), 0) AS homework_due_count,
+			COALESCE((
+				SELECT SUM(fi.balance)
+				FROM fee_invoices fi
+				WHERE fi.student_id = students.id AND fi.status != 'paid'
+			), 0.0) AS fee_balance,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM fee_invoices fi
+				WHERE fi.student_id = students.id AND fi.status != 'paid'
+			), 0) AS fee_pending_invoices,
+			(
+				SELECT strftime('%Y-%m-%d', MIN(es.exam_date))
+				FROM exam_schedules es
+				JOIN exams e ON e.id = es.exam_id
+				WHERE e.school_id = parent_student_links.school_id
+				  AND es.section_id = students.current_section_id
+				  AND es.exam_date >= ?
+			) AS upcoming_exam_date,
+			COALESCE((SELECT g.full_name FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_name,
+			COALESCE((SELECT g.relationship FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_relationship,
+			COALESCE((SELECT g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_phone,
+			COALESCE((SELECT g.email FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_email
+		FROM parent_student_links
+		JOIN students ON students.id = parent_student_links.student_id
+		LEFT JOIN sections ON sections.id = students.current_section_id
+		LEFT JOIN grades ON grades.id = sections.grade_id
+		LEFT JOIN staffs ON staffs.id = sections.class_teacher_id
+		WHERE parent_student_links.school_id = ? 
+		  AND parent_student_links.parent_user_id = ? 
+		  AND students.status != 'inactive'
+	`, now, schoolID, parentUserID).Scan(&dbRows).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load linked students")
 		return
 	}
 
-	students := make([]models.Student, 0, len(links))
-	for _, link := range links {
-		if link.Student == nil {
-			continue
+	result := make([]gin.H, 0, len(dbRows))
+	for _, row := range dbRows {
+		attendanceStatus := "Needs attention"
+		if row.AttendancePct >= 75 {
+			attendanceStatus = "Present"
 		}
-		if strings.EqualFold(strings.TrimSpace(link.Student.Status), "inactive") {
-			continue
+		if row.AttendancePct == 0 {
+			attendanceStatus = "Not marked"
 		}
-		students = append(students, *link.Student)
+
+		feeStatus := "clear"
+		if row.FeePendingInvoices > 0 || row.FeeBalance > 0 {
+			feeStatus = "pending"
+		}
+
+		result = append(result, gin.H{
+			"id":               row.ID,
+			"first_name":       row.FirstName,
+			"last_name":        row.LastName,
+			"admission_number": row.AdmissionNumber,
+			"student_code":     row.StudentCode,
+			"current_section_id": row.CurrentSectionID,
+			"status":           row.Status,
+			"current_section": gin.H{
+				"section_name": row.SectionName,
+				"grade": gin.H{
+					"grade_name": row.GradeName,
+				},
+				"class_teacher": gin.H{
+					"name": row.ClassTeacherName,
+				},
+				"class_teacher_name": row.ClassTeacherName,
+			},
+			"attendance_summary": gin.H{
+				"percent":      row.AttendancePct,
+				"status_label": attendanceStatus,
+			},
+			"fee_summary": gin.H{
+				"balance":          row.FeeBalance,
+				"pending_invoices": row.FeePendingInvoices,
+				"status":           feeStatus,
+			},
+			"pending_homework_count": row.HomeworkDueCount,
+			"upcoming_exam_date":     row.UpcomingExamDate,
+			"primary_guardian": gin.H{
+				"full_name":    row.PrimaryGuardianName,
+				"relationship": row.PrimaryGuardianRelationship,
+				"phone":        row.PrimaryGuardianPhone,
+				"email":        row.PrimaryGuardianEmail,
+				"is_primary":   true,
+			},
+			"guardians": []gin.H{},
+			"documents": []gin.H{},
+		})
 	}
 
-	success(c, http.StatusOK, studentResponseRows(database.DB, schoolID, students), "")
+	success(c, http.StatusOK, result, "")
 }
 
 func (h *ParentLinkHandler) SetStudentParent(c *gin.Context) {

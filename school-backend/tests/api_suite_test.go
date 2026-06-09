@@ -75,6 +75,7 @@ func TestCompleteAPISuite(t *testing.T) {
 		"MIGRATE_ON_START=true",
 		"SEED_ON_START=false",
 		"GIN_MODE=release",
+		"REDIS_URL=",
 	)
 	var logs bytes.Buffer
 	cmd.Stdout = &logs
@@ -224,6 +225,7 @@ func TestCompleteAPISuite(t *testing.T) {
 		t.Fatalf("write reports: %v", err)
 	}
 	if rep.Failed > 0 {
+		t.Logf("Backend Server Logs:\n%s", logs.String())
 		t.Fatalf("api suite failed: %d/%d failed; see test-report/report.html", rep.Failed, rep.Total)
 	}
 }

@@ -41,6 +41,10 @@ type parentChildSummary struct {
 	CurrentSectionID  *string `json:"current_section_id"`
 	PendingFeeBalance float64 `json:"pending_fee_balance"`
 	PendingInvoices   int64   `json:"pending_invoices"`
+	AttendancePct     float64 `json:"attendance_pct"`
+	HomeworkDueCount  int64   `json:"homework_due"`
+	ClassTeacherName  string  `json:"class_teacher_name"`
+	NextExamDate      *string `json:"next_exam_date"`
 }
 
 type principalOperationalGap struct {
@@ -814,6 +818,8 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to load parent dashboard")
 		return
 	}
+	now := time.Now().UTC()
+	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 	var children []parentChildSummary
 	if err := database.DB.Raw(`
 		SELECT
@@ -823,14 +829,45 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 			students.admission_number,
 			students.current_section_id,
 			COALESCE(SUM(CASE WHEN fee_invoices.status != 'paid' THEN fee_invoices.balance ELSE 0 END), 0) AS pending_fee_balance,
-			COUNT(CASE WHEN fee_invoices.status != 'paid' THEN 1 END) AS pending_invoices
+			COUNT(CASE WHEN fee_invoices.status != 'paid' THEN 1 END) AS pending_invoices,
+			COALESCE((
+				SELECT CAST(COUNT(CASE WHEN LOWER(sa.status) IN ('present', 'late') THEN 1 END) AS FLOAT) * 100.0 / NULLIF(COUNT(*), 0)
+				FROM student_attendances sa
+				WHERE sa.student_id = students.id AND sa.marked_at >= ?
+			), 0.0) AS attendance_pct,
+			COALESCE((
+				SELECT COUNT(*)
+				FROM homework h
+				WHERE h.school_id = parent_student_links.school_id
+				  AND h.section_id = students.current_section_id
+				  AND h.status NOT IN ('completed', 'closed')
+				  AND NOT EXISTS (
+					  SELECT 1 FROM homework_submissions hs
+					  WHERE hs.homework_id = h.homework_id
+					    AND hs.student_id = students.id
+				  )
+			), 0) AS homework_due,
+			COALESCE((
+				SELECT st.first_name || ' ' || st.last_name
+				FROM sections s
+				JOIN staffs st ON st.id = s.class_teacher_id
+				WHERE s.id = students.current_section_id
+			), '') AS class_teacher_name,
+			(
+				SELECT strftime('%Y-%m-%d', MIN(es.exam_date))
+				FROM exam_schedules es
+				JOIN exams e ON e.id = es.exam_id
+				WHERE e.school_id = parent_student_links.school_id
+				  AND es.section_id = students.current_section_id
+				  AND es.exam_date >= ?
+			) AS next_exam_date
 		FROM parent_student_links
 		JOIN students ON students.id = parent_student_links.student_id
 		LEFT JOIN fee_invoices ON fee_invoices.student_id = students.id
 		WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ? AND students.status != 'inactive'
-		GROUP BY students.id, students.first_name, students.last_name, students.admission_number, students.current_section_id
+		GROUP BY students.id, students.first_name, students.last_name, students.admission_number, students.current_section_id, parent_student_links.school_id
 		ORDER BY students.first_name, students.last_name
-	`, schoolID, userID).Scan(&children).Error; err != nil {
+	`, startOfMonth, now, schoolID, userID).Scan(&children).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load child summaries")
 		return
 	}
