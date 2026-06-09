@@ -1754,6 +1754,26 @@ def students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     stmt = select(Student).where(Student.school_id == current_user.school_id, Student.deleted_at.is_(None))
+
+    # RBAC: teachers see only students in their class_teacher_sections
+    if current_user.role == "teacher":
+        if not current_user.class_teacher_sections:
+            return success([], page=page, page_size=page_size, total=0, total_pages=1)
+        stmt = stmt.where(Student.current_section_id.in_(current_user.class_teacher_sections))
+
+    # RBAC: parents see only students they have linked leave applications for
+    if current_user.role in {"parent", "guardian"}:
+        linked_student_ids = db.scalars(
+            select(StudentLeaveApplication.student_id).where(
+                StudentLeaveApplication.school_id == current_user.school_id,
+                StudentLeaveApplication.parent_user_id == current_user.id,
+                StudentLeaveApplication.deleted_at.is_(None),
+            )
+        ).all()
+        if not linked_student_ids:
+            return success([], page=page, page_size=page_size, total=0, total_pages=1)
+        stmt = stmt.where(Student.id.in_(linked_student_ids))
+
     if section_id:
         stmt = stmt.where(Student.current_section_id == section_id)
     wanted_status = status or status_filter
