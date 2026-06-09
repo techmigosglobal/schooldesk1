@@ -175,7 +175,11 @@ def get_student_attendance(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
-    require_principal_or_admin(current_user)
+    if current_user.role not in {"principal", "admin"}:
+        if current_user.role == "teacher" and section_id not in (current_user.class_teacher_sections or ()):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your class section")
+        if current_user.role not in {"teacher"}:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student attendance access denied")
     try:
         attendance_date = date.fromisoformat(date_str)
     except ValueError:
@@ -200,7 +204,11 @@ def mark_student_attendance(
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
-    require_principal_or_admin(current_user)
+    if current_user.role not in {"principal", "admin"}:
+        if current_user.role == "teacher" and section_id not in (current_user.class_teacher_sections or ()):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your class section")
+        if current_user.role not in {"teacher"}:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student attendance access denied")
     try:
         attendance_date = date.fromisoformat(date_str)
     except ValueError:

@@ -1,13 +1,10 @@
 from __future__ import annotations
 
 import json
-import logging
 from functools import wraps
 from typing import Any, Callable, TypeVar, ParamSpec
 
 import redis
-
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 P = ParamSpec("P")
@@ -20,6 +17,9 @@ class Cache:
         self._redis_url = redis_url
         self._client: redis.Redis | None = None
         self._available: bool = False
+        # Lazy import to avoid structlog not being configured at module load time
+        from app.core.logging_config import get_logger
+        self._logger = get_logger(__name__)
         self._connect()
 
     def _connect(self) -> None:
@@ -28,9 +28,9 @@ class Cache:
             self._client = redis.from_url(self._redis_url, decode_responses=True, socket_connect_timeout=5)
             self._client.ping()
             self._available = True
-            logger.info("redis_cache_connected", url=self._redis_url)
+            self._logger.info("redis_cache_connected", url=self._redis_url)
         except redis.RedisError as exc:
-            logger.warning("redis_cache_unavailable", url=self._redis_url, error=str(exc))
+            self._logger.warning("redis_cache_unavailable", url=self._redis_url, error=str(exc))
             self._available = False
 
     @property
@@ -44,12 +44,12 @@ class Cache:
         try:
             val = self._client.get(key)
             if val:
-                logger.debug("cache_hit", key=key)
+                self._logger.debug("cache_hit", key=key)
                 return json.loads(val)
-            logger.debug("cache_miss", key=key)
+            self._logger.debug("cache_miss", key=key)
             return None
         except redis.RedisError as exc:
-            logger.warning("cache_get_error", key=key, error=str(exc))
+            self._logger.warning("cache_get_error", key=key, error=str(exc))
             self._available = False
             return None
 
@@ -59,9 +59,9 @@ class Cache:
             return
         try:
             self._client.setex(key, ttl, json.dumps(value, default=str))
-            logger.debug("cache_set", key=key, ttl=ttl)
+            self._logger.debug("cache_set", key=key, ttl=ttl)
         except redis.RedisError as exc:
-            logger.warning("cache_set_error", key=key, error=str(exc))
+            self._logger.warning("cache_set_error", key=key, error=str(exc))
             self._available = False
 
     def delete(self, key: str) -> None:
@@ -70,9 +70,9 @@ class Cache:
             return
         try:
             self._client.delete(key)
-            logger.debug("cache_delete", key=key)
+            self._logger.debug("cache_delete", key=key)
         except redis.RedisError as exc:
-            logger.warning("cache_delete_error", key=key, error=str(exc))
+            self._logger.warning("cache_delete_error", key=key, error=str(exc))
             self._available = False
 
     def delete_pattern(self, pattern: str) -> None:
@@ -83,9 +83,9 @@ class Cache:
             keys = list(self._client.keys(pattern))
             if keys:
                 self._client.delete(*keys)
-                logger.debug("cache_delete_pattern", pattern=pattern, count=len(keys))
+                self._logger.debug("cache_delete_pattern", pattern=pattern, count=len(keys))
         except redis.RedisError as exc:
-            logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(exc))
+            self._logger.warning("cache_delete_pattern_error", pattern=pattern, error=str(exc))
             self._available = False
 
 
