@@ -271,7 +271,35 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Map<String, dynamic> get _currentSlot {
     if (_timetable.isEmpty) return const {};
-    return _timetable.first;
+    final upcoming = _timetable.where((row) {
+      final start = _slotStart(row);
+      if (start == null) return false;
+      return !start.isBefore(DateTime.now());
+    }).toList();
+    if (upcoming.isNotEmpty) {
+      upcoming.sort((a, b) => _slotStart(a)!.compareTo(_slotStart(b)!));
+      return upcoming.first;
+    }
+    final sorted = [..._timetable]
+      ..sort((a, b) {
+        final aStart = _slotStart(a);
+        final bStart = _slotStart(b);
+        if (aStart == null && bStart == null) return 0;
+        if (aStart == null) return 1;
+        if (bStart == null) return -1;
+        return bStart.compareTo(aStart);
+      });
+    return sorted.first;
+  }
+
+  DateTime? _slotStart(Map<String, dynamic> row) {
+    final time = teacherFlowText(row['time']);
+    final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(time);
+    if (match == null) return null;
+    final now = DateTime.now();
+    final hour = int.tryParse(match.group(1) ?? '') ?? 0;
+    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    return DateTime(now.year, now.month, now.day, hour, minute);
   }
 
   List<Widget> _todayFeed(BuildContext context) {

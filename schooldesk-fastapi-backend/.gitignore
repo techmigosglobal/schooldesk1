@@ -1,8 +1,0 @@
-__pycache__/
-.pytest_cache/
-.venv/
-*.pyc
-*.db
-*.sqlite
-.env.local
-.env.production

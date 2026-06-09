@@ -456,12 +456,8 @@ void main() {
     expect(dashboard, contains('.toDouble()'));
     expect(dashboard, contains('mainAxisExtent: tileExtent'));
     expect(dashboard, contains('maxLines: 2'));
-    expect(dashboard, contains("label: 'Guided Assistant'"));
-    expect(dashboard, contains('route: AppRoutes.guidedAssistant'));
-    expect(
-      dashboard,
-      contains('SchoolDeskUiIllustrations.principalGuidedAssistant'),
-    );
+    expect(dashboard, isNot(contains("label: 'Guided Assistant'")));
+    expect(dashboard, isNot(contains('route: AppRoutes.guidedAssistant')));
     expect(dashboard, contains("label: 'Academic Years'"));
     expect(dashboard, contains('route: AppRoutes.academicManagement'));
     expect(dashboard, contains('SchoolDeskUiIllustrations.calendar'));
@@ -474,7 +470,7 @@ void main() {
     expect(dashboard, contains('route: AppRoutes.principalAttendance'));
     expect(dashboard, contains("label: 'Subjects'"));
     expect(dashboard, contains("label: 'Timetable'"));
-    expect(dashboard, contains("label: 'Exams'"));
+    expect(dashboard, contains("label: 'Exam Timetable'"));
     expect(dashboard, contains("label: 'Results'"));
     expect(dashboard, contains("label: 'Fees'"));
     expect(dashboard, contains("label: 'Chat Communications'"));
@@ -486,7 +482,6 @@ void main() {
 
     for (final asset in <String>[
       'assets/images/ui/principal-students.svg',
-      'assets/images/ui/principal-guided-assistant.svg',
       'assets/images/ui/illustration-calendar.svg',
       'assets/images/ui/illustration-chat.svg',
       'assets/images/ui/principal-staff-management.svg',
@@ -498,7 +493,6 @@ void main() {
       'assets/images/ui/principal-results.svg',
       'assets/images/ui/principal-fees.svg',
       'assets/images/ui/principal-events.svg',
-      'assets/images/ui/principal-inbox.svg',
     ]) {
       expect(File(asset).existsSync(), isTrue, reason: '$asset is missing');
     }
@@ -550,13 +544,9 @@ void main() {
       expect(routes, contains('static const String principalAttendance'));
       expect(routes, contains('PrincipalAttendanceScreen'));
       expect(guard, contains("AppRoutes.principalAttendance: {'principal'}"));
-      expect(dashboard, contains('AppRoutes.guidedAssistant'));
-      expect(routes, contains('static const String guidedAssistant'));
-      expect(routes, contains('GuidedAssistantScreen'));
-      expect(
-        guard,
-        contains("AppRoutes.guidedAssistant: {'principal', 'admin'}"),
-      );
+      expect(dashboard, isNot(contains('AppRoutes.guidedAssistant')));
+      expect(routes, isNot(contains('static const String guidedAssistant')));
+      expect(guard, isNot(contains('AppRoutes.guidedAssistant')));
 
       for (final route in <String>[
         'principalTimetable',
@@ -570,7 +560,7 @@ void main() {
 
       expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
       expect(dashboard, contains('SchoolDeskUiIllustrations.principalFees'));
-      expect(dashboard, contains('route: AppRoutes.principalInbox'));
+      expect(dashboard, isNot(contains('route: AppRoutes.principalInbox')));
       expect(
         dashboard,
         contains('route: AppRoutes.principalChatCommunications'),
@@ -639,45 +629,9 @@ void main() {
     },
   );
 
-  test('guided assistant mobile layout keeps key actions visible', () {
-    final source = File(
-      'lib/features/communication/presentation/screens/guided_assistant_screen/guided_assistant_screen.dart',
-    ).readAsStringSync();
-
-    expect(source, contains('EdgeInsets _screenPadding'));
-    expect(source, contains('class _AssistantTopBar'));
-    expect(source, contains('class _AssistantMenuCard'));
-    expect(source, contains('class _StepProgressBar'));
-    expect(source, contains('class _AssistantFooterActions'));
-    expect(source, contains('class _CommandInputBar'));
-    expect(source, contains('class _AssistantComposerFooter'));
-    expect(source, contains("hint: 'Type here...'"));
-    expect(source, contains('actionIcon: Icons.send_rounded'));
-    expect(source, contains('_submitClassNameFromComposer'));
-    expect(source, contains('_selectClassAcademicYear'));
-    expect(source, contains('_api.getNotifications()'));
-    expect(source, contains('unreadNotifications: _unreadNotifications'));
-    expect(source, contains("'Confirm & Create'"));
-    expect(source, contains('Future<void> _confirmAndCreate()'));
-    expect(source, isNot(contains('drawer:')));
-    expect(source, isNot(contains('Icons.menu')));
-    expect(source, isNot(contains('mock')));
-    expect(source, isNot(contains('demo')));
-    expect(source, isNot(contains('sample')));
-    expect(source, isNot(contains('badge: 3')));
-    expect(source, isNot(contains('AlertDialog(')));
-    expect(source, contains('mainAxisExtent: 96'));
-    expect(source, contains('SliverGridDelegateWithFixedCrossAxisCount'));
-    expect(source, contains('BouncingScrollPhysics'));
-    expect(source, contains('SafeArea('));
-  });
-
-  test('principal events and inbox use directory workflows', () {
+  test('principal events use directory workflows and inbox is removed', () {
     final events = File(
       'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
-    ).readAsStringSync();
-    final inbox = File(
-      'lib/features/communication/presentation/screens/principal_inbox_screen/principal_operational_inbox_screen.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -708,17 +662,12 @@ void main() {
     expect(events, contains("createRaw('/events'"));
     expect(events, contains("updateRaw('/events/\$eventId'"));
     expect(events, contains("deleteRaw('/events/\${event.id}'"));
-    expect(inbox, contains('Operational Inbox'));
-    expect(inbox, contains('NotificationService.getInstance'));
-    expect(inbox, contains("getRawList(source.path)"));
-    expect(inbox, contains("'/events/approvals'"));
-    expect(inbox, contains('decideLeaveApplication'));
-    expect(inbox, contains('markAsRead'));
-    expect(routes, contains('static const String principalInbox'));
-    expect(routes, contains('PrincipalOperationalInboxScreen'));
-    expect(guard, contains("AppRoutes.principalInbox: {'principal'}"));
-    expect(dashboard, contains('route: AppRoutes.principalInbox'));
-    expect(appNavigation, contains('route: AppRoutes.principalInbox'));
+    expect(routes, isNot(contains('static const String principalInbox')));
+    expect(routes, isNot(contains('PrincipalOperationalInboxScreen')));
+    expect(guard, isNot(contains('AppRoutes.principalInbox')));
+    expect(dashboard, isNot(contains('route: AppRoutes.principalInbox')));
+    expect(appNavigation, isNot(contains('route: AppRoutes.principalInbox')));
+    expect(appNavigation, contains('route: AppRoutes.notificationCenter'));
   });
 
   test('principal attendance UI uses directory workflow without QR display', () {
@@ -845,8 +794,8 @@ void main() {
           'sectionId: _scopedSectionId.isEmpty ? null : _scopedSectionId',
         ),
       );
-      expect(moduleScaffold, contains("label: principal ? 'Inbox'"));
-      expect(moduleScaffold, contains('AppRoutes.principalInbox'));
+      expect(moduleScaffold, contains('SchoolDeskGlossary.notifications'));
+      expect(moduleScaffold, isNot(contains('AppRoutes.principalInbox')));
     },
   );
 
@@ -1000,27 +949,40 @@ void main() {
     expect(examReview, contains('_PrincipalExamView.studentResult'));
     expect(examReview, contains('_PrincipalExamView.gradeSetup'));
     expect(examReview, contains('_PrincipalExamView.reports'));
-    expect(examReview, contains("_buildHeader('Exams'"));
-    expect(examReview, contains('View and manage exam information'));
+    expect(examReview, contains("_buildHeader(\n        'Exam Timetable'"));
+    expect(
+      examReview,
+      contains(
+        'Create exams, schedule classwise papers, and publish timetables',
+      ),
+    );
     expect(examReview, contains('Total Exams'));
     expect(examReview, contains('Upcoming'));
     expect(examReview, contains('Completed'));
     expect(examReview, contains('Total Subjects'));
     expect(examReview, contains('Total Students'));
     expect(examReview, contains('Results Published'));
+    expect(examReview, contains('Create Exam'));
+    expect(examReview, contains('Create Classwise Exam Timetable'));
     expect(examReview, contains('Examination List'));
-    expect(examReview, contains('Exam Schedule'));
+    expect(examReview, contains('Classwise Timetable'));
     expect(examReview, contains('Results'));
     expect(examReview, contains('Grade Setup'));
     expect(examReview, contains('Exam Reports'));
     expect(
       examReview,
-      contains(
-        'Teachers prepare syllabus, schedules, marks, and report cards.',
-      ),
+      contains('Use Create Exam first, then Create Classwise Exam Timetable'),
     );
-    expect(examReview, contains('Principal reviews and publishes'));
+    expect(
+      examReview,
+      contains('Publish the timetable when every paper is scheduled'),
+    );
     expect(examReview, contains('Publish Exam Timetable'));
+    expect(examReview, contains('Edit Exam'));
+    expect(examReview, contains('Unpublish Exam Timetable'));
+    expect(examReview, contains('AdminExamFormArgs('));
+    expect(examReview, contains("'exam_name': _examTitle(exam)"));
+    expect(examReview, contains('setExamPublished('));
     expect(examReview, contains("actionType: 'publish_exam_timetable'"));
     expect(examReview, contains("actionType: 'publish_results'"));
     expect(examReview, contains("actionType: 'hold_results'"));

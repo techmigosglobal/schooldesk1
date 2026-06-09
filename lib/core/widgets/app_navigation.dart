@@ -128,13 +128,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalDashboard,
             ),
             SchoolDeskNavigationItem(
-              index: 17,
-              icon: Icons.assistant_direction_outlined,
-              activeIcon: Icons.assistant_direction_rounded,
-              label: 'Guided Assistant',
-              route: AppRoutes.guidedAssistant,
-            ),
-            SchoolDeskNavigationItem(
               index: 14,
               icon: Icons.apartment_outlined,
               activeIcon: Icons.apartment_rounded,
@@ -363,10 +356,11 @@ class PrincipalShellBottomBar extends StatelessWidget {
         arguments: 'principal',
       ),
       _PrincipalShellDestination(
-        label: 'Inbox',
-        icon: Icons.mail_outline_rounded,
-        activeIcon: Icons.mail_rounded,
-        route: AppRoutes.principalInbox,
+        label: SchoolDeskGlossary.notifications,
+        icon: Icons.notifications_none_rounded,
+        activeIcon: Icons.notifications_rounded,
+        route: AppRoutes.notificationCenter,
+        arguments: 'principal',
       ),
       _PrincipalShellDestination(
         label: SchoolDeskGlossary.profile,

@@ -126,19 +126,20 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         await BackendApiClient.instance.createHomework(
           title: _titleController.text.trim(),
           subject: _subjectController.text.trim(),
-          className: widget.args.defaultClassName,
+          className: _selectedClassLabel,
           sectionId: _sectionId,
           teacherId: widget.args.teacherStaffId,
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
           dueDate: _dueDateController.text.trim(),
           studentId: _studentId,
         );
+        await _writeDiaryEntry();
       } else {
         await BackendApiClient.instance.updateHomework(
           homeworkId,
           title: _titleController.text.trim(),
           subject: _subjectController.text.trim(),
-          className: widget.args.defaultClassName,
+          className: _selectedClassLabel,
           sectionId: _sectionId,
           teacherId: widget.args.teacherStaffId,
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
@@ -343,6 +344,35 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     final grade = teacherFlowText(row['grade_name']);
     final section = teacherFlowText(row['section_name']);
     return [grade, section].where((part) => part.isNotEmpty).join(' ');
+  }
+
+  String get _selectedClassLabel {
+    final match = _classOptions.where(
+      (row) => teacherFlowText(row['id']) == _sectionId,
+    );
+    if (match.isNotEmpty) return _classLabel(match.first);
+    return widget.args.defaultClassName;
+  }
+
+  Future<void> _writeDiaryEntry() async {
+    await BackendApiClient.instance.createRaw('/diary-entries', {
+      'section_id': _sectionId,
+      'teacher_id': widget.args.teacherStaffId,
+      'staff_id': widget.args.teacherStaffId,
+      'date': DateTime.now().toUtc().toIso8601String(),
+      'entry_date': teacherFlowDate(DateTime.now()),
+      'entry_type': 'homework',
+      'type': 'homework',
+      'class': _selectedClassLabel,
+      'subject': _subjectController.text.trim(),
+      'title': 'Homework assigned',
+      'homework': _descriptionController.text.trim(),
+      'notes':
+          'Due ${_dueDateController.text.trim()} · ${_studentId.isEmpty ? 'Full class' : 'Individual student'}',
+      'content':
+          '$_homeworkType: ${_descriptionController.text.trim()}\nDue: ${_dueDateController.text.trim()}',
+      'created_by': 'Teacher',
+    });
   }
 }
 

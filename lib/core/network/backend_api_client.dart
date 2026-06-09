@@ -16,7 +16,6 @@ export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 part 'api_modules/auth_api.dart';
 part 'api_modules/client_interceptors.dart';
 part 'api_modules/principal_api.dart';
-part 'api_modules/assistant_api.dart';
 part 'api_modules/school_api.dart';
 part 'api_modules/staff_api.dart';
 part 'api_modules/users_api.dart';

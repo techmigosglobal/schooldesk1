@@ -641,11 +641,7 @@ class _ModuleBottomActionBar extends StatelessWidget {
     required String? currentRoute,
     required String homeRoute,
   }) {
-    final normalizedRole = role.trim().toLowerCase();
-    final principal = normalizedRole == 'principal';
-    final inboxRoute = principal
-        ? AppRoutes.principalInbox
-        : AppRoutes.notificationCenter;
+    final notificationsRoute = AppRoutes.notificationCenter;
     return [
       _BottomAction(
         label: 'Home',
@@ -662,15 +658,11 @@ class _ModuleBottomActionBar extends StatelessWidget {
         selected: currentRoute == AppRoutes.globalSearch,
       ),
       _BottomAction(
-        label: principal ? 'Inbox' : SchoolDeskGlossary.notifications,
-        icon: principal
-            ? Icons.mail_outline_rounded
-            : Icons.notifications_none_rounded,
-        activeIcon: principal
-            ? Icons.mail_rounded
-            : Icons.notifications_rounded,
-        route: inboxRoute,
-        selected: currentRoute == inboxRoute,
+        label: SchoolDeskGlossary.notifications,
+        icon: Icons.notifications_none_rounded,
+        activeIcon: Icons.notifications_rounded,
+        route: notificationsRoute,
+        selected: currentRoute == notificationsRoute,
         badgeCount: unreadCount,
       ),
       _BottomAction(

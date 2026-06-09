@@ -24,7 +24,9 @@ void main() {
       expect(source, contains("'enrollment_missing': enrollmentId.isEmpty"));
       expect(source, contains("throw Exception('Enrollment record missing"));
       expect(source, contains('getAttendanceSessions('));
-      expect(source, contains('timetableSlotId: slotId'));
+      expect(source, contains('RoleAccessService.teacherClassId'));
+      expect(source, contains('slotBelongsToSection ? slotId : null'));
+      expect(source, contains('academicYearId: academicYearId'));
       expect(source, contains('periodNumber: periodNumber'));
       expect(source, contains('markAttendance(sessionId, attendances)'));
       expect(source, isNot(contains('Request Correction')));
@@ -43,7 +45,10 @@ void main() {
       ).readAsStringSync();
 
       expect(source, contains("Tab(text: 'Chats')"));
+      expect(source, contains("Tab(text: 'Start Chat')"));
       expect(source, contains("Tab(text: 'School Notices')"));
+      expect(source, contains("api.getUsers(\n        role: 'Teacher'"));
+      expect(source, contains("api.getUsers(\n        role: 'Parent'"));
       expect(source, contains("getRawList('/message-conversations')"));
       expect(source, contains("getRawList('/messages')"));
       expect(source, contains('RoleAccessService.teacherStaffId'));
@@ -51,8 +56,15 @@ void main() {
       expect(source, contains("updateRaw('/messages/\$id'"));
       expect(source, contains("'conversation_id': conversationId"));
       expect(source, contains("'sender_role': 'Teacher'"));
+      expect(source, contains('class _ThreadTile'));
+      expect(source, contains('class _ChatBubble'));
+      expect(source, contains('class _ChatTarget'));
+      expect(source, contains("title: 'Class Parents'"));
+      expect(source, contains('_buildThreadPane'));
+      expect(source, contains('Visible to Principal monitoring'));
       expect(source, contains("IconButton.filled("));
       expect(source, contains("tooltip: 'Send message'"));
+      expect(source, isNot(contains('showDialog')));
       expect(source, isNot(contains('Send Notice')));
       expect(source, isNot(contains('Compose Notice')));
     },

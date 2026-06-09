@@ -576,14 +576,12 @@ class _AcademicBottomBar extends StatelessWidget {
                 ),
               ),
               _AcademicBottomNavItem(
-                label: 'Inbox',
-                icon: Icons.mail_outline_rounded,
+                label: 'Alerts',
+                icon: Icons.notifications_none_rounded,
                 onTap: () => Navigator.pushNamed(
                   context,
-                  role == 'admin'
-                      ? AppRoutes.notificationCenter
-                      : AppRoutes.principalInbox,
-                  arguments: role == 'admin' ? role : null,
+                  AppRoutes.notificationCenter,
+                  arguments: role,
                 ),
               ),
               _AcademicBottomNavItem(

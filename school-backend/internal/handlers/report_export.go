@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
@@ -73,8 +74,8 @@ func (h *ReportExportHandler) Create(category string) gin.HandlerFunc {
 			fail(c, http.StatusBadRequest, "format is required")
 			return
 		}
-		if format != "pdf" && format != "csv" && format != "json" {
-			fail(c, http.StatusBadRequest, "format must be pdf, csv, or json")
+		if format != "pdf" && format != "csv" && format != "json" && format != "xlsx" {
+			fail(c, http.StatusBadRequest, "format must be pdf, csv, json, or xlsx")
 			return
 		}
 		title := firstPayloadText(payload, "report_title", "report", "title", "name")
@@ -140,6 +141,16 @@ func writeReportArtifact(row models.ReportExport, payload map[string]interface{}
 			log.Printf("report export csv write failed for export %s: %v", row.ID, err)
 			return "", "", err
 		}
+	case "xlsx":
+		artifact, err := reportXLSX(row, payload)
+		if err != nil {
+			log.Printf("report export xlsx generation failed for export %s: %v", row.ID, err)
+			return "", "", err
+		}
+		if err := os.WriteFile(path, artifact, 0o644); err != nil {
+			log.Printf("report export xlsx write failed for export %s: %v", row.ID, err)
+			return "", "", err
+		}
 	case "pdf":
 		if err := os.WriteFile(path, reportPDF(row, payload), 0o644); err != nil {
 			log.Printf("report export pdf write failed for export %s: %v", row.ID, err)
@@ -170,6 +181,28 @@ func reportCSV(row models.ReportExport, payload map[string]interface{}) []byte {
 	}
 	writer.Flush()
 	return buffer.Bytes()
+}
+
+func reportXLSX(row models.ReportExport, payload map[string]interface{}) ([]byte, error) {
+	var buffer bytes.Buffer
+	archive := zip.NewWriter(&buffer)
+	files := map[string]string{
+		"[Content_Types].xml":        xlsxContentTypes(),
+		"_rels/.rels":                xlsxRels(),
+		"xl/workbook.xml":            xlsxWorkbook(),
+		"xl/_rels/workbook.xml.rels": xlsxWorkbookRels(),
+		"xl/worksheets/sheet1.xml":   xlsxSheet(row, payload),
+	}
+	for name, body := range files {
+		if err := writeZipFile(archive, name, body); err != nil {
+			_ = archive.Close()
+			return nil, err
+		}
+	}
+	if err := archive.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 func reportPDF(row models.ReportExport, payload map[string]interface{}) []byte {
@@ -217,6 +250,81 @@ func minimalPDF(title string, lines []string) []byte {
 	}
 	buffer.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xrefOffset))
 	return buffer.Bytes()
+}
+
+func writeZipFile(archive *zip.Writer, name, body string) error {
+	file, err := archive.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write([]byte(body))
+	return err
+}
+
+func xlsxContentTypes() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`
+}
+
+func xlsxRels() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`
+}
+
+func xlsxWorkbook() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Report Export" sheetId="1" r:id="rId1"/></sheets>
+</workbook>`
+}
+
+func xlsxWorkbookRels() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`
+}
+
+func xlsxSheet(row models.ReportExport, payload map[string]interface{}) string {
+	rows := [][]string{
+		{"field", "value"},
+		{"report_title", row.ReportTitle},
+		{"category", row.Category},
+		{"format", row.Format},
+		{"scope", row.Scope},
+	}
+	for key, value := range payload {
+		rows = append(rows, []string{key, fmt.Sprint(value)})
+	}
+	var sheet strings.Builder
+	sheet.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
+	sheet.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
+	for rowIndex, cells := range rows {
+		sheet.WriteString(fmt.Sprintf(`<row r="%d">`, rowIndex+1))
+		for columnIndex, value := range cells {
+			sheet.WriteString(xlsxCell(columnIndex, rowIndex+1, value))
+		}
+		sheet.WriteString(`</row>`)
+	}
+	sheet.WriteString(`</sheetData></worksheet>`)
+	return sheet.String()
+}
+
+func xlsxCell(columnIndex, rowIndex int, value string) string {
+	columnName := string(rune('A' + columnIndex))
+	return fmt.Sprintf(`<c r="%s%d" t="inlineStr"><is><t>%s</t></is></c>`, columnName, rowIndex, reportXMLTextEscape(value))
+}
+
+func reportXMLTextEscape(value string) string {
+	replacer := strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&apos;")
+	return replacer.Replace(value)
 }
 
 func sanitizeFilename(value string) string {

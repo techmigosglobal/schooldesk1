@@ -83,11 +83,19 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     final sectionId = RoleAccessService.teacherClassId;
     await BackendApiClient.instance.createRaw('/diary-entries', {
       'section_id': sectionId,
+      'teacher_id': RoleAccessService.teacherStaffId,
       'staff_id': RoleAccessService.teacherStaffId,
       'entry_type': 'no_homework',
+      'type': 'no_homework',
       'title': 'No Homework Today',
+      'class': RoleAccessService.teacherClassName,
+      'subject': RoleAccessService.teacherSubject,
+      'homework': 'No homework',
       'content':
           'No homework assigned for ${RoleAccessService.teacherSubject} today.',
+      'notes':
+          'No homework assigned for ${RoleAccessService.teacherSubject} today.',
+      'date': DateTime.now().toUtc().toIso8601String(),
       'entry_date': teacherFlowDate(DateTime.now()),
     });
     if (!mounted) return;

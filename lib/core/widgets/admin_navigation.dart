@@ -110,13 +110,6 @@ class _AdminDrawerState extends State<AdminDrawer> {
               label: SchoolDeskGlossary.dashboard,
               route: AppRoutes.adminDashboard,
             ),
-            SchoolDeskNavigationItem(
-              index: 16,
-              icon: Icons.assistant_direction_outlined,
-              activeIcon: Icons.assistant_direction_rounded,
-              label: 'Guided Assistant',
-              route: AppRoutes.guidedAssistant,
-            ),
           ],
         ),
         SchoolDeskNavigationSection(

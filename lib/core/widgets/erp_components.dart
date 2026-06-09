@@ -66,8 +66,6 @@ class SchoolDeskUiIllustrations {
   static const lessonPlanner =
       'assets/images/ui/illustration-lesson-planner.svg';
   static const principalStudents = 'assets/images/ui/principal-students.svg';
-  static const principalGuidedAssistant =
-      'assets/images/ui/principal-guided-assistant.svg';
   static const principalStaffManagement =
       'assets/images/ui/principal-staff-management.svg';
   static const principalGuardians = 'assets/images/ui/principal-guardians.svg';
@@ -78,7 +76,6 @@ class SchoolDeskUiIllustrations {
   static const principalResults = 'assets/images/ui/principal-results.svg';
   static const principalFees = 'assets/images/ui/principal-fees.svg';
   static const principalEvents = 'assets/images/ui/principal-events.svg';
-  static const principalInbox = 'assets/images/ui/principal-inbox.svg';
 }
 
 class SchoolDeskCard extends StatelessWidget {

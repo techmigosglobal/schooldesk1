@@ -364,7 +364,7 @@ class RoleAccessService {
     List<Map<String, dynamic>> timetable,
   ) {
     final today = DateTime.now().weekday;
-    return timetable
+    final rows = timetable
         .where((slot) => slot['day_of_week'] == today)
         .map(
           (slot) => {
@@ -381,6 +381,19 @@ class RoleAccessService {
           },
         )
         .toList();
+    rows.sort(
+      (a, b) => _timeMinutes(a['time']).compareTo(_timeMinutes(b['time'])),
+    );
+    return rows;
+  }
+
+  static int _timeMinutes(dynamic value) {
+    final text = _text(value);
+    final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(text);
+    if (match == null) return 24 * 60;
+    final hour = int.tryParse(match.group(1) ?? '') ?? 24;
+    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
+    return hour * 60 + minute;
   }
 
   static String _subjectFromTimetable(List<Map<String, dynamic>> timetable) {

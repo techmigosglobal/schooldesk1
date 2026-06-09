@@ -66,7 +66,7 @@ void main() {
     expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
   });
 
-  testWidgets('compact principal shell uses dashboard inbox navigation', (
+  testWidgets('compact principal shell uses notifications navigation', (
     tester,
   ) async {
     BackendApiClient.instance.clearAuthToken();
@@ -90,9 +90,8 @@ void main() {
 
     expect(find.text('Home'), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.search), findsOneWidget);
-    expect(find.text('Inbox'), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.notifications), findsOneWidget);
     expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
-    expect(find.text(SchoolDeskGlossary.notifications), findsNothing);
     expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
     await tester.tap(find.byIcon(Icons.menu_rounded));
     await tester.pumpAndSettle();

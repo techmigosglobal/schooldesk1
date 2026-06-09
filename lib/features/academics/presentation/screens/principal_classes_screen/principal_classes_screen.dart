@@ -2293,10 +2293,13 @@ class _ClassesDirectoryBottomBar extends StatelessWidget {
                 ),
               ),
               _ClassesBottomNavItem(
-                label: 'Inbox',
-                icon: Icons.mail_outline_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.principalInbox),
+                label: 'Alerts',
+                icon: Icons.notifications_none_rounded,
+                onTap: () => Navigator.pushNamed(
+                  context,
+                  AppRoutes.notificationCenter,
+                  arguments: 'principal',
+                ),
               ),
               _ClassesBottomNavItem(
                 label: 'Profile',

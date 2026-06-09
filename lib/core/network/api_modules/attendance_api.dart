@@ -34,6 +34,7 @@ extension BackendAttendanceApi on BackendApiClient {
 
   Future<AttendanceSessionModel> createAttendanceSession({
     required String sectionId,
+    required String academicYearId,
     required String subjectId,
     required String staffId,
     required String date,
@@ -43,6 +44,7 @@ extension BackendAttendanceApi on BackendApiClient {
     try {
       final data = {
         'section_id': sectionId,
+        'academic_year_id': academicYearId,
         'subject_id': subjectId,
         'staff_id': staffId,
         'date': date,

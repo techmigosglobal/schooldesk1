@@ -79,7 +79,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   Map<String, dynamic> _mapEntry(Map<String, dynamic> row) {
     return {
       'id': row['id'],
-      'date': teacherFlowDateOnly(row['date'] ?? row['created_at']),
+      'date': teacherFlowDateOnly(
+        row['date'] ?? row['entry_date'] ?? row['created_at'],
+      ),
       'class': teacherFlowText(
         row['class'] ?? row['class_name'],
         fallback: teacherCurrentClassLabel(),
@@ -90,9 +92,19 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       ),
       'title': teacherFlowText(row['title'], fallback: 'Class diary'),
       'classwork': teacherFlowText(row['classwork'] ?? row['work_done']),
-      'homework': teacherFlowText(row['homework']),
-      'notes': teacherFlowText(row['notes'] ?? row['remarks']),
-      'type': teacherFlowText(row['type'], fallback: 'regular'),
+      'homework': teacherFlowText(
+        row['homework'],
+        fallback: teacherFlowText(row['entry_type']) == 'no_homework'
+            ? 'No homework'
+            : '',
+      ),
+      'notes': teacherFlowText(
+        row['notes'] ?? row['remarks'] ?? row['content'],
+      ),
+      'type': teacherFlowText(
+        row['type'] ?? row['entry_type'],
+        fallback: 'regular',
+      ),
     };
   }
 
@@ -109,8 +121,10 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     try {
       await BackendApiClient.instance.createRaw('/diary-entries', {
         'date': DateTime.now().toUtc().toIso8601String(),
+        'entry_date': teacherFlowDate(DateTime.now()),
         'section_id': RoleAccessService.teacherClassId,
         'teacher_id': RoleAccessService.teacherStaffId,
+        'staff_id': RoleAccessService.teacherStaffId,
         'class': RoleAccessService.teacherClassName,
         'subject': RoleAccessService.teacherSubject,
         'title': noHomework ? 'No homework assigned' : 'Daily class diary',
@@ -118,6 +132,12 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         'homework': homework,
         'notes': notes,
         'type': noHomework ? 'no_homework' : _entryType,
+        'entry_type': noHomework ? 'no_homework' : _entryType,
+        'content': [
+          if (classwork.isNotEmpty) 'Classwork: $classwork',
+          if (homework.isNotEmpty) 'Homework: $homework',
+          if (notes.isNotEmpty) 'Notes: $notes',
+        ].join('\n'),
         'created_by': RoleAccessService.teacherName,
       });
       _classworkController.clear();

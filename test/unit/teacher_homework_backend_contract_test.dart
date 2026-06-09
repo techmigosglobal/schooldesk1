@@ -14,6 +14,9 @@ void main() {
     final teacherForms = File(
       'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart',
     ).readAsStringSync();
+    final teacherDiary = File(
+      'lib/features/academics/presentation/screens/teacher_diary_screen/teacher_diary_screen.dart',
+    ).readAsStringSync();
     final parentScreen = File(
       'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
     ).readAsStringSync();
@@ -38,6 +41,9 @@ void main() {
     expect(teacherScreen, contains('AppRoutes.teacherHomeworkSubmissions'));
     expect(teacherScreen, contains('getHomework('));
     expect(teacherScreen, contains('getHomeworkSubmissions('));
+    expect(teacherScreen, contains("createRaw('/diary-entries'"));
+    expect(teacherScreen, contains("'entry_type': 'no_homework'"));
+    expect(teacherScreen, contains("'homework': 'No homework'"));
     expect(teacherScreen, isNot(contains('showModalBottomSheet(')));
     expect(teacherScreen, isNot(contains('showDialog(')));
     expect(teacherScreen, isNot(contains('_showAddHomeworkSheet')));
@@ -48,10 +54,20 @@ void main() {
     expect(teacherForms, contains('TeacherHomeworkSubmissionsScreen'));
     expect(teacherForms, contains('createHomework('));
     expect(teacherForms, contains('updateHomework('));
+    expect(teacherForms, contains("createRaw('/diary-entries'"));
+    expect(teacherForms, contains("'entry_type': 'homework'"));
+    expect(teacherForms, contains('Future<void> _writeDiaryEntry()'));
     expect(teacherForms, contains('getHomeworkSubmissions('));
     expect(teacherForms, contains('reviewHomeworkSubmission('));
     expect(teacherForms, isNot(contains('showModalBottomSheet(')));
     expect(teacherForms, isNot(contains('showDialog(')));
+    expect(teacherDiary, contains("row['entry_date']"));
+    expect(teacherDiary, contains("row['entry_type']"));
+    expect(teacherDiary, contains("row['content']"));
+    expect(
+      teacherDiary,
+      contains("'staff_id': RoleAccessService.teacherStaffId"),
+    );
 
     expect(parentScreen, contains('AppRoutes.parentHomeworkSubmit'));
     expect(parentScreen, contains('getHomeworkSubmissions('));

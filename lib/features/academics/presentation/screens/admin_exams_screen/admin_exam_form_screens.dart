@@ -82,28 +82,28 @@ class _AdminExamFormScreenState extends State<AdminExamFormScreen> {
   void initState() {
     super.initState();
     final exam = widget.args.exam;
-    _nameController.text = _text(exam?['name']);
+    _nameController.text = _text(exam?['name'] ?? exam?['exam_name']);
     _startDateController = TextEditingController(
       text: _dateOnly(
-        _text(exam?['startDate']),
+        _text(exam?['startDate'] ?? exam?['start_date']),
         fallback: _dateInput(DateTime.now()),
       ),
     );
     _endDateController = TextEditingController(
       text: _dateOnly(
-        _text(exam?['endDate']),
+        _text(exam?['endDate'] ?? exam?['end_date']),
         fallback: _dateInput(DateTime.now()),
       ),
     );
     _academicYearId = _initialId(
-      _text(exam?['academicYearId']),
+      _text(exam?['academicYearId'] ?? exam?['academic_year_id']),
       widget.args.academicYears.map((year) => year.id),
     );
     _examTypeId = _initialId(
-      _text(exam?['examTypeId']),
+      _text(exam?['examTypeId'] ?? exam?['exam_type_id']),
       widget.args.examTypes.map((type) => _text(type['id'])),
     );
-    _loadTerms(preferredTermId: _text(exam?['termId']));
+    _loadTerms(preferredTermId: _text(exam?['termId'] ?? exam?['term_id']));
   }
 
   @override

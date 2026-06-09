@@ -21,7 +21,6 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/blank_role_module_screen.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
-import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 
 class AppRoutes {
@@ -30,12 +29,10 @@ class AppRoutes {
   static const String onboarding = '/onboarding-screen';
   static const String principalLogin = '/principal-login-screen';
   static const String principalDashboard = '/principal-dashboard-screen';
-  static const String guidedAssistant = '/guided-assistant-screen';
   static const String staffManagement = '/staff-management-screen';
   static const String staffForm = '/staff-management-screen/form';
   static const String studentOversight = '/student-oversight-screen';
   static const String approvalCenter = '/approval-center-screen';
-  static const String principalInbox = '/principal-inbox-screen';
   static const String feeMonitoring = '/fee-monitoring-screen';
   static const String timetableManagement = '/timetable-management-screen';
   static const String syllabusMonitoring = '/syllabus-monitoring-screen';
@@ -54,7 +51,6 @@ class AppRoutes {
   static const String academicCurriculumForm =
       '/academic-management-screen/curriculum';
   static const String principalAcademicInfo = '/principal-academic-info-screen';
-  static const String teacherAcademicInfo = '/teacher-academic-info-screen';
   static const String adminAcademicInfo = '/admin-academic-info-screen';
   static const String parentAcademicInfo = '/parent-academic-info-screen';
   // Admin Module Routes
@@ -110,7 +106,6 @@ class AppRoutes {
       '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
-  static const String teacherDiscipline = '/teacher-discipline-screen';
   static const String teacherReports = '/teacher-reports-screen';
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
@@ -165,13 +160,11 @@ class AppRoutes {
     onboarding: (context) => const OnboardingScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
-    guidedAssistant: (context) => const GuidedAssistantScreen(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
     staffManagement: (context) => const StaffManagementScreen(),
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
-    principalInbox: (context) => const PrincipalOperationalInboxScreen(),
     feeMonitoring: (context) => const FeeMonitoringScreen(),
     timetableManagement: (context) => const PrincipalTimetableScreen(),
     syllabusMonitoring: (context) => const SyllabusMonitoringScreen(),
@@ -201,11 +194,6 @@ class AppRoutes {
       role: 'principal',
       drawer: PrincipalDrawer(selectedIndex: 12, onDestinationSelected: (_) {}),
       drawerIndex: 12,
-    ),
-    teacherAcademicInfo: (context) => AcademicInfoScreen(
-      role: 'teacher',
-      drawer: TeacherDrawer(selectedIndex: 15, onDestinationSelected: (_) {}),
-      drawerIndex: 15,
     ),
     adminAcademicInfo: (context) => AcademicInfoScreen(
       role: 'admin',
@@ -302,7 +290,6 @@ class AppRoutes {
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
-    teacherDiscipline: (context) => const TeacherDisciplineScreen(),
     teacherReports: (context) => const TeacherReportsScreen(),
     // Parent Module,
     parentLogin: (context) => const AuthLoginScreen(),
@@ -398,7 +385,6 @@ class AppRoutes {
 
   static const Set<String> _roleWorkflowVisibleRoutes = {
     principalDashboard,
-    guidedAssistant,
     principalSchoolProfile,
     principalUserManagement,
     guardianDirectory,
@@ -420,7 +406,6 @@ class AppRoutes {
     staffForm,
     studentOversight,
     approvalCenter,
-    principalInbox,
     feeMonitoring,
     communicationCenter,
     principalChatCommunications,
@@ -484,10 +469,8 @@ class AppRoutes {
     teacherParentInteraction,
     teacherLeave,
     teacherLeaveRequestForm,
-    teacherDiscipline,
     teacherReports,
     teacherDiary,
-    teacherAcademicInfo,
     principalAnalytics,
     notificationCenter,
     settingsScreen,

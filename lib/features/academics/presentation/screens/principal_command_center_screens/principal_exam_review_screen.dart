@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 enum _PrincipalExamView {
@@ -99,6 +100,137 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
     }
   }
 
+  Future<void> _openPrincipalExamForm({Map<String, dynamic>? exam}) async {
+    setState(() => _saving = true);
+    try {
+      final api = BackendApiClient.instance;
+      final academicYears = await api.getAcademicYears();
+      final examTypes = await api.getExamTypes();
+      if (!mounted) return;
+      final result = await Navigator.pushNamed(
+        context,
+        AppRoutes.adminExamForm,
+        arguments: AdminExamFormArgs(
+          academicYears: academicYears,
+          examTypes: examTypes,
+          exam: exam == null ? null : _examFormRow(exam),
+        ),
+      );
+      if (result is AdminExamFormResult) {
+        _snack(result.message, success: true);
+        await _loadData();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Unable to open exam form: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _openPrincipalScheduleForm() async {
+    setState(() => _saving = true);
+    try {
+      final api = BackendApiClient.instance;
+      final exams = await api.getExams();
+      final grades = await api.getGrades();
+      final sections = await api.getSections();
+      final subjects = await api.getRawList('/subjects');
+      final examRows = _scheduleExamRows(exams);
+      final subjectRows = _subjectRows(subjects);
+      if (!mounted) return;
+      final missing = [
+        if (examRows.isEmpty) 'exams',
+        if (grades.isEmpty) 'grades',
+        if (sections.isEmpty) 'sections',
+        if (subjectRows.isEmpty) 'subjects',
+      ];
+      if (missing.isNotEmpty) {
+        _snack(
+          '${missing.join(', ')} must be set up before adding a schedule.',
+        );
+        return;
+      }
+      final result = await Navigator.pushNamed(
+        context,
+        AppRoutes.adminExamScheduleForm,
+        arguments: AdminExamScheduleFormArgs(
+          exams: examRows,
+          grades: grades,
+          sections: sections,
+          subjects: subjectRows,
+        ),
+      );
+      if (result is AdminExamFormResult) {
+        _snack(result.message, success: true);
+        await _loadData();
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Unable to open schedule form: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  List<Map<String, dynamic>> _scheduleExamRows(List<ExamModel> exams) {
+    return [
+      for (final exam in exams)
+        {
+          'id': exam.id,
+          'name': exam.examName,
+          'exam_name': exam.examName,
+          'academic_year_id': exam.academicYearId,
+          'term_id': exam.termId,
+          'exam_type_id': exam.examTypeId,
+          'start_date': exam.startDate,
+          'end_date': exam.endDate,
+          'is_published': exam.isPublished,
+        },
+    ];
+  }
+
+  List<Map<String, dynamic>> _subjectRows(List<Map<String, dynamic>> subjects) {
+    return [
+      for (final subject in subjects)
+        {
+          ...subject,
+          'id': _text(subject['id'] ?? subject['subject_id']),
+          'subject_name': _text(
+            subject['subject_name'] ?? subject['name'] ?? subject['title'],
+            fallback: 'Subject',
+          ),
+          'name': _text(
+            subject['name'] ?? subject['subject_name'] ?? subject['title'],
+            fallback: 'Subject',
+          ),
+        },
+    ].where((subject) => _text(subject['id']).isNotEmpty).toList();
+  }
+
+  Map<String, dynamic> _examFormRow(Map<String, dynamic> exam) {
+    return {
+      ...exam,
+      'id': _text(exam['id'] ?? exam['exam_id']),
+      'name': _examTitle(exam),
+      'exam_name': _examTitle(exam),
+      'academicYearId': _text(
+        exam['academicYearId'] ?? exam['academic_year_id'],
+      ),
+      'academic_year_id': _text(
+        exam['academic_year_id'] ?? exam['academicYearId'],
+      ),
+      'termId': _text(exam['termId'] ?? exam['term_id']),
+      'term_id': _text(exam['term_id'] ?? exam['termId']),
+      'examTypeId': _text(exam['examTypeId'] ?? exam['exam_type_id']),
+      'exam_type_id': _text(exam['exam_type_id'] ?? exam['examTypeId']),
+      'startDate': _text(exam['startDate'] ?? exam['start_date']),
+      'start_date': _text(exam['start_date'] ?? exam['startDate']),
+      'endDate': _text(exam['endDate'] ?? exam['end_date']),
+      'end_date': _text(exam['end_date'] ?? exam['endDate']),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -119,7 +251,10 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
   Widget _buildContent() {
     if (_loading) {
       return _ExamPage(
-        header: _buildHeader('Exams', 'View and manage exam information'),
+        header: _buildHeader(
+          'Exam Timetable',
+          'Create exams, schedule classwise papers, and publish timetables',
+        ),
         children: const [
           SizedBox(height: 220),
           Center(child: CircularProgressIndicator()),
@@ -129,7 +264,10 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
 
     if (_error != null) {
       return _ExamPage(
-        header: _buildHeader('Exams', 'View and manage exam information'),
+        header: _buildHeader(
+          'Exam Timetable',
+          'Create exams, schedule classwise papers, and publish timetables',
+        ),
         children: [
           const SizedBox(height: 100),
           _ExamEmptyState(
@@ -160,8 +298,8 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
   Widget _buildHomeView() {
     return _ExamPage(
       header: _buildHeader(
-        'Exams',
-        'View and manage exam information',
+        'Exam Timetable',
+        'Create exams, schedule classwise papers, and publish timetables',
         trailing: IconButton(
           tooltip: 'Filter exams',
           icon: const Icon(Icons.filter_alt_outlined),
@@ -213,6 +351,21 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
         const _ExamSectionTitle('Quick Actions'),
         const SizedBox(height: 8),
         _ExamActionRow(
+          icon: Icons.add_circle_outline_rounded,
+          iconColor: const Color(0xFF16A34A),
+          title: 'Create Exam',
+          subtitle: 'Set exam name, term, academic year, and date range',
+          onTap: _openPrincipalExamForm,
+        ),
+        _ExamActionRow(
+          icon: Icons.edit_calendar_outlined,
+          iconColor: const Color(0xFFEF4444),
+          title: 'Create Classwise Exam Timetable',
+          subtitle:
+              'Choose exam, class/section, subject, date, time, and marks',
+          onTap: _openPrincipalScheduleForm,
+        ),
+        _ExamActionRow(
           icon: Icons.fact_check_outlined,
           iconColor: const Color(0xFF2563EB),
           title: 'Examination List',
@@ -222,8 +375,8 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
         _ExamActionRow(
           icon: Icons.calendar_month_outlined,
           iconColor: const Color(0xFF2563EB),
-          title: 'Exam Schedule',
-          subtitle: 'View exam timetable',
+          title: 'Classwise Timetable',
+          subtitle: 'View scheduled papers by class',
           onTap: () => _goTo(_PrincipalExamView.schedule),
         ),
         _ExamActionRow(
@@ -251,7 +404,7 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
         const _ExamInfoBanner(
           icon: Icons.info_outline_rounded,
           message:
-              'Teachers prepare syllabus, schedules, marks, and report cards. Principal reviews and publishes them for parent visibility.',
+              'Use Create Exam first, then Create Classwise Exam Timetable for each class and subject. Publish the timetable when every paper is scheduled.',
         ),
       ],
     );
@@ -260,7 +413,15 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
   Widget _buildExaminationsView() {
     final rows = _filteredExamRows;
     return _ExamPage(
-      header: _buildHeader('Examinations', 'View all examinations'),
+      header: _buildHeader(
+        'Examinations',
+        'Create and view exam date ranges',
+        trailing: IconButton(
+          tooltip: 'Create exam',
+          icon: const Icon(Icons.add_rounded),
+          onPressed: _openPrincipalExamForm,
+        ),
+      ),
       children: [
         _ExamSearchBox(
           hint: 'Search examinations',
@@ -309,10 +470,22 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
       header: _buildHeader(
         'Exam Details',
         _examTitle(exam),
-        trailing: IconButton(
-          tooltip: 'Open Classes Hub',
-          icon: const Icon(Icons.edit_outlined),
-          onPressed: _openClassesHubForExams,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Edit Exam',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _saving
+                  ? null
+                  : () => _openPrincipalExamForm(exam: exam),
+            ),
+            IconButton(
+              tooltip: 'Open Classes Hub',
+              icon: const Icon(Icons.grid_view_outlined),
+              onPressed: _openClassesHubForExams,
+            ),
+          ],
         ),
       ),
       children: [
@@ -393,14 +566,30 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
           onAction: () => _goTo(_PrincipalExamView.schedule),
         ),
         if (schedules.isEmpty)
-          const _ExamInfoBanner(
-            icon: Icons.pending_actions_outlined,
-            message:
-                'No subject-wise schedule has been submitted yet. Teachers will add syllabus and schedules before Principal review.',
+          Column(
+            children: [
+              const _ExamInfoBanner(
+                icon: Icons.pending_actions_outlined,
+                message:
+                    'No subject-wise schedule has been submitted yet. Teachers will add syllabus and schedules before Principal review.',
+              ),
+              const SizedBox(height: 10),
+              _ExamOutlineButton(
+                label: 'Add Schedule',
+                icon: Icons.add_task_rounded,
+                onPressed: _openPrincipalScheduleForm,
+              ),
+            ],
           )
         else
           for (final schedule in schedules.take(12))
             _ExamScheduleTile(schedule: schedule),
+        const SizedBox(height: 10),
+        _ExamOutlineButton(
+          label: 'Edit Exam',
+          icon: Icons.edit_outlined,
+          onPressed: _saving ? null : () => _openPrincipalExamForm(exam: exam),
+        ),
         const SizedBox(height: 10),
         _ExamPrimaryButton(
           label: _isPublished(exam)
@@ -411,6 +600,14 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
               ? null
               : () => _publishExamTimetable(exam),
         ),
+        if (_isPublished(exam)) ...[
+          const SizedBox(height: 10),
+          _ExamOutlineButton(
+            label: 'Unpublish Exam Timetable',
+            icon: Icons.visibility_off_outlined,
+            onPressed: _saving ? null : () => _unpublishExamTimetable(exam),
+          ),
+        ],
         const SizedBox(height: 10),
         _ExamOutlineButton(
           label: 'Go to Classes Hub',
@@ -427,14 +624,26 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
     final filters = _scheduleClassFilters;
     return _ExamPage(
       header: _buildHeader(
-        'Exam Schedule',
-        exam == null ? 'View exam timetable' : _examTitle(exam),
-        trailing: IconButton(
-          tooltip: 'Export schedule',
-          icon: const Icon(Icons.calendar_month_outlined),
-          onPressed: exam == null || _saving
-              ? null
-              : () => _exportSchedule(exam),
+        'Classwise Exam Timetable',
+        exam == null
+            ? 'Create or view classwise exam timetables'
+            : _examTitle(exam),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Add schedule',
+              icon: const Icon(Icons.add_task_rounded),
+              onPressed: _openPrincipalScheduleForm,
+            ),
+            IconButton(
+              tooltip: 'Export schedule',
+              icon: const Icon(Icons.calendar_month_outlined),
+              onPressed: exam == null || _saving
+                  ? null
+                  : () => _exportSchedule(exam),
+            ),
+          ],
         ),
       ),
       children: [
@@ -493,10 +702,21 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
           const SizedBox(height: 12),
         ],
         if (rows.isEmpty)
-          const _ExamEmptyState(
-            icon: Icons.calendar_month_outlined,
-            title: 'No schedule rows',
-            message: 'Teacher-created schedule rows will appear here.',
+          Column(
+            children: [
+              const _ExamEmptyState(
+                icon: Icons.calendar_month_outlined,
+                title: 'No classwise timetable rows',
+                message:
+                    'Add a schedule row for each class, subject, date, and time.',
+              ),
+              const SizedBox(height: 10),
+              _ExamOutlineButton(
+                label: 'Create Classwise Timetable',
+                icon: Icons.add_task_rounded,
+                onPressed: _openPrincipalScheduleForm,
+              ),
+            ],
           )
         else
           _ExamCard(
@@ -510,7 +730,8 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
           ),
         const _ExamInfoBanner(
           icon: Icons.info_outline_rounded,
-          message: 'Timings are shown from backend schedule rows only.',
+          message:
+              'Each row is saved to the backend exam schedule and filtered classwise here.',
         ),
         const SizedBox(height: 10),
         _ExamOutlineButton(
@@ -1133,6 +1354,26 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
     } catch (error) {
       if (!mounted) return;
       _snack('Unable to publish exam timetable: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _unpublishExamTimetable(Map<String, dynamic> exam) async {
+    final examId = _text(exam['exam_id'] ?? exam['id']);
+    if (examId.isEmpty) {
+      _snack('Backend exam ID is missing.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await BackendApiClient.instance.setExamPublished(examId, false);
+      await _loadData();
+      if (!mounted) return;
+      _snack('Exam timetable unpublished.', success: true);
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Unable to unpublish exam timetable: $error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }

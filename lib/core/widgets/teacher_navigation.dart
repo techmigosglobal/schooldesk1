@@ -206,30 +206,11 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherLeave,
             ),
             SchoolDeskNavigationItem(
-              index: 11,
-              icon: Icons.report_problem_outlined,
-              activeIcon: Icons.report_problem_rounded,
-              label: 'Discipline / Incidents',
-              route: AppRoutes.teacherDiscipline,
-            ),
-            SchoolDeskNavigationItem(
               index: 12,
               icon: Icons.bar_chart_outlined,
               activeIcon: Icons.bar_chart_rounded,
               label: 'Reports',
               route: AppRoutes.teacherReports,
-            ),
-          ],
-        ),
-        const SchoolDeskNavigationSection(
-          label: 'School Info',
-          items: [
-            SchoolDeskNavigationItem(
-              index: 15,
-              icon: Icons.auto_stories_outlined,
-              activeIcon: Icons.auto_stories_rounded,
-              label: 'Academic Info',
-              route: AppRoutes.teacherAcademicInfo,
             ),
           ],
         ),

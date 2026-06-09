@@ -27,6 +27,9 @@ func (h *FrontendRecordHandler) List(c *gin.Context) {
 	if h.parentOwnsRecords(c) {
 		query = query.Where("created_by = ?", currentUserID(c))
 	}
+	if h.teacherOwnsRecords(c) {
+		query = query.Where("created_by = ?", currentUserID(c))
+	}
 	if err := query.Find(&rows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load records")
 		return
@@ -75,6 +78,10 @@ func (h *FrontendRecordHandler) Update(c *gin.Context) {
 		fail(c, http.StatusForbidden, "Record access denied")
 		return
 	}
+	if h.teacherOwnsRecords(c) && strings.TrimSpace(row.CreatedBy) != currentUserID(c) {
+		fail(c, http.StatusForbidden, "Record access denied")
+		return
+	}
 	payload, ok := h.bindPayload(c)
 	if !ok {
 		return
@@ -101,6 +108,9 @@ func (h *FrontendRecordHandler) Update(c *gin.Context) {
 func (h *FrontendRecordHandler) Delete(c *gin.Context) {
 	query := database.DB.Where("id = ? AND school_id = ? AND resource = ?", c.Param("id"), scopedSchoolID(c), h.resource)
 	if h.parentOwnsRecords(c) {
+		query = query.Where("created_by = ?", currentUserID(c))
+	}
+	if h.teacherOwnsRecords(c) {
 		query = query.Where("created_by = ?", currentUserID(c))
 	}
 	result := query.Delete(&models.FrontendRecord{})
@@ -133,7 +143,19 @@ func (h *FrontendRecordHandler) parentOwnsRecords(c *gin.Context) bool {
 		return false
 	}
 	switch h.resource {
-	case "certificates/requests", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
+	case "certificates/requests", "discipline-incidents", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *FrontendRecordHandler) teacherOwnsRecords(c *gin.Context) bool {
+	if currentRole(c) != "teacher" {
+		return false
+	}
+	switch h.resource {
+	case "discipline-incidents":
 		return true
 	default:
 		return false

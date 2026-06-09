@@ -13,6 +13,7 @@ analyzer:
   exclude:
     - test/**
     - integration_test/**
+    - build/**
     - Parent_Module_UI/**
     - '**/__MACOSX/**'
   errors:

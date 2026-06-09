@@ -46,12 +46,23 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         dayOfWeek: DateTime.now().weekday,
       );
       final slot = _pickAttendanceSlot(slots);
-      final sectionId = teacherFlowText(slot['section_id']);
+      final classTeacherSectionId = RoleAccessService.teacherClassId;
+      final sectionId = classTeacherSectionId.isNotEmpty
+          ? classTeacherSectionId
+          : teacherFlowText(slot['section_id']);
+      final slotBelongsToSection =
+          teacherFlowText(slot['section_id']) == sectionId;
       final subjectId = teacherFlowText(slot['subject_id']);
+      final academicYearId = teacherFlowText(slot['academic_year_id']);
       final slotId = teacherFlowText(slot['id'] ?? slot['slot_id']);
       final periodNumber = teacherFlowInt(slot['period_number']);
-      if (sectionId.isEmpty || subjectId.isEmpty) {
-        throw Exception('Today timetable slot is missing class or subject.');
+      if (sectionId.isEmpty) {
+        throw Exception('Class teacher section is not assigned.');
+      }
+      if (academicYearId.isEmpty || subjectId.isEmpty || periodNumber < 1) {
+        throw Exception(
+          'Today timetable slot is missing academic year, subject, or period.',
+        );
       }
       final studentsPage = await api.getStudents(
         sectionId: sectionId,
@@ -89,14 +100,17 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           : await api.createAttendanceSession(
               sectionId: sectionId,
               subjectId: subjectId,
+              academicYearId: academicYearId,
               staffId: staffId,
               date: date,
-              timetableSlotId: slotId,
+              timetableSlotId: slotBelongsToSection ? slotId : null,
               periodNumber: periodNumber,
             );
       if (!mounted) return;
       setState(() {
-        _classLabel = _classLabelFromSlot(slot);
+        _classLabel = classTeacherSectionId.isNotEmpty
+            ? RoleAccessService.teacherClassName
+            : _classLabelFromSlot(slot);
         _subjectLabel = _subjectLabelFromSlot(slot);
         _timeLabel = _timeLabelFromSlot(slot);
         _session = session;
@@ -289,6 +303,19 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Map<String, dynamic> _pickAttendanceSlot(List<Map<String, dynamic>> slots) {
     if (slots.isEmpty) return const {};
+    final ownClassSlots = slots
+        .where(
+          (slot) =>
+              teacherFlowText(slot['section_id']) ==
+              RoleAccessService.teacherClassId,
+        )
+        .toList();
+    if (ownClassSlots.isNotEmpty) {
+      final firstPeriod = ownClassSlots.where(
+        (slot) => teacherFlowInt(slot['period_number']) == 1,
+      );
+      return firstPeriod.isNotEmpty ? firstPeriod.first : ownClassSlots.first;
+    }
     final firstPeriod = slots.where(
       (slot) => teacherFlowInt(slot['period_number']) == 1,
     );

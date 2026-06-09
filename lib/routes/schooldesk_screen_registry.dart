@@ -86,13 +86,6 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
-      route: '/guided-assistant-screen',
-      title: 'Guided Assistant',
-      module: 'Operations',
-      portal: 'shared',
-      isShared: true,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/principal-school-profile-screen',
       title: SchoolDeskGlossary.schoolProfile,
       module: 'Governance',
@@ -137,6 +130,18 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/principal-exams-screen',
       title: SchoolDeskGlossary.examRecords,
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/admin-exams-screen/form',
+      title: 'Exam Form',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/admin-exams-screen/schedule',
+      title: 'Exam Schedule Form',
       module: 'Academics',
       portal: 'principal',
     ),
@@ -189,12 +194,6 @@ class SchoolDeskScreenRegistry {
       route: '/approval-center-screen',
       title: SchoolDeskGlossary.approvalCenter,
       module: 'Approvals',
-      portal: 'principal',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/principal-inbox-screen',
-      title: 'Operational Inbox',
-      module: 'Communication',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
@@ -560,12 +559,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-discipline-screen',
-      title: 'Discipline & Incidents',
-      module: 'Management',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-reports-screen',
       title: 'Reports',
       module: 'Reports',
@@ -576,12 +569,6 @@ class SchoolDeskScreenRegistry {
       route: '/teacher-diary-screen',
       title: 'Class Diary',
       module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-academic-info-screen',
-      title: 'Academic Info',
-      module: 'School Info',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(

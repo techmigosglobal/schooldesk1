@@ -30,12 +30,10 @@ class RouteAccessGuard {
 
   static const Map<String, Set<String>> _routeRoles = {
     AppRoutes.principalDashboard: {'principal'},
-    AppRoutes.guidedAssistant: {'principal', 'admin'},
     AppRoutes.staffManagement: {'principal', 'admin'},
     AppRoutes.staffForm: {'principal', 'admin'},
     AppRoutes.studentOversight: {'principal'},
     AppRoutes.approvalCenter: {'principal'},
-    AppRoutes.principalInbox: {'principal'},
     AppRoutes.feeMonitoring: {'principal'},
     AppRoutes.timetableManagement: {'principal'},
     AppRoutes.syllabusMonitoring: {'principal'},
@@ -105,10 +103,8 @@ class RouteAccessGuard {
     AppRoutes.teacherParentInteraction: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
-    AppRoutes.teacherDiscipline: {'teacher'},
     AppRoutes.teacherReports: {'teacher'},
     AppRoutes.teacherDiary: {'teacher'},
-    AppRoutes.teacherAcademicInfo: {'teacher'},
     AppRoutes.parentDashboard: {'parent'},
     AppRoutes.parentAcademicProgress: {'parent'},
     AppRoutes.parentAttendance: {'parent'},

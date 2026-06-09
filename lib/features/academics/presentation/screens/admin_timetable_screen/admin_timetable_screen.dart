@@ -2764,9 +2764,9 @@ class _AdminTimetableBottomBar extends StatelessWidget {
           ).pushNamed(AppRoutes.globalSearch, arguments: 'admin'),
         ),
         SchoolDeskBottomNavItem(
-          label: 'Inbox',
-          icon: Icons.mail_outline_rounded,
-          activeIcon: Icons.mail_rounded,
+          label: 'Communication',
+          icon: Icons.forum_outlined,
+          activeIcon: Icons.forum_rounded,
           selected: currentRoute == AppRoutes.adminCommunication,
           onTap: () =>
               Navigator.of(context).pushNamed(AppRoutes.adminCommunication),

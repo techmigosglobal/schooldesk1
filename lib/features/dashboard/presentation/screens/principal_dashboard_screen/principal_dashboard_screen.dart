@@ -231,15 +231,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               _AcademicModuleGrid(
                 items: [
                   _AcademicModuleItem(
-                    label: 'Guided Assistant',
-                    route: AppRoutes.guidedAssistant,
-                    illustration:
-                        SchoolDeskUiIllustrations.principalGuidedAssistant,
-                    fallbackIcon: Icons.assistant_direction_outlined,
-                    accent: const Color(0xFF0E9384),
-                    cardColor: const Color(0xFFE7FAF6),
-                  ),
-                  _AcademicModuleItem(
                     label: 'Academic Years',
                     route: AppRoutes.academicManagement,
                     illustration: SchoolDeskUiIllustrations.calendar,
@@ -305,7 +296,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFFFF1DF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Exams',
+                    label: 'Exam Timetable',
                     route: AppRoutes.principalExams,
                     illustration: SchoolDeskUiIllustrations.principalExams,
                     fallbackIcon: Icons.assignment_rounded,
@@ -335,15 +326,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     fallbackIcon: Icons.event_rounded,
                     accent: const Color(0xFFF59E0B),
                     cardColor: const Color(0xFFFFF5D8),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Inbox',
-                    route: AppRoutes.principalInbox,
-                    illustration: SchoolDeskUiIllustrations.principalInbox,
-                    fallbackIcon: Icons.mail_rounded,
-                    accent: const Color(0xFF0EA5E9),
-                    cardColor: const Color(0xFFEAF4FF),
-                    badge: _data.pendingApprovals,
                   ),
                   _AcademicModuleItem(
                     label: 'Chat Communications',
@@ -2059,9 +2041,9 @@ class _PrincipalBottomBar extends StatelessWidget {
             label: 'Search',
           ),
           NavigationDestination(
-            selectedIcon: Icon(Icons.mail_rounded),
-            icon: Icon(Icons.mail_outline_rounded),
-            label: 'Inbox',
+            selectedIcon: Icon(Icons.notifications_rounded),
+            icon: Icon(Icons.notifications_none_rounded),
+            label: 'Alerts',
           ),
           NavigationDestination(
             selectedIcon: Icon(Icons.person_rounded),

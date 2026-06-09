@@ -129,3 +129,71 @@ func TestFrontendRecordHandlerScopesParentOwnedRecords(t *testing.T) {
 		t.Fatalf("update other status = %d body=%s", updateOther.Code, updateOther.Body.String())
 	}
 }
+
+func TestFrontendRecordHandlerScopesDisciplineIncidentsToCreatorForTeacherAndParent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	database.DB = db
+	if err := db.AutoMigrate(&models.FrontendRecord{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	records := []models.FrontendRecord{
+		{
+			BaseModel: models.BaseModel{ID: "teacher-own-incident"},
+			SchoolID:  "school-test",
+			Resource:  "discipline-incidents",
+			Payload:   `{"student_id":"student-a","title":"Own incident"}`,
+			CreatedBy: "teacher-a",
+		},
+		{
+			BaseModel: models.BaseModel{ID: "teacher-other-incident"},
+			SchoolID:  "school-test",
+			Resource:  "discipline-incidents",
+			Payload:   `{"student_id":"student-b","title":"Other incident"}`,
+			CreatedBy: "teacher-b",
+		},
+	}
+	if err := db.Create(&records).Error; err != nil {
+		t.Fatalf("seed records: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("school_id", "school-test")
+		c.Set("user_id", "teacher-a")
+		c.Set("role_name", "Teacher")
+		c.Next()
+	})
+	handler := NewFrontendRecordHandler("discipline-incidents")
+	router.GET("/discipline-incidents", handler.List)
+	router.PUT("/discipline-incidents/:id", handler.Update)
+
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/discipline-incidents", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	if !strings.Contains(list.Body.String(), "Own incident") {
+		t.Fatalf("list body missing own incident: %s", list.Body.String())
+	}
+	if strings.Contains(list.Body.String(), "Other incident") {
+		t.Fatalf("list body leaked another teacher's incident: %s", list.Body.String())
+	}
+
+	updateOther := httptest.NewRecorder()
+	router.ServeHTTP(
+		updateOther,
+		httptest.NewRequest(
+			http.MethodPut,
+			"/discipline-incidents/teacher-other-incident",
+			strings.NewReader(`{"status":"reviewed"}`),
+		),
+	)
+	if updateOther.Code != http.StatusForbidden {
+		t.Fatalf("update other status = %d body=%s", updateOther.Code, updateOther.Body.String())
+	}
+}
