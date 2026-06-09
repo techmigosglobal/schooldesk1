@@ -13,6 +13,7 @@ from app.models.goal_task import (
 )
 from app.models.vps import VpsFee
 from app.models.attendance import StaffAttendance, StudentAttendance
+from app.models.exam import Exam, ExamMark
 from app.models.timetable import TimetableSlot
 from app.models.guardian import Guardian
 
@@ -36,6 +37,8 @@ __all__ = [
     "Staff",
     "StaffAttendance",
     "Student",
+    "Exam",
+    "ExamMark",
     "StudentAttendance",
     "Subject",
     "Task",

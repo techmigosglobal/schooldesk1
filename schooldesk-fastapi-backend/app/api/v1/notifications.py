@@ -82,6 +82,10 @@ def mark_notification_read(
             NotificationLog.id == notification_id,
             NotificationLog.school_id == current_user.school_id,
             NotificationLog.deleted_at.is_(None),
+            or_(
+                NotificationLog.recipient_user_id == current_user.id,
+                NotificationLog.recipient_role == current_user.role,
+            ),
         )
     )
     if notification is None:
@@ -137,6 +141,10 @@ def delete_notification(
             NotificationLog.id == notification_id,
             NotificationLog.school_id == current_user.school_id,
             NotificationLog.deleted_at.is_(None),
+            or_(
+                NotificationLog.recipient_user_id == current_user.id,
+                NotificationLog.recipient_role == current_user.role,
+            ),
         )
     )
     if notification is None:
@@ -147,4 +155,5 @@ def delete_notification(
     notification.updated_by = current_user.id
     record_audit(db, current_user, action="delete", entity_id=notification.id)
     db.commit()
+    return {"success": True, "data": None, "message": "Notification deleted"}
     return {"success": True, "data": None, "message": "Notification deleted"}
