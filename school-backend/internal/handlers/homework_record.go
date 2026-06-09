@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"school-backend/internal/database"
+	"school-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -93,10 +94,25 @@ func canAccessHomeworkRecord(c *gin.Context, homework HomeworkRecord) bool {
 		}
 		return strings.TrimSpace(homework.StudentID) != "" && canAccessStudent(c, homework.StudentID)
 	case "parent":
-		if strings.TrimSpace(homework.StudentID) != "" && canAccessStudent(c, homework.StudentID) {
-			return true
+		parentUserID := currentUserID(c)
+		if parentUserID == "" {
+			return false
 		}
-		return strings.TrimSpace(homework.SectionID) != "" && canAccessSection(c, homework.SectionID)
+		if strings.TrimSpace(homework.StudentID) != "" {
+			return canAccessStudent(c, homework.StudentID)
+		}
+		if strings.TrimSpace(homework.SectionID) == "" {
+			return false
+		}
+		var count int64
+		if err := database.DB.Model(&models.ParentStudentLink{}).
+			Joins("JOIN students ON students.id = parent_student_links.student_id").
+			Where("parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ?", homework.SchoolID, parentUserID).
+			Where("(students.current_section_id = ? OR EXISTS (SELECT 1 FROM enrollments WHERE enrollments.student_id = students.id AND enrollments.section_id = ?))", homework.SectionID, homework.SectionID).
+			Count(&count).Error; err != nil {
+			return false
+		}
+		return count > 0
 	default:
 		return false
 	}

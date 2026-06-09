@@ -307,7 +307,7 @@ func savePrincipalAction(c *gin.Context, resource, module, principalRole, messag
 	success(c, http.StatusCreated, response, message)
 }
 
-func validateAndApplyPrincipalAction(c *gin.Context, schoolID, resource, actionType string, req principalActionRequest) (principalActionApplyResult, error) {
+func validateAndApplyPrincipalAction(_ *gin.Context, schoolID, resource, actionType string, req principalActionRequest) (principalActionApplyResult, error) {
 	if slotID := strings.TrimSpace(req.SlotID); slotID != "" {
 		var slot models.TimetableSlot
 		if err := principalTimetableSlotQuery(schoolID).First(&slot, "timetable_slots.id = ?", slotID).Error; err != nil {

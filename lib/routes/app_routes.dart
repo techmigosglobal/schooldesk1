@@ -22,6 +22,14 @@ import 'package:schooldesk1/core/widgets/blank_role_module_screen.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/parent_timetable_screen/parent_timetable_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/parent_exam_schedule_screen/parent_exam_schedule_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/parent_report_cards_screen/parent_report_cards_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/parent_ptm_booking_screen/parent_ptm_booking_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/parent_discipline_screen/parent_discipline_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/teacher_mark_entry_screen/teacher_mark_entry_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/teacher_ptm_screen/teacher_ptm_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/teacher_syllabus_screen/teacher_syllabus_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -101,6 +109,7 @@ class AppRoutes {
       '/teacher-homework-screen/submissions';
   static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
+  static const String teacherDiscipline = '/teacher-discipline-screen';
   static const String teacherCommunication = '/teacher-communication-screen';
   static const String teacherParentInteraction =
       '/teacher-parent-interaction-screen';
@@ -125,6 +134,17 @@ class AppRoutes {
   static const String parentDocuments = '/parent-documents-screen';
   static const String teacherDiary = '/teacher-diary-screen';
   static const String parentDiary = '/parent-diary-screen';
+  // New Parent Module Routes
+  static const String parentTimetable = '/parent-timetable-screen';
+  static const String parentExamSchedule = '/parent-exam-schedule-screen';
+  static const String parentReportCards = '/parent-report-cards-screen';
+  static const String parentPTMBooking = '/parent-ptm-booking-screen';
+  static const String parentDiscipline = '/parent-discipline-screen';
+
+  // New Teacher Module Routes
+  static const String teacherMarkEntry = '/teacher-mark-entry-screen';
+  static const String teacherPTM = '/teacher-ptm-screen';
+  static const String teacherSyllabus = '/teacher-syllabus-screen';
   // New Screens
   static const String notificationCenter = '/notification-center-screen';
   static const String settingsScreen = '/settings-screen';
@@ -152,7 +172,7 @@ class AppRoutes {
       '/principal-user-management-screen/assign-children';
   static const String principalSchoolProfile =
       '/principal-school-profile-screen';
-  static const bool blankRoleModuleScreens = true;
+  static const bool blankRoleModuleScreens = false;
 
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
@@ -284,6 +304,7 @@ class AppRoutes {
     ),
     teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
+    teacherDiscipline: (context) => const TeacherDisciplineScreen(),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
     teacherParentInteraction: (context) =>
         const TeacherParentInteractionScreen(),
@@ -312,6 +333,14 @@ class AppRoutes {
     parentDocuments: (context) => const ParentDocumentsScreen(),
     teacherDiary: (context) => const TeacherDiaryScreen(),
     parentDiary: (context) => const ParentDiaryScreen(),
+    parentTimetable: (context) => const ParentTimetableScreen(),
+    parentExamSchedule: (context) => const ParentExamScheduleScreen(),
+    parentReportCards: (context) => const ParentReportCardsScreen(),
+    parentPTMBooking: (context) => const ParentPTMBookingScreen(),
+    parentDiscipline: (context) => const ParentDisciplineScreen(),
+    teacherMarkEntry: (context) => const TeacherMarkEntryScreen(),
+    teacherPTM: (context) => const TeacherPTMScreen(),
+    teacherSyllabus: (context) => const TeacherSyllabusScreen(),
     // New Screens,
     notificationCenter: (context) {
       final role =
@@ -465,6 +494,7 @@ class AppRoutes {
     teacherHomeworkSubmissions,
     teacherPerformance,
     teacherStudentNotes,
+    teacherDiscipline,
     teacherCommunication,
     teacherParentInteraction,
     teacherLeave,
@@ -476,6 +506,14 @@ class AppRoutes {
     settingsScreen,
     profileScreen,
     globalSearch,
+    parentTimetable,
+    parentExamSchedule,
+    parentReportCards,
+    parentPTMBooking,
+    parentDiscipline,
+    teacherMarkEntry,
+    teacherPTM,
+    teacherSyllabus,
   };
 
   static AccountAccessFormArgs _accountFormArgs(

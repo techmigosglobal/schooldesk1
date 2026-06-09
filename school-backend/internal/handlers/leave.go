@@ -380,7 +380,7 @@ func leaveTypeBelongsToSchool(leaveTypeID, schoolID string) bool {
 
 func validStaffLeaveStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "pending", "approved", "rejected":
+	case "pending", "approved", "rejected", "withdrawn":
 		return true
 	default:
 		return false

@@ -579,7 +579,7 @@ func (h *CRUDHandler[T]) prepareCreate(c *gin.Context, row *T) {
 	}
 }
 
-func (h *CRUDHandler[T]) afterCreate(c *gin.Context, row *T) {
+func (h *CRUDHandler[T]) afterCreate(_ *gin.Context, row *T) {
 	switch h.TableName {
 	case "messages":
 		if message, ok := any(row).(*models.Message); ok {

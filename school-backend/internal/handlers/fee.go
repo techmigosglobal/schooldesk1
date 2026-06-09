@@ -832,6 +832,11 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 		fail(c, http.StatusNotFound, "Invoice not found")
 		return
 	}
+	var parentLink models.ParentStudentLink
+	if err := database.DB.Where("school_id = ? AND parent_user_id = ? AND student_id = ?", scopedSchoolID(c), currentUserID(c), invoice.StudentID).First(&parentLink).Error; err != nil {
+		fail(c, http.StatusForbidden, "Invoice does not belong to a linked child")
+		return
+	}
 	if invoice.Balance <= 0 {
 		fail(c, http.StatusBadRequest, "invoice has no outstanding balance")
 		return

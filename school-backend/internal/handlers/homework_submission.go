@@ -81,7 +81,8 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "answer_text or attachment_url is required")
 		return
 	}
-	if !canAccessStudent(c, req.StudentID) {
+	var parentLink models.ParentStudentLink
+	if err := database.DB.Where("school_id = ? AND parent_user_id = ? AND student_id = ?", scopedSchoolID(c), currentUserID(c), req.StudentID).First(&parentLink).Error; err != nil {
 		fail(c, http.StatusForbidden, "Parent is not linked to this student")
 		return
 	}

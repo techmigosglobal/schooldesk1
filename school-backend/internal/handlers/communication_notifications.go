@@ -838,7 +838,7 @@ func userNotificationRole(user models.User) string {
 	return strings.ToLower(strings.TrimSpace(user.RoleSlug))
 }
 
-func messageRecipientRole(conversation models.MessageConversation, message models.Message) string {
+func messageRecipientRole(_ models.MessageConversation, message models.Message) string {
 	switch strings.ToLower(strings.TrimSpace(message.SenderRole)) {
 	case "parent":
 		return "teacher"
