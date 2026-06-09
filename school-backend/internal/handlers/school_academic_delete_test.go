@@ -68,6 +68,7 @@ func academicDeleteRouter() *gin.Engine {
 	})
 	handler := NewSchoolHandler()
 	router.POST("/academic-years", handler.CreateAcademicYear)
+	router.GET("/academic-years/:id/terms", handler.GetTerms)
 	router.PUT("/academic-years/:id", handler.UpdateAcademicYear)
 	router.DELETE("/academic-years/:id", handler.DeleteAcademicYear)
 	router.DELETE("/subjects/:id", handler.DeleteSubject)
@@ -111,6 +112,70 @@ func TestCreateAcademicYearCurrentDeactivatesExistingCurrentYear(t *testing.T) {
 	}
 	if existing.IsCurrent {
 		t.Fatalf("existing year should have been deactivated")
+	}
+}
+
+func TestCreateAcademicYearCreatesDefaultTerm(t *testing.T) {
+	db := setupAcademicDeleteDB(t)
+
+	response := httptest.NewRecorder()
+	academicDeleteRouter().ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodPost, "/academic-years", strings.NewReader(`{"year_label":"2026-2027","start_date":"2026-04-01","end_date":"2027-03-31","is_current":true}`)),
+	)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", response.Code, response.Body.String())
+	}
+	var terms []models.Term
+	if err := db.Find(&terms).Error; err != nil {
+		t.Fatalf("load terms: %v", err)
+	}
+	if len(terms) != 1 {
+		t.Fatalf("term count = %d, want 1", len(terms))
+	}
+	term := terms[0]
+	if term.TermName != "Term 1" || term.TermNumber != 1 || !term.IsCurrent {
+		t.Fatalf("default term = %+v, want current Term 1", term)
+	}
+	if !sameAcademicDate(term.StartDate, mustParseAcademicDeleteDate(t, "2026-04-01")) ||
+		!sameAcademicDate(term.EndDate, mustParseAcademicDeleteDate(t, "2027-03-31")) {
+		t.Fatalf("term dates = %s - %s, want academic year range", term.StartDate, term.EndDate)
+	}
+}
+
+func TestGetTermsRepairsTermlessAcademicYear(t *testing.T) {
+	db := setupAcademicDeleteDB(t)
+	year := models.AcademicYear{
+		BaseModel: models.BaseModel{ID: "year-termless"},
+		SchoolID:  "school-test",
+		YearLabel: "2026-2027",
+		Year:      "2026-2027",
+		StartDate: mustParseAcademicDeleteDate(t, "2026-04-01"),
+		EndDate:   mustParseAcademicDeleteDate(t, "2027-03-31"),
+		IsCurrent: true,
+		Status:    "active",
+	}
+	if err := db.Create(&year).Error; err != nil {
+		t.Fatalf("seed year: %v", err)
+	}
+
+	response := httptest.NewRecorder()
+	academicDeleteRouter().ServeHTTP(
+		response,
+		httptest.NewRequest(http.MethodGet, "/academic-years/year-termless/terms", nil),
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("terms status = %d body=%s", response.Code, response.Body.String())
+	}
+	var termCount int64
+	db.Model(&models.Term{}).Where("academic_year_id = ?", year.ID).Count(&termCount)
+	if termCount != 1 {
+		t.Fatalf("term count = %d, want 1", termCount)
+	}
+	if !strings.Contains(response.Body.String(), "Term 1") {
+		t.Fatalf("terms response should include generated default term: %s", response.Body.String())
 	}
 }
 
@@ -185,6 +250,10 @@ func TestDeleteAcademicYearRejectsLinkedExam(t *testing.T) {
 	if !strings.Contains(response.Body.String(), "linked exams") {
 		t.Fatalf("delete response should explain linked exams: %s", response.Body.String())
 	}
+}
+
+func sameAcademicDate(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
 }
 
 func TestDeleteSubjectCleansLinkedEmptyTimetableSlot(t *testing.T) {

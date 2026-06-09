@@ -233,16 +233,25 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF7FAFF),
-      drawer: PrincipalDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
-      bottomNavigationBar: const PrincipalShellBottomBar(),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: AppTheme.primary,
-          child: _buildContent(),
+    return PopScope(
+      canPop: _history.isEmpty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF7FAFF),
+        drawer: PrincipalDrawer(
+          selectedIndex: 6,
+          onDestinationSelected: (_) {},
+        ),
+        bottomNavigationBar: const PrincipalShellBottomBar(),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppTheme.primary,
+            child: _buildContent(),
+          ),
         ),
       ),
     );
@@ -2026,7 +2035,7 @@ class _ExamMetricGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
-      childAspectRatio: 1.75,
+      childAspectRatio: 1.35,
       children: children,
     );
   }
@@ -2050,11 +2059,13 @@ class _ExamMetricTile extends StatelessWidget {
     return _ExamCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
           _ExamIconBadge(icon: icon, color: color),
+          const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 label,
@@ -2067,13 +2078,18 @@ class _ExamMetricTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppTheme.onSurface,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.onSurface,
+                    ),
+                  ),
                 ),
               ),
             ],

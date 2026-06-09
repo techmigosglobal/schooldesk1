@@ -4404,6 +4404,7 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
   bool _previewing = false;
   bool _generating = false;
   bool _replaceExisting = true;
+  bool _showBreaks = false;
   bool _dirty = false;
   String _termId = '';
   String? _error;
@@ -4573,6 +4574,41 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
     }
   }
 
+  Future<void> _ensureDefaultTerm() async {
+    if (_academicYearId.isEmpty) {
+      setState(
+        () => _error = 'Select an academic year before preparing terms.',
+      );
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final terms = await BackendApiClient.instance.getTerms(_academicYearId);
+      final nextTermId = terms.isEmpty ? '' : _termIdFrom(terms.first);
+      if (!mounted) return;
+      setState(() {
+        _terms = terms;
+        _termId = nextTermId;
+        _loading = false;
+      });
+      if (terms.isEmpty) {
+        setState(() {
+          _error =
+              'The backend did not return a term for this academic year. Create a term in Academic Management and retry.';
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Unable to prepare default term. $error';
+        _loading = false;
+      });
+    }
+  }
+
   bool _validateSetup() {
     if (!_ready) {
       setState(() {
@@ -4732,24 +4768,62 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
           const SizedBox(height: 16),
           _buildTermSelector(),
           const SizedBox(height: 14),
-          _TimetableWorkingDaySelector(
-            selectedDays: _workingDays,
-            onChanged: (day, selected) {
-              setState(() {
-                if (selected) {
-                  _workingDays.add(day);
-                } else {
-                  _workingDays.remove(day);
-                }
-                _preview = null;
-                _generation = null;
-              });
-            },
+          _TimetableSetupSection(
+            title: 'Schedule pattern',
+            icon: Icons.tune_rounded,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TimetableWorkingDaySelector(
+                  selectedDays: _workingDays,
+                  onChanged: (day, selected) {
+                    setState(() {
+                      if (selected) {
+                        _workingDays.add(day);
+                      } else {
+                        _workingDays.remove(day);
+                      }
+                      _preview = null;
+                      _generation = null;
+                    });
+                  },
+                ),
+                const SizedBox(height: 14),
+                _buildGeneratorFields(),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
-          _buildGeneratorFields(),
-          const SizedBox(height: 14),
-          _buildBreakFields(),
+          _TimetableSetupSection(
+            title: 'Breaks',
+            icon: Icons.free_breakfast_outlined,
+            trailing: Switch.adaptive(
+              value: _showBreaks,
+              onChanged: _generating
+                  ? null
+                  : (value) => setState(() {
+                      _showBreaks = value;
+                      if (!value) {
+                        _shortBreakPeriodController.clear();
+                        _shortBreakStartController.clear();
+                        _shortBreakEndController.clear();
+                        _longBreakPeriodController.clear();
+                        _longBreakStartController.clear();
+                        _longBreakEndController.clear();
+                      }
+                      _preview = null;
+                      _generation = null;
+                    }),
+            ),
+            child: _showBreaks
+                ? _buildBreakFields()
+                : const _TimetableSetupHint(
+                    icon: Icons.add_circle_outline_rounded,
+                    title: 'Add breaks',
+                    message:
+                        'Keep this off for a clean timetable, or enable it to reserve interval and lunch periods.',
+                  ),
+          ),
           const SizedBox(height: 10),
           Material(
             type: MaterialType.transparency,
@@ -4824,9 +4898,13 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
 
   Widget _buildTermSelector() {
     if (_terms.isEmpty) {
-      return const _SetupEmptyBox(
+      return _TimetableSetupHint(
+        icon: Icons.event_note_outlined,
+        title: 'Academic term needed',
         message:
-            'No academic terms are available for this year. Create a term before generating the timetable.',
+            'Prepare the default Term 1 for this academic year, then generate the timetable.',
+        actionLabel: 'Prepare default term',
+        onAction: _ensureDefaultTerm,
       );
     }
     return DropdownButtonFormField<String>(
@@ -5242,6 +5320,133 @@ class _TimetableSetupSummary extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _TimetableSetupSection extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+  final Widget? trailing;
+
+  const _TimetableSetupSection({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _CreateClassSetupPageState._line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: _CreateClassSetupPageState._primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _TimetableSetupHint extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _TimetableSetupHint({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final action = actionLabel;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _CreateClassSetupPageState._line),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: _CreateClassSetupPageState._primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._muted,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    height: 1.3,
+                    letterSpacing: 0,
+                  ),
+                ),
+                if (action != null && onAction != null) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: onAction,
+                      icon: const Icon(Icons.build_circle_outlined, size: 18),
+                      label: Text(action),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -343,7 +343,10 @@ func (h *SchoolHandler) CreateAcademicYear(c *gin.Context) {
 				return err
 			}
 		}
-		return tx.Create(&year).Error
+		if err := tx.Create(&year).Error; err != nil {
+			return err
+		}
+		return ensureDefaultAcademicYearTerm(tx, year)
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create academic year"})
 		return
@@ -1141,9 +1144,43 @@ func (h *SchoolHandler) GetTerms(c *gin.Context) {
 		fail(c, http.StatusNotFound, "Academic year not found")
 		return
 	}
+	var year models.AcademicYear
+	if err := database.DB.First(&year, "id = ? AND school_id = ?", yearID, scopedSchoolID(c)).Error; err != nil {
+		fail(c, http.StatusNotFound, "Academic year not found")
+		return
+	}
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		return ensureDefaultAcademicYearTerm(tx, year)
+	}); err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to prepare academic terms")
+		return
+	}
 	var terms []models.Term
-	database.DB.Where("academic_year_id = ?", yearID).Find(&terms)
+	database.DB.Where("academic_year_id = ?", yearID).Order("term_number ASC, start_date ASC").Find(&terms)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: terms})
+}
+
+func ensureDefaultAcademicYearTerm(tx *gorm.DB, year models.AcademicYear) error {
+	if strings.TrimSpace(year.ID) == "" {
+		return errors.New("academic year is required")
+	}
+	var count int64
+	if err := tx.Model(&models.Term{}).
+		Where("academic_year_id = ?", year.ID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	return tx.Create(&models.Term{
+		AcademicYearID: year.ID,
+		TermNumber:     1,
+		TermName:       "Term 1",
+		StartDate:      year.StartDate,
+		EndDate:        year.EndDate,
+		IsCurrent:      true,
+	}).Error
 }
 
 func (h *SchoolHandler) PaginationMeta(page, pageSize int, total int64) map[string]int {

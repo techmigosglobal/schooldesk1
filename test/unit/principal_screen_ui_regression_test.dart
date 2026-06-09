@@ -70,6 +70,11 @@ void main() {
       final api = File(
         'lib/core/network/api_modules/fees_api.dart',
       ).readAsStringSync();
+      final metricTile = source
+          .split('class _FeeMetricTile')
+          .last
+          .split('class _FeeIconBadge')
+          .first;
 
       expect(source, contains("title: 'Fees'"));
       expect(source, contains('View and manage fee information'));
@@ -117,7 +122,18 @@ void main() {
       expect(source, contains('createReportExport('));
       expect(source, contains('PaymentRequest('));
       expect(source, contains('PrincipalShellBottomBar'));
-      expect(source, contains('PrincipalDrawer(selectedIndex: 7'));
+      expect(source, contains('PrincipalDrawer('));
+      expect(source, contains('selectedIndex: 7'));
+      expect(source, contains('PopScope('));
+      expect(source, contains('canPop: _view == _FeeView.home'));
+      expect(source, contains('if (!didPop) _goBack();'));
+      expect(source, contains('childAspectRatio: 1.35'));
+      expect(metricTile, contains('mainAxisSize: MainAxisSize.min'));
+      expect(metricTile, contains('FittedBox('));
+      expect(
+        metricTile,
+        isNot(contains('mainAxisAlignment: MainAxisAlignment.spaceBetween')),
+      );
       expect(source, contains('_openClassesHubForFees'));
       expect(source, contains("class_hub_action': 'fees'"));
       expect(source, contains("source': 'principal_fees'"));
@@ -203,6 +219,12 @@ void main() {
     expect(screen, contains('Generate class timetable'));
     expect(screen, contains('Preview Timetable'));
     expect(screen, contains('Generate Timetable'));
+    expect(screen, contains('Schedule pattern'));
+    expect(screen, contains('Breaks'));
+    expect(screen, contains('Add breaks'));
+    expect(screen, contains('Prepare default term'));
+    expect(screen, contains('_ensureDefaultTerm'));
+    expect(screen, contains('_TimetableSetupSection'));
     expect(screen, contains('View timetables'));
     expect(screen, contains('Setup timetable'));
     expect(screen, contains('_openTimetableSetup'));
@@ -648,6 +670,16 @@ void main() {
     expect(events, contains('Create Event'));
     expect(events, contains('Live school calendar'));
     expect(events, contains('_EventFilter.month'));
+    expect(events, contains('enum _EventsDisplayMode'));
+    expect(events, contains('_EventsDisplayMode.calendar'));
+    expect(events, contains("_displayMode == _EventsDisplayMode.list"));
+    expect(events, contains('Calendar'));
+    expect(events, contains('List'));
+    expect(events, contains('_buildCalendarMonth()'));
+    expect(events, contains('class _EventCalendarMonth'));
+    expect(events, contains('class _EventCalendarDayCell'));
+    expect(events, contains('_eventsForDay('));
+    expect(events, contains('DateUtils.getDaysInMonth'));
     expect(events, contains('_selectedMonthCount'));
     expect(events, contains('overlapsMonth'));
     expect(events, contains('overlapsDate'));
@@ -887,6 +919,11 @@ void main() {
     final examReview = File(
       'lib/features/academics/presentation/screens/principal_command_center_screens/principal_exam_review_screen.dart',
     ).readAsStringSync();
+    final examMetricTile = examReview
+        .split('class _ExamMetricTile')
+        .last
+        .split('class _ExamIconBadge')
+        .first;
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final drawer = File(
       'lib/core/widgets/app_navigation.dart',
@@ -949,6 +986,9 @@ void main() {
     expect(examReview, contains('_PrincipalExamView.studentResult'));
     expect(examReview, contains('_PrincipalExamView.gradeSetup'));
     expect(examReview, contains('_PrincipalExamView.reports'));
+    expect(examReview, contains('PopScope('));
+    expect(examReview, contains('canPop: _history.isEmpty'));
+    expect(examReview, contains('if (!didPop) _goBack();'));
     expect(examReview, contains("_buildHeader(\n        'Exam Timetable'"));
     expect(
       examReview,
@@ -998,6 +1038,13 @@ void main() {
     expect(examReview, contains("selectedStep': 'exam_setup'"));
     expect(examReview, contains("source': 'principal_exams'"));
     expect(examReview, contains('Step 5 (Exams)'));
+    expect(examReview, contains('childAspectRatio: 1.35'));
+    expect(examMetricTile, contains('mainAxisSize: MainAxisSize.min'));
+    expect(examMetricTile, contains('FittedBox('));
+    expect(
+      examMetricTile,
+      isNot(contains('mainAxisAlignment: MainAxisAlignment.spaceBetween')),
+    );
     expect(examReview, isNot(contains("createRaw('/exams'")));
     expect(examReview, isNot(contains("createRaw('/exams/schedules'")));
     expect(examReview, isNot(contains('PrincipalInputPage')));

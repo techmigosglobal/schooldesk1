@@ -98,7 +98,8 @@ flutter run --dart-define-from-file=env.hostinger.json
 Release builds must use HTTPS:
 
 ```bash
-flutter build apk --release --dart-define-from-file=env.hostinger.json
+scripts/build-android-vps.sh apk
+scripts/build-android-vps.sh aab
 ```
 
 For the Hostinger "Ubuntu 24.04 with Docker and Traefik" template, deploy the
@@ -160,7 +161,8 @@ Container(
 
 ```bash
 # For Android
-flutter build apk --release
+scripts/build-android-vps.sh apk
+scripts/build-android-vps.sh aab
 
 # For iOS
 flutter build ios --release

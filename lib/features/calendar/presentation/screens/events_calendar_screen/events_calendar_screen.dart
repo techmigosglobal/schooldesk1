@@ -16,6 +16,8 @@ enum _EventFilter {
   cancelled,
 }
 
+enum _EventsDisplayMode { calendar, list }
+
 class EventsCalendarScreen extends StatefulWidget {
   const EventsCalendarScreen({super.key});
 
@@ -32,6 +34,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
   _EventFilter _filter = _EventFilter.month;
+  _EventsDisplayMode _displayMode = _EventsDisplayMode.calendar;
 
   @override
   void initState() {
@@ -142,6 +145,48 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   int get _approvalCount =>
       _events.where((event) => event.needsApproval).length;
+
+  int get _calendarYear {
+    final monthEvents = _events
+        .where((event) => event.overlapsMonth(_selectedMonth))
+        .toList();
+    if (monthEvents.isNotEmpty) return monthEvents.first.start.year;
+
+    AcademicYearModel? selectedYear;
+    for (final year in _academicYears) {
+      if (year.id == _selectedAcademicYearId) {
+        selectedYear = year;
+        break;
+      }
+    }
+    final academicStart = DateTime.tryParse(selectedYear?.startDate ?? '');
+    final academicEnd = DateTime.tryParse(selectedYear?.endDate ?? '');
+    if (academicStart != null && academicStart.month <= _selectedMonth) {
+      return academicStart.year;
+    }
+    if (academicEnd != null && academicEnd.month >= _selectedMonth) {
+      return academicEnd.year;
+    }
+    return DateTime.now().year;
+  }
+
+  List<_PrincipalEvent> _eventsForDay(DateTime day) {
+    final query = _query.trim().toLowerCase();
+    final rows = _events.where((event) {
+      if (!event.overlapsDate(day)) return false;
+      if (query.isEmpty) return true;
+      return [
+        event.title,
+        event.type,
+        event.status,
+        event.venue,
+        event.audience,
+        event.description,
+      ].join(' ').toLowerCase().contains(query);
+    }).toList();
+    rows.sort((a, b) => a.start.compareTo(b.start));
+    return rows;
+  }
 
   Future<void> _openCreateEvent() async {
     final saved = await Navigator.of(context).push<bool>(
@@ -298,6 +343,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   @override
   Widget build(BuildContext context) {
     final visible = _visibleEvents;
+    final showList = _displayMode == _EventsDisplayMode.list;
     return PrincipalDirectoryScaffold(
       title: 'Events Directory',
       subtitle:
@@ -308,7 +354,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       onAdd: _canManageEvents ? _openCreateEvent : null,
       addTooltip: 'Create event',
       addIcon: Icons.event_available_rounded,
-      isEmpty: !_loading && _error == null && visible.isEmpty,
+      isEmpty: !_loading && _error == null && showList && visible.isEmpty,
       emptyState: EmptyStateWidget(
         icon: Icons.event_busy_rounded,
         title: 'No events found',
@@ -359,20 +405,36 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             ],
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-          sliver: SliverList.separated(
-            itemCount: visible.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => _EventDirectoryCard(
-              event: visible[index],
-              onTap: () => _openDetails(visible[index]),
-              canManage: _canManageEvents,
-              onAction: (action) => _handleEventAction(action, visible[index]),
+        if (_displayMode == _EventsDisplayMode.calendar)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+            sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
+          )
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+            sliver: SliverList.separated(
+              itemCount: visible.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) => _EventDirectoryCard(
+                event: visible[index],
+                onTap: () => _openDetails(visible[index]),
+                canManage: _canManageEvents,
+                onAction: (action) =>
+                    _handleEventAction(action, visible[index]),
+              ),
             ),
           ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildCalendarMonth() {
+    return _EventCalendarMonth(
+      month: _selectedMonth,
+      year: _calendarYear,
+      eventsForDay: _eventsForDay,
+      onEventTap: _openDetails,
     );
   }
 
@@ -411,6 +473,30 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               },
             ),
           ],
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                PrincipalDirectoryChip(
+                  label: 'Calendar',
+                  selected: _displayMode == _EventsDisplayMode.calendar,
+                  icon: Icons.calendar_month_rounded,
+                  onTap: () => setState(
+                    () => _displayMode = _EventsDisplayMode.calendar,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                PrincipalDirectoryChip(
+                  label: 'List',
+                  selected: _displayMode == _EventsDisplayMode.list,
+                  icon: Icons.view_agenda_rounded,
+                  onTap: () =>
+                      setState(() => _displayMode = _EventsDisplayMode.list),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -539,6 +625,270 @@ class _EventDirectoryCard extends StatelessWidget {
               ],
             )
           : const Icon(Icons.chevron_right_rounded),
+    );
+  }
+}
+
+class _EventCalendarMonth extends StatelessWidget {
+  final int month;
+  final int year;
+  final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
+  final ValueChanged<_PrincipalEvent> onEventTap;
+
+  const _EventCalendarMonth({
+    required this.month,
+    required this.year,
+    required this.eventsForDay,
+    required this.onEventTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final firstDay = DateTime(year, month);
+    final leadingBlankDays = firstDay.weekday - 1;
+    final dayCount = DateUtils.getDaysInMonth(year, month);
+    final totalCells = ((leadingBlankDays + dayCount + 6) ~/ 7) * 7;
+    var monthEventCount = 0;
+
+    final cells = List<Widget>.generate(totalCells, (index) {
+      final dayNumber = index - leadingBlankDays + 1;
+      if (dayNumber < 1 || dayNumber > dayCount) {
+        return const SizedBox.shrink();
+      }
+      final day = DateTime(year, month, dayNumber);
+      final events = eventsForDay(day);
+      monthEventCount += events.length;
+      return _EventCalendarDayCell(
+        day: day,
+        events: events,
+        onTap: events.isEmpty ? null : () => onEventTap(events.first),
+      );
+    });
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE8F4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF4FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: principalDirectoryAccent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_monthName(month)} $year',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryText,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      monthEventCount == 0
+                          ? 'Calendar'
+                          : '$monthEventCount calendar entries',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryMuted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: const [
+              _CalendarWeekLabel('Mon'),
+              _CalendarWeekLabel('Tue'),
+              _CalendarWeekLabel('Wed'),
+              _CalendarWeekLabel('Thu'),
+              _CalendarWeekLabel('Fri'),
+              _CalendarWeekLabel('Sat'),
+              _CalendarWeekLabel('Sun'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.count(
+            crossAxisCount: 7,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            childAspectRatio: 0.82,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: cells,
+          ),
+          if (monthEventCount == 0) ...[
+            const SizedBox(height: 14),
+            const _CalendarNotice(
+              icon: Icons.event_available_rounded,
+              title: 'No events scheduled',
+              message: 'Use the create event button to add one for this month.',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarWeekLabel extends StatelessWidget {
+  final String label;
+
+  const _CalendarWeekLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Center(
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            color: principalDirectoryMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EventCalendarDayCell extends StatelessWidget {
+  final DateTime day;
+  final List<_PrincipalEvent> events;
+  final VoidCallback? onTap;
+
+  const _EventCalendarDayCell({
+    required this.day,
+    required this.events,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final isToday = DateUtils.isSameDay(day, now);
+    final hasEvents = events.isNotEmpty;
+    final firstEvent = hasEvents ? events.first : null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Ink(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isToday
+                ? const Color(0xFFEAF4FF)
+                : hasEvents
+                ? const Color(0xFFF7FBFF)
+                : const Color(0xFFF9FBFE),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isToday
+                  ? principalDirectoryAccent.withAlpha(120)
+                  : hasEvents
+                  ? firstEvent!.statusColor.withAlpha(90)
+                  : const Color(0xFFE4ECF5),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${day.day}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: isToday
+                            ? principalDirectoryAccent
+                            : principalDirectoryText,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (events.length > 1)
+                    Text(
+                      '${events.length}',
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                ],
+              ),
+              const Spacer(),
+              if (firstEvent != null) ...[
+                Text(
+                  firstEvent.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryText,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    for (final event in events.take(3)) ...[
+                      Container(
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.only(right: 3),
+                        decoration: BoxDecoration(
+                          color: event.statusColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

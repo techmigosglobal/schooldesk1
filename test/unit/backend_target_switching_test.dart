@@ -46,4 +46,25 @@ void main() {
       'https://api.schooldesk.example',
     );
   });
+
+  test('release Android helper always builds artifacts against Hostinger', () {
+    final script = File('scripts/build-android-vps.sh');
+    final readme = File('README.md').readAsStringSync();
+
+    expect(script.existsSync(), isTrue);
+
+    final source = script.readAsStringSync();
+    expect(source, contains('env.hostinger.json'));
+    expect(source, contains(r'--dart-define-from-file="$env_file"'));
+    expect(source, contains('flutter build apk --release'));
+    expect(source, contains('flutter build appbundle --release'));
+    expect(source, contains('aab|abb'));
+    expect(source, contains('jq -e'));
+    expect(source, contains('API_BASE_URL'));
+    expect(source, contains('https://'));
+
+    expect(readme, contains('scripts/build-android-vps.sh apk'));
+    expect(readme, contains('scripts/build-android-vps.sh aab'));
+    expect(readme, isNot(contains('flutter build apk --release\n')));
+  });
 }

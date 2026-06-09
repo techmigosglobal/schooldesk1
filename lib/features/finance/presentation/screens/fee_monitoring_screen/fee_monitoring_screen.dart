@@ -153,16 +153,25 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: const Color(0xFFF7FAFF),
-      drawer: PrincipalDrawer(selectedIndex: 7, onDestinationSelected: (_) {}),
-      bottomNavigationBar: const PrincipalShellBottomBar(),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: AppTheme.primary,
-          child: _buildContent(),
+    return PopScope(
+      canPop: _view == _FeeView.home,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF7FAFF),
+        drawer: PrincipalDrawer(
+          selectedIndex: 7,
+          onDestinationSelected: (_) {},
+        ),
+        bottomNavigationBar: const PrincipalShellBottomBar(),
+        body: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: AppTheme.primary,
+            child: _buildContent(),
+          ),
         ),
       ),
     );
@@ -241,7 +250,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 10,
           mainAxisSpacing: 10,
-          childAspectRatio: 1.7,
+          childAspectRatio: 1.35,
           children: [
             _FeeMetricTile(
               label: 'Total Fee Structures',
@@ -2016,11 +2025,13 @@ class _FeeMetricTile extends StatelessWidget {
     return _FeeCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.min,
         children: [
           _FeeIconBadge(icon: icon, color: color),
+          const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 label,
@@ -2033,13 +2044,18 @@ class _FeeMetricTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppTheme.onSurface,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.onSurface,
+                    ),
+                  ),
                 ),
               ),
             ],
