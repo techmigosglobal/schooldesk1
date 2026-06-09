@@ -59,8 +59,6 @@ android/key.properties
 android/*.jks
 android/app/*.jks
 *.keystore
-!android/key.properties
-!android/upload-keystore.jks
 
 # Symbolication related
 app.*.symbols
@@ -97,3 +95,10 @@ android/.kotlin/
 /Classes_Screen.html
 /schooldesk-web-*.png
 /schooldesk-students-web-preview.png
+
+# Data imports and assets
+*.csv
+/screenshots/
+
+# Internal tooling
+.kimchi/
