@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from redis import Redis
+from redis import Redis, RedisError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,8 @@ def health_redis(settings: Settings = Depends(get_settings)) -> dict[str, str]:
     try:
         if not client.ping():
             raise HTTPException(status_code=503, detail="Redis ping failed")
+    except RedisError as exc:
+        raise HTTPException(status_code=503, detail=f"Redis unavailable: {exc}") from exc
     finally:
         client.close()
     return {"status": "ok", "redis": "connected"}
-

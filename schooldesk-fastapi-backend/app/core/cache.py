@@ -37,6 +37,10 @@ class Cache:
     def is_available(self) -> bool:
         return self._available and self._client is not None
 
+    @property
+    def redis_url(self) -> str:
+        return self._redis_url
+
     def get(self, key: str) -> Any | None:
         """Get value from cache. Returns None if cache unavailable."""
         if not self.is_available:
@@ -96,7 +100,7 @@ _cache: Cache | None = None
 def get_cache(redis_url: str = "redis://localhost:6380/0") -> Cache:
     """Get or create the global cache instance."""
     global _cache
-    if _cache is None:
+    if _cache is None or _cache._redis_url != redis_url:
         _cache = Cache(redis_url)
     return _cache
 
