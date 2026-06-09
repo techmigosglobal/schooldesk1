@@ -320,7 +320,7 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
         SchoolDeskRole.principal: Color(0xFF2457D6),
         SchoolDeskRole.admin: Color(0xFF0E9384),
         SchoolDeskRole.teacher: Color(0xFF7C3AED),
-        SchoolDeskRole.parent: Color(0xFF16A34A),
+        SchoolDeskRole.parent: Color(0xFF1A6B4A),
         SchoolDeskRole.student: Color(0xFFEA580C),
       },
       pageBackground: isDark

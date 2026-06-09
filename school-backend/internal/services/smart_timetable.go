@@ -24,16 +24,17 @@ func NewSmartTimetableEngine(db *gorm.DB) *SmartTimetableEngine {
 }
 
 type SmartTimetableRequest struct {
-	SectionID             string `json:"section_id"`
-	AcademicYearID        string `json:"academic_year_id"`
-	TermID                string `json:"term_id"`
-	Mode                  string `json:"mode"`
-	Days                  []int  `json:"days"`
-	PeriodsPerDay         int    `json:"periods_per_day"`
-	StartTime             string `json:"start_time"`
-	PeriodDurationMinutes int    `json:"period_duration_minutes"`
-	GapMinutes            int    `json:"gap_minutes"`
-	RegenerateScope       bool   `json:"regenerate_scope"`
+	SectionID             string                   `json:"section_id"`
+	AcademicYearID        string                   `json:"academic_year_id"`
+	TermID                string                   `json:"term_id"`
+	Mode                  string                   `json:"mode"`
+	Days                  []int                    `json:"days"`
+	PeriodsPerDay         int                      `json:"periods_per_day"`
+	StartTime             string                   `json:"start_time"`
+	PeriodDurationMinutes int                      `json:"period_duration_minutes"`
+	GapMinutes            int                      `json:"gap_minutes"`
+	Breaks                []map[string]interface{} `json:"breaks"`
+	RegenerateScope       bool                     `json:"regenerate_scope"`
 }
 
 type SmartTimetablePlan struct {
@@ -108,12 +109,19 @@ type SmartTimetableLog struct {
 }
 
 type SmartTimetableTemplateConfig struct {
-	Days                  []int                  `json:"days"`
-	PeriodsPerDay         int                    `json:"periods_per_day"`
-	StartTime             string                 `json:"start_time"`
-	PeriodDurationMinutes int                    `json:"period_duration_minutes"`
-	GapMinutes            int                    `json:"gap_minutes"`
-	Breaks                map[int]map[int]string `json:"breaks"`
+	Days                  []int                               `json:"days"`
+	PeriodsPerDay         int                                 `json:"periods_per_day"`
+	StartTime             string                              `json:"start_time"`
+	PeriodDurationMinutes int                                 `json:"period_duration_minutes"`
+	GapMinutes            int                                 `json:"gap_minutes"`
+	Breaks                map[int]map[int]SmartTimetableBreak `json:"breaks"`
+}
+
+type SmartTimetableBreak struct {
+	Label     string `json:"label"`
+	Type      string `json:"type,omitempty"`
+	StartTime string `json:"start_time,omitempty"`
+	EndTime   string `json:"end_time,omitempty"`
 }
 
 type SmartTimetableGenerateResult struct {
@@ -215,7 +223,9 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 			for period := 1; period <= state.Template.PeriodsPerDay; period++ {
 				plan.Summary.RequestedSlots++
 				start, end := periodTime(state.Template, period)
-				if label := breakLabel(state.Template, day, period); label != "" {
+				if row, ok := breakConfig(state.Template, day, period); ok {
+					start, end = breakTime(state.Template, period, row)
+					label := firstNonEmpty(row.Label, "Break")
 					plan.Summary.ReservedBreaks++
 					plan.Suggestions = append(plan.Suggestions, SmartTimetableSuggestion{
 						SectionID: section.ID, ClassName: classLabel(section),
@@ -345,7 +355,10 @@ func (e *SmartTimetableEngine) Generate(ctx context.Context, schoolID, userID, r
 
 	created := make([]models.TimetableSlot, 0)
 	for _, suggestion := range plan.Suggestions {
-		if suggestion.Blocking || suggestion.Status != "ready" {
+		if suggestion.Blocking {
+			continue
+		}
+		if suggestion.Status != "ready" && suggestion.Status != "reserved_break" {
 			continue
 		}
 		var existing int64
@@ -361,13 +374,17 @@ func (e *SmartTimetableEngine) Generate(ctx context.Context, schoolID, userID, r
 		if startErr != nil || endErr != nil {
 			continue
 		}
+		slotType := "regular"
+		if suggestion.Status == "reserved_break" {
+			slotType = "break:" + strings.TrimSpace(firstNonEmpty(suggestion.SubjectName, "Break"))
+		}
 		slot := models.TimetableSlot{
 			SectionID: suggestion.SectionID, AcademicYearID: suggestion.AcademicYearID,
 			TermID: suggestion.TermID, DayOfWeek: suggestion.DayOfWeek,
 			PeriodNumber: suggestion.PeriodNumber, SubjectID: suggestion.SubjectID,
-			StaffID: suggestion.StaffID, StartTime: start, EndTime: end, SlotType: "regular",
+			StaffID: suggestion.StaffID, StartTime: start, EndTime: end, SlotType: slotType,
 		}
-		if suggestion.RoomID != "" {
+		if suggestion.Status == "ready" && suggestion.RoomID != "" {
 			roomID := suggestion.RoomID
 			slot.RoomID = &roomID
 		}
@@ -598,7 +615,7 @@ func (e *SmartTimetableEngine) loadContext(ctx context.Context, schoolID string,
 }
 
 func (e *SmartTimetableEngine) loadTemplate(ctx context.Context, schoolID, academicYearID string, req SmartTimetableRequest) SmartTimetableTemplateConfig {
-	template := SmartTimetableTemplateConfig{Days: []int{1, 2, 3, 4, 5, 6}, PeriodsPerDay: 8, StartTime: "09:00", PeriodDurationMinutes: 40, GapMinutes: 5, Breaks: map[int]map[int]string{}}
+	template := SmartTimetableTemplateConfig{Days: []int{1, 2, 3, 4, 5, 6}, PeriodsPerDay: 8, StartTime: "09:00", PeriodDurationMinutes: 40, GapMinutes: 5, Breaks: map[int]map[int]SmartTimetableBreak{}}
 	var row models.TimetableTemplate
 	if err := e.db.WithContext(ctx).Where("school_id = ? AND (academic_year_id = '' OR academic_year_id = ?)", schoolID, academicYearID).Order("is_default DESC, created_at DESC").First(&row).Error; err == nil {
 		if days := intListFromJSON(row.WorkingDays); len(days) > 0 {
@@ -632,6 +649,9 @@ func (e *SmartTimetableEngine) loadTemplate(ctx context.Context, schoolID, acade
 	}
 	if req.GapMinutes >= 0 {
 		template.GapMinutes = req.GapMinutes
+	}
+	if len(req.Breaks) > 0 {
+		template.Breaks = breaksFromRows(req.Breaks)
 	}
 	if template.GapMinutes == 0 {
 		template.GapMinutes = 5
@@ -669,10 +689,10 @@ func (e *SmartTimetableEngine) applyConstraints(ctx context.Context, state *smar
 			label := firstNonEmpty(fmt.Sprint(payload["label"]), "Break")
 			for _, day := range intsFromAny(payload["days"], intFromAny(payload["day_of_week"])) {
 				if state.Template.Breaks[day] == nil {
-					state.Template.Breaks[day] = map[int]string{}
+					state.Template.Breaks[day] = map[int]SmartTimetableBreak{}
 				}
 				for _, period := range intsFromAny(payload["periods"], intFromAny(payload["period_number"])) {
-					state.Template.Breaks[day][period] = label
+					state.Template.Breaks[day][period] = SmartTimetableBreak{Label: label, Type: "break"}
 				}
 			}
 		}
@@ -832,7 +852,7 @@ func (e *SmartTimetableEngine) detectExistingConflicts(state smartContext) []Sma
 }
 
 func (e *SmartTimetableEngine) deleteGenerationScope(ctx context.Context, schoolID string, req SmartTimetableRequest) error {
-	q := e.db.WithContext(ctx).Model(&models.TimetableSlot{}).
+	q := e.db.WithContext(ctx).Model(&models.TimetableSlot{}).Select("timetable_slots.id").
 		Joins("JOIN sections ON sections.id = timetable_slots.section_id").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", schoolID)
@@ -845,7 +865,14 @@ func (e *SmartTimetableEngine) deleteGenerationScope(ctx context.Context, school
 	if strings.TrimSpace(req.SectionID) != "" {
 		q = q.Where("timetable_slots.section_id = ?", strings.TrimSpace(req.SectionID))
 	}
-	return q.Delete(&models.TimetableSlot{}).Error
+	var slotIDs []string
+	if err := q.Pluck("timetable_slots.id", &slotIDs).Error; err != nil {
+		return err
+	}
+	if len(slotIDs) == 0 {
+		return nil
+	}
+	return e.db.WithContext(ctx).Where("id IN ?", slotIDs).Delete(&models.TimetableSlot{}).Error
 }
 
 func (e *SmartTimetableEngine) persistJobLog(ctx context.Context, jobID, stage, severity, message, entityType, entityID string) {
@@ -940,6 +967,18 @@ func periodTime(template SmartTimetableTemplateConfig, period int) (string, stri
 	return start.Format("15:04"), end.Format("15:04")
 }
 
+func breakTime(template SmartTimetableTemplateConfig, period int, row SmartTimetableBreak) (string, string) {
+	if strings.TrimSpace(row.StartTime) == "" || strings.TrimSpace(row.EndTime) == "" {
+		return periodTime(template, period)
+	}
+	start, startErr := time.Parse("15:04", strings.TrimSpace(row.StartTime))
+	end, endErr := time.Parse("15:04", strings.TrimSpace(row.EndTime))
+	if startErr != nil || endErr != nil || !end.After(start) {
+		return periodTime(template, period)
+	}
+	return start.Format("15:04"), end.Format("15:04")
+}
+
 func clockPointer(value string) (*time.Time, error) {
 	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
 	if err != nil {
@@ -949,30 +988,46 @@ func clockPointer(value string) (*time.Time, error) {
 	return &clock, nil
 }
 
-func breakLabel(template SmartTimetableTemplateConfig, day, period int) string {
+func breakConfig(template SmartTimetableTemplateConfig, day, period int) (SmartTimetableBreak, bool) {
 	if template.Breaks[day] == nil {
-		return ""
+		return SmartTimetableBreak{}, false
 	}
-	return strings.TrimSpace(template.Breaks[day][period])
+	row, ok := template.Breaks[day][period]
+	if !ok || strings.TrimSpace(row.Label) == "" {
+		return SmartTimetableBreak{}, false
+	}
+	return row, true
 }
 
-func breaksFromJSON(raw string) map[int]map[int]string {
-	result := map[int]map[int]string{}
+func breaksFromJSON(raw string) map[int]map[int]SmartTimetableBreak {
 	if strings.TrimSpace(raw) == "" {
-		return result
+		return map[int]map[int]SmartTimetableBreak{}
 	}
 	var rows []map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
-		return result
+		return map[int]map[int]SmartTimetableBreak{}
 	}
+	return breaksFromRows(rows)
+}
+
+func breaksFromRows(rows []map[string]interface{}) map[int]map[int]SmartTimetableBreak {
+	result := map[int]map[int]SmartTimetableBreak{}
 	for _, row := range rows {
 		label := firstNonEmpty(fmt.Sprint(row["label"]), "Break")
+		breakType := firstNonEmpty(fmt.Sprint(row["type"]), "break")
+		startTime := firstNonEmpty(fmt.Sprint(row["start_time"]), fmt.Sprint(row["start"]))
+		endTime := firstNonEmpty(fmt.Sprint(row["end_time"]), fmt.Sprint(row["end"]))
 		for _, day := range intsFromAny(row["days"], intFromAny(row["day_of_week"])) {
 			if result[day] == nil {
-				result[day] = map[int]string{}
+				result[day] = map[int]SmartTimetableBreak{}
 			}
 			for _, period := range intsFromAny(row["periods"], intFromAny(row["period_number"])) {
-				result[day][period] = label
+				result[day][period] = SmartTimetableBreak{
+					Label:     label,
+					Type:      breakType,
+					StartTime: startTime,
+					EndTime:   endTime,
+				}
 			}
 		}
 	}

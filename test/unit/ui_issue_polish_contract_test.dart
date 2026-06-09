@@ -60,19 +60,10 @@ void main() {
     }
 
     final markdownFiles =
-        (Process.runSync('find', [
-                  '.',
-                  '-name',
-                  '*.md',
-                  '-not',
-                  '-path',
-                  './.git/*',
-                ]).stdout
-                as String)
+        (Process.runSync('git', ['ls-files', '--', '*.md']).stdout as String)
             .trim()
             .split('\n')
             .where((path) => path.isNotEmpty)
-            .map((path) => path.replaceFirst('./', ''))
             .toSet();
 
     expect(markdownFiles, {'README.md', 'docs/PRD.md', 'docs/SPEC.md'});

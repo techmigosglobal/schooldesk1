@@ -12,6 +12,7 @@ import 'package:share_plus/share_plus.dart' as share_plus;
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
+import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -570,6 +571,14 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     );
   }
 
+  Future<void> _importStudentsCsv() async {
+    final imported = await BulkCsvImportService.importCsv(
+      context,
+      BulkCsvImportTarget.students,
+    );
+    if (imported && mounted) await _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -734,6 +743,11 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                 PopupMenuItem(value: 'pdf', child: Text('PDF')),
                 PopupMenuItem(value: 'csv', child: Text('CSV')),
               ],
+            ),
+            IconButton(
+              onPressed: _importStudentsCsv,
+              icon: const Icon(Icons.upload_file_rounded, size: 22),
+              tooltip: 'Upload students CSV',
             ),
           ],
         ),
@@ -1024,6 +1038,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           academicYears: _academicYears,
           feeStructures: _feeStructures,
           parents: _parents,
+          existingStudents: _allStudents,
           onSubmit: _saveStudentFromForm,
         ),
       ),
@@ -1221,6 +1236,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           academicYears: _academicYears,
           feeStructures: _feeStructures,
           parents: _parents,
+          existingStudents: _allStudents,
           initialStudent: student,
           onSubmit: _saveStudentFromForm,
         ),
@@ -1629,6 +1645,7 @@ class _AddStudentPhotoFormPage extends StatefulWidget {
   final List<api.AcademicYearModel> academicYears;
   final List<Map<String, dynamic>> feeStructures;
   final List<api.UserAccountModel> parents;
+  final List<StudentModel> existingStudents;
   final StudentModel? initialStudent;
   final Future<void> Function(_AddStudentInput input) onSubmit;
 
@@ -1638,6 +1655,7 @@ class _AddStudentPhotoFormPage extends StatefulWidget {
     required this.academicYears,
     required this.feeStructures,
     required this.parents,
+    this.existingStudents = const [],
     this.initialStudent,
     required this.onSubmit,
   });
@@ -1694,27 +1712,21 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     _systemIdCtrl = TextEditingController(
       text: initial?.systemId.trim().isNotEmpty == true
           ? initial!.systemId.trim()
-          : _generateSystemId(),
+          : '',
     );
     _admissionCtrl = TextEditingController(
       text: initial?.rollNumber.trim().isNotEmpty == true
           ? initial!.rollNumber.trim()
-          : _generateAdmissionNumber(),
+          : '',
     );
     _sectionId = initial?.sectionId.trim().isNotEmpty == true
         ? initial!.sectionId
         : widget.sections.isNotEmpty
         ? widget.sections.first.id
         : null;
-    _parentNameCtrl = TextEditingController(
-      text: initial == null ? '' : 'Parent of ${initial.name}',
-    );
-    _parentUsernameCtrl = TextEditingController(
-      text: _generateParentUsername(_admissionCtrl.text),
-    );
-    _parentPasswordCtrl = TextEditingController(
-      text: _generateParentPassword(_admissionCtrl.text),
-    );
+    _parentNameCtrl = TextEditingController();
+    _parentUsernameCtrl = TextEditingController();
+    _parentPasswordCtrl = TextEditingController();
   }
 
   @override
@@ -1808,7 +1820,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     }
     if (_systemIdCtrl.text.trim().isEmpty ||
         _admissionCtrl.text.trim().isEmpty) {
-      setState(() => _error = 'System ID and admission number are required');
+      setState(
+        () => _error =
+            'Custom System ID and admission / roll number are required',
+      );
       return;
     }
     if (_createParentLogin &&
@@ -1871,6 +1886,13 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
 
   String _friendlyStudentSaveError(Object error) {
     final message = '$error';
+    final lower = message.toLowerCase();
+    if (lower.contains('student code already exists')) {
+      return 'System ID already exists. Enter a different custom System ID.';
+    }
+    if (lower.contains('admission number already exists')) {
+      return 'Admission / roll number already exists. Enter a different value.';
+    }
     if (message.contains('NotFoundException')) {
       return 'the server route or selected student was not found. Please retry after backend sync.';
     }
@@ -1890,11 +1912,11 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       _assignFees = true;
       _photoFile = null;
       _documents.clear();
-      _systemIdCtrl.text = _generateSystemId();
-      _admissionCtrl.text = _generateAdmissionNumber();
+      _systemIdCtrl.clear();
+      _admissionCtrl.clear();
       _parentNameCtrl.clear();
-      _parentUsernameCtrl.text = _generateParentUsername(_admissionCtrl.text);
-      _parentPasswordCtrl.text = _generateParentPassword(_admissionCtrl.text);
+      _parentUsernameCtrl.clear();
+      _parentPasswordCtrl.clear();
       _parentEmailCtrl.clear();
       _parentPhoneCtrl.clear();
       _documentTypeCtrl.text = 'admission_document';
@@ -1946,7 +1968,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                         _FieldLabel('Student Name'),
                         _TextInput(
                           controller: _nameCtrl,
-                          hint: 'Ravali S.',
                           enabled: !_saving,
                           validator: _requiredFullName,
                         ),
@@ -2023,8 +2044,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                 _FieldLabel('System ID'),
                                 _TextInput(
                                   controller: _systemIdCtrl,
-                                  enabled: false,
-                                  suffixIcon: Icons.lock_outline_rounded,
+                                  enabled: !_saving,
+                                  validator: (value) =>
+                                      _requiredUniqueIdentifier(
+                                        value,
+                                        'System ID',
+                                        (student) => student.systemId,
+                                      ),
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                 ),
                               ],
                             ),
@@ -2040,12 +2068,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                 _FieldLabel('Admission / Roll Number'),
                                 _TextInput(
                                   controller: _admissionCtrl,
-                                  hint: 'ADM-100 / 100',
                                   enabled: !_saving,
-                                  validator: (value) => _requiredIdentifier(
-                                    value,
-                                    'Admission / roll number',
-                                  ),
+                                  validator: (value) =>
+                                      _requiredUniqueIdentifier(
+                                        value,
+                                        'Admission / roll number',
+                                        (student) => student.rollNumber,
+                                      ),
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                 ),
                               ],
                             ),
@@ -2113,7 +2144,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   _TextInput(
                                     controller: _parentNameCtrl,
                                     enabled: !_saving,
-                                    hint: 'Parent / Guardian name',
                                   ),
                                 ],
                               ),
@@ -2124,7 +2154,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   _TextInput(
                                     controller: _parentUsernameCtrl,
                                     enabled: !_saving,
-                                    hint: 'parent-login-id',
                                   ),
                                 ],
                               ),
@@ -2141,7 +2170,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   _TextInput(
                                     controller: _parentPasswordCtrl,
                                     enabled: !_saving,
-                                    hint: '8+ characters',
                                   ),
                                 ],
                               ),
@@ -2152,7 +2180,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   _TextInput(
                                     controller: _parentPhoneCtrl,
                                     enabled: !_saving,
-                                    hint: 'Mobile number',
                                   ),
                                 ],
                               ),
@@ -2163,7 +2190,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                           _TextInput(
                             controller: _parentEmailCtrl,
                             enabled: !_saving,
-                            hint: 'Optional email',
                           ),
                         ],
                       ],
@@ -2505,7 +2531,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   }
 
   String _parentLabel(String? id) {
-    if (id == null || id.isEmpty) return 'Select parent';
+    if (id == null || id.isEmpty) return '';
     api.UserAccountModel? parent;
     for (final item in widget.parents) {
       if (item.id == id) {
@@ -2517,35 +2543,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     if (parent.name.trim().isNotEmpty) return parent.name.trim();
     if (parent.username.trim().isNotEmpty) return parent.username.trim();
     return parent.phone.trim().isNotEmpty ? parent.phone.trim() : parent.id;
-  }
-
-  static String _generateSystemId() {
-    final suffix =
-        DateTime.now().millisecondsSinceEpoch.remainder(90000) + 10000;
-    return 'STD-$suffix';
-  }
-
-  static String _generateAdmissionNumber() {
-    final suffix = DateTime.now().millisecondsSinceEpoch.remainder(90000) + 100;
-    return 'ADM-$suffix';
-  }
-
-  static String _generateParentUsername(String admissionNumber) {
-    final clean = admissionNumber
-        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
-        .toLowerCase();
-    if (clean.isEmpty) {
-      return 'parent${DateTime.now().millisecondsSinceEpoch.remainder(90000)}';
-    }
-    return 'parent$clean';
-  }
-
-  static String _generateParentPassword(String admissionNumber) {
-    final clean = admissionNumber
-        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
-        .toUpperCase();
-    final suffix = clean.length > 4 ? clean.substring(clean.length - 4) : clean;
-    return 'Parent@$suffix${DateTime.now().second.toString().padLeft(2, '0')}';
   }
 
   static String _displayDate(DateTime date) {
@@ -2578,6 +2575,26 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     }
     return null;
   }
+
+  String? _requiredUniqueIdentifier(
+    String? value,
+    String field,
+    String Function(StudentModel student) valueForStudent,
+  ) {
+    final baseError = _requiredIdentifier(value, field);
+    if (baseError != null) return baseError;
+    final normalized = _normalizeIdentifier(value);
+    final currentStudentId = widget.initialStudent?.id ?? '';
+    final duplicate = widget.existingStudents.any((student) {
+      if (student.id == currentStudentId) return false;
+      return _normalizeIdentifier(valueForStudent(student)) == normalized;
+    });
+    if (duplicate) return '$field already exists. Enter a different value.';
+    return null;
+  }
+
+  static String _normalizeIdentifier(String? value) =>
+      (value ?? '').trim().toLowerCase();
 }
 
 class _PhotoUploadButton extends StatelessWidget {
@@ -2731,6 +2748,7 @@ class _TextInput extends StatelessWidget {
   final IconData? suffixIcon;
   final VoidCallback? onTap;
   final String? Function(String?)? validator;
+  final AutovalidateMode? autovalidateMode;
 
   const _TextInput({
     required this.controller,
@@ -2740,6 +2758,7 @@ class _TextInput extends StatelessWidget {
     this.suffixIcon,
     this.onTap,
     this.validator,
+    this.autovalidateMode,
   });
 
   @override
@@ -2750,6 +2769,7 @@ class _TextInput extends StatelessWidget {
       readOnly: readOnly,
       onTap: onTap,
       validator: validator,
+      autovalidateMode: autovalidateMode,
       style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700),
       decoration: InputDecoration(
         hintText: hint,

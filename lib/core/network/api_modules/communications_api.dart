@@ -74,6 +74,63 @@ extension BackendCommunicationsApi on BackendApiClient {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getCommunications({
+    String? counterpartId,
+    String? role,
+  }) async {
+    final queryParams = <String, dynamic>{};
+    if (counterpartId != null && counterpartId.trim().isNotEmpty) {
+      queryParams['counterpart_id'] = counterpartId.trim();
+    }
+    if (role != null && role.trim().isNotEmpty) {
+      queryParams['receiver_role'] = role.trim().toLowerCase();
+    }
+    final rows = await getTablesMDRows(
+      'communications',
+      queryParameters: queryParams.isEmpty ? null : queryParams,
+    );
+    return rows.map(_normalizeCommunicationRow).toList();
+  }
+
+  Future<Map<String, dynamic>> sendCommunication({
+    required String receiverId,
+    required String messageContent,
+    String receiverRole = '',
+    String studentId = '',
+    String priority = 'medium',
+  }) async {
+    final payload = <String, dynamic>{
+      'receiver_id': receiverId.trim(),
+      'message_content': messageContent.trim(),
+      'message_type': 'direct',
+      if (receiverRole.trim().isNotEmpty)
+        'receiver_role': receiverRole.trim().toLowerCase(),
+      if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+      if (priority.trim().isNotEmpty) 'priority': priority.trim(),
+    };
+    final row = await createTablesMDRow('communications', payload);
+    return _normalizeCommunicationRow(row);
+  }
+
+  Future<Map<String, dynamic>> markCommunicationRead(
+    String communicationId,
+  ) async {
+    final row = await updateTablesMDRow('communications', communicationId, {
+      'is_read': true,
+    });
+    return _normalizeCommunicationRow(row);
+  }
+
+  Map<String, dynamic> _normalizeCommunicationRow(Map<String, dynamic> row) {
+    final normalized = Map<String, dynamic>.from(row);
+    normalized['id'] ??= normalized['message_id'];
+    normalized['message_id'] ??= normalized['id'];
+    normalized['body'] ??= normalized['message_content'];
+    normalized['message'] ??= normalized['message_content'];
+    normalized['sent_at'] ??= normalized['created_at'];
+    return normalized;
+  }
+
   Future<void> markNotificationRead(String notificationId) async {
     try {
       final response = await SchoolDeskApi.instance.client.markNotificationRead(

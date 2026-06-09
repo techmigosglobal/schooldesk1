@@ -75,6 +75,68 @@ func TestCreateSubstitution(t *testing.T) {
 	assert.Equal(t, "2024-04-30T00:00:00Z", sub["date"])
 }
 
+func TestCreateTimetableSlotRejectsRoomOverlap(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	assert.NoError(t, database.SetupTestDB())
+	now := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	school := models.School{BaseModel: models.BaseModel{ID: "school-room-overlap"}, Name: "Room Overlap School", SchoolType: "cbse"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-room-overlap"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: now, EndDate: now.AddDate(1, 0, 0), IsCurrent: true, Status: "active"}
+	term := models.Term{BaseModel: models.BaseModel{ID: "term-room-overlap"}, AcademicYearID: year.ID, TermNumber: 1, TermName: "Term 1", StartDate: now, EndDate: now.AddDate(0, 6, 0), IsCurrent: true}
+	gradeA := models.Grade{BaseModel: models.BaseModel{ID: "grade-room-a"}, SchoolID: school.ID, GradeName: "Class 5", GradeNumber: 5}
+	gradeB := models.Grade{BaseModel: models.BaseModel{ID: "grade-room-b"}, SchoolID: school.ID, GradeName: "Class 6", GradeNumber: 6}
+	room := models.Room{BaseModel: models.BaseModel{ID: "room-overlap"}, SchoolID: school.ID, RoomNumber: "101", RoomType: "classroom", Capacity: 40}
+	sectionA := models.Section{BaseModel: models.BaseModel{ID: "section-room-a"}, SchoolID: school.ID, GradeID: gradeA.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
+	sectionB := models.Section{BaseModel: models.BaseModel{ID: "section-room-b"}, SchoolID: school.ID, GradeID: gradeB.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
+	department := models.Department{BaseModel: models.BaseModel{ID: "dept-room-overlap"}, SchoolID: school.ID, DepartmentName: "Academics"}
+	subjectA := models.Subject{BaseModel: models.BaseModel{ID: "subject-room-a"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Mathematics"}
+	subjectB := models.Subject{BaseModel: models.BaseModel{ID: "subject-room-b"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Science"}
+	staffA := models.Staff{BaseModel: models.BaseModel{ID: "staff-room-a"}, SchoolID: school.ID, StaffCode: "R-A", FirstName: "A", LastName: "Teacher", Status: "active"}
+	staffB := models.Staff{BaseModel: models.BaseModel{ID: "staff-room-b"}, SchoolID: school.ID, StaffCode: "R-B", FirstName: "B", LastName: "Teacher", Status: "active"}
+	sectionAID := sectionA.ID
+	sectionBID := sectionB.ID
+	gradeSubjectA := models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-room-a"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: gradeA.ID, SubjectID: subjectA.ID, PeriodsPerWeek: 5, IsMandatory: true}
+	gradeSubjectB := models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-room-b"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: gradeB.ID, SubjectID: subjectB.ID, PeriodsPerWeek: 5, IsMandatory: true}
+	staffSubjectA := models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-room-a"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: staffA.ID, SubjectID: subjectA.ID, GradeID: gradeA.ID, SectionID: &sectionAID, IsPrimary: true}
+	staffSubjectB := models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-room-b"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: staffB.ID, SubjectID: subjectB.ID, GradeID: gradeB.ID, SectionID: &sectionBID, IsPrimary: true}
+	roomID := room.ID
+	existing := models.TimetableSlot{BaseModel: models.BaseModel{ID: "slot-room-existing"}, SectionID: sectionA.ID, AcademicYearID: year.ID, TermID: term.ID, DayOfWeek: 1, PeriodNumber: 1, SubjectID: subjectA.ID, StaffID: staffA.ID, RoomID: &roomID, StartTime: mustTimetableTestClock(t, "09:00"), EndTime: mustTimetableTestClock(t, "09:40"), SlotType: "regular"}
+	for _, seed := range []any{&school, &year, &term, &gradeA, &gradeB, &room, &sectionA, &sectionB, &department, &subjectA, &subjectB, &staffA, &staffB, &gradeSubjectA, &gradeSubjectB, &staffSubjectA, &staffSubjectB, &existing} {
+		assert.NoError(t, database.DB.Create(seed).Error)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"section_id":       sectionB.ID,
+		"academic_year_id": year.ID,
+		"term_id":          term.ID,
+		"day_of_week":      1,
+		"period_number":    1,
+		"subject_id":       subjectB.ID,
+		"staff_id":         staffB.ID,
+		"room_id":          room.ID,
+		"start_time":       "09:00",
+		"end_time":         "09:40",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/timetable/slots", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("school_id", school.ID)
+		c.Set("role_name", "Admin")
+		c.Set("user_id", "admin-room-overlap")
+		c.Next()
+	})
+	r.POST("/timetable/slots", NewTimetableHandler().CreateTimetableSlot)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected room conflict, status=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "room is already booked") {
+		t.Fatalf("expected room conflict message, body=%s", w.Body.String())
+	}
+}
+
 func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -93,6 +155,7 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 		&models.GradeSubject{},
 		&models.Staff{},
 		&models.StaffSubject{},
+		&models.Room{},
 		&models.TimetableSlot{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -102,13 +165,15 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-timetable"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true}
 	term := models.Term{BaseModel: models.BaseModel{ID: "term-timetable"}, AcademicYearID: year.ID, TermNumber: 1, TermName: "Term 1", StartDate: year.StartDate, EndDate: year.EndDate, IsCurrent: true}
 	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-timetable"}, SchoolID: school.ID, GradeName: "Class 5", GradeNumber: 5}
-	section := models.Section{BaseModel: models.BaseModel{ID: "section-timetable"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
+	room := models.Room{BaseModel: models.BaseModel{ID: "room-timetable"}, SchoolID: school.ID, RoomNumber: "5-A", RoomType: "classroom", Capacity: 40}
+	roomID := room.ID
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-timetable"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40, RoomID: &roomID}
 	department := models.Department{BaseModel: models.BaseModel{ID: "dept-timetable"}, SchoolID: school.ID, DepartmentName: "Academics"}
 	math := models.Subject{BaseModel: models.BaseModel{ID: "subject-math"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Mathematics"}
 	science := models.Subject{BaseModel: models.BaseModel{ID: "subject-science"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Science"}
 	mathTeacher := models.Staff{BaseModel: models.BaseModel{ID: "staff-math"}, SchoolID: school.ID, StaffCode: "T-MATH", FirstName: "Meera", LastName: "Math", Status: "active"}
 	scienceTeacher := models.Staff{BaseModel: models.BaseModel{ID: "staff-science"}, SchoolID: school.ID, StaffCode: "T-SCI", FirstName: "Sanjay", LastName: "Science", Status: "active"}
-	seeds := []any{&school, &year, &term, &grade, &section, &department, &math, &science, &mathTeacher, &scienceTeacher}
+	seeds := []any{&school, &year, &term, &grade, &room, &section, &department, &math, &science, &mathTeacher, &scienceTeacher}
 	for _, seed := range seeds {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed: %v", err)
@@ -162,6 +227,9 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 	if suggestionBody.Data.Suggestions[0]["subject_id"] != math.ID || suggestionBody.Data.Suggestions[0]["staff_id"] != mathTeacher.ID {
 		t.Fatalf("expected first suggestion to use math mapping, got %+v", suggestionBody.Data.Suggestions[0])
 	}
+	if suggestionBody.Data.Suggestions[0]["room_id"] != room.ID {
+		t.Fatalf("expected first suggestion to use class room, got %+v", suggestionBody.Data.Suggestions[0])
+	}
 
 	generate := httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/timetable/slots/generate", strings.NewReader(payload))
@@ -186,6 +254,11 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 	db.Model(&models.TimetableSlot{}).Where("section_id = ?", section.ID).Count(&slotCount)
 	if slotCount != 3 {
 		t.Fatalf("expected generated slots in database, got %d", slotCount)
+	}
+	var roomSlotCount int64
+	db.Model(&models.TimetableSlot{}).Where("section_id = ? AND room_id = ?", section.ID, room.ID).Count(&roomSlotCount)
+	if roomSlotCount != 3 {
+		t.Fatalf("expected generated slots to use class room, got %d", roomSlotCount)
 	}
 
 	duplicate := httptest.NewRecorder()

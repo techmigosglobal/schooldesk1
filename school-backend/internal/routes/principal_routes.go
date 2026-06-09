@@ -26,6 +26,24 @@ func registerPrincipalRoutes(
 
 	principal.GET("/classes", principalClassesHandler.Overview)
 	principal.POST("/classes", middleware.RateLimitMiddleware("principal_class_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), principalClassesHandler.CreateClass)
+	principal.POST(
+		"/classes/import/dry-run",
+		middleware.RateLimitMiddleware(
+			"principal_class_import_dry_run",
+			cfg.RateLimitMaxAPI,
+			time.Duration(cfg.RateLimitWindowSeconds)*time.Second,
+		),
+		principalClassesHandler.DryRunClassCsvImport,
+	)
+	principal.POST(
+		"/classes/import",
+		middleware.RateLimitMiddleware(
+			"principal_class_import",
+			cfg.RateLimitMaxAPI,
+			time.Duration(cfg.RateLimitWindowSeconds)*time.Second,
+		),
+		principalClassesHandler.ImportClassCsv,
+	)
 	principal.PUT(
 		"/classes/:section_id",
 		middleware.RateLimitMiddleware(

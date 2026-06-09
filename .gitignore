@@ -59,6 +59,8 @@ android/key.properties
 android/*.jks
 android/app/*.jks
 *.keystore
+!android/key.properties
+!android/upload-keystore.jks
 
 # Symbolication related
 app.*.symbols

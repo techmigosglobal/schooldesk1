@@ -132,6 +132,224 @@ func TestCreateEventValidatesAcademicYearScopeAndDates(t *testing.T) {
 	}
 }
 
+func TestTablesMDEventsValidateAcademicYearScopeAndDates(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	externalSchool := models.School{
+		BaseModel:  models.BaseModel{ID: "external-school"},
+		Name:       "External School",
+		SchoolType: "cbse",
+	}
+	externalYear := models.AcademicYear{
+		BaseModel: models.BaseModel{ID: "external-year"},
+		SchoolID:  externalSchool.ID,
+		YearLabel: "2026-2027",
+		StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:   time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC),
+		IsCurrent: true,
+		Status:    "active",
+	}
+	if err := database.DB.Create(&externalSchool).Error; err != nil {
+		t.Fatalf("seed external school: %v", err)
+	}
+	if err := database.DB.Create(&externalYear).Error; err != nil {
+		t.Fatalf("seed external year: %v", err)
+	}
+	resource, ok := TablesMDResourceFor("events")
+	if !ok {
+		t.Fatal("events tables.md resource missing")
+	}
+	handler := NewTablesMDCRUDHandler(resource)
+	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.POST("/events", handler.Create)
+
+	rejectYear := httptest.NewRecorder()
+	router.ServeHTTP(rejectYear, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"external-year","event_name":"Sports Day","event_type":"event","start_date":"2026-08-01","end_date":"2026-08-01","start_time":"09:00","end_time":"12:00"}`),
+	))
+	if rejectYear.Code != http.StatusBadRequest {
+		t.Fatalf("cross-school year status=%d body=%s", rejectYear.Code, rejectYear.Body.String())
+	}
+	if !strings.Contains(rejectYear.Body.String(), "academic year must belong to this school") {
+		t.Fatalf("cross-school response should explain academic year: %s", rejectYear.Body.String())
+	}
+
+	rejectDates := httptest.NewRecorder()
+	router.ServeHTTP(rejectDates, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","event_name":"Sports Day","event_type":"event","start_date":"2026-08-01","end_date":"2026-08-01","start_time":"12:00","end_time":"09:00"}`),
+	))
+	if rejectDates.Code != http.StatusBadRequest {
+		t.Fatalf("invalid dates status=%d body=%s", rejectDates.Code, rejectDates.Body.String())
+	}
+	if !strings.Contains(rejectDates.Body.String(), "end_date cannot be before start_date") {
+		t.Fatalf("date response should explain ordering: %s", rejectDates.Body.String())
+	}
+
+	rejectDatetimes := httptest.NewRecorder()
+	router.ServeHTTP(rejectDatetimes, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","event_title":"Sports Day","event_type":"event","start_datetime":"2026-08-01T12:00:00Z","end_datetime":"2026-08-01T09:00:00Z"}`),
+	))
+	if rejectDatetimes.Code != http.StatusBadRequest {
+		t.Fatalf("invalid datetimes status=%d body=%s", rejectDatetimes.Code, rejectDatetimes.Body.String())
+	}
+	if !strings.Contains(rejectDatetimes.Body.String(), "end_date cannot be before start_date") {
+		t.Fatalf("datetime response should explain ordering: %s", rejectDatetimes.Body.String())
+	}
+
+	create := httptest.NewRecorder()
+	router.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/events",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","event_name":"Sports Day","event_type":"event","start_date":"2026-08-01","end_date":"2026-08-01","start_time":"09:00","end_time":"12:00"}`),
+	))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create event status=%d body=%s", create.Code, create.Body.String())
+	}
+}
+
+func TestCommunicationsDirectMessagesValidateScopeNotifyAndRead(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	resource, ok := TablesMDResourceFor("communications")
+	if !ok {
+		t.Fatal("communications tables.md resource missing")
+	}
+	handler := NewTablesMDCRUDHandler(resource)
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.POST("/communications", handler.Create)
+	principalRouter.GET("/communications", handler.List)
+
+	rejectSender := httptest.NewRecorder()
+	principalRouter.ServeHTTP(rejectSender, httptest.NewRequest(
+		http.MethodPost,
+		"/communications",
+		strings.NewReader(`{"sender_id":"spoof-user","receiver_id":"user-policy-teacher","message_content":"Meet after assembly"}`),
+	))
+	if rejectSender.Code != http.StatusBadRequest {
+		t.Fatalf("spoof sender status=%d body=%s", rejectSender.Code, rejectSender.Body.String())
+	}
+
+	rejectReceiverRole := httptest.NewRecorder()
+	principalRouter.ServeHTTP(rejectReceiverRole, httptest.NewRequest(
+		http.MethodPost,
+		"/communications",
+		strings.NewReader(`{"receiver_id":"user-policy-teacher","receiver_role":"Parent","message_content":"Meet after assembly"}`),
+	))
+	if rejectReceiverRole.Code != http.StatusBadRequest {
+		t.Fatalf("spoof receiver role status=%d body=%s", rejectReceiverRole.Code, rejectReceiverRole.Body.String())
+	}
+
+	create := httptest.NewRecorder()
+	principalRouter.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/communications",
+		strings.NewReader(`{"receiver_id":"user-policy-teacher","message_content":"Meet after assembly"}`),
+	))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create communication status=%d body=%s", create.Code, create.Body.String())
+	}
+	var created struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created communication: %v body=%s", err, create.Body.String())
+	}
+	messageID, _ := created.Data["message_id"].(string)
+	if messageID == "" {
+		t.Fatalf("created communication missing message_id: %+v", created.Data)
+	}
+	if created.Data["sender_id"] != "user-policy-principal" || created.Data["sender_role"] != "principal" {
+		t.Fatalf("sender should be auth derived, got %+v", created.Data)
+	}
+	if created.Data["receiver_role"] != "teacher" || created.Data["is_read"] != false {
+		t.Fatalf("receiver/defaults mismatch: %+v", created.Data)
+	}
+
+	var teacherNotification models.NotificationLog
+	if err := database.DB.
+		Where("recipient_user_id = ? AND reference_type = ?", "user-policy-teacher", "communication").
+		First(&teacherNotification).Error; err != nil {
+		t.Fatalf("load teacher communication notification: %v", err)
+	}
+	if teacherNotification.Route != "/teacher-communication-screen" {
+		t.Fatalf("teacher communication route=%q, want /teacher-communication-screen", teacherNotification.Route)
+	}
+
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.GET("/communications", handler.List)
+	teacherRouter.PATCH("/communications/:id", handler.Update)
+	teacherRouter.POST("/communications", handler.Create)
+
+	teacherList := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(teacherList, httptest.NewRequest(http.MethodGet, "/communications", nil))
+	if teacherList.Code != http.StatusOK {
+		t.Fatalf("teacher list status=%d body=%s", teacherList.Code, teacherList.Body.String())
+	}
+	if findCommunicationRow(decodePolicyList(t, teacherList.Body.String()), messageID) == nil {
+		t.Fatalf("teacher should see principal direct message: %s", teacherList.Body.String())
+	}
+
+	otherParentRouter := scopedPolicyRouter("Parent", f.otherParentUserID, "", "", "other.parent@policy.test", f.schoolID)
+	otherParentRouter.GET("/communications", handler.List)
+	otherParentList := httptest.NewRecorder()
+	otherParentRouter.ServeHTTP(otherParentList, httptest.NewRequest(http.MethodGet, "/communications", nil))
+	if otherParentList.Code != http.StatusOK {
+		t.Fatalf("other parent list status=%d body=%s", otherParentList.Code, otherParentList.Body.String())
+	}
+	if findCommunicationRow(decodePolicyList(t, otherParentList.Body.String()), messageID) != nil {
+		t.Fatalf("unrelated parent should not see teacher message: %s", otherParentList.Body.String())
+	}
+
+	markRead := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(markRead, httptest.NewRequest(
+		http.MethodPatch,
+		"/communications/"+messageID,
+		strings.NewReader(`{"is_read":true}`),
+	))
+	if markRead.Code != http.StatusOK {
+		t.Fatalf("mark read status=%d body=%s", markRead.Code, markRead.Body.String())
+	}
+	var readRow map[string]any
+	if err := database.DB.Table("communications").Where("message_id = ?", messageID).Take(&readRow).Error; err != nil {
+		t.Fatalf("load read communication: %v", err)
+	}
+	if readRow["is_read"] != true || readRow["read_at"] == nil {
+		t.Fatalf("read status not persisted: %+v", readRow)
+	}
+
+	reply := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(reply, httptest.NewRequest(
+		http.MethodPost,
+		"/communications",
+		strings.NewReader(`{"receiver_id":"user-policy-principal","message_content":"Noted, will join."}`),
+	))
+	if reply.Code != http.StatusCreated {
+		t.Fatalf("teacher reply status=%d body=%s", reply.Code, reply.Body.String())
+	}
+	var principalNotification models.NotificationLog
+	if err := database.DB.
+		Where("recipient_user_id = ? AND reference_type = ?", "user-policy-principal", "communication").
+		First(&principalNotification).Error; err != nil {
+		t.Fatalf("load principal communication notification: %v", err)
+	}
+	if principalNotification.Route != "/communication-center-screen" {
+		t.Fatalf("principal communication route=%q, want /communication-center-screen", principalNotification.Route)
+	}
+}
+
+func findCommunicationRow(rows []map[string]any, messageID string) map[string]any {
+	for _, row := range rows {
+		if row["message_id"] == messageID || row["id"] == messageID {
+			return row
+		}
+	}
+	return nil
+}
+
 func TestDeleteNoticeRemovesAnnouncementNotifications(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	notice := models.Announcement{

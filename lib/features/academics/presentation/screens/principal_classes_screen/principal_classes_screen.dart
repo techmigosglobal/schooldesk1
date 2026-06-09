@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
@@ -31,6 +32,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   String _search = '';
   String _capacityFilter = 'All';
   String _selectedSectionId = '';
+  bool _routeArgsRead = false;
+  String _pendingHubAction = '';
+  String _pendingHubSectionId = '';
+  String _pendingHubGradeId = '';
 
   Map<String, dynamic> _summary = {};
   List<Map<String, dynamic>> _classes = [];
@@ -46,6 +51,25 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeArgsRead) return;
+    _routeArgsRead = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+    _pendingHubAction = _text(
+      args['class_hub_action'] ??
+          args['action'] ??
+          args['selectedStep'] ??
+          args['setup'],
+    );
+    _pendingHubSectionId = _text(
+      args['section_id'] ?? args['sectionId'] ?? args['classId'],
+    );
+    _pendingHubGradeId = _text(args['grade_id'] ?? args['gradeId']);
   }
 
   Future<void> _load() async {
@@ -98,6 +122,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
             : (classes.isEmpty ? '' : _text(classes.first['section_id']));
         _loading = false;
       });
+      _openPendingHubAction();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -105,6 +130,66 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _openPendingHubAction() {
+    final action = _pendingHubAction.trim();
+    if (action.isEmpty || _classes.isEmpty) return;
+    final sectionId = _pendingHubSectionId;
+    final gradeId = _pendingHubGradeId;
+    _pendingHubAction = '';
+    _pendingHubSectionId = '';
+    _pendingHubGradeId = '';
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final row = _classRowForRoute(sectionId: sectionId, gradeId: gradeId);
+      if (row == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Open a class first to continue this setup.'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        return;
+      }
+      setState(() => _selectedSectionId = _text(row['section_id']));
+      switch (action) {
+        case 'subjects':
+        case 'subject_setup':
+          await _openSubjectSetup(row);
+          break;
+        case 'timetable':
+        case 'timetable_setup':
+          await _openTimetableSetup(row);
+          break;
+        case 'fees':
+        case 'fee_setup':
+          await _openFeesSetup(row);
+          break;
+        case 'attendance':
+          _openRoute(AppRoutes.principalAttendance, row);
+          break;
+        default:
+          await _openClassDetail(row);
+      }
+    });
+  }
+
+  Map<String, dynamic>? _classRowForRoute({
+    required String sectionId,
+    required String gradeId,
+  }) {
+    if (sectionId.isNotEmpty) {
+      for (final row in _classes) {
+        if (_text(row['section_id']) == sectionId) return row;
+      }
+    }
+    if (gradeId.isNotEmpty) {
+      for (final row in _classes) {
+        if (_text(row['grade_id']) == gradeId) return row;
+      }
+    }
+    return _classes.isEmpty ? null : _classes.first;
   }
 
   Future<List<Map<String, dynamic>>> _loadOptionalRows(
@@ -172,6 +257,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                       _ClassesDirectoryHeader(
                         unreadNotifications: _unreadNotifications,
                         onMenu: _showDirectoryMenu,
+                        onUpload: _importClassesCsv,
                         onNotifications: () => Navigator.pushNamed(
                           context,
                           AppRoutes.notificationCenter,
@@ -258,6 +344,12 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                           context,
                           AppRoutes.feeMonitoring,
                         ),
+                        onTimetable: () => rows.isEmpty
+                            ? Navigator.pushNamed(
+                                context,
+                                AppRoutes.principalTimetable,
+                              )
+                            : _openTimetableSetup(rows.first),
                       ),
                     ],
                   ),
@@ -358,6 +450,14 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     if (result == true) await _load();
   }
 
+  Future<void> _importClassesCsv() async {
+    final imported = await BulkCsvImportService.importCsv(
+      context,
+      BulkCsvImportTarget.classes,
+    );
+    if (imported && mounted) await _load();
+  }
+
   Future<void> _openEditClassForm(Map<String, dynamic> row) async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -384,6 +484,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required String gradeName,
     required int? gradeNumber,
     required String classTeacherId,
+    required String roomNumber,
+    required String roomType,
+    required int roomCapacity,
   }) async {
     setState(() => _saving = true);
     try {
@@ -395,6 +498,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         gradeName: gradeName,
         gradeNumber: gradeNumber,
         classTeacherId: classTeacherId,
+        roomNumber: roomNumber,
+        roomType: roomType,
+        roomCapacity: roomCapacity,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -430,6 +536,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required String sectionName,
     required int capacity,
     required String classTeacherId,
+    required String roomNumber,
+    required String roomType,
+    required int roomCapacity,
   }) async {
     try {
       await BackendApiClient.instance.updatePrincipalClassSetup(
@@ -441,6 +550,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         sectionName: sectionName,
         capacity: capacity,
         classTeacherId: classTeacherId,
+        roomNumber: roomNumber,
+        roomType: roomType,
+        roomCapacity: roomCapacity,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -549,14 +661,15 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       case 'attendance':
         _openRoute(AppRoutes.principalAttendance, row);
         break;
+      case 'view_timetables':
       case 'timetable':
         _openRoute(AppRoutes.principalTimetable, row);
         break;
-      case 'subjects':
-        await _openSubjectSetup(row);
-        break;
       case 'setup_timetable':
         await _openTimetableSetup(row);
+        break;
+      case 'subjects':
+        await _openSubjectSetup(row);
         break;
       case 'setup_fees':
         await _openFeesSetup(row);
@@ -587,13 +700,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   Future<void> _openTimetableSetup(Map<String, dynamic> row) async {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => _GenerateTimetableSetupPage(
+        builder: (_) => _TimetableReviewSetupPage(
           classRow: row,
           academicYears: _academicYears,
-          staff: _staff,
-          initialSubjects: _subjects,
-          initialGradeSubjects: _gradeSubjects,
-          initialStaffSubjects: _staffSubjects,
         ),
       ),
     );
@@ -814,10 +923,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 }
 
-const Color _classesDirectoryBg = Color(0xFFF2F8FF);
-const Color _classesDirectoryInk = Color(0xFF071333);
-const Color _classesDirectoryMuted = Color(0xFF526078);
-const Color _classesDirectoryBlue = Color(0xFF1478F2);
+const Color _classesDirectoryBg = principalDirectoryBackground;
+const Color _classesDirectoryInk = principalDirectoryText;
+const Color _classesDirectoryMuted = principalDirectoryMuted;
+const Color _classesDirectoryBlue = principalDirectoryAccent;
 
 bool _classesCompact(BuildContext context) =>
     MediaQuery.sizeOf(context).width < 390;
@@ -838,21 +947,23 @@ double _classesContentMaxWidth(BuildContext context) {
 EdgeInsets _classesPagePadding(BuildContext context) {
   final width = MediaQuery.sizeOf(context).width;
   final horizontal = width < 370
-      ? 14.0
+      ? 12.0
       : width < 430
-      ? 20.0
-      : 24.0;
-  return EdgeInsets.fromLTRB(horizontal, 18, horizontal, 34);
+      ? 16.0
+      : 18.0;
+  return EdgeInsets.fromLTRB(horizontal, 10, horizontal, 28);
 }
 
 class _ClassesDirectoryHeader extends StatelessWidget {
   final int unreadNotifications;
   final VoidCallback onMenu;
+  final VoidCallback onUpload;
   final VoidCallback onNotifications;
 
   const _ClassesDirectoryHeader({
     required this.unreadNotifications,
     required this.onMenu,
+    required this.onUpload,
     required this.onNotifications,
   });
 
@@ -881,16 +992,16 @@ class _ClassesDirectoryHeader extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                   color: _classesDirectoryInk,
                   fontSize: tiny
-                      ? 24
+                      ? 17
                       : compact
-                      ? 26
-                      : 30,
+                      ? 18
+                      : 20,
                   fontWeight: FontWeight.w900,
-                  height: 1.02,
+                  height: 1.08,
                   letterSpacing: 0,
                 ),
               ),
-              SizedBox(height: compact ? 6 : 9),
+              SizedBox(height: compact ? 3 : 4),
               Text(
                 'Open a class, manage details, and jump into roster actions',
                 maxLines: tiny ? 3 : 2,
@@ -898,12 +1009,12 @@ class _ClassesDirectoryHeader extends StatelessWidget {
                 style: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,
                   fontSize: tiny
-                      ? 12.5
+                      ? 11
                       : compact
-                      ? 13.5
-                      : 15,
-                  fontWeight: FontWeight.w600,
-                  height: 1.18,
+                      ? 11.5
+                      : 12,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
                   letterSpacing: 0,
                 ),
               ),
@@ -911,6 +1022,12 @@ class _ClassesDirectoryHeader extends StatelessWidget {
           ),
         ),
         SizedBox(width: compact ? 8 : 14),
+        _ClassesHeaderIconButton(
+          tooltip: 'Upload classes CSV',
+          icon: Icons.upload_file_rounded,
+          onTap: onUpload,
+        ),
+        SizedBox(width: compact ? 8 : 10),
         Stack(
           clipBehavior: Clip.none,
           children: [
@@ -968,20 +1085,20 @@ class _ClassesHeaderIconButton extends StatelessWidget {
               ? 40
               : compact
               ? 44
-              : 48,
+              : 44,
           height: tiny
               ? 40
               : compact
               ? 44
-              : 48,
+              : 44,
           child: Icon(
             icon,
             color: _classesDirectoryInk,
             size: tiny
-                ? 25
+                ? 21
                 : compact
-                ? 28
-                : 32,
+                ? 22
+                : 23,
           ),
         ),
       ),
@@ -1002,17 +1119,17 @@ class _ClassesDirectorySearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = _classesCompact(context);
     return Container(
-      constraints: BoxConstraints(minHeight: compact ? 54 : 60),
+      constraints: BoxConstraints(minHeight: compact ? 48 : 52),
       padding: EdgeInsets.symmetric(vertical: compact ? 4 : 5),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD5E2F1)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF86A5C7).withAlpha(24),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -1022,7 +1139,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
           Icon(
             Icons.search_rounded,
             color: _classesDirectoryMuted,
-            size: compact ? 26 : 30,
+            size: compact ? 21 : 23,
           ),
           SizedBox(width: compact ? 7 : 10),
           Expanded(
@@ -1031,7 +1148,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
               maxLines: 1,
               style: GoogleFonts.dmSans(
                 color: _classesDirectoryInk,
-                fontSize: compact ? 14.5 : 16.5,
+                fontSize: compact ? 14 : 15,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0,
               ),
@@ -1039,7 +1156,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
                 hintText: 'Search class, teacher, section',
                 hintStyle: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,
-                  fontSize: compact ? 14.5 : 16.5,
+                  fontSize: compact ? 14 : 15,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0,
                 ),
@@ -1052,8 +1169,8 @@ class _ClassesDirectorySearchField extends StatelessWidget {
           IconButton(
             tooltip: 'Filter classes',
             onPressed: onFilter,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            icon: Icon(Icons.tune_rounded, size: compact ? 24 : 28),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            icon: Icon(Icons.tune_rounded, size: compact ? 21 : 23),
             color: _classesDirectoryMuted,
           ),
           SizedBox(width: compact ? 4 : 8),
@@ -1079,8 +1196,8 @@ class _ClassesDirectoryMetricStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _classesPanelDecoration(radius: 18),
+      padding: const EdgeInsets.all(12),
+      decoration: _classesPanelDecoration(radius: 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final columns = constraints.maxWidth < 520
@@ -1162,22 +1279,22 @@ class _ClassesMetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = _classesCompact(context);
     return Container(
-      constraints: BoxConstraints(minHeight: compact ? 92 : 104),
+      constraints: BoxConstraints(minHeight: compact ? 82 : 86),
       padding: EdgeInsets.fromLTRB(
         compact ? 9 : 12,
-        compact ? 10 : 13,
+        compact ? 9 : 12,
         compact ? 8 : 10,
-        compact ? 10 : 12,
+        compact ? 9 : 12,
       ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withAlpha(35)),
         boxShadow: [
           BoxShadow(
             color: color.withAlpha(12),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -1190,9 +1307,9 @@ class _ClassesMetricTile extends StatelessWidget {
             height: compact ? 36 : 42,
             decoration: BoxDecoration(
               color: tone,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: compact ? 23 : 27),
+            child: Icon(icon, color: color, size: compact ? 20 : 22),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1203,7 +1320,7 @@ class _ClassesMetricTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.dmSans(
                   color: _classesDirectoryInk,
-                  fontSize: compact ? 21 : 25,
+                  fontSize: compact ? 18 : 20,
                   fontWeight: FontWeight.w900,
                   height: 1,
                   letterSpacing: 0,
@@ -1216,8 +1333,8 @@ class _ClassesMetricTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.dmSans(
                   color: _classesDirectoryInk,
-                  fontSize: compact ? 10.5 : 12.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: compact ? 11 : 12,
+                  fontWeight: FontWeight.w800,
                   height: 1.1,
                   letterSpacing: 0,
                 ),
@@ -1249,9 +1366,9 @@ class _ClassesTodayCard extends StatelessWidget {
             Icon(
               Icons.calendar_month_outlined,
               color: _classesDirectoryBlue,
-              size: compact ? 30 : 35,
+              size: compact ? 22 : 24,
             ),
-            SizedBox(width: compact ? 12 : 16),
+            SizedBox(width: compact ? 10 : 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1262,7 +1379,7 @@ class _ClassesTodayCard extends StatelessWidget {
                     overflow: TextOverflow.visible,
                     style: GoogleFonts.dmSans(
                       color: _classesDirectoryInk,
-                      fontSize: compact ? 14.5 : 16,
+                      fontSize: compact ? 13 : 14,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0,
                     ),
@@ -1276,8 +1393,8 @@ class _ClassesTodayCard extends StatelessWidget {
                     overflow: TextOverflow.visible,
                     style: GoogleFonts.dmSans(
                       color: _classesDirectoryMuted,
-                      fontSize: compact ? 12.5 : 13.5,
-                      fontWeight: FontWeight.w600,
+                      fontSize: compact ? 11.5 : 12,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0,
                     ),
                   ),
@@ -1290,14 +1407,14 @@ class _ClassesTodayCard extends StatelessWidget {
         final button = OutlinedButton(
           onPressed: onCalendar,
           style: OutlinedButton.styleFrom(
-            minimumSize: Size(compact ? 112 : 126, 44),
+            minimumSize: Size(compact ? 104 : 116, 40),
             foregroundColor: _classesDirectoryBlue,
             side: const BorderSide(color: Color(0xFFD5E5F7)),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
+              borderRadius: BorderRadius.circular(8),
             ),
             textStyle: GoogleFonts.dmSans(
-              fontSize: compact ? 13 : 14.5,
+              fontSize: compact ? 12 : 13,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -1306,10 +1423,10 @@ class _ClassesTodayCard extends StatelessWidget {
         );
 
         return Container(
-          padding: EdgeInsets.fromLTRB(18, 16, compact ? 14 : 16, 16),
+          padding: EdgeInsets.fromLTRB(14, 12, compact ? 12 : 14, 12),
           decoration: BoxDecoration(
             color: Colors.white.withAlpha(225),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFD5E5F7)),
           ),
           child: compact
@@ -1401,11 +1518,11 @@ class _SetupProgressChip extends StatelessWidget {
         ? Colors.white
         : _CreateClassSetupPageState._ink;
     return Container(
-      width: 132,
-      padding: const EdgeInsets.all(10),
+      width: 118,
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: active
               ? _CreateClassSetupPageState._primary
@@ -1415,28 +1532,28 @@ class _SetupProgressChip extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 32,
-            height: 32,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             child: Center(
               child: complete
                   ? const Icon(
                       Icons.check_rounded,
                       color: Colors.white,
-                      size: 18,
+                      size: 16,
                     )
                   : Text(
                       '$number',
                       style: GoogleFonts.dmSans(
                         color: textColor,
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0,
                       ),
                     ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 7),
           Expanded(
             child: Text(
               label,
@@ -1446,7 +1563,7 @@ class _SetupProgressChip extends StatelessWidget {
                 color: active
                     ? _CreateClassSetupPageState._primary
                     : _CreateClassSetupPageState._ink,
-                fontSize: 11,
+                fontSize: 10.5,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0,
                 height: 1.15,
@@ -1485,13 +1602,13 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
     final compact = _classesCompact(context);
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(17),
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: EdgeInsets.all(compact ? 14 : 16),
-          decoration: _classesPanelDecoration(radius: 17),
+          padding: EdgeInsets.all(compact ? 12 : 14),
+          decoration: _classesPanelDecoration(radius: 8),
           child: Column(
             children: [
               Row(
@@ -1501,7 +1618,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                     icon: Icons.meeting_room_outlined,
                     color: _classesDirectoryBlue,
                     tone: const Color(0xFFEAF3FF),
-                    size: compact ? 52 : 58,
+                    size: compact ? 42 : 46,
                   ),
                   SizedBox(width: compact ? 12 : 14),
                   Expanded(
@@ -1514,13 +1631,13 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.dmSans(
                             color: _classesDirectoryInk,
-                            fontSize: compact ? 22 : 26,
+                            fontSize: compact ? 15 : 16,
                             fontWeight: FontWeight.w900,
-                            height: 1.08,
+                            height: 1.18,
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 7),
+                        const SizedBox(height: 5),
                         Align(
                           alignment: Alignment.centerLeft,
                           child: _ClassesStatusPill(
@@ -1528,14 +1645,14 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                             color: healthColor,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 5),
                         Text(
                           '${_classText(row['class_teacher'], fallback: 'Teacher pending')}  •  $students/$capacity students',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.dmSans(
                             color: _classesDirectoryMuted,
-                            fontSize: compact ? 13 : 14.5,
+                            fontSize: compact ? 11.5 : 12,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0,
                           ),
@@ -1548,7 +1665,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                     icon: Icon(
                       Icons.more_vert_rounded,
                       color: _classesDirectoryInk,
-                      size: compact ? 27 : 30,
+                      size: compact ? 21 : 22,
                     ),
                     onSelected: onAction,
                     itemBuilder: (_) => const [
@@ -1566,8 +1683,8 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                         child: Text('Open attendance'),
                       ),
                       PopupMenuItem(
-                        value: 'timetable',
-                        child: Text('Open timetable'),
+                        value: 'view_timetables',
+                        child: Text('View timetables'),
                       ),
                       PopupMenuDivider(),
                       PopupMenuItem(
@@ -1576,7 +1693,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                       ),
                       PopupMenuItem(
                         value: 'setup_timetable',
-                        child: Text('Generate timetable'),
+                        child: Text('Setup timetable'),
                       ),
                       PopupMenuItem(
                         value: 'setup_fees',
@@ -1770,7 +1887,7 @@ class _ClassesClassMetric extends StatelessWidget {
 class _ClassesMetricDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1, height: 58, color: const Color(0xFFDDE8F6));
+    return Container(width: 1, height: 48, color: const Color(0xFFDDE8F6));
   }
 }
 
@@ -1798,7 +1915,7 @@ class _ClassesStatusPill extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: GoogleFonts.dmSans(
           color: color,
-          fontSize: compact ? 12.5 : 15,
+          fontSize: compact ? 11 : 12,
           fontWeight: FontWeight.w900,
           letterSpacing: 0,
         ),
@@ -1840,6 +1957,7 @@ class _ClassesQuickActions extends StatelessWidget {
   final VoidCallback onAddTeacher;
   final VoidCallback onAttendance;
   final VoidCallback onFees;
+  final VoidCallback onTimetable;
 
   const _ClassesQuickActions({
     required this.onAddClass,
@@ -1847,14 +1965,15 @@ class _ClassesQuickActions extends StatelessWidget {
     required this.onAddTeacher,
     required this.onAttendance,
     required this.onFees,
+    required this.onTimetable,
   });
 
   @override
   Widget build(BuildContext context) {
     final compact = _classesCompact(context);
     return Container(
-      padding: EdgeInsets.fromLTRB(14, compact ? 15 : 17, 14, 15),
-      decoration: _classesPanelDecoration(radius: 17),
+      padding: EdgeInsets.fromLTRB(12, compact ? 12 : 14, 12, 12),
+      decoration: _classesPanelDecoration(radius: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1862,7 +1981,7 @@ class _ClassesQuickActions extends StatelessWidget {
             'Quick Actions',
             style: GoogleFonts.dmSans(
               color: _classesDirectoryInk,
-              fontSize: compact ? 16 : 17,
+              fontSize: compact ? 15 : 16,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -1875,7 +1994,7 @@ class _ClassesQuickActions extends StatelessWidget {
                   ? 2
                   : constraints.maxWidth < 560
                   ? 3
-                  : 5;
+                  : 6;
               final tileWidth =
                   (constraints.maxWidth - spacing * (columns - 1)) / columns;
               return Wrap(
@@ -1925,6 +2044,16 @@ class _ClassesQuickActions extends StatelessWidget {
                   SizedBox(
                     width: tileWidth,
                     child: _ClassesQuickActionTile(
+                      icon: Icons.calendar_view_week_outlined,
+                      label: 'Timetable\nSetup',
+                      color: const Color(0xFF0F766E),
+                      tone: const Color(0xFFE8F8F4),
+                      onTap: onTimetable,
+                    ),
+                  ),
+                  SizedBox(
+                    width: tileWidth,
+                    child: _ClassesQuickActionTile(
                       icon: Icons.currency_rupee_rounded,
                       label: 'Fees',
                       color: const Color(0xFF12AFC6),
@@ -1967,14 +2096,14 @@ class _ClassesQuickActionTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          constraints: BoxConstraints(minHeight: compact ? 76 : 84),
+          constraints: BoxConstraints(minHeight: compact ? 68 : 76),
           padding: EdgeInsets.symmetric(
             horizontal: compact ? 4 : 5,
-            vertical: compact ? 9 : 11,
+            vertical: compact ? 8 : 10,
           ),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withAlpha(38)),
             boxShadow: [
               BoxShadow(
@@ -1994,7 +2123,7 @@ class _ClassesQuickActionTile extends StatelessWidget {
                   color: tone,
                   borderRadius: BorderRadius.circular(7),
                 ),
-                child: Icon(icon, color: color, size: compact ? 21 : 24),
+                child: Icon(icon, color: color, size: compact ? 19 : 21),
               ),
               SizedBox(height: compact ? 6 : 8),
               Text(
@@ -2004,8 +2133,8 @@ class _ClassesQuickActionTile extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.dmSans(
                   color: _classesDirectoryInk,
-                  fontSize: compact ? 10.5 : 12.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: compact ? 10 : 11.5,
+                  fontWeight: FontWeight.w800,
                   height: 1.15,
                   letterSpacing: 0,
                 ),
@@ -2044,18 +2173,18 @@ class _ClassesDirectoryErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _classesPanelDecoration(radius: 17),
+      padding: const EdgeInsets.all(14),
+      decoration: _classesPanelDecoration(radius: 8),
       child: Column(
         children: [
-          const Icon(Icons.cloud_off_rounded, color: AppTheme.error, size: 38),
+          const Icon(Icons.cloud_off_rounded, color: AppTheme.error, size: 30),
           const SizedBox(height: 10),
           Text(
             message,
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: _classesDirectoryMuted,
-              fontSize: 14,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               height: 1.3,
               letterSpacing: 0,
@@ -2077,22 +2206,22 @@ class _ClassesDirectoryEmptyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _classesPanelDecoration(radius: 17),
+      padding: const EdgeInsets.all(16),
+      decoration: _classesPanelDecoration(radius: 8),
       child: Column(
         children: [
           const _ClassesIconTile(
             icon: Icons.meeting_room_outlined,
             color: _classesDirectoryBlue,
             tone: Color(0xFFEAF3FF),
-            size: 62,
+            size: 50,
           ),
           const SizedBox(height: 12),
           Text(
             'No classes found',
             style: GoogleFonts.dmSans(
               color: _classesDirectoryInk,
-              fontSize: 19,
+              fontSize: 16,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -2103,7 +2232,7 @@ class _ClassesDirectoryEmptyCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: _classesDirectoryMuted,
-              fontSize: 14,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               letterSpacing: 0,
             ),
@@ -2258,15 +2387,15 @@ class _ClassesDirectoryActionSheet extends StatelessWidget {
     return SafeArea(
       child: Container(
         margin: const EdgeInsets.all(14),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(30),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -2278,38 +2407,44 @@ class _ClassesDirectoryActionSheet extends StatelessWidget {
               title,
               style: GoogleFonts.dmSans(
                 color: _classesDirectoryInk,
-                fontSize: 18,
+                fontSize: 16,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 10),
             for (final action in actions)
-              ListTile(
-                minVerticalPadding: 8,
-                leading: Icon(
-                  action.icon,
-                  color: action.selected
-                      ? _classesDirectoryBlue
-                      : _classesDirectoryMuted,
-                ),
-                title: Text(
-                  action.label,
-                  style: GoogleFonts.dmSans(
-                    color: _classesDirectoryInk,
-                    fontWeight: action.selected
-                        ? FontWeight.w900
-                        : FontWeight.w700,
-                    letterSpacing: 0,
+              Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  dense: true,
+                  minVerticalPadding: 8,
+                  leading: Icon(
+                    action.icon,
+                    color: action.selected
+                        ? _classesDirectoryBlue
+                        : _classesDirectoryMuted,
+                    size: 21,
                   ),
+                  title: Text(
+                    action.label,
+                    style: GoogleFonts.dmSans(
+                      color: _classesDirectoryInk,
+                      fontSize: 13.5,
+                      fontWeight: action.selected
+                          ? FontWeight.w900
+                          : FontWeight.w700,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  trailing: action.selected
+                      ? const Icon(
+                          Icons.check_rounded,
+                          color: _classesDirectoryBlue,
+                        )
+                      : null,
+                  onTap: action.onTap,
                 ),
-                trailing: action.selected
-                    ? const Icon(
-                        Icons.check_rounded,
-                        color: _classesDirectoryBlue,
-                      )
-                    : null,
-                onTap: action.onTap,
               ),
           ],
         ),
@@ -2417,12 +2552,15 @@ class _ClassDetailPage extends StatelessWidget {
                 value: 'attendance',
                 child: Text('Open attendance'),
               ),
-              PopupMenuItem(value: 'timetable', child: Text('Open timetable')),
+              PopupMenuItem(
+                value: 'view_timetables',
+                child: Text('View timetables'),
+              ),
               PopupMenuDivider(),
               PopupMenuItem(value: 'subjects', child: Text('Setup subjects')),
               PopupMenuItem(
                 value: 'setup_timetable',
-                child: Text('Generate timetable'),
+                child: Text('Setup timetable'),
               ),
               PopupMenuItem(value: 'setup_fees', child: Text('Setup fees')),
               PopupMenuItem(value: 'note', child: Text('Send observation')),
@@ -2499,9 +2637,9 @@ class _ClassDetailPage extends StatelessWidget {
                 ),
                 _ClassActionTile(
                   icon: Icons.calendar_view_week_outlined,
-                  title: 'Open timetable',
-                  subtitle: 'Check timetable coverage',
-                  onTap: () => Navigator.pop(context, 'timetable'),
+                  title: 'View timetables',
+                  subtitle: 'Open the saved timetable records for this class',
+                  onTap: () => Navigator.pop(context, 'view_timetables'),
                 ),
                 _ClassActionTile(
                   icon: Icons.menu_book_outlined,
@@ -2510,9 +2648,9 @@ class _ClassDetailPage extends StatelessWidget {
                   onTap: () => Navigator.pop(context, 'subjects'),
                 ),
                 _ClassActionTile(
-                  icon: Icons.auto_fix_high_rounded,
-                  title: 'Generate timetable',
-                  subtitle: 'Create a smart timetable for this class',
+                  icon: Icons.edit_calendar_outlined,
+                  title: 'Setup timetable',
+                  subtitle: 'Review the class timetable setup step',
                   onTap: () => Navigator.pop(context, 'setup_timetable'),
                 ),
                 _ClassActionTile(
@@ -2677,10 +2815,10 @@ class _ClassDetailCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final phone = _classesPhone(context);
     return Container(
-      padding: EdgeInsets.all(phone ? 14 : 18),
+      padding: EdgeInsets.all(phone ? 12 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(phone ? 10 : 8),
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF7FA6BD).withAlpha(45),
@@ -2699,8 +2837,11 @@ class _ClassDetailCard extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  style: GoogleFonts.dmSans(
+                    color: _classesDirectoryInk,
+                    fontSize: phone ? 14.5 : 15,
                     fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
@@ -2729,16 +2870,21 @@ class _ClassDetailRow extends StatelessWidget {
         builder: (context, constraints) {
           final labelWidget = Text(
             label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            style: GoogleFonts.dmSans(
               color: const Color(0xFF64727E),
+              fontSize: 11.5,
               fontWeight: FontWeight.w800,
+              letterSpacing: 0,
             ),
           );
           final valueWidget = Text(
             value,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: GoogleFonts.dmSans(
+              color: _classesDirectoryInk,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
+            ),
           );
           if (constraints.maxWidth < 330) {
             return Column(
@@ -2777,16 +2923,45 @@ class _ClassActionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tint = color ?? const Color(0xFF0887F2);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: tint.withAlpha(26),
-        child: Icon(icon, color: tint),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        contentPadding: EdgeInsets.zero,
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: tint.withAlpha(26),
+          child: Icon(icon, color: tint, size: 20),
+        ),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            color: _classesDirectoryInk,
+            fontSize: 14,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            color: _classesDirectoryMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            height: 1.25,
+            letterSpacing: 0,
+          ),
+        ),
+        trailing: onTap == null
+            ? null
+            : const Icon(Icons.chevron_right_rounded, size: 20),
+        onTap: onTap,
       ),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis),
-      trailing: onTap == null ? null : const Icon(Icons.chevron_right_rounded),
-      onTap: onTap,
     );
   }
 }
@@ -2833,6 +3008,9 @@ class _CreateClassSetupPage extends StatefulWidget {
     required String gradeName,
     required int? gradeNumber,
     required String classTeacherId,
+    required String roomNumber,
+    required String roomType,
+    required int roomCapacity,
   })
   onSubmit;
 
@@ -2862,6 +3040,8 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
   final _gradeNumber = TextEditingController();
   final _section = TextEditingController();
   final _capacity = TextEditingController(text: '40');
+  final _roomNumber = TextEditingController();
+  final _roomType = TextEditingController(text: 'classroom');
   String _academicYearId = '';
   String _teacherId = '';
   bool _saving = false;
@@ -2882,6 +3062,8 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
     _gradeNumber.dispose();
     _section.dispose();
     _capacity.dispose();
+    _roomNumber.dispose();
+    _roomType.dispose();
     super.dispose();
   }
 
@@ -3028,6 +3210,31 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
                               ],
                             ),
                             const SizedBox(height: 18),
+                            _ClassSetupTwoColumnRow(
+                              children: [
+                                _ClassSetupInputField(
+                                  label: 'Room Number',
+                                  controller: _roomNumber,
+                                  hint: 'Optional room number',
+                                  icon: Icons.meeting_room_outlined,
+                                  iconColor: const Color(0xFF0891B2),
+                                  iconTone: const Color(0xFFE6FAFD),
+                                  enabled: !_busy,
+                                  validator: (_) => null,
+                                ),
+                                _ClassSetupInputField(
+                                  label: 'Room Type',
+                                  controller: _roomType,
+                                  hint: 'classroom',
+                                  icon: Icons.apartment_outlined,
+                                  iconColor: const Color(0xFF475569),
+                                  iconTone: const Color(0xFFF1F5F9),
+                                  enabled: !_busy,
+                                  validator: (_) => null,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 18),
                             _ClassSetupInputField(
                               label: 'Display Order',
                               controller: _gradeNumber,
@@ -3078,6 +3285,9 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
       gradeName: _gradeName.text.trim(),
       gradeNumber: _gradeOrderValue(),
       classTeacherId: _teacherId,
+      roomNumber: _roomNumber.text.trim(),
+      roomType: _roomType.text.trim(),
+      roomCapacity: int.tryParse(_capacity.text.trim()) ?? 40,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -3144,6 +3354,15 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
         section['class_teacher_id'],
         fallback: _teacherId,
       ),
+      'room_id': _classText(section['room_id']),
+      'room_number': _classText(
+        section['room_number'] ?? _classMap(section['room'])['room_number'],
+        fallback: _roomNumber.text.trim(),
+      ),
+      'room_type': _classText(
+        section['room_type'] ?? _classMap(section['room'])['room_type'],
+        fallback: _roomType.text.trim(),
+      ),
       'total_students': 0,
     };
   }
@@ -3157,7 +3376,7 @@ class _ClassSetupHeader extends StatelessWidget {
     final phone = _classesPhone(context);
     final tiny = _classesTiny(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(phone ? 14 : 30, 16, phone ? 14 : 30, 8),
+      padding: EdgeInsets.fromLTRB(phone ? 12 : 18, 10, phone ? 12 : 18, 8),
       child: Row(
         children: [
           IconButton(
@@ -3165,7 +3384,7 @@ class _ClassSetupHeader extends StatelessWidget {
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back_rounded),
             color: _CreateClassSetupPageState._ink,
-            iconSize: tiny ? 26 : 30,
+            iconSize: tiny ? 20 : 22,
           ),
           SizedBox(
             width: tiny
@@ -3185,16 +3404,16 @@ class _ClassSetupHeader extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: _CreateClassSetupPageState._ink,
                     fontSize: tiny
-                        ? 21
+                        ? 17
                         : phone
-                        ? 24
-                        : 30,
+                        ? 18
+                        : 19,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
-                    height: 1.05,
+                    height: 1.08,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 3),
                 Text(
                   'Add a new class to your school',
                   maxLines: 2,
@@ -3202,11 +3421,11 @@ class _ClassSetupHeader extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: _CreateClassSetupPageState._muted,
                     fontSize: tiny
-                        ? 12.5
+                        ? 11
                         : phone
-                        ? 14
-                        : 17,
-                    fontWeight: FontWeight.w600,
+                        ? 11.5
+                        : 12,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0,
                   ),
                 ),
@@ -3216,23 +3435,23 @@ class _ClassSetupHeader extends StatelessWidget {
           if (!tiny) ...[
             const SizedBox(width: 10),
             Container(
-              width: phone ? 50 : 68,
-              height: phone ? 50 : 68,
+              width: phone ? 40 : 44,
+              height: phone ? 40 : 44,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFFB7CEE5).withAlpha(70),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
               child: Icon(
                 Icons.maps_home_work_rounded,
                 color: _CreateClassSetupPageState._primary,
-                size: phone ? 27 : 34,
+                size: phone ? 21 : 23,
               ),
             ),
           ],
@@ -3251,15 +3470,15 @@ class _ClassSetupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final phone = _classesPhone(context);
     return Container(
-      padding: EdgeInsets.all(phone ? 18 : 30),
+      padding: EdgeInsets.all(phone ? 14 : 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(phone ? 18 : 24),
+        borderRadius: BorderRadius.circular(phone ? 10 : 12),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF9DB9D2).withAlpha(45),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -3278,8 +3497,8 @@ class _ClassSetupCardHeader extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 56,
-              height: 56,
+              width: 42,
+              height: 42,
               decoration: const BoxDecoration(
                 color: _CreateClassSetupPageState._primary,
                 shape: BoxShape.circle,
@@ -3287,10 +3506,10 @@ class _ClassSetupCardHeader extends StatelessWidget {
               child: const Icon(
                 Icons.maps_home_work_rounded,
                 color: Colors.white,
-                size: 28,
+                size: 22,
               ),
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3301,20 +3520,20 @@ class _ClassSetupCardHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
                       color: _CreateClassSetupPageState._ink,
-                      fontSize: 24,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     'Enter class details to start the setup flow.',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
                       color: _CreateClassSetupPageState._muted,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       height: 1.25,
                       letterSpacing: 0,
                     ),
@@ -3324,7 +3543,7 @@ class _ClassSetupCardHeader extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         const Divider(height: 1, color: _CreateClassSetupPageState._line),
       ],
     );
@@ -3339,7 +3558,7 @@ class _ClassSetupStepRail extends StatelessWidget {
   static const _steps = [
     'Classes setup',
     'Subjects creation and assigning teachers',
-    'Time Table Generation',
+    'Timetable setup',
     'Fee setup',
     'Review',
   ];
@@ -3347,7 +3566,7 @@ class _ClassSetupStepRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 42,
+      height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
@@ -3357,12 +3576,12 @@ class _ClassSetupStepRail extends StatelessWidget {
           final active = index == activeIndex;
           return AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: active
                   ? _CreateClassSetupPageState._primary
                   : const Color(0xFFF3F7FC),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(999),
               border: Border.all(
                 color: active
                     ? _CreateClassSetupPageState._primary
@@ -3376,18 +3595,18 @@ class _ClassSetupStepRail extends StatelessWidget {
                   '${index + 1}',
                   style: GoogleFonts.dmSans(
                     color: active ? Colors.white : const Color(0xFF64748B),
-                    fontSize: 13,
+                    fontSize: 11,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Text(
                   _steps[index],
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     color: active ? Colors.white : const Color(0xFF64748B),
-                    fontSize: 12,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
@@ -3558,7 +3777,7 @@ class _ClassSetupFieldShell extends StatelessWidget {
             text: label,
             style: GoogleFonts.dmSans(
               color: _CreateClassSetupPageState._ink,
-              fontSize: 16,
+              fontSize: 13.5,
               fontWeight: FontWeight.w800,
               letterSpacing: 0,
             ),
@@ -3574,7 +3793,7 @@ class _ClassSetupFieldShell extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 7),
         child,
       ],
     );
@@ -3587,18 +3806,18 @@ class _ClassSetupTip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFEFF7FF),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD4E9FF)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 38,
+            height: 38,
             decoration: const BoxDecoration(
               color: Color(0xFFDDEEFF),
               shape: BoxShape.circle,
@@ -3606,10 +3825,10 @@ class _ClassSetupTip extends StatelessWidget {
             child: const Icon(
               Icons.info_outline_rounded,
               color: _CreateClassSetupPageState._primary,
-              size: 28,
+              size: 20,
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3618,7 +3837,7 @@ class _ClassSetupTip extends StatelessWidget {
                   'Tip',
                   style: GoogleFonts.dmSans(
                     color: _CreateClassSetupPageState._ink,
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -3627,7 +3846,7 @@ class _ClassSetupTip extends StatelessWidget {
                   'This creates the class and first section on the central academic server.',
                   style: GoogleFonts.dmSans(
                     color: const Color(0xFF334155),
-                    fontSize: 15,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     height: 1.35,
                   ),
@@ -3654,7 +3873,7 @@ class _ClassSetupActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final phone = _classesPhone(context);
     return SizedBox(
-      height: phone ? 56 : 62,
+      height: phone ? 48 : 52,
       child: FilledButton.icon(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
@@ -3672,14 +3891,14 @@ class _ClassSetupActionButton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : const Icon(Icons.save_rounded, size: 28),
+            : const Icon(Icons.save_rounded, size: 21),
         label: Text(
           saving ? 'Saving...' : 'Save & Continue',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: Colors.white,
-            fontSize: phone ? 18 : 22,
+            fontSize: phone ? 14.5 : 15.5,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
@@ -3691,7 +3910,7 @@ class _ClassSetupActionButton extends StatelessWidget {
 
 TextStyle get _fieldTextStyle => GoogleFonts.dmSans(
   color: _CreateClassSetupPageState._ink,
-  fontSize: 17,
+  fontSize: 14.5,
   fontWeight: FontWeight.w700,
   letterSpacing: 0,
 );
@@ -3706,47 +3925,47 @@ InputDecoration _fieldDecoration({
     hintText: hint,
     hintStyle: GoogleFonts.dmSans(
       color: const Color(0xFF98A2B3),
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: FontWeight.w600,
       letterSpacing: 0,
     ),
     filled: true,
     fillColor: Colors.white,
     prefixIcon: Padding(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(8),
       child: Container(
-        width: 46,
-        height: 46,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           color: iconTone,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, color: iconColor, size: 26),
+        child: Icon(icon, color: iconColor, size: 20),
       ),
     ),
-    prefixIconConstraints: const BoxConstraints(minWidth: 66, minHeight: 66),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    prefixIconConstraints: const BoxConstraints(minWidth: 54, minHeight: 54),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: _CreateClassSetupPageState._line),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: _CreateClassSetupPageState._line),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(
         color: _CreateClassSetupPageState._primary,
         width: 1.4,
       ),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: Color(0xFFEF4444)),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(8),
       borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.4),
     ),
   );
@@ -3943,6 +4162,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
       } else {
         await BackendApiClient.instance.savePrincipalSubjectMapping(
           subjectId: subjectId,
+          academicYearId: _academicYearId,
           gradeId: _gradeId,
           sectionId: _sectionId,
           teacherId: teacherId,
@@ -4109,18 +4329,11 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
                                               .pushReplacement<bool, bool>(
                                                 MaterialPageRoute(
                                                   builder: (_) =>
-                                                      _GenerateTimetableSetupPage(
+                                                      _TimetableReviewSetupPage(
                                                         classRow:
                                                             widget.classRow,
                                                         academicYears: widget
                                                             .academicYears,
-                                                        staff: widget.staff,
-                                                        initialSubjects:
-                                                            _subjects,
-                                                        initialGradeSubjects:
-                                                            _gradeSubjects,
-                                                        initialStaffSubjects:
-                                                            _staffSubjects,
                                                       ),
                                                 ),
                                                 result: true,
@@ -4155,64 +4368,48 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
   }
 }
 
-class _GenerateTimetableSetupPage extends StatefulWidget {
+class _TimetableReviewSetupPage extends StatefulWidget {
   final Map<String, dynamic> classRow;
   final List<AcademicYearModel> academicYears;
-  final List<StaffModel> staff;
-  final List<Map<String, dynamic>> initialSubjects;
-  final List<Map<String, dynamic>> initialGradeSubjects;
-  final List<Map<String, dynamic>> initialStaffSubjects;
 
-  const _GenerateTimetableSetupPage({
+  const _TimetableReviewSetupPage({
     required this.classRow,
     required this.academicYears,
-    required this.staff,
-    required this.initialSubjects,
-    required this.initialGradeSubjects,
-    required this.initialStaffSubjects,
   });
 
   @override
-  State<_GenerateTimetableSetupPage> createState() =>
-      _GenerateTimetableSetupPageState();
+  State<_TimetableReviewSetupPage> createState() =>
+      _TimetableReviewSetupPageState();
 }
 
-class _GenerateTimetableSetupPageState
-    extends State<_GenerateTimetableSetupPage> {
-  static const _background = _CreateClassSetupPageState._background;
-  static const _primary = _CreateClassSetupPageState._primary;
-  static const _days = [1, 2, 3, 4, 5, 6];
+class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
+  final _periodsController = TextEditingController(text: '8');
+  final _startController = TextEditingController(text: '08:30');
+  final _durationController = TextEditingController(text: '40');
+  final _gapController = TextEditingController(text: '5');
+  final _shortBreakPeriodController = TextEditingController();
+  final _shortBreakLabelController = TextEditingController(text: 'Interval');
+  final _shortBreakStartController = TextEditingController();
+  final _shortBreakEndController = TextEditingController();
+  final _longBreakPeriodController = TextEditingController();
+  final _longBreakLabelController = TextEditingController(text: 'Lunch Break');
+  final _longBreakStartController = TextEditingController();
+  final _longBreakEndController = TextEditingController();
+  final Set<int> _workingDays = {1, 2, 3, 4, 5};
 
   bool _loading = true;
+  bool _previewing = false;
   bool _generating = false;
-  bool _publishing = false;
-  String? _error;
-  int _phase = 0;
-  int _activeDay = 1;
-
-  List<Map<String, dynamic>> _subjects = [];
-  List<Map<String, dynamic>> _gradeSubjects = [];
-  List<Map<String, dynamic>> _staffSubjects = [];
-  List<Map<String, dynamic>> _terms = [];
-  List<Map<String, dynamic>> _templates = [];
-  Map<String, dynamic>? _preview;
-
+  bool _replaceExisting = true;
+  bool _dirty = false;
   String _termId = '';
-  String _startTime = '08:30';
-  int _periodsPerDay = 8;
-  int _periodDurationMinutes = 40;
-  int _gapMinutes = 5;
-  int _shortBreakPeriod = 4;
-  int _lunchBreakPeriod = 7;
-
-  bool _distributeEvenly = true;
-  bool _noSubjectsOnBreak = true;
-  bool _preferMornings = true;
-  bool _avoidConsecutive = true;
-  bool _considerAvailability = false;
+  String? _error;
+  List<Map<String, dynamic>> _terms = const [];
+  List<Map<String, dynamic>> _slots = const [];
+  Map<String, dynamic>? _preview;
+  Map<String, dynamic>? _generation;
 
   String get _sectionId => _classText(widget.classRow['section_id']);
-  String get _gradeId => _classText(widget.classRow['grade_id']);
   String get _academicYearId => _classText(widget.classRow['academic_year_id']);
   String get _className => _classText(
     widget.classRow['class_name'],
@@ -4222,13 +4419,44 @@ class _GenerateTimetableSetupPageState
     ),
   );
 
+  String get _academicYearLabel {
+    for (final year in widget.academicYears) {
+      if (year.id == _academicYearId) return year.yearLabel;
+    }
+    return _academicYearId.isEmpty ? '-' : _academicYearId;
+  }
+
+  bool get _ready =>
+      _sectionId.isNotEmpty && _academicYearId.isNotEmpty && _termId.isNotEmpty;
+
+  List<Map<String, dynamic>> get _visibleSlots {
+    return _slots.where((slot) {
+      final termId = _classText(slot['term_id']);
+      return _termId.isEmpty || termId.isEmpty || termId == _termId;
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
-    _subjects = widget.initialSubjects;
-    _gradeSubjects = widget.initialGradeSubjects;
-    _staffSubjects = widget.initialStaffSubjects;
     _load();
+  }
+
+  @override
+  void dispose() {
+    _periodsController.dispose();
+    _startController.dispose();
+    _durationController.dispose();
+    _gapController.dispose();
+    _shortBreakPeriodController.dispose();
+    _shortBreakLabelController.dispose();
+    _shortBreakStartController.dispose();
+    _shortBreakEndController.dispose();
+    _longBreakPeriodController.dispose();
+    _longBreakLabelController.dispose();
+    _longBreakStartController.dispose();
+    _longBreakEndController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -4239,670 +4467,1162 @@ class _GenerateTimetableSetupPageState
     try {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
-        api.getRawList(
-          '/grade-subjects',
-          queryParameters: {'grade_id': _gradeId, 'page_size': 500},
-        ),
-        api.getRawList(
-          '/staff-subjects',
-          queryParameters: {'grade_id': _gradeId, 'page_size': 500},
-        ),
         _academicYearId.isEmpty
-            ? Future.value(<Map<String, dynamic>>[])
+            ? Future<List<Map<String, dynamic>>>.value(const [])
             : api.getTerms(_academicYearId),
-        _academicYearId.isEmpty
-            ? Future.value(<Map<String, dynamic>>[])
-            : api.getTimetableTemplates(academicYearId: _academicYearId),
+        _sectionId.isEmpty
+            ? Future<List<Map<String, dynamic>>>.value(const [])
+            : api.getTimetableSlots(
+                sectionId: _sectionId,
+                academicYearId: _academicYearId,
+              ),
       ]);
+      final terms = results[0] as List<Map<String, dynamic>>;
+      final slots = results[1] as List<Map<String, dynamic>>;
+      final preferredTerm = _classText(widget.classRow['term_id']);
+      final nextTermId =
+          _safeTermId(_termId, terms) ??
+          _safeTermId(preferredTerm, terms) ??
+          (terms.isEmpty ? '' : _termIdFrom(terms.first));
       if (!mounted) return;
-      final templates = results[4] as List<Map<String, dynamic>>;
       setState(() {
-        _subjects = results[0] as List<Map<String, dynamic>>;
-        _gradeSubjects = results[1] as List<Map<String, dynamic>>;
-        _staffSubjects = results[2] as List<Map<String, dynamic>>;
-        _terms = results[3] as List<Map<String, dynamic>>;
-        _templates = templates;
-        _termId = _initialId(
-          _termId,
-          _terms.map((term) => _classText(term['id'])),
-        );
-        if (_termId.isEmpty && _terms.isNotEmpty) {
-          _termId = _classText(_terms.first['id']);
-        }
-        _applyTemplate(templates.firstOrNull);
+        _terms = terms;
+        _slots = slots;
+        _termId = nextTermId;
         _loading = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load timetable setup from backend. $error';
+        _error = 'Unable to load timetable setup data. $error';
         _loading = false;
       });
     }
   }
 
-  void _applyTemplate(Map<String, dynamic>? template) {
-    if (template == null || template.isEmpty) return;
-    final start = _classText(template['start_time']);
-    if (start.isNotEmpty) _startTime = start;
-    final periods = _classInt(template['periods_per_day']);
-    if (periods > 0) _periodsPerDay = periods;
-    final duration = _classInt(template['period_duration_minutes']);
-    if (duration > 0) _periodDurationMinutes = duration;
-    final gap = _classInt(template['gap_minutes'], fallback: -1);
-    if (gap >= 0) _gapMinutes = gap;
-  }
-
-  List<Map<String, dynamic>> get _mappedSubjects {
-    final ids = <String>{
-      ..._gradeSubjects
-          .where((row) => _classText(row['grade_id']) == _gradeId)
-          .map((row) => _classText(row['subject_id'])),
-      ..._staffSubjects
-          .where((row) => _isClassStaffSubject(row))
-          .map((row) => _classText(row['subject_id'])),
-    }..removeWhere((id) => id.isEmpty);
-    final rows = _subjects
-        .where((subject) => ids.contains(_subjectId(subject)))
-        .toList();
-    rows.sort(
-      (left, right) =>
-          _subjectName(left).toLowerCase().compareTo(_subjectName(right)),
-    );
-    return rows;
-  }
-
-  int get _totalPeriodsPerWeek {
-    var total = 0;
-    for (final subject in _mappedSubjects) {
-      final row = _gradeSubjectFor(_subjectId(subject));
-      final periods = _classInt(row['periods_per_week']);
-      total += periods > 0 ? periods : 1;
-    }
-    return total;
-  }
-
-  bool _isClassStaffSubject(Map<String, dynamic> row) {
-    final sectionId = _classText(row['section_id']);
-    return _classText(row['grade_id']) == _gradeId &&
-        (sectionId.isEmpty || sectionId == _sectionId);
-  }
-
-  Map<String, dynamic> _gradeSubjectFor(String subjectId) {
-    return _gradeSubjects.firstWhere(
-      (row) =>
-          _classText(row['grade_id']) == _gradeId &&
-          _classText(row['subject_id']) == subjectId,
-      orElse: () => const {},
-    );
-  }
-
-  Map<String, dynamic> _staffSubjectFor(String subjectId) {
-    final exact = _staffSubjects.where(
-      (row) =>
-          _classText(row['subject_id']) == subjectId &&
-          _classText(row['grade_id']) == _gradeId &&
-          _classText(row['section_id']) == _sectionId,
-    );
-    if (exact.isNotEmpty) return exact.first;
-    return _staffSubjects.firstWhere(
-      (row) =>
-          _classText(row['subject_id']) == subjectId &&
-          _classText(row['grade_id']) == _gradeId &&
-          _classText(row['section_id']).isEmpty,
-      orElse: () => const {},
-    );
-  }
-
-  String _teacherNameFor(String subjectId) {
-    final assignment = _staffSubjectFor(subjectId);
-    final direct = _classText(
-      assignment['teacher_name'] ?? assignment['staff_name'],
-    );
-    if (direct.isNotEmpty) return direct;
-    final staffId = _classText(assignment['staff_id']);
-    for (final staff in widget.staff) {
-      if (staff.id == staffId) return staff.fullName;
-    }
-    return 'Teacher pending';
-  }
-
-  Future<void> _openSubjectEdit() async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => _AddSelectSubjectSetupPage(
-          classRow: widget.classRow,
-          mappedSubjectIds: _mappedSubjects.map(_subjectId).toSet(),
-          staff: widget.staff,
-        ),
-      ),
-    );
-    if (changed == true) await _load();
-  }
-
-  Future<void> _editTimings() async {
-    final result = await showModalBottomSheet<_TimetableTimingConfig>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _TimetableTimingSheet(
-        initial: _TimetableTimingConfig(
-          startTime: _startTime,
-          periodsPerDay: _periodsPerDay,
-          periodDurationMinutes: _periodDurationMinutes,
-          gapMinutes: _gapMinutes,
-        ),
-      ),
-    );
-    if (result == null || !mounted) return;
+  Future<void> _previewTimetable() async {
+    if (!_validateSetup()) return;
     setState(() {
-      _startTime = result.startTime;
-      _periodsPerDay = result.periodsPerDay;
-      _periodDurationMinutes = result.periodDurationMinutes;
-      _gapMinutes = result.gapMinutes;
-      _preview = null;
+      _previewing = true;
+      _error = null;
+      _generation = null;
     });
-  }
-
-  Future<void> _editBreaks() async {
-    final result = await showModalBottomSheet<({int shortBreak, int lunch})>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _TimetableBreakSheet(
-        shortBreakPeriod: _shortBreakPeriod,
-        lunchBreakPeriod: _lunchBreakPeriod,
-        periodsPerDay: _periodsPerDay,
-      ),
-    );
-    if (result == null || !mounted) return;
-    setState(() {
-      _shortBreakPeriod = result.shortBreak;
-      _lunchBreakPeriod = result.lunch;
-      _preview = null;
-    });
-  }
-
-  Future<void> _saveTemplate() async {
-    await BackendApiClient.instance.saveTimetableTemplate(
-      id: _classText(_templates.firstOrNull?['id']),
-      academicYearId: _academicYearId,
-      name: 'Class setup smart timetable',
-      workingDays: _days,
-      periodsPerDay: _periodsPerDay,
-      periodDurationMinutes: _periodDurationMinutes,
-      gapMinutes: _gapMinutes,
-      startTime: _startTime,
-      endTime: _endTime,
-      breaks: _noSubjectsOnBreak ? _breakRows : const [],
-      isDefault: true,
-    );
-  }
-
-  Future<void> _generatePreview() async {
-    if (_termId.isEmpty) {
-      setState(() {
-        _error =
-            'Academic term is required before timetable generation. Add a term in Academic Management.';
-      });
-      return;
+    try {
+      final result = await BackendApiClient.instance.previewSmartTimetable(
+        sectionId: _sectionId,
+        academicYearId: _academicYearId,
+        termId: _termId,
+        days: _selectedDays,
+        periodsPerDay: _positiveInt(_periodsController.text, 8),
+        startTime: _startController.text.trim(),
+        periodDurationMinutes: _positiveInt(_durationController.text, 40),
+        gapMinutes: _nonNegativeInt(_gapController.text, 5),
+        breaks: _breakRows,
+      );
+      if (!mounted) return;
+      setState(() => _preview = result);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = 'Timetable preview failed. $error');
+    } finally {
+      if (mounted) setState(() => _previewing = false);
     }
+  }
+
+  Future<void> _generateTimetable() async {
+    if (!_validateSetup()) return;
     setState(() {
       _generating = true;
       _error = null;
     });
     try {
-      await _saveTemplate();
-      final preview = await BackendApiClient.instance.previewSmartTimetable(
+      final result = await BackendApiClient.instance.generateSmartTimetable(
         sectionId: _sectionId,
         academicYearId: _academicYearId,
         termId: _termId,
-        days: _days,
-        periodsPerDay: _periodsPerDay,
-        startTime: _startTime,
-        periodDurationMinutes: _periodDurationMinutes,
-        gapMinutes: _gapMinutes,
+        days: _selectedDays,
+        periodsPerDay: _positiveInt(_periodsController.text, 8),
+        startTime: _startController.text.trim(),
+        periodDurationMinutes: _positiveInt(_durationController.text, 40),
+        gapMinutes: _nonNegativeInt(_gapController.text, 5),
+        breaks: _breakRows,
+        regenerateScope: _replaceExisting,
       );
       if (!mounted) return;
       setState(() {
-        _preview = preview;
-        _phase = 2;
-        _activeDay = _firstPreviewDay(preview);
+        _generation = result;
+        _preview = result;
+        _dirty = true;
       });
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_generationMessage(result)),
+          backgroundColor: AppTheme.success,
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = 'Unable to generate timetable preview. $error');
+      setState(() => _error = 'Timetable generation failed. $error');
     } finally {
       if (mounted) setState(() => _generating = false);
     }
   }
 
-  Future<void> _publish() async {
-    if (_preview == null || _termId.isEmpty || _publishing) return;
-    setState(() => _publishing = true);
-    try {
-      await _saveTemplate();
-      final result = await BackendApiClient.instance.generateSmartTimetable(
-        sectionId: _sectionId,
-        academicYearId: _academicYearId,
-        termId: _termId,
-        days: _days,
-        periodsPerDay: _periodsPerDay,
-        startTime: _startTime,
-        periodDurationMinutes: _periodDurationMinutes,
-        gapMinutes: _gapMinutes,
-        regenerateScope: true,
-      );
-      if (!mounted) return;
-      final created = _listMap(result['created']).length;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            created > 0
-                ? 'Timetable published with $created backend periods.'
-                : 'Timetable published. Existing backend periods were kept.',
-          ),
-          backgroundColor: AppTheme.success,
-        ),
-      );
-      Navigator.of(context).pushReplacement<bool, bool>(
-        MaterialPageRoute(
-          builder: (_) => _FeesSetupPage(
-            classRow: widget.classRow,
-            academicYears: widget.academicYears,
-          ),
-        ),
-        result: true,
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to publish timetable: $error'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _publishing = false);
+  bool _validateSetup() {
+    if (!_ready) {
+      setState(() {
+        _error =
+            'Create the academic year term before generating this class timetable.';
+      });
+      return false;
     }
+    if (_selectedDays.isEmpty) {
+      setState(() => _error = 'Select at least one working day.');
+      return false;
+    }
+    final periodsPerDay = _positiveInt(_periodsController.text, 0);
+    if (periodsPerDay <= 0 || _positiveInt(_durationController.text, 0) <= 0) {
+      setState(
+        () => _error = 'Periods and duration must be greater than zero.',
+      );
+      return false;
+    }
+    final breakPeriods = _breakPeriods;
+    if (breakPeriods.any((period) => period > periodsPerDay)) {
+      setState(
+        () => _error = 'Break period must be within the periods per day.',
+      );
+      return false;
+    }
+    if (breakPeriods.length != breakPeriods.toSet().length) {
+      setState(
+        () => _error = 'Short and long break cannot use the same period.',
+      );
+      return false;
+    }
+    final breakTimingError = _breakTimingValidationError();
+    if (breakTimingError != null) {
+      setState(() => _error = breakTimingError);
+      return false;
+    }
+    if (!_validTime(_startController.text)) {
+      setState(() => _error = 'Start time must use HH:MM format.');
+      return false;
+    }
+    return true;
   }
+
+  List<int> get _selectedDays {
+    final days = _workingDays.toList()..sort();
+    return days;
+  }
+
+  String? _safeTermId(String value, List<Map<String, dynamic>> terms) {
+    final termId = value.trim();
+    if (termId.isEmpty) return null;
+    return terms.any((term) => _termIdFrom(term) == termId) ? termId : null;
+  }
+
+  String _termLabel(Map<String, dynamic> term) {
+    return _classText(
+      term['term_name'] ?? term['name'] ?? term['label'] ?? term['term_label'],
+      fallback: _termIdFrom(term),
+    );
+  }
+
+  String _termIdFrom(Map<String, dynamic> term) =>
+      _classText(term['id'] ?? term['term_id']);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _background,
-      body: SafeArea(child: _phase == 2 ? _buildPreview() : _buildSetupPhase()),
+      backgroundColor: _CreateClassSetupPageState._background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _SetupFlowHeader(
+              title: 'Timetable Setup',
+              subtitle: _className,
+              icon: Icons.calendar_view_week_rounded,
+            ),
+            Expanded(
+              child: ListView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                children: [
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 860),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _ClassSetupStepRail(activeIndex: 2),
+                          const SizedBox(height: 18),
+                          _ClassDetailsSetupCard(
+                            academicYear: _academicYearLabel,
+                            className: _className,
+                            capacity:
+                                '${_classInt(widget.classRow['capacity'], fallback: 40)} Students',
+                          ),
+                          const SizedBox(height: 18),
+                          _buildSetupBody(),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildSetupPhase() {
-    final title = _phase == 0 ? 'Generate Timetable' : 'Constraints';
-    return Column(
-      children: [
-        _SetupFlowHeader(
-          title: title,
-          subtitle: _className,
-          icon: Icons.calendar_month_rounded,
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _load,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
-              ),
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 860),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _TimetableStepIndicator(activeIndex: _phase),
-                        const SizedBox(height: 18),
-                        if (_loading)
-                          const Padding(
-                            padding: EdgeInsets.all(40),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_error != null)
-                          _SetupErrorBox(message: _error!, onRetry: _load)
-                        else if (_phase == 0)
-                          _buildClassSettings()
-                        else
-                          _buildConstraints(),
-                      ],
+  Widget _buildSetupBody() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return _SetupPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SetupPanelTitle(
+            icon: Icons.auto_awesome_outlined,
+            title: 'Generate class timetable',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Preview and generate timetable slots for this class using the live subject and teacher mappings already saved in Class Hub.',
+            style: GoogleFonts.dmSans(
+              color: _CreateClassSetupPageState._muted,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+              letterSpacing: 0,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_error != null) ...[
+            _SetupErrorBox(message: _error!, onRetry: _load),
+            const SizedBox(height: 14),
+          ],
+          _TimetableSetupSummary(
+            existingSlots: _visibleSlots.length,
+            selectedDays: _selectedDays.length,
+            requestedSlots:
+                _selectedDays.length * _positiveInt(_periodsController.text, 8),
+            termLabel: _termId.isEmpty
+                ? 'Term required'
+                : _termLabel(
+                    _terms.firstWhere(
+                      (term) => _termIdFrom(term) == _termId,
+                      orElse: () => {'id': _termId},
                     ),
+                  ),
+          ),
+          const SizedBox(height: 16),
+          _buildTermSelector(),
+          const SizedBox(height: 14),
+          _TimetableWorkingDaySelector(
+            selectedDays: _workingDays,
+            onChanged: (day, selected) {
+              setState(() {
+                if (selected) {
+                  _workingDays.add(day);
+                } else {
+                  _workingDays.remove(day);
+                }
+                _preview = null;
+                _generation = null;
+              });
+            },
+          ),
+          const SizedBox(height: 14),
+          _buildGeneratorFields(),
+          const SizedBox(height: 14),
+          _buildBreakFields(),
+          const SizedBox(height: 10),
+          Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _replaceExisting,
+              title: Text(
+                'Replace existing timetable for selected days',
+                style: GoogleFonts.dmSans(
+                  color: _CreateClassSetupPageState._ink,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              subtitle: Text(
+                'Turn this off to keep existing slots and only add available periods.',
+                style: GoogleFonts.dmSans(
+                  color: _CreateClassSetupPageState._muted,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              onChanged: _generating
+                  ? null
+                  : (value) => setState(() => _replaceExisting = value),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildGeneratorActions(),
+          if (_preview != null || _generation != null) ...[
+            const SizedBox(height: 14),
+            _SmartTimetableResultPanel(
+              result: _generation ?? _preview!,
+              generated: _generation != null,
+            ),
+          ],
+          const SizedBox(height: 12),
+          _ClassActionTile(
+            icon: Icons.calendar_view_week_outlined,
+            title: 'View timetables',
+            subtitle: 'Open timetable records for this class',
+            onTap: () => Navigator.pushNamed(
+              context,
+              AppRoutes.principalTimetable,
+              arguments: {
+                'section_id': _sectionId,
+                'sectionId': _sectionId,
+                'class_name': _className,
+                'className': _className,
+                'source': 'class_setup_timetable_setup',
+              },
+            ),
+          ),
+          _ClassActionTile(
+            icon: Icons.receipt_long_outlined,
+            title: 'Continue to fees',
+            subtitle: 'Move to class fee setup',
+            onTap: () => Navigator.of(context).pushReplacement<bool, bool>(
+              MaterialPageRoute(
+                builder: (_) => _FeesSetupPage(
+                  classRow: widget.classRow,
+                  academicYears: widget.academicYears,
+                ),
+              ),
+              result: _dirty,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTermSelector() {
+    if (_terms.isEmpty) {
+      return const _SetupEmptyBox(
+        message:
+            'No academic terms are available for this year. Create a term before generating the timetable.',
+      );
+    }
+    return DropdownButtonFormField<String>(
+      key: ValueKey('term-$_termId'),
+      initialValue: _termId.isEmpty ? null : _termId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Academic term',
+        prefixIcon: Icon(Icons.event_note_outlined),
+      ),
+      items: [
+        for (final term in _terms)
+          DropdownMenuItem(
+            value: _termIdFrom(term),
+            child: Text(_termLabel(term)),
+          ),
+      ],
+      onChanged: _generating
+          ? null
+          : (value) => setState(() {
+              _termId = value ?? '';
+              _preview = null;
+              _generation = null;
+            }),
+    );
+  }
+
+  Widget _buildGeneratorFields() {
+    final phone = _classesPhone(context);
+    final fields = [
+      _TimetableSetupField(
+        controller: _periodsController,
+        label: 'Periods / day',
+        icon: Icons.format_list_numbered_rounded,
+        keyboardType: TextInputType.number,
+        enabled: !_generating,
+        onChanged: (_) => setState(() {
+          _preview = null;
+          _generation = null;
+        }),
+      ),
+      _TimetableSetupField(
+        controller: _startController,
+        label: 'Start time',
+        icon: Icons.schedule_rounded,
+        helperText: 'HH:MM',
+        enabled: !_generating,
+        onChanged: (_) => setState(() {
+          _preview = null;
+          _generation = null;
+        }),
+      ),
+      _TimetableSetupField(
+        controller: _durationController,
+        label: 'Minutes',
+        icon: Icons.timer_outlined,
+        keyboardType: TextInputType.number,
+        enabled: !_generating,
+        onChanged: (_) => setState(() {
+          _preview = null;
+          _generation = null;
+        }),
+      ),
+      _TimetableSetupField(
+        controller: _gapController,
+        label: 'Gap',
+        icon: Icons.more_horiz_rounded,
+        keyboardType: TextInputType.number,
+        enabled: !_generating,
+        onChanged: (_) => setState(() {
+          _preview = null;
+          _generation = null;
+        }),
+      ),
+    ];
+    if (phone) {
+      return Column(
+        children: [
+          for (final field in fields) ...[
+            field,
+            if (field != fields.last) const SizedBox(height: 10),
+          ],
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final field in fields) SizedBox(width: 196, child: field),
+      ],
+    );
+  }
+
+  Widget _buildBreakFields() {
+    final phone = _classesPhone(context);
+    final fields = [
+      _TimetableSetupField(
+        controller: _shortBreakPeriodController,
+        label: 'Short break period',
+        icon: Icons.free_breakfast_outlined,
+        keyboardType: TextInputType.number,
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _shortBreakLabelController,
+        label: 'Short break label',
+        icon: Icons.label_outline_rounded,
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _shortBreakStartController,
+        label: 'Short break start',
+        icon: Icons.play_arrow_rounded,
+        helperText: 'HH:MM optional',
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _shortBreakEndController,
+        label: 'Short break end',
+        icon: Icons.stop_rounded,
+        helperText: 'HH:MM optional',
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _longBreakPeriodController,
+        label: 'Long break period',
+        icon: Icons.restaurant_menu_outlined,
+        keyboardType: TextInputType.number,
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _longBreakLabelController,
+        label: 'Long break label',
+        icon: Icons.label_important_outline_rounded,
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _longBreakStartController,
+        label: 'Long break start',
+        icon: Icons.play_arrow_rounded,
+        helperText: 'HH:MM optional',
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+      _TimetableSetupField(
+        controller: _longBreakEndController,
+        label: 'Long break end',
+        icon: Icons.stop_rounded,
+        helperText: 'HH:MM optional',
+        enabled: !_generating,
+        onChanged: (_) => _markTimetableSetupChanged(),
+      ),
+    ];
+    if (phone) {
+      return Column(
+        children: [
+          for (final field in fields) ...[
+            field,
+            if (field != fields.last) const SizedBox(height: 10),
+          ],
+        ],
+      );
+    }
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        for (final field in fields) SizedBox(width: 196, child: field),
+      ],
+    );
+  }
+
+  void _markTimetableSetupChanged() {
+    setState(() {
+      _preview = null;
+      _generation = null;
+    });
+  }
+
+  List<int> get _breakPeriods {
+    return [_shortBreakPeriodController.text, _longBreakPeriodController.text]
+        .map((value) => int.tryParse(value.trim()) ?? 0)
+        .where((period) => period > 0)
+        .toList();
+  }
+
+  List<Map<String, dynamic>> get _breakRows {
+    final rows = <Map<String, dynamic>>[];
+    void addBreak(
+      String periodText,
+      String labelText,
+      String fallbackLabel,
+      String type,
+      String startText,
+      String endText,
+    ) {
+      final period = int.tryParse(periodText.trim()) ?? 0;
+      if (period <= 0) return;
+      final label = labelText.trim().isEmpty ? fallbackLabel : labelText.trim();
+      final row = <String, dynamic>{
+        'label': label,
+        'type': type,
+        'days': _selectedDays,
+        'periods': [period],
+      };
+      if (startText.trim().isNotEmpty && endText.trim().isNotEmpty) {
+        row['start_time'] = startText.trim();
+        row['end_time'] = endText.trim();
+      }
+      rows.add(row);
+    }
+
+    addBreak(
+      _shortBreakPeriodController.text,
+      _shortBreakLabelController.text,
+      'Interval',
+      'short_break',
+      _shortBreakStartController.text,
+      _shortBreakEndController.text,
+    );
+    addBreak(
+      _longBreakPeriodController.text,
+      _longBreakLabelController.text,
+      'Lunch Break',
+      'long_break',
+      _longBreakStartController.text,
+      _longBreakEndController.text,
+    );
+    return rows;
+  }
+
+  Widget _buildGeneratorActions() {
+    final phone = _classesPhone(context);
+    final previewButton = OutlinedButton.icon(
+      onPressed: _previewing || _generating ? null : _previewTimetable,
+      icon: _previewing
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.visibility_outlined, size: 18),
+      label: Text(_previewing ? 'Previewing' : 'Preview Timetable'),
+    );
+    final generateButton = _SetupPrimaryButton(
+      label: 'Generate Timetable',
+      icon: Icons.auto_awesome_rounded,
+      saving: _generating,
+      onPressed: _generating || _previewing ? null : _generateTimetable,
+    );
+    if (phone) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: 46, child: previewButton),
+          const SizedBox(height: 10),
+          generateButton,
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Expanded(child: SizedBox(height: 48, child: previewButton)),
+        const SizedBox(width: 10),
+        Expanded(child: generateButton),
+      ],
+    );
+  }
+
+  int _positiveInt(String value, int fallback) {
+    final parsed = int.tryParse(value.trim()) ?? fallback;
+    return parsed <= 0 ? fallback : parsed;
+  }
+
+  int _nonNegativeInt(String value, int fallback) {
+    final parsed = int.tryParse(value.trim()) ?? fallback;
+    return parsed < 0 ? fallback : parsed;
+  }
+
+  bool _validTime(String value) {
+    final match = RegExp(
+      r'^([01]?\d|2[0-3]):([0-5]\d)$',
+    ).firstMatch(value.trim());
+    return match != null;
+  }
+
+  String? _breakTimingValidationError() {
+    final shortError = _validateBreakTimePair(
+      label: 'Short break',
+      periodText: _shortBreakPeriodController.text,
+      startText: _shortBreakStartController.text,
+      endText: _shortBreakEndController.text,
+    );
+    if (shortError != null) return shortError;
+    return _validateBreakTimePair(
+      label: 'Long break',
+      periodText: _longBreakPeriodController.text,
+      startText: _longBreakStartController.text,
+      endText: _longBreakEndController.text,
+    );
+  }
+
+  String? _validateBreakTimePair({
+    required String label,
+    required String periodText,
+    required String startText,
+    required String endText,
+  }) {
+    final period = int.tryParse(periodText.trim()) ?? 0;
+    final start = startText.trim();
+    final end = endText.trim();
+    if (start.isEmpty && end.isEmpty) return null;
+    if (period <= 0) {
+      return '$label period is required when custom timing is entered.';
+    }
+    if (start.isEmpty || end.isEmpty) {
+      return '$label custom timing needs both start and end time.';
+    }
+    if (!_validTime(start) || !_validTime(end)) {
+      return '$label custom timing must use HH:MM format.';
+    }
+    if (_timeMinutes(end) <= _timeMinutes(start)) {
+      return '$label end time must be after start time.';
+    }
+    return null;
+  }
+
+  int _timeMinutes(String value) {
+    final parts = value.trim().split(':');
+    if (parts.length != 2) return 0;
+    return (int.tryParse(parts.first) ?? 0) * 60 +
+        (int.tryParse(parts.last) ?? 0);
+  }
+
+  String _generationMessage(Map<String, dynamic> result) {
+    final summary = _classMap(result['summary']);
+    final created = _classInt(summary['created_slots']);
+    final skipped = _classInt(summary['skipped_slots']);
+    if (created > 0) {
+      return 'Generated $created timetable slots. Skipped $skipped.';
+    }
+    return 'Timetable generation finished. Review the blocked slots.';
+  }
+}
+
+class _TimetableSetupSummary extends StatelessWidget {
+  final int existingSlots;
+  final int selectedDays;
+  final int requestedSlots;
+  final String termLabel;
+
+  const _TimetableSetupSummary({
+    required this.existingSlots,
+    required this.selectedDays,
+    required this.requestedSlots,
+    required this.termLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 560;
+        final tileWidth = compact
+            ? (constraints.maxWidth - 10) / 2
+            : (constraints.maxWidth - 30) / 4;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            SizedBox(
+              width: tileWidth,
+              child: _TimetableMetricTile(
+                label: 'Existing',
+                value: '$existingSlots',
+                icon: Icons.calendar_view_week_outlined,
+                color: _CreateClassSetupPageState._primary,
+              ),
+            ),
+            SizedBox(
+              width: tileWidth,
+              child: _TimetableMetricTile(
+                label: 'Days',
+                value: '$selectedDays',
+                icon: Icons.date_range_rounded,
+                color: const Color(0xFF0E9384),
+              ),
+            ),
+            SizedBox(
+              width: tileWidth,
+              child: _TimetableMetricTile(
+                label: 'Plan',
+                value: '$requestedSlots',
+                icon: Icons.auto_awesome_outlined,
+                color: const Color(0xFF7C3AED),
+              ),
+            ),
+            SizedBox(
+              width: tileWidth,
+              child: _TimetableMetricTile(
+                label: 'Term',
+                value: termLabel,
+                icon: Icons.event_note_outlined,
+                color: const Color(0xFFF59E0B),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TimetableMetricTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _TimetableMetricTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 76),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(18),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(50)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._muted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
                   ),
                 ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimetableWorkingDaySelector extends StatelessWidget {
+  final Set<int> selectedDays;
+  final void Function(int day, bool selected) onChanged;
+
+  const _TimetableWorkingDaySelector({
+    required this.selectedDays,
+    required this.onChanged,
+  });
+
+  static const _days = {
+    1: 'Mon',
+    2: 'Tue',
+    3: 'Wed',
+    4: 'Thu',
+    5: 'Fri',
+    6: 'Sat',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Working days',
+          style: GoogleFonts.dmSans(
+            color: _CreateClassSetupPageState._ink,
+            fontSize: 13,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in _days.entries)
+              FilterChip(
+                selected: selectedDays.contains(entry.key),
+                label: Text(entry.value),
+                onSelected: (selected) => onChanged(entry.key, selected),
+              ),
+          ],
         ),
       ],
     );
   }
+}
 
-  Widget _buildClassSettings() {
-    final subjects = _mappedSubjects;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _TimetableClassDetailsCard(
-          academicYear: _academicYearLabel,
-          className: _className,
-          totalSubjects: subjects.length,
-          totalPeriods: _totalPeriodsPerWeek,
-        ),
-        const SizedBox(height: 18),
-        _SetupPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SetupSectionHeader(
-                title: 'Subjects',
-                count: subjects.length,
-                actionLabel: 'Edit',
-                actionIcon: Icons.edit_outlined,
-                onAction: _openSubjectEdit,
-              ),
-              const SizedBox(height: 12),
-              if (subjects.isEmpty)
-                const _SetupEmptyBox(
-                  message:
-                      'Assign backend subjects before generating timetable.',
-                )
-              else
-                ...subjects.map(
-                  (subject) => _TimetableSubjectRow(
-                    subject: subject,
-                    teacherName: _teacherNameFor(_subjectId(subject)),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        _SetupPanel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SetupSectionHeader(
-                title: 'Class Timings',
-                actionLabel: 'Edit',
-                actionIcon: Icons.edit_outlined,
-                onAction: _editTimings,
-              ),
-              const SizedBox(height: 12),
-              _TimingValueRow(
-                label: 'Start Time',
-                value: _displayClock(_startTime),
-              ),
-              _TimingValueRow(
-                label: 'End Time',
-                value: _displayClock(_endTime),
-              ),
-              _TimingValueRow(
-                label: 'Period Duration',
-                value: '$_periodDurationMinutes Min',
-              ),
-              _TimingValueRow(label: 'Break Time', value: '$_gapMinutes Min'),
-              const SizedBox(height: 16),
-              _SetupPrimaryButton(
-                label: 'Continue',
-                icon: Icons.arrow_forward_rounded,
-                saving: false,
-                onPressed: subjects.isEmpty
-                    ? null
-                    : () => setState(() => _phase = 1),
-              ),
-            ],
-          ),
-        ),
-      ],
+class _TimetableSetupField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final String? helperText;
+  final TextInputType? keyboardType;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
+
+  const _TimetableSetupField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.helperText,
+    this.keyboardType,
+    this.enabled = true,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      enabled: enabled,
+      keyboardType: keyboardType,
+      onChanged: onChanged,
+      style: GoogleFonts.dmSans(
+        color: _CreateClassSetupPageState._ink,
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        prefixIcon: Icon(icon, size: 18),
+      ),
     );
   }
+}
 
-  Widget _buildConstraints() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SetupPanel(
-          child: Column(
-            children: [
-              const _SetupPanelTitle(
-                icon: Icons.settings_suggest_outlined,
-                title: 'Concentration Preferences',
-              ),
-              const SizedBox(height: 12),
-              _ConstraintToggle(
-                value: _distributeEvenly,
-                title: 'Distribute periods evenly',
-                subtitle: 'Spread subjects evenly across the week',
-                onChanged: (value) => setState(() => _distributeEvenly = value),
-              ),
-              _ConstraintToggle(
-                value: _noSubjectsOnBreak,
-                title: 'No subjects on break time',
-                subtitle: 'Ensure break time is free',
-                onChanged: (value) =>
-                    setState(() => _noSubjectsOnBreak = value),
-              ),
-              _ConstraintToggle(
-                value: _preferMornings,
-                title: 'Prefer mornings for core subjects',
-                subtitle: 'Assign core subjects in morning',
-                onChanged: (value) => setState(() => _preferMornings = value),
-              ),
-              _ConstraintToggle(
-                value: _avoidConsecutive,
-                title: 'Avoid consecutive same subjects',
-                subtitle: "Don't assign same subject back-to-back",
-                onChanged: (value) => setState(() => _avoidConsecutive = value),
-              ),
-              _ConstraintToggle(
-                value: _considerAvailability,
-                title: 'Consider teacher availability',
-                subtitle: 'Ensure assigned teachers are available',
-                onChanged: (value) =>
-                    setState(() => _considerAvailability = value),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        _SetupPanel(
-          child: Column(
-            children: [
-              const _SetupPanelTitle(
-                icon: Icons.settings_suggest_outlined,
-                title: 'Break Settings',
-              ),
-              const SizedBox(height: 10),
-              _BreakSettingTile(
-                title: 'Short Break',
-                subtitle: _breakTimeLabel(_shortBreakPeriod, 20),
-                onTap: _editBreaks,
-              ),
-              _BreakSettingTile(
-                title: 'Lunch Break',
-                subtitle: _breakTimeLabel(_lunchBreakPeriod, 40),
-                onTap: _editBreaks,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        const _AiOptimizationPanel(),
-        const SizedBox(height: 18),
-        _SetupPrimaryButton(
-          label: 'Generate Timetable',
-          icon: Icons.auto_fix_high_rounded,
-          saving: _generating,
-          onPressed: _generating ? null : _generatePreview,
-        ),
-      ],
-    );
-  }
+class _SmartTimetableResultPanel extends StatelessWidget {
+  final Map<String, dynamic> result;
+  final bool generated;
 
-  Widget _buildPreview() {
-    final suggestions = _previewSuggestionsForDay(_activeDay);
-    return Column(
-      children: [
-        const _SetupFlowHeader(
-          title: 'Timetable Preview',
-          subtitle: 'Backend smart generation result',
-          icon: Icons.ios_share_rounded,
+  const _SmartTimetableResultPanel({
+    required this.result,
+    required this.generated,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = _classMap(result['summary']);
+    final requested = _classInt(summary['requested_slots']);
+    final suggested = _classInt(summary['suggested_slots']);
+    final existing = _classInt(summary['existing_slots']);
+    final blocked = _classInt(summary['blocked_slots']);
+    final breaks = _classInt(summary['reserved_breaks']);
+    final created = _classInt(summary['created_slots']);
+    final skipped = _classInt(summary['skipped_slots']);
+    final conflicts = _listMap(result['conflicts']);
+    final logs = _listMap(result['logs']).where((log) {
+      final severity = _classText(log['severity']).toLowerCase();
+      return severity == 'warning' || severity == 'error';
+    }).toList();
+    final suggestions = _listMap(result['suggestions']);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: generated ? const Color(0xFFEAFBF0) : const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: generated
+              ? const Color(0xFFBBF7D0)
+              : _CreateClassSetupPageState._line,
         ),
-        Expanded(
-          child: ListView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 860),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const _TimetableSuccessPanel(),
-                      const SizedBox(height: 14),
-                      _TimetableDayTabs(
-                        activeDay: _activeDay,
-                        availableDays: _days,
-                        onChanged: (day) => setState(() => _activeDay = day),
-                      ),
-                      const SizedBox(height: 12),
-                      _SetupPanel(
-                        child: suggestions.isEmpty
-                            ? const _SetupEmptyBox(
-                                message:
-                                    'Backend preview returned no periods for this day.',
-                              )
-                            : Column(
-                                children: [
-                                  for (final row in suggestions)
-                                    _TimetablePreviewRow(
-                                      row: row,
-                                      subject: _subjectForPreview(row),
-                                    ),
-                                ],
-                              ),
-                      ),
-                      const SizedBox(height: 20),
-                      _SetupPrimaryButton(
-                        label: 'Save & Publish',
-                        icon: Icons.save_rounded,
-                        saving: _publishing,
-                        onPressed: _publishing ? null : _publish,
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        height: 54,
-                        child: OutlinedButton.icon(
-                          onPressed: () => _openManualTimetable(),
-                          icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Edit Timetable Manually'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _primary,
-                            side: const BorderSide(
-                              color: _CreateClassSetupPageState._line,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+              Icon(
+                generated
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.visibility_outlined,
+                color: generated ? AppTheme.success : AppTheme.info,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  generated ? 'Generated timetable result' : 'Preview result',
+                  style: GoogleFonts.dmSans(
+                    color: _CreateClassSetupPageState._ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
                   ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _TimetableResultChip(label: 'Requested', value: requested),
+              _TimetableResultChip(label: 'Suggested', value: suggested),
+              _TimetableResultChip(label: 'Existing', value: existing),
+              _TimetableResultChip(label: 'Breaks', value: breaks),
+              _TimetableResultChip(label: 'Blocked', value: blocked),
+              if (generated)
+                _TimetableResultChip(label: 'Created', value: created),
+              if (generated)
+                _TimetableResultChip(label: 'Skipped', value: skipped),
+            ],
+          ),
+          if (suggestions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...suggestions.take(5).map(_suggestionPreviewRow),
+          ],
+          if (conflicts.isNotEmpty || logs.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            ...[
+              ...conflicts
+                  .take(3)
+                  .map(
+                    (conflict) => _TimetableIssueLine(
+                      message: _classText(
+                        conflict['message'],
+                        fallback: 'Timetable conflict needs review.',
+                      ),
+                      warning: true,
+                    ),
+                  ),
+              ...logs
+                  .take(3)
+                  .map(
+                    (log) => _TimetableIssueLine(
+                      message: _classText(
+                        log['message'],
+                        fallback: 'Timetable setup warning.',
+                      ),
+                      warning:
+                          _classText(log['severity']).toLowerCase() != 'error',
+                    ),
+                  ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _suggestionPreviewRow(Map<String, dynamic> row) {
+    final blocking = row['blocking'] == true;
+    final status = _classText(row['status']).toLowerCase();
+    final reservedBreak = status == 'reserved_break';
+    final day = _classText(row['day_label'], fallback: 'Day');
+    final period = _classInt(row['period_number']);
+    final subject = _classText(row['subject_name'], fallback: 'Subject');
+    final teacher = _classText(row['staff_name'], fallback: 'Teacher pending');
+    final time = [
+      _classText(row['start_time']),
+      _classText(row['end_time']),
+    ].where((value) => value.isNotEmpty).join(' - ');
+    final message = reservedBreak
+        ? '$day P$period - $subject${time.isEmpty ? '' : ' ($time)'}'
+        : '$day P$period - $subject with $teacher${time.isEmpty ? '' : ' ($time)'}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            reservedBreak
+                ? Icons.free_breakfast_outlined
+                : blocking
+                ? Icons.warning_amber_rounded
+                : Icons.check_rounded,
+            color: blocking ? AppTheme.warning : AppTheme.success,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.dmSans(
+                color: _CreateClassSetupPageState._ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimetableResultChip extends StatelessWidget {
+  final String label;
+  final int value;
+
+  const _TimetableResultChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _CreateClassSetupPageState._line),
+      ),
+      child: Text(
+        '$label $value',
+        style: GoogleFonts.dmSans(
+          color: _CreateClassSetupPageState._ink,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
         ),
-      ],
+      ),
     );
   }
+}
 
-  void _openManualTimetable() {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.principalTimetable,
-      arguments: {
-        'section_id': _sectionId,
-        'sectionId': _sectionId,
-        'class_name': _className,
-        'className': _className,
-        'source': 'class_setup_timetable',
-      },
+class _TimetableIssueLine extends StatelessWidget {
+  final String message;
+  final bool warning;
+
+  const _TimetableIssueLine({required this.message, required this.warning});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            warning ? Icons.info_outline_rounded : Icons.error_outline_rounded,
+            color: warning ? AppTheme.warning : AppTheme.error,
+            size: 16,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.dmSans(
+                color: warning
+                    ? const Color(0xFF92400E)
+                    : const Color(0xFF991B1B),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
-  }
-
-  List<Map<String, dynamic>> _previewSuggestionsForDay(int day) {
-    return _listMap(
-      _preview?['suggestions'],
-    ).where((row) => _classInt(row['day_of_week']) == day).toList()..sort(
-      (left, right) => _classInt(
-        left['period_number'],
-      ).compareTo(_classInt(right['period_number'])),
-    );
-  }
-
-  Map<String, dynamic> _subjectForPreview(Map<String, dynamic> row) {
-    final subjectId = _classText(row['subject_id']);
-    if (subjectId.isEmpty) return const {};
-    return _subjects.firstWhere(
-      (subject) => _subjectId(subject) == subjectId,
-      orElse: () => {
-        'subject_name': row['subject_name'],
-        'subject_code': subjectId,
-      },
-    );
-  }
-
-  int _firstPreviewDay(Map<String, dynamic> preview) {
-    for (final row in _listMap(preview['suggestions'])) {
-      final day = _classInt(row['day_of_week']);
-      if (day > 0) return day;
-    }
-    return 1;
-  }
-
-  String get _academicYearLabel {
-    for (final year in widget.academicYears) {
-      if (year.id == _academicYearId) return year.yearLabel;
-    }
-    return _academicYearId.isEmpty ? '-' : _academicYearId;
-  }
-
-  String get _endTime {
-    final total =
-        _periodsPerDay * _periodDurationMinutes +
-        (_periodsPerDay - 1).clamp(0, 99) * _gapMinutes;
-    return _clockFromMinutes(_minutesFromClock(_startTime) + total);
-  }
-
-  List<Map<String, dynamic>> get _breakRows => [
-    {
-      'label': 'Short Break',
-      'days': _days,
-      'periods': [_shortBreakPeriod],
-    },
-    {
-      'label': 'Lunch Break',
-      'days': _days,
-      'periods': [_lunchBreakPeriod],
-    },
-  ];
-
-  String _breakTimeLabel(int afterPeriod, int minutes) {
-    final start =
-        _minutesFromClock(_startTime) +
-        (afterPeriod - 1).clamp(0, 99) * (_periodDurationMinutes + _gapMinutes);
-    return '${_displayClock(_clockFromMinutes(start))} - ${_displayClock(_clockFromMinutes(start + minutes))} ($minutes Min)';
   }
 }
 
@@ -5269,6 +5989,8 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
                   index: index,
                   component: component,
                   enabled: !_saving,
+                  onFrequencyChanged: (value) =>
+                      setState(() => component.frequency = value),
                   onDelete: () => _removeComponent(component),
                 );
               },
@@ -5311,7 +6033,11 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           ),
         ),
         const SizedBox(height: 16),
-        _FeeTotalsCard(oneTimeTotal: _oneTimeTotal, yearlyTotal: _yearlyTotal),
+        _FeeTotalsCard(
+          termTotal: _termTotal,
+          oneTimeTotal: _oneTimeTotal,
+          yearlyTotal: _yearlyTotal,
+        ),
         const SizedBox(height: 20),
         _SetupPrimaryButton(
           label: 'Confirm & Assign',
@@ -5337,6 +6063,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           className: _className,
           structureName: _structureName.text.trim(),
           totalComponents: _components.length,
+          termTotal: _termTotal,
           oneTimeTotal: _oneTimeTotal,
           yearlyTotal: _yearlyTotal,
         ),
@@ -5349,10 +6076,10 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 56,
+          height: _classesPhone(context) ? 48 : 52,
           child: OutlinedButton.icon(
             onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.arrow_forward_rounded),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 21),
             label: const Text('Setup Next (Review)'),
             style: OutlinedButton.styleFrom(
               foregroundColor: _primary,
@@ -5361,7 +6088,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               textStyle: GoogleFonts.dmSans(
-                fontSize: 16,
+                fontSize: _classesPhone(context) ? 14.5 : 15.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0,
               ),
@@ -5393,8 +6120,12 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       .where((component) => component.frequencyPayload == 'one_time')
       .fold<double>(0, (sum, component) => sum + component.amount);
 
+  double get _termTotal => _components
+      .where((component) => component.frequencyPayload == 'term')
+      .fold<double>(0, (sum, component) => sum + component.amount);
+
   double get _yearlyTotal => _components
-      .where((component) => component.frequencyPayload != 'one_time')
+      .where((component) => component.frequencyPayload == 'yearly')
       .fold<double>(0, (sum, component) => sum + component.amount);
 
   String get _academicYearLabel {
@@ -5432,6 +6163,7 @@ class _AddSelectSubjectSetupPageState
 
   String get _gradeId => _classText(widget.classRow['grade_id']);
   String get _sectionId => _classText(widget.classRow['section_id']);
+  String get _academicYearId => _classText(widget.classRow['academic_year_id']);
 
   @override
   void initState() {
@@ -5505,6 +6237,7 @@ class _AddSelectSubjectSetupPageState
     try {
       await BackendApiClient.instance.savePrincipalSubjectMapping(
         subjectId: subjectId,
+        academicYearId: _academicYearId,
         gradeId: _gradeId,
         sectionId: _sectionId,
         teacherId: '',
@@ -5690,6 +6423,7 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
 
   String get _gradeId => _classText(widget.classRow['grade_id']);
   String get _sectionId => _classText(widget.classRow['section_id']);
+  String get _academicYearId => _classText(widget.classRow['academic_year_id']);
 
   @override
   void dispose() {
@@ -5720,6 +6454,7 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
       }
       await BackendApiClient.instance.savePrincipalSubjectMapping(
         subjectId: subjectId,
+        academicYearId: _academicYearId,
         gradeId: _gradeId,
         sectionId: _sectionId,
         teacherId: '',
@@ -5879,174 +6614,14 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
   }
 }
 
-class _TimetableStepIndicator extends StatelessWidget {
-  final int activeIndex;
-
-  const _TimetableStepIndicator({required this.activeIndex});
-
-  static const _steps = [
-    'Class & Settings',
-    'Constraints',
-    'Generate',
-    'Review',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    if (_classesPhone(context)) {
-      return SizedBox(
-        height: 74,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          itemCount: _steps.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
-          itemBuilder: (context, index) {
-            return _SetupProgressChip(
-              number: index + 1,
-              label: _steps[index],
-              active: index == activeIndex,
-              complete: index < activeIndex,
-            );
-          },
-        ),
-      );
-    }
-    return Row(
-      children: [
-        for (var i = 0; i < _steps.length; i++) ...[
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: i < activeIndex
-                        ? const Color(0xFF5BC48D)
-                        : i == activeIndex
-                        ? _CreateClassSetupPageState._primary
-                        : const Color(0xFFE5EAF0),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: i < activeIndex
-                        ? const Icon(
-                            Icons.check_rounded,
-                            color: Colors.white,
-                            size: 22,
-                          )
-                        : Text(
-                            '${i + 1}',
-                            style: GoogleFonts.dmSans(
-                              color: i == activeIndex
-                                  ? Colors.white
-                                  : const Color(0xFF475569),
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _steps[i],
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.dmSans(
-                    color: i == activeIndex
-                        ? _CreateClassSetupPageState._primary
-                        : _CreateClassSetupPageState._ink,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (i < _steps.length - 1)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 27),
-                child: Container(height: 2, color: const Color(0xFFD7E3F0)),
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-class _TimetableClassDetailsCard extends StatelessWidget {
-  final String academicYear;
-  final String className;
-  final int totalSubjects;
-  final int totalPeriods;
-
-  const _TimetableClassDetailsCard({
-    required this.academicYear,
-    required this.className,
-    required this.totalSubjects,
-    required this.totalPeriods,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _SetupPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SetupPanelTitle(
-            icon: Icons.school_rounded,
-            title: 'Class Details',
-          ),
-          const SizedBox(height: 18),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final values = [
-                _ClassDetailsValue(label: 'Academic Year', value: academicYear),
-                _ClassDetailsValue(label: 'Class / Section', value: className),
-                _ClassDetailsValue(
-                  label: 'Total Subjects',
-                  value: '$totalSubjects',
-                ),
-                _ClassDetailsValue(
-                  label: 'Total Periods / Week',
-                  value: '$totalPeriods',
-                ),
-              ];
-              final columns = constraints.maxWidth < 520 ? 2 : 4;
-              final spacing = constraints.maxWidth < 520 ? 14.0 : 18.0;
-              final width =
-                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
-              return Wrap(
-                spacing: spacing,
-                runSpacing: 16,
-                children: [
-                  for (final value in values)
-                    SizedBox(width: width, child: value),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _SetupSectionHeader extends StatelessWidget {
   final String title;
-  final int? count;
   final String? actionLabel;
   final IconData? actionIcon;
   final VoidCallback? onAction;
 
   const _SetupSectionHeader({
     required this.title,
-    this.count,
     this.actionLabel,
     this.actionIcon,
     this.onAction,
@@ -6056,14 +6631,12 @@ class _SetupSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final heading = count == null
-            ? Text(
-                title,
-                style: _sectionTitleStyle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : _SectionTitleWithCount(title: title, count: count!);
+        final heading = Text(
+          title,
+          style: _sectionTitleStyle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        );
         final action = actionLabel == null
             ? null
             : TextButton.icon(
@@ -6104,152 +6677,6 @@ class _SetupSectionHeader extends StatelessWidget {
   }
 }
 
-class _TimetableSubjectRow extends StatelessWidget {
-  final Map<String, dynamic> subject;
-  final String teacherName;
-
-  const _TimetableSubjectRow({
-    required this.subject,
-    required this.teacherName,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: _CreateClassSetupPageState._line),
-        ),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final teacher = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: const Color(0xFFFFF1E8),
-                child: Text(
-                  _initials(teacherName),
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF9A3412),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  teacherName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: _CreateClassSetupPageState._ink,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ),
-            ],
-          );
-          if (constraints.maxWidth < 390) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    _SubjectIconBadge(subject: subject),
-                    const SizedBox(width: 12),
-                    Expanded(child: _SubjectNameCode(subject: subject)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                teacher,
-              ],
-            );
-          }
-          return Row(
-            children: [
-              _SubjectIconBadge(subject: subject),
-              const SizedBox(width: 12),
-              Expanded(child: _SubjectNameCode(subject: subject)),
-              const SizedBox(width: 12),
-              SizedBox(width: 150, child: teacher),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TimingValueRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _TimingValueRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final labelText = Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.dmSans(
-              color: _CreateClassSetupPageState._muted,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0,
-            ),
-          );
-          final valueChip = Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF2FF),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(
-                color: _CreateClassSetupPageState._primary,
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-              ),
-            ),
-          );
-          if (constraints.maxWidth < 300) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                labelText,
-                const SizedBox(height: 6),
-                Align(alignment: Alignment.centerLeft, child: valueChip),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              Expanded(child: labelText),
-              const SizedBox(width: 12),
-              Flexible(child: valueChip),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
 class _SetupPanelTitle extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -6260,8 +6687,8 @@ class _SetupPanelTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, color: _CreateClassSetupPageState._primary, size: 26),
-        const SizedBox(width: 10),
+        Icon(icon, color: _CreateClassSetupPageState._primary, size: 20),
+        const SizedBox(width: 8),
         Expanded(
           child: Text(
             title,
@@ -6269,7 +6696,7 @@ class _SetupPanelTitle extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               color: _CreateClassSetupPageState._primary,
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -6280,621 +6707,24 @@ class _SetupPanelTitle extends StatelessWidget {
   }
 }
 
-class _ConstraintToggle extends StatelessWidget {
-  final bool value;
-  final String title;
-  final String subtitle;
-  final ValueChanged<bool> onChanged;
-
-  const _ConstraintToggle({
-    required this.value,
-    required this.title,
-    required this.subtitle,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return CheckboxListTile(
-      value: value,
-      onChanged: (next) => onChanged(next ?? false),
-      controlAffinity: ListTileControlAffinity.leading,
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      activeColor: _CreateClassSetupPageState._primary,
-      title: Text(
-        title,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          color: _CreateClassSetupPageState._ink,
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 0,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          color: _CreateClassSetupPageState._muted,
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0,
-        ),
-      ),
-    );
-  }
-}
-
-class _BreakSettingTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _BreakSettingTile({
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          color: _CreateClassSetupPageState._ink,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 0,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          color: _CreateClassSetupPageState._muted,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0,
-        ),
-      ),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: onTap,
-    );
-  }
-}
-
-class _AiOptimizationPanel extends StatelessWidget {
-  const _AiOptimizationPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE9FAF2),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD1F2E2)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.auto_awesome_rounded, color: Color(0xFF059669)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AI Optimization',
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF047857),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Our AI will generate the most optimized timetable based on your preferences and rules.',
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF356859),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    height: 1.35,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimetableSuccessPanel extends StatelessWidget {
-  const _TimetableSuccessPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8FAEF),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: const Color(0xFFCFF2DC)),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 17,
-            backgroundColor: Color(0xFF5BC48D),
-            child: Icon(Icons.check_rounded, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Timetable generated successfully!',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF047857),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  'All subjects scheduled optimally.',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF356859),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TimetableDayTabs extends StatelessWidget {
-  final int activeDay;
-  final List<int> availableDays;
-  final ValueChanged<int> onChanged;
-
-  const _TimetableDayTabs({
-    required this.activeDay,
-    required this.availableDays,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 38,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: availableDays.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final day = availableDays[index];
-          final selected = day == activeDay;
-          return ChoiceChip(
-            selected: selected,
-            showCheckmark: false,
-            label: Text(_dayShortLabel(day)),
-            onSelected: (_) => onChanged(day),
-            selectedColor: _CreateClassSetupPageState._primary,
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: _CreateClassSetupPageState._line),
-            labelStyle: GoogleFonts.dmSans(
-              color: selected ? Colors.white : _CreateClassSetupPageState._ink,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TimetablePreviewRow extends StatelessWidget {
-  final Map<String, dynamic> row;
-  final Map<String, dynamic> subject;
-
-  const _TimetablePreviewRow({required this.row, required this.subject});
-
-  bool get _isBreak => _classText(row['status']) == 'reserved_break';
-
-  @override
-  Widget build(BuildContext context) {
-    final title = _classText(row['subject_name'], fallback: 'Period');
-    final teacher = _classText(row['staff_name'], fallback: 'Teacher pending');
-    final room = _classText(row['room_name']);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: _isBreak ? const Color(0xFFFFF7DF) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: _CreateClassSetupPageState._line),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final timeBlock = Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _timeRange(row),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: _CreateClassSetupPageState._ink,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _isBreak
-                      ? 'Break'
-                      : 'Period ${_classInt(row['period_number'])}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: _CreateClassSetupPageState._muted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          );
-          final icon = _isBreak
-              ? Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF2C2),
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: const Icon(
-                    Icons.free_breakfast_outlined,
-                    color: Color(0xFFD97706),
-                  ),
-                )
-              : _SubjectIconBadge(subject: subject);
-          final details = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: _CreateClassSetupPageState._ink,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _isBreak ? 'Reserved break time' : teacher,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  color: _CreateClassSetupPageState._muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0,
-                ),
-              ),
-            ],
-          );
-          final roomChip = room.isEmpty
-              ? const SizedBox.shrink()
-              : Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEAF2FF),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Text(
-                    room,
-                    style: GoogleFonts.dmSans(
-                      color: _CreateClassSetupPageState._primary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                );
-          if (constraints.maxWidth < 360) {
-            return Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: timeBlock),
-                      if (room.isNotEmpty) roomChip,
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      icon,
-                      const SizedBox(width: 12),
-                      Expanded(child: details),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }
-          return Row(
-            children: [
-              SizedBox(width: 88, child: timeBlock),
-              Container(
-                width: 1,
-                height: 64,
-                color: _CreateClassSetupPageState._line,
-              ),
-              const SizedBox(width: 10),
-              icon,
-              const SizedBox(width: 12),
-              Expanded(child: details),
-              if (room.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: roomChip,
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _TimetableTimingConfig {
-  final String startTime;
-  final int periodsPerDay;
-  final int periodDurationMinutes;
-  final int gapMinutes;
-
-  const _TimetableTimingConfig({
-    required this.startTime,
-    required this.periodsPerDay,
-    required this.periodDurationMinutes,
-    required this.gapMinutes,
-  });
-}
-
-class _TimetableTimingSheet extends StatefulWidget {
-  final _TimetableTimingConfig initial;
-
-  const _TimetableTimingSheet({required this.initial});
-
-  @override
-  State<_TimetableTimingSheet> createState() => _TimetableTimingSheetState();
-}
-
-class _TimetableTimingSheetState extends State<_TimetableTimingSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _start;
-  late final TextEditingController _periods;
-  late final TextEditingController _duration;
-  late final TextEditingController _gap;
-
-  @override
-  void initState() {
-    super.initState();
-    _start = TextEditingController(text: widget.initial.startTime);
-    _periods = TextEditingController(text: '${widget.initial.periodsPerDay}');
-    _duration = TextEditingController(
-      text: '${widget.initial.periodDurationMinutes}',
-    );
-    _gap = TextEditingController(text: '${widget.initial.gapMinutes}');
-  }
-
-  @override
-  void dispose() {
-    _start.dispose();
-    _periods.dispose();
-    _duration.dispose();
-    _gap.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _BottomSheetPanel(
-      title: 'Class Timings',
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _start,
-              decoration: const InputDecoration(labelText: 'Start time'),
-              validator: (value) =>
-                  _timeValid(_classText(value)) ? null : 'Use HH:MM time',
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _periods,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Periods/day'),
-                    validator: (value) =>
-                        _classInt(value) > 0 ? null : 'Required',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _duration,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Minutes'),
-                    validator: (value) =>
-                        _classInt(value) > 0 ? null : 'Required',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _gap,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Break / gap min'),
-              validator: (value) => _classInt(value, fallback: -1) >= 0
-                  ? null
-                  : 'Enter 0 or more',
-            ),
-            const SizedBox(height: 18),
-            _SetupPrimaryButton(
-              label: 'Apply Timings',
-              icon: Icons.check_rounded,
-              saving: false,
-              onPressed: () {
-                if (!(_formKey.currentState?.validate() ?? false)) return;
-                Navigator.pop(
-                  context,
-                  _TimetableTimingConfig(
-                    startTime: _classText(_start.text),
-                    periodsPerDay: _classInt(_periods.text),
-                    periodDurationMinutes: _classInt(_duration.text),
-                    gapMinutes: _classInt(_gap.text),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TimetableBreakSheet extends StatefulWidget {
-  final int shortBreakPeriod;
-  final int lunchBreakPeriod;
-  final int periodsPerDay;
-
-  const _TimetableBreakSheet({
-    required this.shortBreakPeriod,
-    required this.lunchBreakPeriod,
-    required this.periodsPerDay,
-  });
-
-  @override
-  State<_TimetableBreakSheet> createState() => _TimetableBreakSheetState();
-}
-
-class _TimetableBreakSheetState extends State<_TimetableBreakSheet> {
-  late int _shortBreak;
-  late int _lunch;
-
-  @override
-  void initState() {
-    super.initState();
-    _shortBreak = widget.shortBreakPeriod.clamp(1, widget.periodsPerDay);
-    _lunch = widget.lunchBreakPeriod.clamp(1, widget.periodsPerDay);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final options = [for (var i = 1; i <= widget.periodsPerDay; i++) i];
-    return _BottomSheetPanel(
-      title: 'Break Settings',
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          DropdownButtonFormField<int>(
-            initialValue: _shortBreak,
-            decoration: const InputDecoration(labelText: 'Short break period'),
-            items: options
-                .map(
-                  (period) => DropdownMenuItem(
-                    value: period,
-                    child: Text('Period $period'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => _shortBreak = value ?? 4),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            initialValue: _lunch,
-            decoration: const InputDecoration(labelText: 'Lunch break period'),
-            items: options
-                .map(
-                  (period) => DropdownMenuItem(
-                    value: period,
-                    child: Text('Period $period'),
-                  ),
-                )
-                .toList(),
-            onChanged: (value) => setState(() => _lunch = value ?? 7),
-          ),
-          const SizedBox(height: 18),
-          _SetupPrimaryButton(
-            label: 'Apply Breaks',
-            icon: Icons.check_rounded,
-            saving: false,
-            onPressed: () => Navigator.pop(context, (
-              shortBreak: _shortBreak,
-              lunch: _lunch,
-            )),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _FeeSetupProgressIndicator extends StatelessWidget {
   final int activeIndex;
 
   const _FeeSetupProgressIndicator({required this.activeIndex});
 
-  static const _steps = ['Class', 'Subjects', 'Timetable', 'Fees', 'Review'];
+  static const _steps = [
+    'Class',
+    'Subjects',
+    'Timetable setup',
+    'Fees',
+    'Review',
+  ];
 
   @override
   Widget build(BuildContext context) {
     if (_classesPhone(context)) {
       return SizedBox(
-        height: 74,
+        height: 62,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
@@ -6918,8 +6748,8 @@ class _FeeSetupProgressIndicator extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  width: 34,
-                  height: 34,
+                  width: 30,
+                  height: 30,
                   decoration: BoxDecoration(
                     color: i < activeIndex
                         ? const Color(0xFF3DBB75)
@@ -6933,7 +6763,7 @@ class _FeeSetupProgressIndicator extends StatelessWidget {
                         ? const Icon(
                             Icons.check_rounded,
                             color: Colors.white,
-                            size: 18,
+                            size: 16,
                           )
                         : Text(
                             '${i + 1}',
@@ -6941,14 +6771,14 @@ class _FeeSetupProgressIndicator extends StatelessWidget {
                               color: i == activeIndex
                                   ? Colors.white
                                   : const Color(0xFF475569),
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 0,
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
                   _steps[i],
                   maxLines: 1,
@@ -6958,7 +6788,7 @@ class _FeeSetupProgressIndicator extends StatelessWidget {
                     color: i == activeIndex
                         ? _CreateClassSetupPageState._primary
                         : _CreateClassSetupPageState._ink,
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
@@ -7011,7 +6841,7 @@ class _FeeClassDetailsCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
                         color: _CreateClassSetupPageState._primary,
-                        fontSize: 18,
+                        fontSize: 15,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0,
                       ),
@@ -7054,7 +6884,7 @@ class _FeeClassDetailsCard extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final values = [
@@ -7109,7 +6939,7 @@ class _FeeChoiceCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
@@ -7130,7 +6960,7 @@ class _FeeChoiceCard extends StatelessWidget {
                     ? _CreateClassSetupPageState._primary
                     : const Color(0xFFB5C1D0),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -7141,7 +6971,7 @@ class _FeeChoiceCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
                         color: _CreateClassSetupPageState._ink,
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.w900,
                         letterSpacing: 0,
                       ),
@@ -7153,7 +6983,7 @@ class _FeeChoiceCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
                         color: _CreateClassSetupPageState._muted,
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0,
                       ),
@@ -7178,10 +7008,10 @@ class _FeeInfoPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFEFF7FF),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD4E9FF)),
       ),
       child: Row(
@@ -7196,7 +7026,7 @@ class _FeeInfoPanel extends StatelessWidget {
               message,
               style: GoogleFonts.dmSans(
                 color: _CreateClassSetupPageState._ink,
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
                 letterSpacing: 0,
@@ -7247,6 +7077,7 @@ class _FeeComponentEditRow extends StatelessWidget {
   final int index;
   final _FeeComponentDraft component;
   final bool enabled;
+  final ValueChanged<String> onFrequencyChanged;
   final VoidCallback onDelete;
 
   const _FeeComponentEditRow({
@@ -7254,6 +7085,7 @@ class _FeeComponentEditRow extends StatelessWidget {
     required this.index,
     required this.component,
     required this.enabled,
+    required this.onFrequencyChanged,
     required this.onDelete,
   });
 
@@ -7300,21 +7132,79 @@ class _FeeComponentEditRow extends StatelessWidget {
             component: component,
             enabled: enabled,
           );
+          final frequency = _FeeFrequencySelector(
+            value: component.frequencyLabel,
+            enabled: enabled,
+            onChanged: onFrequencyChanged,
+          );
           if (constraints.maxWidth < 540) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [header, const SizedBox(height: 8), amount],
+              children: [
+                header,
+                const SizedBox(height: 8),
+                frequency,
+                const SizedBox(height: 8),
+                amount,
+              ],
             );
           }
           return Row(
             children: [
               Expanded(child: header),
               const SizedBox(width: 12),
+              SizedBox(width: 132, child: frequency),
+              const SizedBox(width: 12),
               SizedBox(width: 148, child: amount),
             ],
           );
         },
       ),
+    );
+  }
+}
+
+class _FeeFrequencySelector extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  const _FeeFrequencySelector({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const options = ['Term', 'One Time', 'Yearly', 'Monthly'];
+    final label = _feeFrequencyLabel(value);
+    final current = options.contains(label) ? label : 'Term';
+    return DropdownButtonFormField<String>(
+      initialValue: current,
+      isExpanded: true,
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: const Color(0xFFF8FBFF),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 11,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _CreateClassSetupPageState._line),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: _CreateClassSetupPageState._line),
+        ),
+      ),
+      items: [
+        for (final option in options)
+          DropdownMenuItem(value: option, child: Text(option)),
+      ],
+      onChanged: enabled ? (value) => onChanged(value ?? 'Term') : null,
     );
   }
 }
@@ -7437,7 +7327,7 @@ class _FeeStructureSummaryCard extends StatelessWidget {
                     'New',
                     style: GoogleFonts.dmSans(
                       color: const Color(0xFF059669),
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0,
                     ),
@@ -7445,9 +7335,9 @@ class _FeeStructureSummaryCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 18),
-          _FeeSummaryText(label: 'Name', value: structureName),
           const SizedBox(height: 14),
+          _FeeSummaryText(label: 'Name', value: structureName),
+          const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
               final values = [
@@ -7460,7 +7350,7 @@ class _FeeStructureSummaryCard extends StatelessWidget {
               if (constraints.maxWidth < 360) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [values[0], const SizedBox(height: 14), values[1]],
+                  children: [values[0], const SizedBox(height: 12), values[1]],
                 );
               }
               return Row(
@@ -7499,7 +7389,7 @@ class _FeeSummaryText extends StatelessWidget {
           label,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._muted,
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,
           ),
@@ -7511,7 +7401,7 @@ class _FeeSummaryText extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._ink,
-            fontSize: phone ? 13.5 : 14,
+            fontSize: phone ? 13 : 13.5,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
@@ -7608,33 +7498,46 @@ class _FeeReviewComponentRow extends StatelessWidget {
 }
 
 class _FeeTotalsCard extends StatelessWidget {
+  final double termTotal;
   final double oneTimeTotal;
   final double yearlyTotal;
 
-  const _FeeTotalsCard({required this.oneTimeTotal, required this.yearlyTotal});
+  const _FeeTotalsCard({
+    required this.termTotal,
+    required this.oneTimeTotal,
+    required this.yearlyTotal,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFF4F8FF),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD8E7FF)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final oneTime = _FeeTotalValue(
-            label: 'Total (One Time)',
+            label: 'One Time',
             value: _formatCurrency(oneTimeTotal),
           );
+          final term = _FeeTotalValue(
+            label: 'Term',
+            value: _formatCurrency(termTotal),
+          );
           final yearly = _FeeTotalValue(
-            label: 'Total (Yearly)',
+            label: 'Yearly',
             value: _formatCurrency(yearlyTotal),
           );
           if (constraints.maxWidth < 340) {
             return Column(
               children: [
+                term,
+                const SizedBox(height: 12),
+                Container(height: 1, color: const Color(0xFFD8E7FF)),
+                const SizedBox(height: 12),
                 oneTime,
                 const SizedBox(height: 12),
                 Container(height: 1, color: const Color(0xFFD8E7FF)),
@@ -7645,6 +7548,8 @@ class _FeeTotalsCard extends StatelessWidget {
           }
           return Row(
             children: [
+              Expanded(child: term),
+              Container(width: 1, height: 44, color: const Color(0xFFD8E7FF)),
               Expanded(child: oneTime),
               Container(width: 1, height: 44, color: const Color(0xFFD8E7FF)),
               Expanded(child: yearly),
@@ -7671,7 +7576,7 @@ class _FeeTotalValue extends StatelessWidget {
           textAlign: TextAlign.center,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._muted,
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,
           ),
@@ -7684,7 +7589,7 @@ class _FeeTotalValue extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._ink,
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
@@ -7706,26 +7611,26 @@ class _FeeAssignedSuccessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: const Color(0xFFEFFAF4),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFCFEEDB)),
       ),
       child: Column(
         children: [
           const CircleAvatar(
-            radius: 36,
+            radius: 28,
             backgroundColor: Color(0xFF20B565),
-            child: Icon(Icons.check_rounded, color: Colors.white, size: 46),
+            child: Icon(Icons.check_rounded, color: Colors.white, size: 32),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Text(
             'Fee Structure Assigned!',
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: _CreateClassSetupPageState._ink,
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -7736,7 +7641,7 @@ class _FeeAssignedSuccessCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               color: const Color(0xFF475569),
-              fontSize: 14,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               height: 1.35,
               letterSpacing: 0,
@@ -7753,6 +7658,7 @@ class _FeeAssignmentDetailsCard extends StatelessWidget {
   final String className;
   final String structureName;
   final int totalComponents;
+  final double termTotal;
   final double oneTimeTotal;
   final double yearlyTotal;
 
@@ -7761,6 +7667,7 @@ class _FeeAssignmentDetailsCard extends StatelessWidget {
     required this.className,
     required this.structureName,
     required this.totalComponents,
+    required this.termTotal,
     required this.oneTimeTotal,
     required this.yearlyTotal,
   });
@@ -7775,13 +7682,13 @@ class _FeeAssignmentDetailsCard extends StatelessWidget {
             icon: Icons.assignment_turned_in_rounded,
             title: 'Assignment Details',
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           _FeeSummaryText(label: 'Academic Year', value: academicYear),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _FeeSummaryText(label: 'Class / Section', value: className),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _FeeSummaryText(label: 'Fee Structure', value: structureName),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final values = [
@@ -7790,14 +7697,14 @@ class _FeeAssignmentDetailsCard extends StatelessWidget {
                   value: '$totalComponents',
                 ),
                 _FeeSummaryText(
-                  label: 'Total (One Time)',
-                  value: _formatCurrency(oneTimeTotal),
+                  label: 'Term Total',
+                  value: _formatCurrency(termTotal),
                 ),
               ];
               if (constraints.maxWidth < 330) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [values[0], const SizedBox(height: 14), values[1]],
+                  children: [values[0], const SizedBox(height: 12), values[1]],
                 );
               }
               return Row(
@@ -7805,10 +7712,29 @@ class _FeeAssignmentDetailsCard extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 14),
-          _FeeSummaryText(
-            label: 'Total (Yearly)',
-            value: _formatCurrency(yearlyTotal),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final values = [
+                _FeeSummaryText(
+                  label: 'One Time Total',
+                  value: _formatCurrency(oneTimeTotal),
+                ),
+                _FeeSummaryText(
+                  label: 'Yearly Total',
+                  value: _formatCurrency(yearlyTotal),
+                ),
+              ];
+              if (constraints.maxWidth < 330) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [values[0], const SizedBox(height: 12), values[1]],
+                );
+              }
+              return Row(
+                children: [for (final value in values) Expanded(child: value)],
+              );
+            },
           ),
         ],
       ),
@@ -7824,13 +7750,13 @@ class _FeeComponentIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 42,
-      height: 42,
+      width: 38,
+      height: 38,
       decoration: BoxDecoration(
         color: component.tone,
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Icon(component.icon, color: component.color, size: 23),
+      child: Icon(component.icon, color: component.color, size: 20),
     );
   }
 }
@@ -7846,6 +7772,7 @@ class _AddFeeComponentSheetState extends State<_AddFeeComponentSheet> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _amount = TextEditingController();
+  String _frequency = 'Term';
 
   @override
   void dispose() {
@@ -7876,6 +7803,12 @@ class _AddFeeComponentSheetState extends State<_AddFeeComponentSheet> {
               validator: (value) => _classText(value).isEmpty
                   ? 'Component name is required'
                   : null,
+            ),
+            const SizedBox(height: 14),
+            _FeeFrequencySelector(
+              value: _frequency,
+              enabled: true,
+              onChanged: (value) => setState(() => _frequency = value),
             ),
             const SizedBox(height: 14),
             _ClassSetupInputField(
@@ -7915,6 +7848,7 @@ class _AddFeeComponentSheetState extends State<_AddFeeComponentSheet> {
                   _FeeComponentDraft(
                     name: name,
                     amount: amount,
+                    frequency: _frequency,
                     icon: _feeComponentIconForName(name),
                     color: _feeComponentColorForName(name),
                   ),
@@ -7934,7 +7868,7 @@ class _FeeComponentDraft {
   final String feeCategoryId;
   final TextEditingController nameController;
   final TextEditingController amountController;
-  final String frequency;
+  String frequency;
   final IconData icon;
   final Color color;
   final Color tone;
@@ -7947,7 +7881,7 @@ class _FeeComponentDraft {
     this.feeCategoryId = '',
     required String name,
     required double amount,
-    this.frequency = 'One Time',
+    this.frequency = 'Term',
     IconData? icon,
     Color? color,
     Color? tone,
@@ -7997,14 +7931,14 @@ class _BottomSheetPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.viewInsetsOf(context).bottom + 20,
+        16,
+        16,
+        16,
+        MediaQuery.viewInsetsOf(context).bottom + 16,
       ),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -8015,12 +7949,12 @@ class _BottomSheetPanel extends StatelessWidget {
               title,
               style: GoogleFonts.dmSans(
                 color: _CreateClassSetupPageState._ink,
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             child,
           ],
         ),
@@ -8045,7 +7979,7 @@ class _SetupFlowHeader extends StatelessWidget {
     final phone = _classesPhone(context);
     final tiny = _classesTiny(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(phone ? 14 : 24, 16, phone ? 14 : 24, 8),
+      padding: EdgeInsets.fromLTRB(phone ? 12 : 18, 10, phone ? 12 : 18, 8),
       child: Row(
         children: [
           IconButton(
@@ -8053,7 +7987,7 @@ class _SetupFlowHeader extends StatelessWidget {
             onPressed: () => Navigator.of(context).maybePop(),
             icon: const Icon(Icons.arrow_back_rounded),
             color: _CreateClassSetupPageState._ink,
-            iconSize: tiny ? 25 : 28,
+            iconSize: tiny ? 20 : 22,
           ),
           SizedBox(
             width: tiny
@@ -8075,14 +8009,14 @@ class _SetupFlowHeader extends StatelessWidget {
                     fontSize: tiny
                         ? 17
                         : phone
-                        ? 19
-                        : 22,
+                        ? 17.5
+                        : 18,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
                     height: 1.05,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 3),
                 Text(
                   subtitle,
                   maxLines: 2,
@@ -8090,11 +8024,11 @@ class _SetupFlowHeader extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     color: _CreateClassSetupPageState._muted,
                     fontSize: tiny
-                        ? 11.5
+                        ? 11
                         : phone
-                        ? 12.5
-                        : 14,
-                    fontWeight: FontWeight.w600,
+                        ? 11.5
+                        : 12,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0,
                     height: 1.2,
                   ),
@@ -8105,23 +8039,23 @@ class _SetupFlowHeader extends StatelessWidget {
           if (!tiny) ...[
             const SizedBox(width: 10),
             Container(
-              width: phone ? 46 : 60,
-              height: phone ? 46 : 60,
+              width: phone ? 40 : 44,
+              height: phone ? 40 : 44,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFFB7CEE5).withAlpha(60),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
               child: Icon(
                 icon,
                 color: _CreateClassSetupPageState._primary,
-                size: phone ? 24 : 31,
+                size: phone ? 20 : 22,
               ),
             ),
           ],
@@ -8141,15 +8075,15 @@ class _SetupPanel extends StatelessWidget {
     final phone = _classesPhone(context);
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(phone ? 14 : 18),
+      padding: EdgeInsets.all(phone ? 12 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(phone ? 12 : 14),
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF9DB9D2).withAlpha(38),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            blurRadius: 12,
+            offset: const Offset(0, 5),
           ),
         ],
       ),
@@ -8186,7 +8120,7 @@ class _ClassDetailsSetupCard extends StatelessWidget {
                   'Class Details',
                   style: GoogleFonts.dmSans(
                     color: _CreateClassSetupPageState._primary,
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
                   ),
@@ -8194,7 +8128,7 @@ class _ClassDetailsSetupCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
               final items = [
@@ -8244,19 +8178,19 @@ class _ClassDetailsValue extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._muted,
-            fontSize: 12,
+            fontSize: 11.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 5),
         Text(
           value,
           maxLines: phone ? 2 : 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: _CreateClassSetupPageState._ink,
-            fontSize: phone ? 14.5 : 16,
+            fontSize: phone ? 13 : 14,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
@@ -8283,7 +8217,7 @@ class _SectionTitleWithCount extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               color: _CreateClassSetupPageState._ink,
-              fontSize: 16,
+              fontSize: 15,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -8300,7 +8234,7 @@ class _SectionTitleWithCount extends StatelessWidget {
             '$count',
             style: GoogleFonts.dmSans(
               color: _CreateClassSetupPageState._primary,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
@@ -8749,7 +8683,7 @@ class _SubjectSetupCardHeader extends StatelessWidget {
                     'Create Subject',
                     style: GoogleFonts.dmSans(
                       color: _CreateClassSetupPageState._ink,
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0,
                     ),
@@ -8759,7 +8693,7 @@ class _SubjectSetupCardHeader extends StatelessWidget {
                     'Enter subject details to add to your curriculum.',
                     style: GoogleFonts.dmSans(
                       color: _CreateClassSetupPageState._muted,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0,
                     ),
@@ -8909,14 +8843,18 @@ class _SubjectFilterButton extends StatelessWidget {
           PopupMenuItem(value: option, child: Text(option)),
       ],
       child: Container(
-        width: 48,
-        height: 48,
+        width: 44,
+        height: 44,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: _CreateClassSetupPageState._line),
         ),
-        child: const Icon(Icons.tune_rounded, color: Color(0xFF475569)),
+        child: const Icon(
+          Icons.tune_rounded,
+          color: Color(0xFF475569),
+          size: 22,
+        ),
       ),
     );
   }
@@ -8932,10 +8870,10 @@ class _SetupIconCircle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 46,
-      height: 46,
+      width: 42,
+      height: 42,
       decoration: BoxDecoration(color: tone ?? color, shape: BoxShape.circle),
-      child: Icon(icon, color: tone == null ? Colors.white : color, size: 24),
+      child: Icon(icon, color: tone == null ? Colors.white : color, size: 22),
     );
   }
 }
@@ -8957,7 +8895,7 @@ class _SetupPrimaryButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final phone = _classesPhone(context);
     return SizedBox(
-      height: phone ? 54 : 58,
+      height: phone ? 48 : 52,
       child: FilledButton.icon(
         onPressed: onPressed,
         icon: saving
@@ -8968,14 +8906,14 @@ class _SetupPrimaryButton extends StatelessWidget {
                   color: Colors.white,
                 ),
               )
-            : Icon(icon, size: 24),
+            : Icon(icon, size: 21),
         label: Text(
           saving ? 'Saving...' : label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.dmSans(
             color: Colors.white,
-            fontSize: phone ? 16 : 18,
+            fontSize: phone ? 14.5 : 15.5,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
@@ -9191,75 +9129,9 @@ TextStyle get _sectionTitleStyle => GoogleFonts.dmSans(
   letterSpacing: 0,
 );
 
-String _initialId(
-  String preferred,
-  Iterable<String> allowed, {
-  String? fallback,
-}) {
-  final values = allowed
-      .map((value) => value.trim())
-      .where((value) => value.isNotEmpty)
-      .toList();
-  final preferredValue = preferred.trim();
-  if (preferredValue.isNotEmpty && values.contains(preferredValue)) {
-    return preferredValue;
-  }
-  final fallbackValue = fallback?.trim() ?? '';
-  if (fallbackValue.isNotEmpty && values.contains(fallbackValue)) {
-    return fallbackValue;
-  }
-  return values.isEmpty ? '' : values.first;
-}
-
-bool _timeValid(String value) => RegExp(r'^\d{2}:\d{2}$').hasMatch(value);
-
-int _minutesFromClock(String value) {
-  final parts = value.split(':');
-  if (parts.length != 2) return 0;
-  final hour = int.tryParse(parts[0]) ?? 0;
-  final minute = int.tryParse(parts[1]) ?? 0;
-  return hour * 60 + minute;
-}
-
-String _clockFromMinutes(int value) {
-  final normalized = value % (24 * 60);
-  final hour = normalized ~/ 60;
-  final minute = normalized % 60;
-  return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
-}
-
-String _displayClock(String value) {
-  final minutes = _minutesFromClock(value);
-  final hour24 = minutes ~/ 60;
-  final minute = minutes % 60;
-  final suffix = hour24 >= 12 ? 'PM' : 'AM';
-  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-  return '${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $suffix';
-}
-
-String _timeRange(Map<String, dynamic> row) {
-  final start = _classText(row['start_time']);
-  final end = _classText(row['end_time']);
-  if (start.isEmpty || end.isEmpty) return '--:--';
-  return '$start - $end';
-}
-
-String _dayShortLabel(int day) {
-  return switch (day) {
-    1 => 'Mon',
-    2 => 'Tue',
-    3 => 'Wed',
-    4 => 'Thu',
-    5 => 'Fri',
-    6 => 'Sat',
-    7 => 'Sun',
-    _ => 'Day',
-  };
-}
-
 TextStyle get _feeSectionTitleStyle => GoogleFonts.dmSans(
   color: _CreateClassSetupPageState._ink,
-  fontSize: 20,
+  fontSize: 16,
   fontWeight: FontWeight.w900,
   letterSpacing: 0,
 );
@@ -9268,6 +9140,7 @@ List<_FeeComponentDraft> _defaultFeeComponents() => [
   _FeeComponentDraft(
     name: 'Tuition Fee',
     amount: 12000,
+    frequency: 'Term',
     icon: Icons.school_outlined,
     color: const Color(0xFF16A34A),
     tone: const Color(0xFFEAFBF0),
@@ -9275,6 +9148,7 @@ List<_FeeComponentDraft> _defaultFeeComponents() => [
   _FeeComponentDraft(
     name: 'Admission Fee',
     amount: 2000,
+    frequency: 'One Time',
     icon: Icons.account_balance_outlined,
     color: const Color(0xFFF43F5E),
     tone: const Color(0xFFFFEAF1),
@@ -9282,6 +9156,7 @@ List<_FeeComponentDraft> _defaultFeeComponents() => [
   _FeeComponentDraft(
     name: 'Annual Charges',
     amount: 1500,
+    frequency: 'Yearly',
     icon: Icons.local_activity_outlined,
     color: const Color(0xFFA855F7),
     tone: const Color(0xFFF3E8FF),
@@ -9289,6 +9164,7 @@ List<_FeeComponentDraft> _defaultFeeComponents() => [
   _FeeComponentDraft(
     name: 'Smart Class Fee',
     amount: 1000,
+    frequency: 'Term',
     icon: Icons.smart_display_outlined,
     color: _CreateClassSetupPageState._primary,
     tone: const Color(0xFFEAF2FF),
@@ -9306,7 +9182,7 @@ _FeeComponentDraft _feeDraftFromBackend(Map<String, dynamic> row) {
   );
   final frequency = _classText(
     category['frequency'] ?? row['frequency'],
-    fallback: 'One Time',
+    fallback: 'Term',
   );
   return _FeeComponentDraft(
     localKey: _classText(row['id'], fallback: UniqueKey().toString()),
@@ -9352,7 +9228,7 @@ String _feeFrequencyPayload(String frequency) {
   if (text.contains('year')) return 'yearly';
   if (text.contains('month')) return 'monthly';
   if (text.contains('term')) return 'term';
-  return text.isEmpty ? 'one_time' : text.replaceAll(' ', '_');
+  return text.isEmpty ? 'term' : text.replaceAll(' ', '_');
 }
 
 String _feeFrequencyLabel(String frequency) {
@@ -9362,7 +9238,7 @@ String _feeFrequencyLabel(String frequency) {
     'yearly' => 'Yearly',
     'monthly' => 'Monthly',
     'term' => 'Term',
-    _ => frequency.trim().isEmpty ? 'One Time' : frequency.trim(),
+    _ => frequency.trim().isEmpty ? 'Term' : frequency.trim(),
   };
 }
 
@@ -9415,6 +9291,9 @@ class _EditClassSheet extends StatefulWidget {
     required String sectionName,
     required int capacity,
     required String classTeacherId,
+    required String roomNumber,
+    required String roomType,
+    required int roomCapacity,
   })
   onSubmit;
 
@@ -9435,6 +9314,8 @@ class _EditClassSheetState extends State<_EditClassSheet> {
   final _gradeNumber = TextEditingController();
   final _section = TextEditingController();
   final _capacity = TextEditingController();
+  final _roomNumber = TextEditingController();
+  final _roomType = TextEditingController(text: 'classroom');
   String _academicYearId = '';
   String _teacherId = '';
   bool _saving = false;
@@ -9458,6 +9339,9 @@ class _EditClassSheetState extends State<_EditClassSheet> {
     final teacherId = _classText(widget.row['class_teacher_id']);
     final teacherIds = widget.staff.map((staff) => staff.id).toSet();
     _teacherId = teacherIds.contains(teacherId) ? teacherId : '';
+    _roomNumber.text = _classText(widget.row['room_number']);
+    final roomType = _classText(widget.row['room_type']);
+    if (roomType.isNotEmpty) _roomType.text = roomType;
   }
 
   @override
@@ -9466,6 +9350,8 @@ class _EditClassSheetState extends State<_EditClassSheet> {
     _gradeNumber.dispose();
     _section.dispose();
     _capacity.dispose();
+    _roomNumber.dispose();
+    _roomType.dispose();
     super.dispose();
   }
 
@@ -9586,6 +9472,41 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                 ],
                 onChanged: (value) => _teacherId = value ?? '',
               ),
+              const SizedBox(height: 12),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final roomNumber = TextFormField(
+                    controller: _roomNumber,
+                    decoration: const InputDecoration(
+                      labelText: 'Room number',
+                      prefixIcon: Icon(Icons.meeting_room_outlined),
+                    ),
+                  );
+                  final roomType = TextFormField(
+                    controller: _roomType,
+                    decoration: const InputDecoration(
+                      labelText: 'Room type',
+                      prefixIcon: Icon(Icons.apartment_outlined),
+                    ),
+                  );
+                  if (constraints.maxWidth < 420) {
+                    return Column(
+                      children: [
+                        roomNumber,
+                        const SizedBox(height: 12),
+                        roomType,
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: roomNumber),
+                      const SizedBox(width: 12),
+                      Expanded(child: roomType),
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 18),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
@@ -9619,6 +9540,9 @@ class _EditClassSheetState extends State<_EditClassSheet> {
       sectionName: _section.text.trim(),
       capacity: int.tryParse(_capacity.text.trim()) ?? 40,
       classTeacherId: _teacherId,
+      roomNumber: _roomNumber.text.trim(),
+      roomType: _roomType.text.trim(),
+      roomCapacity: int.tryParse(_capacity.text.trim()) ?? 40,
     );
     if (!mounted) return;
     setState(() => _saving = false);

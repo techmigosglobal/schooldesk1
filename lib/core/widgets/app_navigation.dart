@@ -239,6 +239,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.communicationCenter,
             ),
             SchoolDeskNavigationItem(
+              index: 18,
+              icon: Icons.forum_outlined,
+              activeIcon: Icons.forum_rounded,
+              label: 'Chat Communications',
+              route: AppRoutes.principalChatCommunications,
+            ),
+            SchoolDeskNavigationItem(
               index: 9,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,

@@ -4,8 +4,9 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
-enum _AttendanceView { today, sessions, students, reports }
+enum _AttendanceView { classes, sessions, students, reports }
 
 class PrincipalAttendanceScreen extends StatefulWidget {
   const PrincipalAttendanceScreen({super.key});
@@ -20,7 +21,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   bool _detailLoading = false;
   String? _error;
   String _search = '';
-  _AttendanceView _view = _AttendanceView.today;
+  _AttendanceView _view = _AttendanceView.classes;
   String _selectedSectionId = '';
   String _selectedStudentId = '';
 
@@ -139,14 +140,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     final cards = _directoryCards;
     return PrincipalDirectoryScaffold(
       title: 'Attendance Directory',
-      subtitle:
-          'Teacher / Staff Status, Class-wise Students, Attendance Reports',
+      subtitle: 'Class-wise sessions, student rolls, and attendance history',
       loading: _loading,
       error: _error,
       onRefresh: _load,
-      onAdd: _openReportInput,
-      addIcon: Icons.summarize_outlined,
-      addTooltip: 'Create attendance report',
       filters: _buildFilters(),
       isEmpty: !_loading && _error == null && cards.isEmpty,
       emptyState: const EmptyStateWidget(
@@ -220,7 +217,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               children: [
-                _modeChip(_AttendanceView.today, 'Today', Icons.today_outlined),
+                _modeChip(
+                  _AttendanceView.classes,
+                  'Classes',
+                  Icons.apartment_outlined,
+                ),
                 _modeChip(
                   _AttendanceView.sessions,
                   'Sessions',
@@ -283,49 +284,91 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 
   List<Widget> get _directoryCards {
     final rows = switch (_view) {
-      _AttendanceView.today => [
-        ..._staffAttendance.map(_staffCard),
-        ..._exceptions.map(_exceptionCard),
-      ],
+      _AttendanceView.classes => _classAttendanceCards,
       _AttendanceView.sessions => _sessions.map(_sessionCard).toList(),
       _AttendanceView.students =>
         _detailLoading
             ? [_loadingCard('Loading students', 'Fetching selected class roll')]
             : _sectionStudents.map(_studentCard).toList(),
-      _AttendanceView.reports => [
-        _reportCard('Daily attendance report', 'pdf'),
-        _reportCard('Class attendance register', 'csv'),
-      ],
+      _AttendanceView.reports => _attendanceViewCards,
     };
     final query = _search.trim().toLowerCase();
     if (query.isEmpty) return rows;
     return rows.where((card) => _widgetText(card).contains(query)).toList();
   }
 
-  Widget _staffCard(StaffAttendanceModel row) {
-    final checkedIn = row.checkedIn;
+  List<Widget> get _classAttendanceCards {
+    final sections = _sections.isEmpty
+        ? _sessions
+              .map((session) => session.sectionId)
+              .where((id) => id.trim().isNotEmpty)
+              .toSet()
+              .map((id) => _AttendanceSectionSummary(id, _sectionLabel(id)))
+              .toList()
+        : _sections.map((section) {
+            return _AttendanceSectionSummary(
+              section.id,
+              _sectionLabel(section.id),
+            );
+          }).toList();
+    sections.sort((left, right) => left.label.compareTo(right.label));
+    return [for (final section in sections) _classAttendanceCard(section)];
+  }
+
+  List<Widget> get _attendanceViewCards => [
+    _reportCard('Daily attendance view', 'pdf'),
+    _reportCard('Class attendance register', 'csv'),
+    for (final session in _exceptions) _exceptionCard(session),
+  ];
+
+  Widget _classAttendanceCard(_AttendanceSectionSummary section) {
+    final sessions = _sessions
+        .where((session) => session.sectionId == section.sectionId)
+        .toList();
+    final present = sessions.fold(0, (sum, row) => sum + row.presentCount);
+    final total = sessions.fold(0, (sum, row) => sum + row.totalStudents);
+    final percent = total <= 0 ? 0 : (present / total) * 100;
+    final status = total <= 0
+        ? 'Pending'
+        : percent < 75
+        ? 'Review'
+        : 'Marked';
+    final statusColor = total <= 0
+        ? AppTheme.warning
+        : percent < 75
+        ? AppTheme.warning
+        : AppTheme.success;
     return PrincipalDirectoryCard(
-      icon: checkedIn ? Icons.verified_outlined : Icons.schedule_outlined,
-      title: row.staffName,
-      subtitle:
-          'In ${row.checkInTimeLabel} | Out ${row.checkOutTimeLabel} | ${row.source}',
-      status: checkedIn ? 'Checked in' : 'Pending',
-      statusColor: checkedIn ? AppTheme.success : AppTheme.warning,
+      icon: Icons.apartment_outlined,
+      title: section.label,
+      subtitle: sessions.isEmpty
+          ? 'No attendance sessions returned for today'
+          : '${sessions.length} sessions | $present/$total marked present',
+      status: status,
+      statusColor: statusColor,
       chips: [
         PrincipalInfoPill(
-          icon: Icons.badge_outlined,
-          label: row.status.isEmpty ? 'staff' : row.status,
+          icon: Icons.percent_rounded,
+          label: '${percent.toStringAsFixed(0)}%',
         ),
         PrincipalInfoPill(
-          icon: Icons.calendar_today_outlined,
-          label: _todayText,
+          icon: Icons.fact_check_outlined,
+          label: '${sessions.length} sessions',
         ),
       ],
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: principalDirectoryMuted,
+      trailing: IconButton(
+        tooltip: 'Open class in Classes Hub',
+        icon: const Icon(Icons.account_tree_outlined),
+        onPressed: () =>
+            _openClassesHub(action: 'attendance', sectionId: section.sectionId),
       ),
-      onTap: () => _openStaffDetail(row),
+      onTap: () async {
+        setState(() {
+          _selectedSectionId = section.sectionId;
+          _view = _AttendanceView.students;
+        });
+        await _loadSectionStudents(section.sectionId);
+      },
     );
   }
 
@@ -419,8 +462,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           ? Icons.picture_as_pdf_outlined
           : Icons.table_chart_outlined,
       title: title,
-      subtitle: 'Queue $format export for ${_sectionLabel(_selectedSectionId)}',
-      status: format.toUpperCase(),
+      subtitle:
+          'View class-wise attendance for ${_sectionLabel(_selectedSectionId)}',
+      status: 'View',
       statusColor: AppTheme.primary,
       chips: [
         PrincipalInfoPill(
@@ -433,9 +477,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ),
       ],
       trailing: IconButton(
-        tooltip: 'Create report',
-        icon: const Icon(Icons.file_download_outlined),
-        onPressed: () => _createReport(_reportTypeFor(title), format),
+        tooltip: 'Open class in Classes Hub',
+        icon: const Icon(Icons.account_tree_outlined),
+        onPressed: () => _openClassesHub(action: 'attendance'),
       ),
       onTap: () => _openReportDetail(title, format),
     );
@@ -487,41 +531,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   value: session.subjectId,
                 ),
                 PrincipalDetailRow(label: 'Staff ID', value: session.staffId),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openStaffDetail(StaffAttendanceModel row) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalDetailPage(
-          title: row.staffName,
-          children: [
-            PrincipalDetailCard(
-              title: 'Staff Attendance',
-              trailing: PrincipalStatusPill(
-                label: row.checkedIn ? 'Checked in' : 'Pending',
-                color: row.checkedIn ? AppTheme.success : AppTheme.warning,
-              ),
-              children: [
-                PrincipalDetailRow(
-                  label: 'Check in',
-                  value: row.checkInTimeLabel,
-                ),
-                PrincipalDetailRow(
-                  label: 'Check out',
-                  value: row.checkOutTimeLabel,
-                ),
-                PrincipalDetailRow(label: 'Source', value: row.source),
-                PrincipalDetailRow(
-                  label: 'Status',
-                  value: row.status.isEmpty ? '-' : row.status,
-                ),
-                PrincipalDetailRow(label: 'Staff ID', value: row.staffId),
               ],
             ),
           ],
@@ -605,13 +614,13 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   value: _sectionLabel(_selectedSectionId),
                 ),
                 PrincipalActionTile(
-                  icon: Icons.file_download_outlined,
-                  title: 'Create export',
+                  icon: Icons.account_tree_outlined,
+                  title: 'Open class in Classes Hub',
                   subtitle:
-                      'Queue this report through the backend export lifecycle',
+                      'Attendance changes should start from the selected class',
                   onTap: () {
                     Navigator.pop(context);
-                    _createReport(_reportTypeFor(title), format);
+                    _openClassesHub(action: 'attendance');
                   },
                 ),
               ],
@@ -622,39 +631,20 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
   }
 
-  Future<void> _openReportInput() async {
-    final queued = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalInputPage(
-          title: 'Create Attendance Report',
-          icon: Icons.summarize_outlined,
-          child: _AttendanceReportForm(
-            sections: _sections,
-            selectedSectionId: _selectedSectionId,
-            todayText: _todayText,
-            sectionLabel: _sectionLabel,
-          ),
-        ),
-      ),
+  void _openClassesHub({String action = 'details', String sectionId = ''}) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.principalClasses,
+      arguments: {
+        'class_hub_action': action,
+        'action': action,
+        'selectedStep': action == 'attendance' ? 'section_setup' : action,
+        'section_id': sectionId.isEmpty ? _selectedSectionId : sectionId,
+        'sectionId': sectionId.isEmpty ? _selectedSectionId : sectionId,
+        'classId': sectionId.isEmpty ? _selectedSectionId : sectionId,
+        'source': 'principal_attendance',
+      },
     );
-    if (queued == true) {
-      _showSnack('Attendance report export queued', success: true);
-    }
-  }
-
-  Future<void> _createReport(String reportType, String format) async {
-    try {
-      await BackendApiClient.instance.createReportExport(
-        '/attendance/reports/exports',
-        reportTitle: reportType,
-        reportType: reportType,
-        format: format,
-        parameters: {'date': _todayText, 'section_id': _selectedSectionId},
-      );
-      _showSnack('Attendance report export queued', success: true);
-    } catch (error) {
-      _showSnack('Unable to queue report export: $error');
-    }
   }
 
   List<AttendanceSessionModel> get _exceptions => _sessions
@@ -695,12 +685,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     return text.split('T').first;
   }
 
-  String _reportTypeFor(String title) {
-    return title.toLowerCase().contains('class')
-        ? 'class_attendance_register'
-        : 'daily_attendance';
-  }
-
   String _widgetText(Widget widget) => widget.toStringDeep().toLowerCase();
 
   void _showSnack(String message, {bool success = false}) {
@@ -719,116 +703,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 }
 
-class _AttendanceReportForm extends StatefulWidget {
-  final List<SectionModel> sections;
-  final String selectedSectionId;
-  final String todayText;
-  final String Function(String sectionId) sectionLabel;
+class _AttendanceSectionSummary {
+  final String sectionId;
+  final String label;
 
-  const _AttendanceReportForm({
-    required this.sections,
-    required this.selectedSectionId,
-    required this.todayText,
-    required this.sectionLabel,
-  });
-
-  @override
-  State<_AttendanceReportForm> createState() => _AttendanceReportFormState();
-}
-
-class _AttendanceReportFormState extends State<_AttendanceReportForm> {
-  String _reportType = 'daily_attendance';
-  String _format = 'pdf';
-  String _sectionId = '';
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _sectionId = widget.selectedSectionId;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue: _reportType,
-          decoration: const InputDecoration(labelText: 'Report'),
-          items: const [
-            DropdownMenuItem(
-              value: 'daily_attendance',
-              child: Text('Daily attendance report'),
-            ),
-            DropdownMenuItem(
-              value: 'class_attendance_register',
-              child: Text('Class attendance register'),
-            ),
-          ],
-          onChanged: (value) =>
-              setState(() => _reportType = value ?? 'daily_attendance'),
-        ),
-        const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
-          initialValue: _format,
-          decoration: const InputDecoration(labelText: 'Format'),
-          items: const [
-            DropdownMenuItem(value: 'pdf', child: Text('PDF')),
-            DropdownMenuItem(value: 'csv', child: Text('CSV')),
-          ],
-          onChanged: (value) => setState(() => _format = value ?? 'pdf'),
-        ),
-        const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
-          initialValue: _sectionId.isEmpty ? null : _sectionId,
-          decoration: const InputDecoration(labelText: 'Class'),
-          items: [
-            for (final section in widget.sections)
-              DropdownMenuItem(
-                value: section.id,
-                child: Text(widget.sectionLabel(section.id)),
-              ),
-          ],
-          onChanged: (value) => setState(() => _sectionId = value ?? ''),
-        ),
-        const SizedBox(height: 18),
-        FilledButton.icon(
-          onPressed: _saving ? null : _save,
-          icon: _saving
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.file_download_outlined),
-          label: Text(_saving ? 'Queuing...' : 'Queue report'),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      await BackendApiClient.instance.createReportExport(
-        '/attendance/reports/exports',
-        reportTitle: _reportType,
-        reportType: _reportType,
-        format: _format,
-        parameters: {'date': widget.todayText, 'section_id': _sectionId},
-      );
-      if (!mounted) return;
-      Navigator.pop(context, true);
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to queue attendance report: $error'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
+  const _AttendanceSectionSummary(this.sectionId, this.label);
 }

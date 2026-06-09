@@ -262,6 +262,7 @@ func (h *ExamHandler) CreateExamSchedule(c *gin.Context) {
 		ExamDate  string `json:"exam_date" binding:"required"`
 		StartTime string `json:"start_time"`
 		EndTime   string `json:"end_time"`
+		Syllabus  string `json:"syllabus"`
 		MaxMarks  int    `json:"max_marks" binding:"required"`
 		PassMarks int    `json:"pass_marks" binding:"required"`
 		RoomID    string `json:"room_id"`
@@ -297,6 +298,7 @@ func (h *ExamHandler) CreateExamSchedule(c *gin.Context) {
 		ExamDate:  examDate,
 		StartTime: req.StartTime,
 		EndTime:   req.EndTime,
+		Syllabus:  strings.TrimSpace(req.Syllabus),
 		MaxMarks:  req.MaxMarks,
 		PassMarks: req.PassMarks,
 	}

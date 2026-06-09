@@ -151,12 +151,20 @@ extension BackendFeesApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getInvoices({
     String? studentId,
     String? status,
+    String? academicYearId,
+    String? gradeId,
+    String? sectionId,
+    String? termId,
     int page = 1,
     int pageSize = 100,
   }) async {
     return (await getInvoicesPage(
       studentId: studentId,
       status: status,
+      academicYearId: academicYearId,
+      gradeId: gradeId,
+      sectionId: sectionId,
+      termId: termId,
       page: page,
       pageSize: pageSize,
     )).data;
@@ -165,6 +173,10 @@ extension BackendFeesApi on BackendApiClient {
   Future<PaginatedList<Map<String, dynamic>>> getInvoicesPage({
     String? studentId,
     String? status,
+    String? academicYearId,
+    String? gradeId,
+    String? sectionId,
+    String? termId,
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -175,6 +187,12 @@ extension BackendFeesApi on BackendApiClient {
       };
       if (studentId != null) queryParams['student_id'] = studentId;
       if (status != null) queryParams['status'] = status;
+      if (academicYearId != null) {
+        queryParams['academic_year_id'] = academicYearId;
+      }
+      if (gradeId != null) queryParams['grade_id'] = gradeId;
+      if (sectionId != null) queryParams['section_id'] = sectionId;
+      if (termId != null) queryParams['term_id'] = termId;
       final response = await _dio.get(
         '/fees/invoices',
         queryParameters: queryParams,

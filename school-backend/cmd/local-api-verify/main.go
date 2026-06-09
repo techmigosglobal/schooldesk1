@@ -406,10 +406,16 @@ func (v *verifier) runParentPaymentRequestFlow() {
 	if v.ids["payment_request"] == "" {
 		return
 	}
-	v.expect("Admin approves Parent payment request", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Admin", "Admin", map[string]any{
+	v.expectDataID("Admin submits Parent payment request decision for Principal approval", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Admin", "Admin", map[string]any{
 		"status":        "approved",
 		"admin_remarks": "Verified by local Docker API verifier",
-	}, http.StatusOK)
+	}, http.StatusCreated, "payment_decision_approval")
+	if v.ids["payment_decision_approval"] != "" {
+		v.expect("Principal approves Parent payment request decision", http.MethodPost, "/approvals/"+v.ids["payment_decision_approval"]+"/approve", "Principal", "Principal", map[string]any{
+			"note": "Approved by local Docker API verifier",
+		}, http.StatusOK)
+		v.expect("Principal applies Parent payment request decision", http.MethodPost, "/approvals/"+v.ids["payment_decision_approval"]+"/apply", "Principal", "Principal", map[string]any{}, http.StatusOK)
+	}
 	v.expect("Parent sees invoice after approved request", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
 }
 
@@ -451,12 +457,34 @@ func (v *verifier) loadAcademicFixtureIDs() bool {
 	return true
 }
 
+func (v *verifier) ensureTeacherSubjectAssignment() bool {
+	if v.ids["teacher_subject"] != "" {
+		return true
+	}
+	if v.tokens["Admin"] == "" || v.ids["teacher_staff"] == "" {
+		v.addFail("Teacher subject assignment fixture", "local verifier", "Admin", "Admin token or teacher staff ID missing")
+		return false
+	}
+	if !v.loadAcademicFixtureIDs() {
+		return false
+	}
+	v.expectDataID("Admin maps Teacher to default class subject", http.MethodPost, "/staff-subjects", "Admin", "Admin", map[string]any{
+		"academic_year_id": v.ids["default_year"],
+		"staff_id":         v.ids["teacher_staff"],
+		"subject_id":       v.ids["default_subject"],
+		"grade_id":         v.ids["default_grade"],
+		"section_id":       v.ids["default_section"],
+		"is_primary":       true,
+	}, http.StatusCreated, "teacher_subject")
+	return v.ids["teacher_subject"] != ""
+}
+
 func (v *verifier) runTeacherHomeworkFlow() {
 	if v.tokens["Admin"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
 		v.addFail("Teacher homework fixture", "local verifier", "Admin/Teacher/Parent", "Admin, Teacher, Parent, teacher staff, or linked student missing")
 		return
 	}
-	if !v.loadAcademicFixtureIDs() {
+	if !v.ensureTeacherSubjectAssignment() {
 		return
 	}
 	periodNumber := 100000 + int(time.Now().UnixNano()%900000)
@@ -521,7 +549,7 @@ func (v *verifier) runExamScheduleNotificationFlow() {
 		v.addFail("Exam schedule notification fixture", "local verifier", "Admin/Teacher/Parent", "Admin, Teacher, or Parent token missing")
 		return
 	}
-	if !v.loadAcademicFixtureIDs() {
+	if !v.ensureTeacherSubjectAssignment() {
 		return
 	}
 	if v.ids["default_grade"] == "" {

@@ -331,7 +331,7 @@ func TestGetInvoicesScopesParentToLinkedStudents(t *testing.T) {
 	}
 }
 
-func TestParentPaymentRequestLifecycleValidatesLinkedInvoiceAndAdminDecision(t *testing.T) {
+func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -349,6 +349,7 @@ func TestParentPaymentRequestLifecycleValidatesLinkedInvoiceAndAdminDecision(t *
 		&models.FeeInvoice{},
 		&models.Payment{},
 		&models.ParentPaymentRequest{},
+		&models.FrontendRecord{},
 		&models.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -362,8 +363,9 @@ func TestParentPaymentRequestLifecycleValidatesLinkedInvoiceAndAdminDecision(t *
 	otherStudent := models.Student{BaseModel: models.BaseModel{ID: "other-student-payment"}, SchoolID: school.ID, StudentCode: "OP-001", AdmissionNumber: "OP-001", FirstName: "Other", LastName: "Student", DateOfBirth: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC), AdmissionDate: time.Now(), CurrentSectionID: &section.ID, Status: "active"}
 	parent := models.User{BaseModel: models.BaseModel{ID: "parent-payment"}, SchoolID: school.ID, Username: "parent-payment", Email: "parent-payment@example.test", IsActive: true, IsVerified: true}
 	admin := models.User{BaseModel: models.BaseModel{ID: "admin-payment"}, SchoolID: school.ID, Username: "admin-payment", Email: "admin-payment@example.test", IsActive: true, IsVerified: true}
+	principal := models.User{BaseModel: models.BaseModel{ID: "principal-payment"}, SchoolID: school.ID, Username: "principal-payment", Email: "principal-payment@example.test", IsActive: true, IsVerified: true}
 	link := models.ParentStudentLink{SchoolID: school.ID, ParentUserID: parent.ID, StudentID: linkedStudent.ID, StudentAdmissionNumber: linkedStudent.AdmissionNumber}
-	for _, seed := range []any{&school, &year, &grade, &section, &linkedStudent, &otherStudent, &parent, &admin, &link} {
+	for _, seed := range []any{&school, &year, &grade, &section, &linkedStudent, &otherStudent, &parent, &admin, &principal, &link} {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
@@ -456,16 +458,55 @@ func TestParentPaymentRequestLifecycleValidatesLinkedInvoiceAndAdminDecision(t *
 	approveReq.Header.Set("Content-Type", "application/json")
 	approveResp := httptest.NewRecorder()
 	adminRouter.ServeHTTP(approveResp, approveReq)
-	if approveResp.Code != http.StatusOK {
-		t.Fatalf("approve status=%d body=%s", approveResp.Code, approveResp.Body.String())
+	if approveResp.Code != http.StatusCreated {
+		t.Fatalf("admin decision approval status=%d body=%s", approveResp.Code, approveResp.Body.String())
 	}
+	if err := db.First(&invoice, "id = ?", "invoice-linked-payment").Error; err != nil {
+		t.Fatalf("reload invoice after admin approval request: %v", err)
+	}
+	if invoice.Balance != 1000 || invoice.PaidAmount != 0 || invoice.Status != "pending" {
+		t.Fatalf("admin decision must not settle invoice directly: %+v", invoice)
+	}
+	var paymentCount int64
+	db.Model(&models.Payment{}).Where("invoice_id = ?", invoice.ID).Count(&paymentCount)
+	if paymentCount != 0 {
+		t.Fatalf("admin decision created payment directly, got %d", paymentCount)
+	}
+	var approvalRow models.FrontendRecord
+	if err := db.First(&approvalRow, "resource = ?", approvalRequestResource).Error; err != nil {
+		t.Fatalf("admin decision should create approval row: %v", err)
+	}
+
+	principalApprovalRouter := approvalRequestRouter("Principal", principal.ID, school.ID)
+	approveApproval := httptest.NewRecorder()
+	approveApprovalReq := httptest.NewRequest(
+		http.MethodPost,
+		"/approvals/"+approvalRow.ID+"/approve",
+		strings.NewReader(`{"note":"verified"}`),
+	)
+	approveApprovalReq.Header.Set("Content-Type", "application/json")
+	principalApprovalRouter.ServeHTTP(approveApproval, approveApprovalReq)
+	if approveApproval.Code != http.StatusOK {
+		t.Fatalf("principal approve status=%d body=%s", approveApproval.Code, approveApproval.Body.String())
+	}
+	applyApproval := httptest.NewRecorder()
+	applyApprovalReq := httptest.NewRequest(
+		http.MethodPost,
+		"/approvals/"+approvalRow.ID+"/apply",
+		strings.NewReader(`{}`),
+	)
+	applyApprovalReq.Header.Set("Content-Type", "application/json")
+	principalApprovalRouter.ServeHTTP(applyApproval, applyApprovalReq)
+	if applyApproval.Code != http.StatusOK {
+		t.Fatalf("principal apply status=%d body=%s", applyApproval.Code, applyApproval.Body.String())
+	}
+
 	if err := db.First(&invoice, "id = ?", "invoice-linked-payment").Error; err != nil {
 		t.Fatalf("reload approved invoice: %v", err)
 	}
 	if invoice.Balance != 700 || invoice.PaidAmount != 300 || invoice.Status != "partial" {
 		t.Fatalf("approved request should settle invoice partially: %+v", invoice)
 	}
-	var paymentCount int64
 	db.Model(&models.Payment{}).Where("invoice_id = ?", invoice.ID).Count(&paymentCount)
 	if paymentCount != 1 {
 		t.Fatalf("expected one payment after approval, got %d", paymentCount)

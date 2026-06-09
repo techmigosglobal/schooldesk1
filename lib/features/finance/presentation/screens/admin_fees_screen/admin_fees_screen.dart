@@ -93,12 +93,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
-          tooltip: 'Create fee structure',
+          tooltip: 'Prepare fee structure request',
           icon: const Icon(Icons.add_card_outlined),
           onPressed: _openCreateFeeStructureForm,
         ),
         IconButton(
-          tooltip: 'Generate invoices',
+          tooltip: 'Submit invoice request for approval',
           icon: const Icon(Icons.receipt_long_outlined),
           onPressed: () => _openGenerateInvoiceForm(),
         ),
@@ -170,7 +170,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     return OpsPanel(
       title: 'Admin Finance Workspace',
       subtitle:
-          'Admin owns operational writes; Principal can monitor and decide requests',
+          'Admin prepares finance requests; Principal final-approves decisions',
       trailing: TextButton.icon(
         onPressed: () =>
             Navigator.pushNamed(context, AppRoutes.adminPaymentRequests),
@@ -228,13 +228,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: FilledButton.icon(
         onPressed: _openCreateFeeStructureForm,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Create'),
+        label: const Text('Prepare Fee Structure Request'),
       ),
       child: _feeStructures.isEmpty
           ? OpsEmptyState(
               icon: Icons.price_change_outlined,
               title: 'No fee structures',
-              message: 'Create structures before generating student invoices.',
+              message:
+                  'Prepare fee structure requests before submitting student invoices.',
             )
           : Column(
               children: [
@@ -248,7 +249,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                     trailing: TextButton.icon(
                       onPressed: () => _openEditFeeStructureForm(structure),
                       icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Edit'),
+                      label: const Text('Prepare Update Request'),
                     ),
                   ),
               ],
@@ -264,7 +265,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: FilledButton.icon(
         onPressed: () => _openGenerateInvoiceForm(),
         icon: const Icon(Icons.receipt_long_outlined),
-        label: const Text('Generate'),
+        label: const Text('Submit Invoice Request'),
       ),
       child: _pendingDues.isEmpty
           ? OpsListRow(
@@ -296,7 +297,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                           color: Colors.orange,
                         ),
                         IconButton(
-                          tooltip: 'Record payment',
+                          tooltip: 'Submit payment for approval',
                           icon: const Icon(Icons.payments_outlined),
                           onPressed: () =>
                               _openRecordPaymentForm(invoice: invoice),
@@ -322,14 +323,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: OutlinedButton.icon(
         onPressed: () => _openRecordPaymentForm(),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Record payment'),
+        label: const Text('Submit Payment Request'),
       ),
       child: _recentPayments.isEmpty
           ? OpsEmptyState(
               icon: Icons.payments_outlined,
               title: 'No payments yet',
               message:
-                  'Payments will appear after Admin records them against invoices.',
+                  'Payments will appear after submitted requests are reconciled against invoices.',
             )
           : Column(
               children: [
@@ -402,7 +403,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               icon: Icons.summarize_outlined,
               title: report.$1,
               subtitle:
-                  'Create ${report.$3.toUpperCase()} export through /fees/reports/exports',
+                  'Submit ${report.$3.toUpperCase()} export request through /fees/reports/exports',
               trailing: FilledButton.icon(
                 onPressed: () => _requestReportExport(report.$2, report.$3),
                 icon: const Icon(Icons.file_download_outlined),
@@ -451,7 +452,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (!mounted || result is! AdminInvoiceGenerationFormResult) return;
     await _loadData();
     _snack(
-      'Generated ${result.created} invoice(s), skipped ${result.skipped}.',
+      'Invoice request submitted: ${result.created} invoice(s), skipped ${result.skipped}.',
       success: true,
     );
   }
@@ -468,7 +469,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (!mounted || result is! AdminPaymentRecordFormResult) return;
     await _loadData();
     _snack(
-      'Payment of ${_money(result.amount)} recorded for ${result.studentName}',
+      'Payment request of ${_money(result.amount)} submitted for ${result.studentName}',
       success: true,
     );
   }
@@ -551,7 +552,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         fallback: 'Fee',
       ),
       'amount': _numValue(fee['amount'] ?? fee['tuition']),
-      'frequency': _textValue(fee['frequency'], fallback: 'term'),
+      'frequency': _textValue(
+        fee['frequency'] ?? category['frequency'],
+        fallback: 'term',
+      ),
       'due_day': fee['due_day'] ?? '-',
     };
   }

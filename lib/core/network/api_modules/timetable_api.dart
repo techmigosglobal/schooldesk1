@@ -179,6 +179,7 @@ extension BackendTimetableApi on BackendApiClient {
     String startTime = '08:30',
     int periodDurationMinutes = 40,
     int gapMinutes = 5,
+    List<Map<String, dynamic>> breaks = const [],
   }) async {
     return _smartTimetable(
       path: '/timetable/smart/preview',
@@ -190,6 +191,7 @@ extension BackendTimetableApi on BackendApiClient {
       startTime: startTime,
       periodDurationMinutes: periodDurationMinutes,
       gapMinutes: gapMinutes,
+      breaks: breaks,
     );
   }
 
@@ -202,6 +204,7 @@ extension BackendTimetableApi on BackendApiClient {
     String startTime = '08:30',
     int periodDurationMinutes = 40,
     int gapMinutes = 5,
+    List<Map<String, dynamic>> breaks = const [],
     bool regenerateScope = true,
   }) async {
     return _smartTimetable(
@@ -214,6 +217,7 @@ extension BackendTimetableApi on BackendApiClient {
       startTime: startTime,
       periodDurationMinutes: periodDurationMinutes,
       gapMinutes: gapMinutes,
+      breaks: breaks,
       regenerateScope: regenerateScope,
     );
   }
@@ -228,6 +232,7 @@ extension BackendTimetableApi on BackendApiClient {
     required String startTime,
     required int periodDurationMinutes,
     required int gapMinutes,
+    required List<Map<String, dynamic>> breaks,
     bool regenerateScope = false,
   }) async {
     try {
@@ -243,6 +248,7 @@ extension BackendTimetableApi on BackendApiClient {
           'start_time': startTime.trim(),
           'period_duration_minutes': periodDurationMinutes,
           'gap_minutes': gapMinutes,
+          'breaks': breaks,
           'regenerate_scope': regenerateScope,
         },
       );

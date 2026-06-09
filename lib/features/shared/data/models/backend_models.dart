@@ -357,6 +357,9 @@ class SectionModel {
   final String sectionName;
   final String classTeacherId;
   final String classTeacherName;
+  final String roomId;
+  final String roomNumber;
+  final String roomType;
   final int capacity;
 
   const SectionModel({
@@ -367,6 +370,9 @@ class SectionModel {
     required this.sectionName,
     required this.classTeacherId,
     required this.classTeacherName,
+    required this.roomId,
+    required this.roomNumber,
+    required this.roomType,
     required this.capacity,
   });
 
@@ -378,6 +384,9 @@ class SectionModel {
     sectionName: _stringValue(json['section_name']),
     classTeacherId: _stringValue(json['class_teacher_id']),
     classTeacherName: _staffName(json['class_teacher']),
+    roomId: _stringValue(json['room_id']),
+    roomNumber: _roomNumber(json),
+    roomType: _roomType(json),
     capacity: (json['capacity'] as num?)?.toInt() ?? 0,
   );
 
@@ -397,6 +406,24 @@ class SectionModel {
     final fullName = '$first $last'.trim();
     if (fullName.isNotEmpty) return fullName;
     return _stringValue(value['email'] ?? value['id']);
+  }
+
+  static String _roomNumber(Map<String, dynamic> json) {
+    final direct = _stringValue(
+      json['room_number'] ?? json['room_name'],
+    ).trim();
+    if (direct.isNotEmpty) return direct;
+    final room = json['room'];
+    if (room is! Map) return '';
+    return _stringValue(room['room_number'] ?? room['name'] ?? room['id']);
+  }
+
+  static String _roomType(Map<String, dynamic> json) {
+    final direct = _stringValue(json['room_type']).trim();
+    if (direct.isNotEmpty) return direct;
+    final room = json['room'];
+    if (room is! Map) return '';
+    return _stringValue(room['room_type'] ?? room['type']);
   }
 }
 
@@ -824,6 +851,8 @@ class TimetableSuggestionModel {
   final String subjectName;
   final String staffId;
   final String staffName;
+  final String roomId;
+  final String roomName;
   final String startTime;
   final String endTime;
   final int confidence;
@@ -840,6 +869,8 @@ class TimetableSuggestionModel {
     required this.subjectName,
     required this.staffId,
     required this.staffName,
+    required this.roomId,
+    required this.roomName,
     required this.startTime,
     required this.endTime,
     required this.confidence,
@@ -861,6 +892,8 @@ class TimetableSuggestionModel {
       subjectName: '${json['subject_name'] ?? json['subject_id'] ?? ''}',
       staffId: '${json['staff_id'] ?? ''}',
       staffName: '${json['staff_name'] ?? json['staff_id'] ?? ''}',
+      roomId: '${json['room_id'] ?? ''}',
+      roomName: '${json['room_name'] ?? json['room_id'] ?? ''}',
       startTime: '${json['start_time'] ?? ''}',
       endTime: '${json['end_time'] ?? ''}',
       confidence: _intFromJson(json['confidence']),
@@ -877,6 +910,7 @@ class TimetableSuggestionModel {
     'period_number': periodNumber,
     'subject_id': subjectId,
     'staff_id': staffId,
+    'room_id': roomId,
     'start_time': startTime,
     'end_time': endTime,
   };

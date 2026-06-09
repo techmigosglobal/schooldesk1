@@ -345,6 +345,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFEAF4FF),
                     badge: _data.pendingApprovals,
                   ),
+                  _AcademicModuleItem(
+                    label: 'Chat Communications',
+                    route: AppRoutes.principalChatCommunications,
+                    illustration: SchoolDeskUiIllustrations.chat,
+                    fallbackIcon: Icons.forum_rounded,
+                    accent: const Color(0xFF7C3AED),
+                    cardColor: const Color(0xFFF3ECFF),
+                    badge: _data.unreadNotifications,
+                  ),
                 ],
                 onTap: (item) => _open(item.route),
               ),
@@ -610,7 +619,7 @@ class _PrincipalHomeData {
         ),
         _SetupStep(
           title: 'Subjects Setup',
-          route: AppRoutes.principalSubjects,
+          route: AppRoutes.principalClasses,
           isComplete: hasSubjects,
         ),
         _SetupStep(
@@ -625,12 +634,12 @@ class _PrincipalHomeData {
         ),
         _SetupStep(
           title: 'Fee Structure Setup',
-          route: AppRoutes.feeMonitoring,
+          route: AppRoutes.principalClasses,
           isComplete: hasFees,
         ),
         _SetupStep(
           title: 'Timetable Setup',
-          route: AppRoutes.principalTimetable,
+          route: AppRoutes.principalClasses,
           isComplete: hasTimetable,
         ),
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),

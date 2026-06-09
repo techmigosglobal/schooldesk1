@@ -41,6 +41,8 @@ class AppRoutes {
   static const String syllabusMonitoring = '/syllabus-monitoring-screen';
   static const String examsResults = '/exams-results-screen';
   static const String communicationCenter = '/communication-center-screen';
+  static const String principalChatCommunications =
+      '/principal-chat-communications-screen';
   static const String complaintManagement = '/complaint-management-screen';
   static const String eventsCalendar = '/events-calendar-screen';
   static const String reportsAnalytics = '/reports-analytics-screen';
@@ -171,10 +173,12 @@ class AppRoutes {
     approvalCenter: (context) => const ApprovalCenterScreen(),
     principalInbox: (context) => const PrincipalOperationalInboxScreen(),
     feeMonitoring: (context) => const FeeMonitoringScreen(),
-    timetableManagement: (context) => const TimetableManagementScreen(),
+    timetableManagement: (context) => const PrincipalTimetableScreen(),
     syllabusMonitoring: (context) => const SyllabusMonitoringScreen(),
     examsResults: (context) => const ExamsResultsScreen(),
     communicationCenter: (context) => const CommunicationCenterScreen(),
+    principalChatCommunications: (context) =>
+        const PrincipalChatCommunicationsScreen(),
     complaintManagement: (context) => const ComplaintManagementScreen(),
     eventsCalendar: (context) => const EventsCalendarScreen(),
     reportsAnalytics: (context) => const ReportsAnalyticsScreen(),
@@ -419,6 +423,7 @@ class AppRoutes {
     principalInbox,
     feeMonitoring,
     communicationCenter,
+    principalChatCommunications,
     complaintManagement,
     eventsCalendar,
     principalAcademicInfo,
@@ -439,7 +444,33 @@ class AppRoutes {
     parentDiary,
     parentAcademicInfo,
     adminDashboard,
+    adminStudents,
+    adminTeachers,
     adminAttendance,
+    adminFees,
+    adminFeeStructureForm,
+    adminInvoiceGenerationForm,
+    adminPaymentRecordForm,
+    adminPaymentRequests,
+    adminPaymentRequestDecision,
+    adminTimetable,
+    adminTimetableGenerationForm,
+    adminTimetablePeriodForm,
+    adminTimetableSubstitutionForm,
+    adminExams,
+    adminExamForm,
+    adminExamScheduleForm,
+    adminCommunication,
+    adminHelpdesk,
+    adminDocuments,
+    adminUserAccess,
+    adminAccountCreate,
+    adminAccountEdit,
+    adminParentChildAssignment,
+    adminReports,
+    adminAcademicInfo,
+    idCardGeneration,
+    reportCardGenerator,
     teacherDashboard,
     teacherClasses,
     teacherAttendance,
@@ -658,6 +689,7 @@ class AppRoutes {
       nextPeriodNumber: 1,
       subjects: [],
       staff: [],
+      rooms: [],
     );
   }
 

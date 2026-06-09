@@ -41,6 +41,7 @@ type ExamSchedule struct {
 	ExamDate     time.Time     `json:"exam_date"`
 	StartTime    string        `gorm:"type:text" json:"start_time"`
 	EndTime      string        `gorm:"type:text" json:"end_time"`
+	Syllabus     string        `gorm:"type:text" json:"syllabus"`
 	MaxMarks     int           `json:"max_marks"`
 	PassMarks    int           `json:"pass_marks"`
 	RoomID       *string       `gorm:"type:text" json:"room_id"`

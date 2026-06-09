@@ -39,8 +39,8 @@ class _AdminPaymentRequestDecisionScreenState
   Widget build(BuildContext context) {
     final request = widget.args.request;
     return SchoolDeskModuleScaffold(
-      title: 'Review Payment',
-      subtitle: 'Approve or reject a parent payment request',
+      title: 'Submit Payment Decision',
+      subtitle: 'Prepare a payment decision for Principal approval',
       drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
       floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
@@ -59,8 +59,8 @@ class _AdminPaymentRequestDecisionScreenState
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: _decision == 'approved'
-                    ? 'Admin remarks'
-                    : 'Rejection reason',
+                    ? 'Approval recommendation note'
+                    : 'Rejection recommendation reason',
                 alignLabelWithHint: true,
               ),
             ),
@@ -80,7 +80,9 @@ class _AdminPaymentRequestDecisionScreenState
                       size: 18,
                     ),
               label: Text(
-                _submitting ? 'Saving...' : '${_title(_decision)} Request',
+                _submitting
+                    ? 'Submitting...'
+                    : 'Submit ${_title(_decision)} for Principal Approval',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -147,7 +149,7 @@ class _AdminPaymentRequestDecisionScreenState
         Expanded(
           child: ChoiceChip(
             selected: _decision == 'approved',
-            label: const Text('Approve'),
+            label: const Text('Recommend approval'),
             avatar: const Icon(Icons.check_rounded, size: 16),
             onSelected: _submitting
                 ? null
@@ -158,7 +160,7 @@ class _AdminPaymentRequestDecisionScreenState
         Expanded(
           child: ChoiceChip(
             selected: _decision == 'rejected',
-            label: const Text('Reject'),
+            label: const Text('Recommend rejection'),
             avatar: const Icon(Icons.close_rounded, size: 16),
             onSelected: _submitting
                 ? null
@@ -218,7 +220,7 @@ class _AdminPaymentRequestDecisionScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Payment request ${_decision == 'approved' ? 'approved' : 'rejected'}',
+            'Payment decision submitted for Principal approval.',
           ),
           behavior: SnackBarBehavior.floating,
         ),

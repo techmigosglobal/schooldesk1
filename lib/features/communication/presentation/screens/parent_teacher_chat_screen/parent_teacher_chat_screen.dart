@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
+import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
   const ParentTeacherChatScreen({super.key});
@@ -30,10 +32,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
   final ScrollController _chatScrollCtrl = ScrollController();
 
   List<Map<String, dynamic>> _teachers = [];
+  List<Map<String, dynamic>> _children = [];
+  int _activeChildIndex = 0;
+  bool _classTeacherOnly = false;
 
   // Persisted messages per teacher: { teacherId: [messages] }
   Map<String, List<Map<String, dynamic>>> _allMessages = {};
   Map<String, int> _unreadCounts = {};
+  List<Map<String, dynamic>> _directMessages = [];
   List<Map<String, dynamic>> _ptmSlots = [];
 
   int? _activeChatIndex;
@@ -106,12 +112,16 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     final children = await api.getMyStudents();
     final conversations = await api.getRawList('/message-conversations');
     final messages = await api.getRawList('/messages');
+    final directMessages = await api.getCommunications();
     final ptmSlots = await api.getRawList('/parent-teacher-meetings');
     final timetableRows = <Map<String, dynamic>>[];
     _parentUserId = profile.id;
     _firstStudentId = children.isNotEmpty
         ? '${children.first['id'] ?? ''}'
         : '';
+    directMessages.sort(
+      (a, b) => _directMessageTime(b).compareTo(_directMessageTime(a)),
+    );
     for (final child in children) {
       final sectionId = '${child['current_section_id'] ?? ''}'.trim();
       if (sectionId.isEmpty) continue;
@@ -175,8 +185,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
 
     setState(() {
       _teachers = teacherRows.values.toList();
+      _children = children
+          .whereType<Map>()
+          .map((child) => Map<String, dynamic>.from(child))
+          .toList();
+      if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
       _allMessages = loadedMessages;
       _unreadCounts = loadedUnread;
+      _directMessages = directMessages;
       _ptmSlots = ptmSlots.map(_ptmSlotFromApi).toList();
       _loading = false;
     });
@@ -289,6 +305,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       'date': slotDate == null ? '' : _formatDate(slotDate),
       'slotDate': slotDate?.toUtc().toIso8601String(),
       'time': slot['slot_time'] ?? '',
+      'durationMin': slot['duration_min'] ?? slot['duration'] ?? 15,
       'status': slot['status'] ?? 'available',
       'bookedBy': slot['status'] == 'booked' ? 'Parent' : '',
     };
@@ -387,12 +404,29 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         backgroundColor: _headerColor,
-        leading: _activeChatIndex != null
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                onPressed: () => setState(() => _activeChatIndex = null),
-              )
-            : null,
+        flexibleSpace: const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF0B6B43), Color(0xFF087346)],
+            ),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          onPressed: _activeChatIndex != null
+              ? () => setState(() => _activeChatIndex = null)
+              : () async {
+                  if (!await Navigator.maybePop(context) && context.mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      AppRoutes.parentDashboard,
+                      (route) => false,
+                    );
+                  }
+                },
+        ),
         title: _activeChatIndex != null
             ? Row(
                 children: [
@@ -481,13 +515,61 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      bottomNavigationBar: _buildParentBottomNavigation(),
       body: _activeChatIndex != null
           ? _buildChatView()
           : TabBarView(
               controller: _tabController,
               children: [_buildTeacherList(), _buildPTMBooking()],
             ),
+    );
+  }
+
+  Widget _buildParentBottomNavigation() {
+    return SchoolDeskBottomNavigationBar(
+      items: [
+        SchoolDeskBottomNavItem(
+          label: 'Home',
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+          selected: false,
+          onTap: () => Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.parentDashboard,
+            (route) => false,
+          ),
+        ),
+        SchoolDeskBottomNavItem(
+          label: 'Search',
+          icon: Icons.search_rounded,
+          activeIcon: Icons.manage_search_rounded,
+          selected: false,
+          onTap: () => Navigator.pushNamed(context, AppRoutes.globalSearch),
+        ),
+        SchoolDeskBottomNavItem(
+          label: 'Notifications',
+          icon: Icons.notifications_none_rounded,
+          activeIcon: Icons.notifications_rounded,
+          selected: false,
+          onTap: () => Navigator.pushNamed(
+            context,
+            AppRoutes.notificationCenter,
+            arguments: 'parent',
+          ),
+        ),
+        SchoolDeskBottomNavItem(
+          label: 'Profile',
+          icon: Icons.account_circle_outlined,
+          activeIcon: Icons.account_circle_rounded,
+          selected: false,
+          onTap: () => Navigator.pushNamed(
+            context,
+            AppRoutes.profileScreen,
+            arguments: 'parent',
+          ),
+        ),
+      ],
     );
   }
 
@@ -499,6 +581,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            _buildParentDirectMessagesSection(),
+            const SizedBox(height: 24),
             const SizedBox(height: 120),
             const Icon(Icons.forum_outlined, size: 48, color: AppTheme.muted),
             const SizedBox(height: 12),
@@ -523,9 +607,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _teachers.length,
+      itemCount: _teachers.length + 1,
       itemBuilder: (_, i) {
-        final t = _teachers[i];
+        if (i == 0) return _buildParentDirectMessagesSection();
+        final t = _teachers[i - 1];
         final tid = t['id'] as String;
         final unread = _unreadCounts[tid] ?? 0;
         final lastMsg = _lastMessage(tid);
@@ -652,7 +737,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
             ),
             onTap: () async {
               setState(() {
-                _activeChatIndex = i;
+                _activeChatIndex = i - 1;
                 _initChatPagination(t['id'] as String);
               });
               await _markAsRead(t['id'] as String);
@@ -664,6 +749,190 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
         );
       },
     );
+  }
+
+  Widget _buildParentDirectMessagesSection() {
+    if (_directMessages.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Principal Messages',
+          style: GoogleFonts.dmSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ..._directMessages.map(
+          (message) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildParentDirectMessageCard(message),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  Widget _buildParentDirectMessageCard(Map<String, dynamic> message) {
+    final incoming = _directMessageIncoming(message);
+    final unread = incoming && !_directMessageRead(message);
+    final counterpartRole = incoming
+        ? '${message['sender_role'] ?? 'Principal'}'
+        : '${message['receiver_role'] ?? 'Principal'}';
+    final counterpartId = incoming
+        ? '${message['sender_id'] ?? ''}'
+        : '${message['receiver_id'] ?? ''}';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: unread ? AppTheme.infoContainer : AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: unread ? AppTheme.info.withAlpha(70) : AppTheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                incoming
+                    ? Icons.call_received_rounded
+                    : Icons.call_made_rounded,
+                size: 16,
+                color: incoming ? AppTheme.info : AppTheme.success,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${incoming ? 'From' : 'To'} ${_titleCase(counterpartRole)}',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                _directMessageDate(message),
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${message['message_content'] ?? message['message'] ?? message['body'] ?? 'Message'}',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: AppTheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (unread)
+                TextButton.icon(
+                  onPressed: () => _markDirectMessageRead(message),
+                  icon: const Icon(Icons.done_all_rounded, size: 14),
+                  label: const Text('Mark Read'),
+                ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: counterpartId.trim().isEmpty
+                    ? null
+                    : () => _replyDirectMessage(
+                        receiverId: counterpartId.trim(),
+                        receiverRole: counterpartRole.trim(),
+                      ),
+                icon: const Icon(Icons.reply_rounded, size: 14),
+                label: const Text('Reply'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _markDirectMessageRead(Map<String, dynamic> message) async {
+    final id = '${message['id'] ?? message['message_id'] ?? ''}'.trim();
+    if (id.isEmpty) return;
+    await BackendApiClient.instance.markCommunicationRead(id);
+    await _loadData();
+  }
+
+  Future<void> _replyDirectMessage({
+    required String receiverId,
+    required String receiverRole,
+  }) async {
+    final controller = TextEditingController();
+    final content = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reply'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(labelText: 'Message'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            icon: const Icon(Icons.send_rounded),
+            label: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final text = content?.trim() ?? '';
+    if (text.isEmpty) return;
+    await BackendApiClient.instance.sendCommunication(
+      receiverId: receiverId,
+      receiverRole: receiverRole,
+      messageContent: text,
+    );
+    await _loadData();
+  }
+
+  bool _directMessageIncoming(Map<String, dynamic> message) {
+    return '${message['receiver_id'] ?? ''}' == _parentUserId;
+  }
+
+  bool _directMessageRead(Map<String, dynamic> message) {
+    final value = message['is_read'];
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return '${value ?? ''}'.toLowerCase() == 'true';
+  }
+
+  DateTime _directMessageTime(Map<String, dynamic> message) {
+    return DateTime.tryParse(
+          '${message['sent_at'] ?? message['created_at'] ?? ''}',
+        ) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  String _directMessageDate(Map<String, dynamic> message) {
+    final sentAt = _directMessageTime(message);
+    if (sentAt.millisecondsSinceEpoch == 0) return '';
+    return '${sentAt.day.toString().padLeft(2, '0')}/${sentAt.month.toString().padLeft(2, '0')}';
+  }
+
+  String _titleCase(String value) {
+    final clean = value.trim();
+    if (clean.isEmpty) return 'Principal';
+    return clean[0].toUpperCase() + clean.substring(1).toLowerCase();
   }
 
   void _scrollToBottom() {
@@ -1057,70 +1326,122 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
   }
 
   Widget _buildPTMBooking() {
+    final selectedSlots = _selectedChildPtmSlots();
+    final availableSlots = selectedSlots
+        .where((slot) => !_isPtmSlotBooked(slot))
+        .where(
+          (slot) =>
+              !_classTeacherOnly ||
+              _ptmTeacherSubtitle(slot).toLowerCase().contains('class teacher'),
+        )
+        .toList();
+    final bookedSlots = selectedSlots.where(_isPtmSlotBooked).toList();
     return RefreshIndicator(
       onRefresh: _loadData,
       color: _headerColor,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 96),
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.infoContainer,
-              borderRadius: BorderRadius.circular(12),
+          if (_children.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _PtmChildSelector(
+                label: _activeChildSelectorLabel(),
+                children: _children,
+                activeIndex: _activeChildIndex,
+                onChanged: (index) => setState(() => _activeChildIndex = index),
+              ),
             ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.info_outline_rounded,
-                  color: AppTheme.info,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'PTM slots are set by teachers. Book your preferred slot below.',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 13,
-                      color: AppTheme.info,
-                    ),
-                  ),
-                ),
-              ],
+          const SizedBox(height: 20),
+          _PtmTeacherFilter(
+            classTeacherOnly: _classTeacherOnly,
+            onChanged: (classTeacherOnly) =>
+                setState(() => _classTeacherOnly = classTeacherOnly),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'Available PTM Slots',
+            style: GoogleFonts.dmSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppTheme.onSurface,
             ),
           ),
-          const SizedBox(height: 16),
-          ..._ptmSlots.asMap().entries.map((e) => _ptmSlotCard(e.key, e.value)),
+          const SizedBox(height: 10),
+          if (availableSlots.isEmpty)
+            _PtmEmptyCard(
+              icon: Icons.event_available_outlined,
+              text: _classTeacherOnly
+                  ? 'No class teacher slots available'
+                  : 'No available PTM slots',
+            )
+          else
+            for (final slot in availableSlots) ...[
+              _ptmSlotCard(slot),
+              const SizedBox(height: 12),
+            ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Booking History',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.onSurface,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh bookings',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _loadData,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (bookedSlots.isEmpty) ...[
+            _PtmEmptyCard(
+              icon: Icons.event_busy_outlined,
+              text: 'No more PTM bookings',
+            ),
+          ] else
+            for (final slot in bookedSlots) ...[
+              _ptmHistoryCard(slot),
+              const SizedBox(height: 12),
+            ],
         ],
       ),
     );
   }
 
-  Widget _ptmSlotCard(int index, Map<String, dynamic> slot) {
-    final status = slot['status'] as String? ?? 'available';
-    final isBooked = status == 'booked' || status == 'Booked';
+  Widget _ptmSlotCard(Map<String, dynamic> slot) {
     final teacherName =
         slot['teacherName'] as String? ?? slot['teacher'] as String? ?? '';
-    final subject = slot['subject'] as String? ?? '';
-    final room = slot['room'] as String? ?? '';
+    final subject = _ptmTeacherSubtitle(slot);
     final date = slot['date'] as String? ?? '';
     final time = slot['time'] as String? ?? '';
-    final bookedBy = slot['bookedBy'] as String? ?? '';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isBooked
-              ? _headerColor.withAlpha(80)
-              : AppTheme.outlineVariant,
-        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outlineVariant),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F0F172A),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          _PtmInitialsAvatar(name: teacherName),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1133,101 +1454,484 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
                   ),
                 ),
                 Text(
-                  '$subject • $room',
+                  subject,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     color: AppTheme.muted,
                   ),
                 ),
-                Text(
-                  '$date at $time',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: AppTheme.onSurfaceVariant,
-                  ),
-                ),
-                if (isBooked && bookedBy.isNotEmpty)
-                  Text(
-                    'Booked by: $bookedBy',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: AppTheme.success,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _PtmMetaChip(
+                      icon: Icons.calendar_today_rounded,
+                      text: date,
                     ),
-                  ),
+                    _PtmMetaChip(icon: Icons.access_time_rounded, text: time),
+                  ],
+                ),
               ],
             ),
           ),
-          isBooked
-              ? Container(
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              OutlinedButton(
+                onPressed: () => _bookPtmSlot(slot),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0057FF),
+                  side: const BorderSide(color: Color(0xFF0057FF)),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                    horizontal: 18,
+                    vertical: 12,
                   ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successContainer,
+                  shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.check_circle_rounded,
-                        color: AppTheme.success,
-                        size: 14,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Booked',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.success,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ElevatedButton(
-                  onPressed: () async {
-                    setState(() {
-                      _ptmSlots[index]['status'] = 'booked';
-                      _ptmSlots[index]['bookedBy'] = 'Parent';
-                    });
-                    final slot = _ptmSlots[index];
-                    await BackendApiClient.instance.bookParentTeacherMeeting(
-                      '${slot['id']}',
-                    );
-                    await _savePtmSlots();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('PTM slot booked with $teacherName!'),
-                          backgroundColor: AppTheme.success,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _headerColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: Text(
-                    'Book Slot',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                ),
+                child: Text(
+                  'Book',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _durationLabel(slot),
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
+
+  Widget _ptmHistoryCard(Map<String, dynamic> slot) {
+    final teacherName =
+        slot['teacherName'] as String? ?? slot['teacher'] as String? ?? '';
+    final subject = _ptmTeacherSubtitle(slot);
+    final date = slot['date'] as String? ?? '';
+    final time = slot['time'] as String? ?? '';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          _PtmInitialsAvatar(name: teacherName),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  teacherName,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.onSurface,
+                  ),
+                ),
+                Text(
+                  subject,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: AppTheme.muted,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _PtmMetaChip(
+                      icon: Icons.calendar_today_rounded,
+                      text: date,
+                    ),
+                    _PtmMetaChip(icon: Icons.access_time_rounded, text: time),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.successContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'Confirmed',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.success,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _bookPtmSlot(Map<String, dynamic> slot) async {
+    final id = '${slot['id'] ?? ''}'.trim();
+    if (id.isEmpty) return;
+    final teacherName =
+        slot['teacherName'] as String? ?? slot['teacher'] as String? ?? '';
+    final index = _ptmSlots.indexWhere((row) => '${row['id']}' == id);
+    if (index >= 0) {
+      setState(() {
+        _ptmSlots[index]['status'] = 'booked';
+        _ptmSlots[index]['bookedBy'] = 'Parent';
+      });
+    }
+    try {
+      await BackendApiClient.instance.bookParentTeacherMeeting(id);
+      await _savePtmSlots();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PTM slot booked with $teacherName!'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      await _savePtmSlots();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to book this PTM slot. Please try again.'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  List<Map<String, dynamic>> _selectedChildPtmSlots() {
+    final studentId = _activeStudentId();
+    if (studentId.isEmpty) return List<Map<String, dynamic>>.from(_ptmSlots);
+    return _ptmSlots
+        .where((slot) {
+          final slotStudentId = '${slot['student_id'] ?? ''}'.trim();
+          return slotStudentId.isEmpty || slotStudentId == studentId;
+        })
+        .map((slot) => Map<String, dynamic>.from(slot))
+        .toList();
+  }
+
+  String _activeStudentId() {
+    if (_children.isEmpty) return _firstStudentId;
+    return '${_children[_activeChildIndex]['id'] ?? ''}'.trim();
+  }
+
+  String _activeChildSelectorLabel() {
+    if (_children.isEmpty) return 'Student';
+    final child = _children[_activeChildIndex];
+    final name = '${child['name'] ?? child['full_name'] ?? ''}'.trim();
+    final firstName = '${child['first_name'] ?? ''}'.trim();
+    final lastName = '${child['last_name'] ?? ''}'.trim();
+    final fullName = name.isNotEmpty
+        ? name
+        : [firstName, lastName].where((part) => part.isNotEmpty).join(' ');
+    final grade =
+        '${child['class'] ?? child['grade_name'] ?? child['class_name'] ?? ''}'
+            .trim();
+    final label = fullName.isEmpty ? 'Student' : fullName;
+    return grade.isEmpty ? label : '$label ($grade)';
+  }
+
+  bool _isPtmSlotBooked(Map<String, dynamic> slot) {
+    final status = '${slot['status'] ?? ''}'.toLowerCase().trim();
+    return status == 'booked' || status == 'confirmed';
+  }
+
+  String _ptmTeacherSubtitle(Map<String, dynamic> slot) {
+    final subject = '${slot['subject'] ?? ''}'.trim();
+    return subject.isEmpty ? 'Teacher' : subject;
+  }
+
+  String _durationLabel(Map<String, dynamic> slot) {
+    final raw = slot['durationMin'];
+    final minutes = raw is num ? raw.toInt() : int.tryParse('$raw') ?? 15;
+    return '$minutes mins';
+  }
+}
+
+class _PtmChildSelector extends StatelessWidget {
+  final String label;
+  final List<Map<String, dynamic>> children;
+  final int activeIndex;
+  final ValueChanged<int> onChanged;
+
+  const _PtmChildSelector({
+    required this.label,
+    required this.children,
+    required this.activeIndex,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Container(
+      constraints: const BoxConstraints(minHeight: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A6B4A),
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x180F172A),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
+        ],
+      ),
+    );
+    if (children.length <= 1) return child;
+    return PopupMenuButton<int>(
+      tooltip: 'Select child',
+      onSelected: onChanged,
+      itemBuilder: (context) => [
+        for (var index = 0; index < children.length; index++)
+          PopupMenuItem(
+            value: index,
+            child: Text(_ptmChildLabel(children[index])),
+          ),
+      ],
+      child: child,
+    );
+  }
+}
+
+class _PtmTeacherFilter extends StatelessWidget {
+  final bool classTeacherOnly;
+  final ValueChanged<bool> onChanged;
+
+  const _PtmTeacherFilter({
+    required this.classTeacherOnly,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 10,
+      children: [
+        _PtmFilterPill(
+          label: 'All Teachers',
+          selected: !classTeacherOnly,
+          onTap: () => onChanged(false),
+        ),
+        _PtmFilterPill(
+          label: 'Class Teacher',
+          selected: classTeacherOnly,
+          onTap: () => onChanged(true),
+        ),
+      ],
+    );
+  }
+}
+
+class _PtmFilterPill extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _PtmFilterPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: label == 'All Teachers' ? 120 : 132,
+        constraints: const BoxConstraints(minHeight: 38, minWidth: 118),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF1A6B4A) : AppTheme.surfaceVariant,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? const Color(0xFF1A6B4A) : AppTheme.outlineVariant,
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.white : AppTheme.onSurface,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PtmInitialsAvatar extends StatelessWidget {
+  final String name;
+
+  const _PtmInitialsAvatar({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 28,
+      backgroundColor: const Color(0xFFDCFCE7),
+      foregroundColor: const Color(0xFF1A6B4A),
+      child: Text(
+        _ptmInitials(name),
+        style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w900),
+      ),
+    );
+  }
+}
+
+class _PtmMetaChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _PtmMetaChip({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: AppTheme.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(
+            text.isEmpty ? 'Not set' : text,
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PtmEmptyCard extends StatelessWidget {
+  final IconData icon;
+  final String text;
+
+  const _PtmEmptyCard({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: AppTheme.muted),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.muted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _ptmChildLabel(Map<String, dynamic> child) {
+  final explicit = '${child['name'] ?? child['full_name'] ?? ''}'.trim();
+  final first = '${child['first_name'] ?? ''}'.trim();
+  final last = '${child['last_name'] ?? ''}'.trim();
+  final name = explicit.isNotEmpty
+      ? explicit
+      : [first, last].where((part) => part.isNotEmpty).join(' ');
+  final grade =
+      '${child['class'] ?? child['grade_name'] ?? child['class_name'] ?? ''}'
+          .trim();
+  final label = name.isEmpty ? 'Student' : name;
+  return grade.isEmpty ? label : '$label ($grade)';
+}
+
+String _ptmInitials(String value) {
+  final parts = value
+      .split(RegExp(r'\s+'))
+      .where((part) => part.trim().isNotEmpty)
+      .take(2)
+      .map((part) => part.trim()[0].toUpperCase())
+      .join();
+  return parts.isEmpty ? 'T' : parts;
 }
 
 class _AttachmentBackendGapPage extends StatelessWidget {

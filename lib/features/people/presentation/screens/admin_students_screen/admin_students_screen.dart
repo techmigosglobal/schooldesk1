@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
@@ -220,7 +221,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       title: _isPrincipal ? 'Student Oversight' : 'Students',
       subtitle: _isPrincipal
           ? 'Review student records and handle requested changes'
-          : 'Create, assign, and maintain student records',
+          : 'Prepare, assign, and submit student record changes for Principal approval',
       drawer: drawer,
       floatingActionButton: DashboardFabWidget(
         role: _isPrincipal ? DashboardRole.principal : DashboardRole.admin,
@@ -232,10 +233,17 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           icon: const Icon(Icons.refresh_rounded),
           onPressed: _refreshFromBackend,
         ),
+        IconButton(
+          tooltip: 'Upload students CSV',
+          icon: const Icon(Icons.upload_file_rounded),
+          onPressed: _importStudentsCsv,
+        ),
         FilledButton.icon(
           onPressed: _openAddStudentPage,
           icon: const Icon(Icons.person_add_rounded, size: 18),
-          label: Text(_isPrincipal ? 'Add student' : 'Request student'),
+          label: Text(
+            _isPrincipal ? 'Add student' : 'Prepare Student Request',
+          ),
         ),
       ],
       bottom: TabBar(
@@ -278,6 +286,14 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               ],
             ),
     );
+  }
+
+  Future<void> _importStudentsCsv() async {
+    final imported = await BulkCsvImportService.importCsv(
+      context,
+      BulkCsvImportTarget.students,
+    );
+    if (imported && mounted) await _refreshFromBackend();
   }
 
   Widget _buildSearchFilter() {
@@ -406,28 +422,36 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           itemBuilder: (_) => [
             PopupMenuItem(
               value: 'edit',
-              child: Text(_isPrincipal ? 'Edit Profile' : 'Request Edit'),
+              child: Text(
+                _isPrincipal ? 'Edit Profile' : 'Prepare Edit Request',
+              ),
             ),
             const PopupMenuItem(value: 'docs', child: Text('Upload Documents')),
             PopupMenuItem(
               value: 'transfer',
               child: Text(
-                _isPrincipal ? 'Transfer Student' : 'Request Transfer',
+                _isPrincipal
+                    ? 'Transfer Student'
+                    : 'Prepare Transfer Request',
               ),
             ),
             PopupMenuItem(
               value: 'promote',
               child: Text(
-                _isPrincipal ? 'Promote to Next Class' : 'Request Promotion',
+                _isPrincipal
+                    ? 'Promote to Next Class'
+                    : 'Prepare Promotion Request',
               ),
             ),
             PopupMenuItem(
               value: 'tc',
-              child: Text(_isPrincipal ? 'Issue TC' : 'Request TC'),
+              child: Text(_isPrincipal ? 'Issue TC' : 'Prepare TC Request'),
             ),
             PopupMenuItem(
               value: 'delete',
-              child: Text(_isPrincipal ? 'Delete' : 'Request Delete'),
+              child: Text(
+                _isPrincipal ? 'Delete' : 'Prepare Removal Request',
+              ),
             ),
           ],
         ),
@@ -492,7 +516,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          _isPrincipal ? 'Remove Student' : 'Request Student Removal',
+          _isPrincipal
+              ? 'Remove Student'
+              : 'Prepare Student Removal Request',
         ),
         content: Text(
           _isPrincipal
@@ -506,7 +532,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Remove'),
+            child: Text(
+              _isPrincipal ? 'Remove' : 'Submit Removal for Approval',
+            ),
           ),
         ],
       ),
@@ -531,7 +559,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             content: Text(
               _isPrincipal
                   ? '${s['name']} removed'
-                  : '${s['name']} removal sent for approval',
+                  : '${s['name']} removal submitted for Principal approval',
             ),
             backgroundColor: _isPrincipal ? AppTheme.error : AppTheme.success,
             behavior: SnackBarBehavior.floating,
@@ -542,7 +570,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Delete failed: $e'),
+            content: Text(
+              _isPrincipal ? 'Removal failed: $e' : 'Removal request failed: $e',
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -593,7 +623,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             await _refreshFromBackend();
             return _isPrincipal
                 ? 'Student ${values.name.trim()} added successfully'
-                : 'Student ${values.name.trim()} sent for approval';
+                : 'Student ${values.name.trim()} submitted for Principal approval';
           },
         ),
       ),
@@ -649,7 +679,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             await _refreshFromBackend();
             return _isPrincipal
                 ? 'Student updated'
-                : 'Student update sent for approval';
+                : 'Student update submitted for Principal approval';
           },
         ),
       ),
@@ -668,7 +698,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          _isPrincipal ? 'Transfer Student' : 'Request Student Transfer',
+          _isPrincipal
+              ? 'Transfer Student'
+              : 'Prepare Student Transfer Request',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
         content: Text(
@@ -693,7 +725,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                     content: Text(
                       _isPrincipal
                           ? 'Transfer initiated for ${s['name']}'
-                          : 'Transfer request sent for ${s['name']}',
+                          : 'Transfer request submitted for ${s['name']}',
                     ),
                     backgroundColor: _isPrincipal
                         ? AppTheme.warning
@@ -703,7 +735,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
-            child: Text(_isPrincipal ? 'Initiate Transfer' : 'Send Request'),
+            child: Text(
+              _isPrincipal ? 'Initiate Transfer' : 'Submit Transfer for Approval',
+            ),
           ),
         ],
       ),
@@ -723,7 +757,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             await _refreshFromBackend();
             return _isPrincipal
                 ? '${s['name']} promoted successfully'
-                : 'Promotion request sent for ${s['name']}';
+                : 'Promotion request submitted for ${s['name']}';
           },
         ),
       ),
@@ -746,7 +780,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          _isPrincipal ? 'Issue Transfer Certificate' : 'Request TC',
+          _isPrincipal
+              ? 'Issue Transfer Certificate'
+              : 'Prepare TC Request',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
         content: Text(
@@ -771,14 +807,14 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                     content: Text(
                       _isPrincipal
                           ? 'TC workflow started for ${s['name']}'
-                          : 'TC request sent for ${s['name']}',
+                          : 'TC request submitted for ${s['name']}',
                     ),
                     backgroundColor: AppTheme.success,
                   ),
                 );
               }
             },
-            child: Text(_isPrincipal ? 'Generate TC' : 'Send Request'),
+            child: Text(_isPrincipal ? 'Generate TC' : 'Submit TC for Approval'),
           ),
         ],
       ),
@@ -1032,7 +1068,9 @@ class _StudentFormPageState extends State<_StudentFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errorText = 'Save failed: $e';
+        _errorText = widget.isPrincipal
+            ? 'Save failed: $e'
+            : 'Submission failed: $e';
       });
     }
   }
@@ -1042,19 +1080,21 @@ class _StudentFormPageState extends State<_StudentFormPage> {
     final title = _isEdit
         ? widget.isPrincipal
               ? 'Edit Student'
-              : 'Request Student Update'
+              : 'Prepare Student Update Request'
         : widget.isPrincipal
         ? 'Add New Student'
-        : 'Request New Student';
+        : 'Prepare Student Request';
     final submitLabel = _saving
-        ? 'Saving...'
+        ? widget.isPrincipal
+              ? 'Saving...'
+              : 'Submitting...'
         : _isEdit
         ? widget.isPrincipal
               ? 'Save'
-              : 'Send Request'
+              : 'Submit Update for Approval'
         : widget.isPrincipal
         ? 'Add Student'
-        : 'Send Request';
+        : 'Submit Student for Approval';
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),
@@ -1263,12 +1303,16 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.isPrincipal ? 'Promote Student' : 'Request Promotion';
+    final title = widget.isPrincipal
+        ? 'Promote Student'
+        : 'Prepare Promotion Request';
     final submitLabel = _saving
-        ? 'Saving...'
+        ? widget.isPrincipal
+              ? 'Saving...'
+              : 'Submitting...'
         : widget.isPrincipal
         ? 'Promote'
-        : 'Send Request';
+        : 'Submit Promotion for Approval';
 
     return Scaffold(
       appBar: AppBar(title: Text(title)),

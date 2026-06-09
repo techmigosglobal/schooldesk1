@@ -29,6 +29,7 @@ part 'api_modules/communications_api.dart';
 part 'api_modules/timetable_api.dart';
 part 'api_modules/homework_api.dart';
 part 'api_modules/tables_raw_api.dart';
+part 'api_modules/approval_requests_api.dart';
 
 /// Backend API client for school-desk backend
 /// Handles all HTTP communication with the Go backend
@@ -117,14 +118,13 @@ class BackendApiClient {
     if (e.response != null) {
       final statusCode = e.response!.statusCode ?? 0;
       final data = e.response!.data;
-      final message =
-          (data is Map<String, dynamic>
-              ? (data['error'] as String? ?? data['message'] as String?)
-              : null) ??
-          'Server error occurred.';
-      if (statusCode == 401) return AuthException(message: message);
-      if (statusCode == 404) return NotFoundException(message: message);
-      return ServerException(message: message, statusCode: statusCode);
+      final message = data is Map<String, dynamic>
+          ? _serverErrorMessage(data)
+          : 'Server error occurred.';
+      final safeMessage = message.isEmpty ? 'Server error occurred.' : message;
+      if (statusCode == 401) return AuthException(message: safeMessage);
+      if (statusCode == 404) return NotFoundException(message: safeMessage);
+      return ServerException(message: safeMessage, statusCode: statusCode);
     }
     return NetworkException(message: e.message ?? 'Network error occurred.');
   }
@@ -152,6 +152,21 @@ class BackendApiClient {
     for (final value in values) {
       final text = _trimmed(value);
       if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _serverErrorMessage(Map<String, dynamic> data) {
+    final message = _firstNonEmpty([data['message']]);
+    if (message.isNotEmpty) return message;
+    final error = data['error'];
+    if (error is String) return error.trim();
+    if (error is Map) {
+      return _firstNonEmpty([
+        error['message'],
+        error['details'],
+        error['code'],
+      ]);
     }
     return '';
   }

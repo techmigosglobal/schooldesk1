@@ -60,6 +60,7 @@ void main() {
             ),
             onApprove: () {},
             onReject: (_) {},
+            onRequestChanges: (_) {},
           ),
         ],
       ),

@@ -468,7 +468,20 @@ func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
 	}
 	if err := query.First(&summary).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			fail(c, http.StatusNotFound, "Attendance summary not found")
+			c.JSON(http.StatusOK, models.APIResponse{
+				Success: true,
+				Data: gin.H{
+					"student_id":        studentID,
+					"academic_year_id":  yearID,
+					"term_id":           termID,
+					"total_days":        0,
+					"present_days":      0,
+					"absent_days":       0,
+					"late_count":        0,
+					"attendance_pct":    0,
+					"attendance_status": "not_started",
+				},
+			})
 			return
 		}
 		fail(c, http.StatusInternalServerError, "Failed to load attendance summary")

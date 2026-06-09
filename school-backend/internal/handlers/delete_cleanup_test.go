@@ -92,6 +92,7 @@ func TestDeleteStaffClearsAssignmentsAndOwnedRecords(t *testing.T) {
 	}
 
 	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.GET("/staff", NewStaffHandler().GetStaff)
 	router.DELETE("/staff/:id", NewStaffHandler().DeleteStaff)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/staff/"+f.teacherStaffID, nil))
@@ -138,6 +139,85 @@ func TestDeleteStaffClearsAssignmentsAndOwnedRecords(t *testing.T) {
 	if linkedUser.IsActive {
 		t.Fatalf("linked teacher user should be inactive")
 	}
+
+	defaultList := httptest.NewRecorder()
+	router.ServeHTTP(defaultList, httptest.NewRequest(http.MethodGet, "/staff", nil))
+	if defaultList.Code != http.StatusOK {
+		t.Fatalf("default staff list status=%d body=%s", defaultList.Code, defaultList.Body.String())
+	}
+	if row := findPolicyRow(decodePolicyList(t, defaultList.Body.String()), f.teacherStaffID); row != nil {
+		t.Fatalf("inactive staff should not appear in default staff directory: %#v", row)
+	}
+
+	inactiveList := httptest.NewRecorder()
+	router.ServeHTTP(inactiveList, httptest.NewRequest(http.MethodGet, "/staff?status=inactive", nil))
+	if inactiveList.Code != http.StatusOK {
+		t.Fatalf("inactive staff list status=%d body=%s", inactiveList.Code, inactiveList.Body.String())
+	}
+	if row := findPolicyRow(decodePolicyList(t, inactiveList.Body.String()), f.teacherStaffID); row == nil {
+		t.Fatalf("explicit inactive staff list should still expose inactive audit rows")
+	}
+}
+
+func TestDeleteClassRemovesLastSectionFeeSetup(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	grade := models.Grade{
+		BaseModel:   models.BaseModel{ID: "grade-delete-fees"},
+		SchoolID:    f.schoolID,
+		GradeNumber: 12,
+		GradeName:   "Delete Fees Grade",
+	}
+	section := models.Section{
+		BaseModel:      models.BaseModel{ID: "section-delete-fees"},
+		SchoolID:       f.schoolID,
+		GradeID:        grade.ID,
+		AcademicYearID: f.yearID,
+		SectionName:    "A",
+		Capacity:       30,
+	}
+	category := models.FeeCategory{
+		BaseModel:    models.BaseModel{ID: "fee-cat-delete-fees"},
+		SchoolID:     f.schoolID,
+		CategoryName: "Tuition",
+		Frequency:    "term",
+	}
+	feeStructure := models.FeeStructure{
+		BaseModel:      models.BaseModel{ID: "fee-structure-delete-fees"},
+		SchoolID:       f.schoolID,
+		AcademicYearID: f.yearID,
+		GradeID:        grade.ID,
+		FeeCategoryID:  category.ID,
+		Amount:         1000,
+		DueDay:         10,
+	}
+	gradeSubject := models.GradeSubject{
+		BaseModel:      models.BaseModel{ID: "grade-subject-delete-fees"},
+		SchoolID:       f.schoolID,
+		AcademicYearID: f.yearID,
+		GradeID:        grade.ID,
+		SubjectID:      f.subjectID,
+		PeriodsPerWeek: 5,
+		MaxMarks:       100,
+		PassMarks:      35,
+		IsMandatory:    true,
+	}
+	for _, row := range []any{&grade, &section, &category, &feeStructure, &gradeSubject} {
+		if err := database.DB.Create(row).Error; err != nil {
+			t.Fatalf("seed %T: %v", row, err)
+		}
+	}
+
+	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.DELETE("/principal/classes/:section_id", NewPrincipalClassesHandler().DeleteClass)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/principal/classes/"+section.ID, nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("delete class status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	assertZeroRows(t, &models.Section{}, "id = ?", section.ID)
+	assertZeroRows(t, &models.FeeStructure{}, "grade_id = ? AND academic_year_id = ?", grade.ID, f.yearID)
+	assertZeroRows(t, &models.GradeSubject{}, "grade_id = ? AND academic_year_id = ?", grade.ID, f.yearID)
 }
 
 func assertZeroRows(t *testing.T, model interface{}, query string, args ...interface{}) {

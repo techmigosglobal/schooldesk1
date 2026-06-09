@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -181,6 +182,42 @@ func notifyHomeworkCreatedFromRecord(row HomeworkRecord) {
 		"medium",
 		"homework",
 		homeworkID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}
+
+func notifyCommunicationCreatedFromRecord(row map[string]interface{}) {
+	schoolID := communicationRecordString(row, "school_id")
+	messageID := communicationRecordString(row, "message_id")
+	receiverID := communicationRecordString(row, "receiver_id")
+	if schoolID == "" || messageID == "" || receiverID == "" {
+		return
+	}
+	senderName := communicationSenderName(schoolID, communicationRecordString(row, "sender_id"))
+	title := "New direct message"
+	if senderName != "" {
+		title = "Message from " + senderName
+	}
+	body := communicationRecordString(row, "message_content")
+	if body == "" {
+		body = "A direct message has been sent."
+	}
+	priority := strings.ToLower(communicationRecordString(row, "priority"))
+	if priority == "" {
+		priority = "medium"
+	}
+	logs, err := createNotificationLogsForUserIDsTx(
+		database.DB,
+		schoolID,
+		[]string{receiverID},
+		title,
+		body,
+		"message",
+		priority,
+		"communication",
+		messageID,
 	)
 	if err == nil {
 		enqueuePushNotifications(logs)
@@ -862,6 +899,19 @@ func notificationRoute(referenceType, role string) string {
 		if role == "teacher" {
 			return "/teacher-communication-screen"
 		}
+	case "communication":
+		if role == "parent" {
+			return "/parent-teacher-chat-screen"
+		}
+		if role == "teacher" {
+			return "/teacher-communication-screen"
+		}
+		if role == "principal" {
+			return "/communication-center-screen"
+		}
+		if role == "admin" {
+			return "/admin-communication-screen"
+		}
 	case "homework":
 		if role == "parent" {
 			return "/parent-homework-screen"
@@ -907,6 +957,48 @@ func notificationRoute(referenceType, role string) string {
 		return "/approval-center-screen"
 	}
 	return "/notification-center-screen"
+}
+
+func communicationRecordString(row map[string]interface{}, key string) string {
+	if row == nil {
+		return ""
+	}
+	switch value := row[key].(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(value)
+	case []byte:
+		return strings.TrimSpace(string(value))
+	default:
+		out := strings.TrimSpace(fmt.Sprint(value))
+		if out == "<nil>" {
+			return ""
+		}
+		return out
+	}
+}
+
+func communicationSenderName(schoolID, senderID string) string {
+	schoolID = strings.TrimSpace(schoolID)
+	senderID = strings.TrimSpace(senderID)
+	if schoolID == "" || senderID == "" {
+		return ""
+	}
+	var user models.User
+	if err := database.DB.First(&user, "id = ? AND school_id = ?", senderID, schoolID).Error; err != nil {
+		return ""
+	}
+	if name := strings.TrimSpace(user.Name); name != "" {
+		return name
+	}
+	if username := strings.TrimSpace(user.Username); username != "" {
+		return username
+	}
+	if email := strings.TrimSpace(user.Email); email != "" {
+		return email
+	}
+	return ""
 }
 
 func enqueuePushNotifications(logs []models.NotificationLog) {

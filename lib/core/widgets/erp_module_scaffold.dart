@@ -193,6 +193,16 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   }
 
   List<Widget> _compactToolbarActions() {
+    if (_role == 'parent') {
+      return [
+        _ToolbarIconButton(
+          tooltip: SchoolDeskGlossary.notifications,
+          icon: Icons.notifications_none_rounded,
+          badgeCount: _unreadCount,
+          onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
+        ),
+      ];
+    }
     return [
       _ToolbarIconButton(
         tooltip: SchoolDeskGlossary.notifications,

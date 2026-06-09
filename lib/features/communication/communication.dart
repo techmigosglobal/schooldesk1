@@ -6,6 +6,7 @@ export 'presentation/screens/homework_messaging_screen/homework_messaging_screen
 export 'presentation/screens/notification_center_screen/notification_center_screen.dart';
 export 'presentation/screens/parent_notices_screen/parent_notices_screen.dart';
 export 'presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart';
+export 'presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart';
 export 'presentation/screens/principal_inbox_screen/principal_operational_inbox_screen.dart';
 export 'presentation/screens/teacher_communication_screen/teacher_communication_screen.dart';
 export 'presentation/screens/teacher_parent_interaction_screen/teacher_parent_interaction_screen.dart';

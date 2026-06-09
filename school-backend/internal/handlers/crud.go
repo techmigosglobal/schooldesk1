@@ -451,7 +451,7 @@ func validateStaffSubjectPolicy[T any](c *gin.Context, row *T) error {
 	subjectID := getStringField(row, "SubjectID")
 	gradeID := getStringField(row, "GradeID")
 	sectionID := getStringField(row, "SectionID")
-	return academicDomainService().ValidateStaffSubjectAssignment(
+	return academicDomainService().ValidateStaffSubjectRefs(
 		schoolID,
 		getStringField(row, "AcademicYearID"),
 		staffID,

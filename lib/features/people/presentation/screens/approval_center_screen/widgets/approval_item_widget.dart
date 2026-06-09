@@ -7,6 +7,7 @@ class ApprovalItemWidget extends StatefulWidget {
   final ApprovalModel approval;
   final VoidCallback onApprove;
   final Function(String remarks) onReject;
+  final Function(String note) onRequestChanges;
   final bool isActionLoading;
 
   const ApprovalItemWidget({
@@ -14,6 +15,7 @@ class ApprovalItemWidget extends StatefulWidget {
     required this.approval,
     required this.onApprove,
     required this.onReject,
+    required this.onRequestChanges,
     this.isActionLoading = false,
   });
 
@@ -36,6 +38,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return AppTheme.success;
       case ApprovalType.feeConcession:
         return AppTheme.warning;
+      case ApprovalType.fee:
+        return AppTheme.warning;
       case ApprovalType.tc:
         return AppTheme.secondary;
       case ApprovalType.classApproval:
@@ -46,6 +50,16 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return AppTheme.primary;
       case ApprovalType.timetable:
         return AppTheme.error;
+      case ApprovalType.exam:
+        return AppTheme.secondary;
+      case ApprovalType.document:
+        return AppTheme.primary;
+      case ApprovalType.communication:
+        return AppTheme.info;
+      case ApprovalType.helpdesk:
+        return AppTheme.warning;
+      case ApprovalType.academicInfo:
+        return AppTheme.primary;
     }
   }
 
@@ -61,6 +75,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Icons.how_to_reg_rounded;
       case ApprovalType.feeConcession:
         return Icons.account_balance_wallet_rounded;
+      case ApprovalType.fee:
+        return Icons.payments_rounded;
       case ApprovalType.tc:
         return Icons.description_rounded;
       case ApprovalType.classApproval:
@@ -71,6 +87,16 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Icons.celebration_rounded;
       case ApprovalType.timetable:
         return Icons.schedule_rounded;
+      case ApprovalType.exam:
+        return Icons.quiz_rounded;
+      case ApprovalType.document:
+        return Icons.description_rounded;
+      case ApprovalType.communication:
+        return Icons.campaign_rounded;
+      case ApprovalType.helpdesk:
+        return Icons.support_agent_rounded;
+      case ApprovalType.academicInfo:
+        return Icons.auto_stories_rounded;
     }
   }
 
@@ -86,6 +112,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return 'Admission';
       case ApprovalType.feeConcession:
         return 'Fee Concession';
+      case ApprovalType.fee:
+        return 'Fee';
       case ApprovalType.tc:
         return 'TC Request';
       case ApprovalType.classApproval:
@@ -96,6 +124,16 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return 'Event';
       case ApprovalType.timetable:
         return 'Timetable';
+      case ApprovalType.exam:
+        return 'Exam';
+      case ApprovalType.document:
+        return 'Document';
+      case ApprovalType.communication:
+        return 'Communication';
+      case ApprovalType.helpdesk:
+        return 'Helpdesk';
+      case ApprovalType.academicInfo:
+        return 'Academic Info';
     }
   }
 
@@ -109,48 +147,66 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
     widget.onReject(remarks);
   }
 
-  Widget _statusChip(bool isPending, bool isApproved) {
+  Future<void> _openRequestChangesPage() async {
+    final note = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => _ApprovalRejectPage(
+          approval: widget.approval,
+          title: 'Request Changes',
+          fieldLabel: 'Change request note',
+          hintText: 'Tell Admin what needs to change...',
+          actionLabel: 'Request changes',
+          icon: Icons.edit_note_rounded,
+          color: AppTheme.warning,
+        ),
+      ),
+    );
+    if (note == null) return;
+    widget.onRequestChanges(note);
+  }
+
+  Widget _statusChip(bool isPending, bool isApproved, bool isChangesRequested) {
+    final color = isPending || isChangesRequested
+        ? AppTheme.warning
+        : isApproved
+        ? AppTheme.success
+        : AppTheme.error;
+    final containerColor = isPending || isChangesRequested
+        ? AppTheme.warningContainer
+        : isApproved
+        ? AppTheme.successContainer
+        : AppTheme.errorContainer;
+    final icon = isPending
+        ? Icons.hourglass_empty_rounded
+        : isChangesRequested
+        ? Icons.edit_note_rounded
+        : isApproved
+        ? Icons.check_circle_rounded
+        : Icons.cancel_rounded;
+    final label = isPending
+        ? 'Pending'
+        : isChangesRequested
+        ? 'Changes requested'
+        : isApproved
+        ? 'Approved'
+        : 'Rejected';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isPending
-            ? AppTheme.warningContainer
-            : isApproved
-            ? AppTheme.successContainer
-            : AppTheme.errorContainer,
+        color: containerColor,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isPending
-                ? Icons.hourglass_empty_rounded
-                : isApproved
-                ? Icons.check_circle_rounded
-                : Icons.cancel_rounded,
-            size: 11,
-            color: isPending
-                ? AppTheme.warning
-                : isApproved
-                ? AppTheme.success
-                : AppTheme.error,
-          ),
+          Icon(icon, size: 11, color: color),
           const SizedBox(width: 4),
           Text(
-            isPending
-                ? 'Pending'
-                : isApproved
-                ? 'Approved'
-                : 'Rejected',
+            label,
             style: GoogleFonts.ibmPlexSans(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: isPending
-                  ? AppTheme.warning
-                  : isApproved
-                  ? AppTheme.success
-                  : AppTheme.error,
+              color: color,
             ),
           ),
         ],
@@ -217,6 +273,23 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
             ),
           ),
         );
+        final changesButton = OutlinedButton.icon(
+          onPressed: isBusy ? null : _openRequestChangesPage,
+          icon: const Icon(Icons.edit_note_rounded, size: 16),
+          label: const Text('Request changes'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.warning,
+            side: const BorderSide(color: AppTheme.warning, width: 1),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            textStyle: GoogleFonts.ibmPlexSans(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        );
         final approveButton = ElevatedButton.icon(
           onPressed: isBusy ? null : widget.onApprove,
           icon: isBusy
@@ -250,6 +323,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
             children: [
               SizedBox(width: double.infinity, child: approveButton),
               const SizedBox(height: 8),
+              SizedBox(width: double.infinity, child: changesButton),
+              const SizedBox(height: 8),
               SizedBox(width: double.infinity, child: rejectButton),
             ],
           );
@@ -258,6 +333,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Row(
           children: [
             Expanded(child: rejectButton),
+            const SizedBox(width: 10),
+            Expanded(child: changesButton),
             const SizedBox(width: 10),
             Expanded(flex: 2, child: approveButton),
           ],
@@ -270,6 +347,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
   Widget build(BuildContext context) {
     final isPending = widget.approval.status == 'pending';
     final isApproved = widget.approval.status == 'approved';
+    final isChangesRequested = widget.approval.status == 'changes_requested';
     final typeColor = _getTypeColor();
     final isBusy = widget.isActionLoading;
     final requesterMeta = [
@@ -281,7 +359,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: isPending
+        border: isPending || isChangesRequested
             ? Border.all(color: AppTheme.warning.withAlpha(77), width: 1)
             : Border.all(color: AppTheme.outlineVariant, width: 1),
         boxShadow: [
@@ -303,7 +381,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                 // Left color accent
                 Container(
                   width: 4,
-                  color: isPending
+                  color: isPending || isChangesRequested
                       ? AppTheme.warning
                       : isApproved
                       ? AppTheme.success
@@ -350,7 +428,11 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                                             WrapCrossAlignment.center,
                                         children: [
                                           _typeChip(typeColor),
-                                          _statusChip(isPending, isApproved),
+                                          _statusChip(
+                                            isPending,
+                                            isApproved,
+                                            isChangesRequested,
+                                          ),
                                         ],
                                       ),
                                       const SizedBox(height: 6),
@@ -560,8 +642,22 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
 
 class _ApprovalRejectPage extends StatefulWidget {
   final ApprovalModel approval;
+  final String title;
+  final String fieldLabel;
+  final String hintText;
+  final String actionLabel;
+  final IconData icon;
+  final Color color;
 
-  const _ApprovalRejectPage({required this.approval});
+  const _ApprovalRejectPage({
+    required this.approval,
+    this.title = 'Reject Request',
+    this.fieldLabel = 'Rejection reason',
+    this.hintText = 'Enter rejection reason...',
+    this.actionLabel = 'Reject',
+    this.icon = Icons.close_rounded,
+    this.color = AppTheme.error,
+  });
 
   @override
   State<_ApprovalRejectPage> createState() => _ApprovalRejectPageState();
@@ -588,7 +684,7 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
       backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
-          'Reject Request',
+          widget.title,
           style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w700),
         ),
         backgroundColor: AppTheme.surface,
@@ -621,8 +717,8 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
                 maxLines: 5,
                 textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
-                  labelText: 'Rejection reason',
-                  hintText: 'Enter rejection reason...',
+                  labelText: widget.fieldLabel,
+                  hintText: widget.hintText,
                   filled: true,
                   fillColor: AppTheme.surfaceVariant,
                   border: OutlineInputBorder(
@@ -631,26 +727,25 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(
-                      color: AppTheme.error,
-                      width: 2,
-                    ),
+                    borderSide: BorderSide(color: widget.color, width: 2),
                   ),
                   contentPadding: const EdgeInsets.all(12),
                 ),
                 validator: (value) {
                   final remarks = value?.trim() ?? '';
-                  if (remarks.isEmpty) return 'Enter rejection reason';
-                  if (remarks.length < 8) return 'Add more reason detail';
+                  if (remarks.isEmpty) {
+                    return 'Enter ${widget.fieldLabel.toLowerCase()}';
+                  }
+                  if (remarks.length < 8) return 'Add more detail';
                   return null;
                 },
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: _submit,
-                icon: const Icon(Icons.close_rounded, size: 16),
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
-                label: const Text('Reject'),
+                icon: Icon(widget.icon, size: 16),
+                style: FilledButton.styleFrom(backgroundColor: widget.color),
+                label: Text(widget.actionLabel),
               ),
             ],
           ),

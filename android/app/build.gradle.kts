@@ -20,11 +20,12 @@ val defaultExternalKeystorePropertiesFile = File(
     System.getProperty("user.home"),
     ".schooldesk-signing/key.properties"
 )
-val legacyKeystorePropertiesFile = rootProject.file("key.properties")
+val projectKeystorePropertiesFile = rootProject.file("key.properties")
 val keystorePropertiesFile = listOfNotNull(
     envKeystorePropertiesFile,
+    projectKeystorePropertiesFile,
     defaultExternalKeystorePropertiesFile,
-).firstOrNull { it.exists() } ?: legacyKeystorePropertiesFile
+).firstOrNull { it.exists() } ?: projectKeystorePropertiesFile
 if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
@@ -58,7 +59,7 @@ val isReleaseSigningTask = gradle.startParameter.taskNames.any {
 
 if (isReleaseSigningTask && !hasReleaseSigningConfig) {
     throw GradleException(
-        "Release signing is not configured. Create ~/.schooldesk-signing/key.properties " +
+        "Release signing is not configured. Create android/key.properties " +
             "with storeFile, storePassword, keyAlias, and keyPassword, set " +
             "SCHOOLDESK_KEY_PROPERTIES to an external key.properties file, or set " +
             "ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, " +

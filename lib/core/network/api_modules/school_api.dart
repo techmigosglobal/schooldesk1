@@ -220,4 +220,45 @@ extension BackendSchoolApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  Future<List<Map<String, dynamic>>> getRooms() async {
+    try {
+      final response = await _dio.get('/rooms');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asListMap(data['data']);
+      }
+      throw ServerException(message: data['error'] ?? 'Failed to get rooms');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createRoom({
+    required String roomNumber,
+    String roomType = 'classroom',
+    int capacity = 0,
+    String block = '',
+    int floor = 0,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/rooms',
+        data: {
+          'room_number': roomNumber.trim(),
+          'room_type': roomType.trim().isEmpty ? 'classroom' : roomType.trim(),
+          'capacity': capacity,
+          'block': block.trim(),
+          'floor': floor,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(message: data['error'] ?? 'Failed to create room');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

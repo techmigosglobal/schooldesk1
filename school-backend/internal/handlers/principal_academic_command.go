@@ -59,6 +59,7 @@ func (h *PrincipalAcademicCommandHandler) TimetableOverview(c *gin.Context) {
 
 	var sections []models.Section
 	_ = database.DB.Preload("Grade").
+		Preload("ClassTeacher").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", schoolID).
 		Order("grades.grade_number ASC, sections.section_name ASC").
@@ -232,8 +233,10 @@ func principalTimetableSlotQuery(schoolID string) *gorm.DB {
 		Where("grades.school_id = ?", schoolID).
 		Preload("Section").
 		Preload("Section.Grade").
+		Preload("Section.ClassTeacher").
 		Preload("Subject").
 		Preload("Staff").
+		Preload("Staff.Department").
 		Preload("Room")
 }
 
@@ -416,7 +419,11 @@ func timetableClassRows(slots []models.TimetableSlot, sections []models.Section)
 		list := sectionSlots[section.ID]
 		rows = append(rows, gin.H{
 			"section_id":       section.ID,
+			"grade_id":         section.GradeID,
+			"academic_year_id": section.AcademicYearID,
 			"class_name":       principalClassLabel(section),
+			"class_teacher":    principalTeacherName(section.ClassTeacher),
+			"capacity":         section.Capacity,
 			"slot_count":       len(list),
 			"teacher_count":    distinctSlotValues(list, "staff"),
 			"subject_count":    distinctSlotValues(list, "subject"),
@@ -439,12 +446,14 @@ func timetableTeacherRows(slots []models.TimetableSlot) []gin.H {
 	rows := make([]gin.H, 0, len(grouped))
 	for staffID, list := range grouped {
 		rows = append(rows, gin.H{
-			"staff_id":       staffID,
-			"teacher_name":   principalTeacherName(list[0].Staff),
-			"periods":        len(list),
-			"classes":        distinctSlotValues(list, "section"),
-			"subjects":       distinctSlotValues(list, "subject"),
-			"workload_state": workloadState(len(list)),
+			"staff_id":        staffID,
+			"teacher_name":    principalTeacherName(list[0].Staff),
+			"department_name": principalTeacherDepartment(list[0].Staff),
+			"designation":     principalTeacherDesignation(list[0].Staff),
+			"periods":         len(list),
+			"classes":         distinctSlotValues(list, "section"),
+			"subjects":        distinctSlotValues(list, "subject"),
+			"workload_state":  workloadState(len(list)),
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
@@ -492,6 +501,9 @@ func timetableRoomRows(slots []models.TimetableSlot) []gin.H {
 			"room_id":     roomID,
 			"room_name":   principalRoomName(list[0].Room),
 			"room_type":   principalRoomType(list[0].Room),
+			"capacity":    principalRoomCapacity(list[0].Room),
+			"block":       principalRoomBlock(list[0].Room),
+			"floor":       principalRoomFloor(list[0].Room),
 			"periods":     len(list),
 			"classes":     distinctSlotValues(list, "section"),
 			"conflicts":   roomConflictCount(list),
@@ -771,7 +783,9 @@ func timetableSlotRow(slot models.TimetableSlot) gin.H {
 		"subject_name":     principalSlotSubjectName(&slot),
 		"teacher":          principalTeacherName(slot.Staff),
 		"teacher_name":     principalTeacherName(slot.Staff),
+		"department_name":  principalTeacherDepartment(slot.Staff),
 		"room":             principalRoomName(slot.Room),
+		"room_capacity":    principalRoomCapacity(slot.Room),
 		"day":              weekdayLabel(slot.DayOfWeek),
 		"day_of_week":      slot.DayOfWeek,
 		"period":           slot.PeriodNumber,
@@ -881,6 +895,20 @@ func principalSubjectName(subject *models.Subject) string {
 	return firstNonEmpty(subject.SubjectName, subject.SubjectCode, "Subject")
 }
 
+func principalTeacherDepartment(staff *models.Staff) string {
+	if staff == nil || staff.Department == nil {
+		return ""
+	}
+	return strings.TrimSpace(staff.Department.DepartmentName)
+}
+
+func principalTeacherDesignation(staff *models.Staff) string {
+	if staff == nil {
+		return ""
+	}
+	return strings.TrimSpace(staff.Designation)
+}
+
 func principalRoomName(room *models.Room) string {
 	if room == nil {
 		return "Not assigned"
@@ -893,6 +921,20 @@ func principalRoomType(room *models.Room) string {
 		return ""
 	}
 	return strings.TrimSpace(room.RoomType)
+}
+
+func principalRoomBlock(room *models.Room) string {
+	if room == nil {
+		return ""
+	}
+	return strings.TrimSpace(room.Block)
+}
+
+func principalRoomFloor(room *models.Room) int {
+	if room == nil {
+		return 0
+	}
+	return room.Floor
 }
 
 func isLabRoom(room *models.Room) bool {
@@ -913,6 +955,13 @@ func principalSlotClassName(slot *models.TimetableSlot) string {
 func principalSlotSubjectName(slot *models.TimetableSlot) string {
 	if slot == nil {
 		return "Subject"
+	}
+	slotType := strings.TrimSpace(slot.SlotType)
+	if strings.Contains(strings.ToLower(slotType), "break") {
+		if parts := strings.SplitN(slotType, ":", 2); len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+			return strings.TrimSpace(parts[1])
+		}
+		return "Break"
 	}
 	return principalSubjectName(slot.Subject)
 }
@@ -978,6 +1027,9 @@ func examDashboardRows(exams []models.Exam, now time.Time) []gin.H {
 			"schedule_count":      len(exam.Schedules),
 			"subjects_assigned":   distinctExamScheduleValues(exam.Schedules, "subject"),
 			"classes_assigned":    distinctExamScheduleValues(exam.Schedules, "section"),
+			"subject_names":       strings.Join(examScheduleLabels(exam.Schedules, "subject"), ", "),
+			"class_names":         strings.Join(examScheduleLabels(exam.Schedules, "section"), ", "),
+			"schedule_details":    examScheduleDetailRows(exam.Schedules),
 			"evaluation_percent":  examEvaluationPercent(exam),
 			"evaluation_status":   examEvaluationStatus(exam),
 			"pending_marks_count": examPendingMarks(exam),
@@ -1041,6 +1093,7 @@ func examEvaluationRows(exams []models.Exam) []gin.H {
 				"schedule_id":      schedule.ID,
 				"class_name":       examScheduleClassName(schedule),
 				"subject":          principalSubjectName(schedule.Subject),
+				"syllabus":         schedule.Syllabus,
 				"exam_date":        schedule.ExamDate.Format("2006-01-02"),
 				"expected_marks":   expected,
 				"submitted_marks":  submitted,
@@ -1080,6 +1133,7 @@ func examMonitoringRows(exams []models.Exam, start, end time.Time) []gin.H {
 				"schedule_id":        schedule.ID,
 				"class_name":         examScheduleClassName(schedule),
 				"subject":            principalSubjectName(schedule.Subject),
+				"syllabus":           schedule.Syllabus,
 				"hall":               principalRoomName(schedule.Room),
 				"start_time":         schedule.StartTime,
 				"end_time":           schedule.EndTime,
@@ -1131,6 +1185,7 @@ func examPaperSubmissionRows(exams []models.Exam) []gin.H {
 				"schedule_id":        schedule.ID,
 				"class_name":         examScheduleClassName(schedule),
 				"subject":            principalSubjectName(schedule.Subject),
+				"syllabus":           schedule.Syllabus,
 				"submitted":          submitted,
 				"expected":           expected,
 				"submission_percent": percent(float64(submitted), float64(expected)),
@@ -1370,6 +1425,77 @@ func distinctExamScheduleValues(schedules []models.ExamSchedule, key string) int
 		}
 	}
 	return len(seen)
+}
+
+func examScheduleLabels(schedules []models.ExamSchedule, key string) []string {
+	seen := map[string]bool{}
+	labels := []string{}
+	for _, schedule := range schedules {
+		label := ""
+		switch key {
+		case "subject":
+			label = principalSubjectName(schedule.Subject)
+		case "section":
+			label = examScheduleClassName(schedule)
+		}
+		label = strings.TrimSpace(label)
+		if label != "" && !seen[label] {
+			seen[label] = true
+			labels = append(labels, label)
+		}
+	}
+	sort.Strings(labels)
+	return labels
+}
+
+func examScheduleDetailRows(schedules []models.ExamSchedule) []gin.H {
+	sorted := append([]models.ExamSchedule(nil), schedules...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if !sorted[i].ExamDate.Equal(sorted[j].ExamDate) {
+			return sorted[i].ExamDate.Before(sorted[j].ExamDate)
+		}
+		return sorted[i].StartTime < sorted[j].StartTime
+	})
+	rows := make([]gin.H, 0, len(sorted))
+	for _, schedule := range sorted {
+		roomID := ""
+		if schedule.RoomID != nil {
+			roomID = *schedule.RoomID
+		}
+		rows = append(rows, gin.H{
+			"schedule_id": schedule.ID,
+			"class_name":  examScheduleClassName(schedule),
+			"grade_id":    schedule.GradeID,
+			"section_id":  schedule.SectionID,
+			"subject":     principalSubjectName(schedule.Subject),
+			"subject_id":  schedule.SubjectID,
+			"syllabus":    firstNonEmpty(strings.TrimSpace(schedule.Syllabus), "Not added"),
+			"exam_date":   schedule.ExamDate.Format("2006-01-02"),
+			"start_time":  schedule.StartTime,
+			"end_time":    schedule.EndTime,
+			"time":        examScheduleTime(schedule),
+			"max_marks":   schedule.MaxMarks,
+			"pass_marks":  schedule.PassMarks,
+			"room":        principalRoomName(schedule.Room),
+			"room_id":     roomID,
+		})
+	}
+	return rows
+}
+
+func examScheduleTime(schedule models.ExamSchedule) string {
+	start := strings.TrimSpace(schedule.StartTime)
+	end := strings.TrimSpace(schedule.EndTime)
+	switch {
+	case start != "" && end != "":
+		return start + " - " + end
+	case start != "":
+		return start
+	case end != "":
+		return end
+	default:
+		return "Time not set"
+	}
 }
 
 func examEvaluationPercent(exam models.Exam) float64 {

@@ -139,51 +139,56 @@ class BackendDataService {
       case kAcademicClasses:
         final grades = await _api.getGrades();
         final sections = await _api.getSections();
-        return grades.map((g) {
-          final gradeSections = sections
-              .where((s) => s.gradeId == g.id)
-              .toList();
-          final classTeacherIds = gradeSections
-              .map((s) => s.classTeacherId)
-              .where((id) => id.isNotEmpty)
-              .toSet();
-          final classTeacherNames = gradeSections
-              .map((s) => s.classTeacherName)
-              .where((name) => name.isNotEmpty)
-              .toSet();
-          final sectionIds = {
-            for (final section in gradeSections)
-              section.sectionName: section.id,
-          };
-          final sectionTeacherIds = {
-            for (final section in gradeSections)
-              section.sectionName: section.classTeacherId,
-          };
-          return {
-            'id': g.id,
-            'grade_id': g.id,
-            'grade_number': g.gradeNumber,
-            'name': g.gradeName,
-            'sections': gradeSections.map((s) => s.sectionName).toList(),
-            'sectionIds': sectionIds,
-            'sectionTeacherIds': sectionTeacherIds,
-            'strength': gradeSections.isEmpty
-                ? 40
-                : gradeSections.first.capacity,
-            'academic_year_id': gradeSections.isEmpty
-                ? ''
-                : gradeSections.first.academicYearId,
-            'classTeacher': classTeacherNames.length == 1
-                ? classTeacherNames.first
-                : classTeacherNames.length > 1
-                ? 'Multiple class teachers'
-                : '',
-            'classTeacherId': classTeacherIds.length == 1
-                ? classTeacherIds.first
-                : '',
-            'classTeacherIds': classTeacherIds.toList(),
-          };
-        }).toList();
+        return grades
+            .where((g) {
+              return sections.any((s) => s.gradeId == g.id);
+            })
+            .map((g) {
+              final gradeSections = sections
+                  .where((s) => s.gradeId == g.id)
+                  .toList();
+              final classTeacherIds = gradeSections
+                  .map((s) => s.classTeacherId)
+                  .where((id) => id.isNotEmpty)
+                  .toSet();
+              final classTeacherNames = gradeSections
+                  .map((s) => s.classTeacherName)
+                  .where((name) => name.isNotEmpty)
+                  .toSet();
+              final sectionIds = {
+                for (final section in gradeSections)
+                  section.sectionName: section.id,
+              };
+              final sectionTeacherIds = {
+                for (final section in gradeSections)
+                  section.sectionName: section.classTeacherId,
+              };
+              return {
+                'id': g.id,
+                'grade_id': g.id,
+                'grade_number': g.gradeNumber,
+                'name': g.gradeName,
+                'sections': gradeSections.map((s) => s.sectionName).toList(),
+                'sectionIds': sectionIds,
+                'sectionTeacherIds': sectionTeacherIds,
+                'strength': gradeSections.isEmpty
+                    ? 40
+                    : gradeSections.first.capacity,
+                'academic_year_id': gradeSections.isEmpty
+                    ? ''
+                    : gradeSections.first.academicYearId,
+                'classTeacher': classTeacherNames.length == 1
+                    ? classTeacherNames.first
+                    : classTeacherNames.length > 1
+                    ? 'Multiple class teachers'
+                    : '',
+                'classTeacherId': classTeacherIds.length == 1
+                    ? classTeacherIds.first
+                    : '',
+                'classTeacherIds': classTeacherIds.toList(),
+              };
+            })
+            .toList();
       case kAcademicCurriculum:
       case kSharedCurriculum:
         return await _api.getRawList('/curriculum');

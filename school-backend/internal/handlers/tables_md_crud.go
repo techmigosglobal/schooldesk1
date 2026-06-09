@@ -139,7 +139,7 @@ func TablesMDResourceFor(table string) (TablesMDResource, bool) {
 		"events": {
 			Module: "events", Table: "events", PrimaryKey: "event_id", SchoolScoped: true,
 			Required: []string{"event_name"}, Columns: TablesMDColumns["events"],
-			Aliases: map[string]string{"event_title": "event_name", "location": "venue", "created_by": "organizer_id"},
+			Aliases: map[string]string{"event_title": "event_name", "location": "venue", "created_by": "organizer_id", "start_datetime": "start_date", "end_datetime": "end_date"},
 		},
 		"approval_requests": {
 			Module: "approval_requests", Table: "approval_requests", PrimaryKey: "approval_id", SchoolScoped: true,
@@ -148,6 +148,7 @@ func TablesMDResourceFor(table string) (TablesMDResource, bool) {
 		"communications": {
 			Module: "communications", Table: "communications", PrimaryKey: "message_id", SchoolScoped: true,
 			Required: []string{"sender_id", "receiver_id", "message_content"}, Columns: TablesMDColumns["communications"],
+			Aliases: map[string]string{"message": "message_content", "body": "message_content", "target_user_id": "receiver_id", "target_role": "receiver_role"},
 		},
 		"principal_reports": {
 			Module: "principal_reports", Table: "principal_reports", PrimaryKey: "report_id", SchoolScoped: true,
@@ -217,6 +218,10 @@ func (h *TablesMDCRUDHandler) Create(c *gin.Context) {
 	}
 	h.mirrorLegacyID(payload)
 	h.applyWriteDefaults(c, payload, true)
+	if err := h.validateWritePayload(c, payload, true, nil); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := h.validateRequired(payload); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -235,12 +240,16 @@ func (h *TablesMDCRUDHandler) Create(c *gin.Context) {
 	if h.resource.Table == "homework" {
 		notifyHomeworkCreatedFromRecord(homeworkRecordFromMap(row))
 	}
+	if h.resource.Table == "communications" {
+		notifyCommunicationCreatedFromRecord(row)
+	}
 	success(c, http.StatusCreated, row, "")
 }
 
 func (h *TablesMDCRUDHandler) Update(c *gin.Context) {
 	id := c.Param("id")
-	if _, ok := h.loadByID(c, id); !ok {
+	existing, ok := h.loadByID(c, id)
+	if !ok {
 		return
 	}
 	payload, err := h.bindPayload(c)
@@ -252,6 +261,10 @@ func (h *TablesMDCRUDHandler) Update(c *gin.Context) {
 	delete(payload, "id")
 	delete(payload, "created_at")
 	h.applyWriteDefaults(c, payload, false)
+	if err := h.validateWritePayload(c, payload, false, existing); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	if len(payload) == 0 {
 		fail(c, http.StatusBadRequest, "No valid fields supplied")
 		return
@@ -348,6 +361,144 @@ func (h *TablesMDCRUDHandler) applyWriteDefaults(c *gin.Context, payload map[str
 	}
 }
 
+func (h *TablesMDCRUDHandler) validateWritePayload(c *gin.Context, payload map[string]interface{}, create bool, existing map[string]interface{}) error {
+	switch h.resource.Table {
+	case "events":
+		return h.validateEventPayload(c, payload, existing)
+	case "communications":
+		if create {
+			return h.prepareCommunicationCreate(c, payload)
+		}
+		return h.prepareCommunicationUpdate(c, payload, existing)
+	default:
+		return nil
+	}
+}
+
+func (h *TablesMDCRUDHandler) validateEventPayload(c *gin.Context, payload map[string]interface{}, existing map[string]interface{}) error {
+	academicYearID := tablesMDString(payloadValue(payload, existing, "academic_year_id"))
+	if academicYearID != "" {
+		var count int64
+		if err := database.DB.Model(&models.AcademicYear{}).
+			Where("id = ? AND school_id = ?", academicYearID, scopedSchoolID(c)).
+			Count(&count).Error; err != nil {
+			return fmt.Errorf("failed to validate academic_year_id")
+		}
+		if count == 0 {
+			return fmt.Errorf("academic year must belong to this school")
+		}
+	}
+	start, hasStart, err := eventDateTimeFromPayload(payload, existing, "start_date", "start_time", false)
+	if err != nil {
+		return err
+	}
+	end, hasEnd, err := eventDateTimeFromPayload(payload, existing, "end_date", "end_time", true)
+	if err != nil {
+		return err
+	}
+	if hasStart && hasEnd && end.Before(start) {
+		return fmt.Errorf("end_date cannot be before start_date")
+	}
+	normalizeTablesMDEventDatePayload(payload, "start_date")
+	normalizeTablesMDEventDatePayload(payload, "end_date")
+	return nil
+}
+
+func (h *TablesMDCRUDHandler) prepareCommunicationCreate(c *gin.Context, payload map[string]interface{}) error {
+	authSenderID := currentUserID(c)
+	if authSenderID == "" {
+		return fmt.Errorf("authenticated sender is required")
+	}
+	authSenderRole := currentRole(c)
+	if authSenderRole == "" {
+		return fmt.Errorf("authenticated sender role is required")
+	}
+	if supplied := tablesMDString(payload["sender_id"]); supplied != "" && supplied != authSenderID {
+		return fmt.Errorf("sender_id is derived from authentication")
+	}
+	if supplied := normalizeCommunicationRole(tablesMDString(payload["sender_role"])); supplied != "" && supplied != authSenderRole {
+		return fmt.Errorf("sender_role is derived from authentication")
+	}
+
+	receiverID := tablesMDString(payload["receiver_id"])
+	if receiverID == "" {
+		return fmt.Errorf("receiver_id is required")
+	}
+	if receiverID == authSenderID {
+		return fmt.Errorf("receiver_id must be different from sender_id")
+	}
+	receiver, receiverRole, err := loadActiveCommunicationUser(receiverID, scopedSchoolID(c))
+	if err != nil {
+		return err
+	}
+	if supplied := normalizeCommunicationRole(tablesMDString(payload["receiver_role"])); supplied != "" && supplied != receiverRole {
+		return fmt.Errorf("receiver_role does not match receiver user")
+	}
+	if !directCommunicationAllowed(authSenderRole, receiverRole) {
+		return fmt.Errorf("direct messages are limited to Principal with active Teacher or Parent accounts")
+	}
+
+	payload["sender_id"] = authSenderID
+	payload["sender_role"] = authSenderRole
+	payload["receiver_id"] = receiver.ID
+	payload["receiver_role"] = receiverRole
+	payload["is_read"] = false
+	delete(payload, "read_at")
+	if tablesMDString(payload["message_type"]) == "" {
+		payload["message_type"] = "direct"
+	}
+	if tablesMDString(payload["priority"]) == "" {
+		payload["priority"] = "medium"
+	}
+	if h.columnSet["is_deleted_by_sender"] {
+		if _, ok := payload["is_deleted_by_sender"]; !ok {
+			payload["is_deleted_by_sender"] = false
+		}
+	}
+	if h.columnSet["is_deleted_by_receiver"] {
+		if _, ok := payload["is_deleted_by_receiver"]; !ok {
+			payload["is_deleted_by_receiver"] = false
+		}
+	}
+	return nil
+}
+
+func (h *TablesMDCRUDHandler) prepareCommunicationUpdate(c *gin.Context, payload map[string]interface{}, existing map[string]interface{}) error {
+	delete(payload, "school_id")
+	for _, field := range []string{"sender_id", "sender_role", "receiver_id", "receiver_role", "message_content", "sent_at", "reply_to_message_id"} {
+		if _, ok := payload[field]; ok {
+			return fmt.Errorf("%s cannot be updated", field)
+		}
+	}
+	for field := range payload {
+		switch field {
+		case "is_read", "read_at", "updated_at", "is_deleted_by_sender", "is_deleted_by_receiver":
+		default:
+			return fmt.Errorf("only communication read/delete status can be updated")
+		}
+	}
+	currentUser := currentUserID(c)
+	receiverID := tablesMDString(payloadValue(nil, existing, "receiver_id"))
+	senderID := tablesMDString(payloadValue(nil, existing, "sender_id"))
+	if _, ok := payload["is_read"]; ok {
+		if !isSchoolOperator(c) && currentUser != receiverID {
+			return fmt.Errorf("only the receiver can mark this communication read")
+		}
+		if tablesMDBool(payload["is_read"]) {
+			payload["read_at"] = time.Now().UTC()
+		} else {
+			payload["read_at"] = nil
+		}
+	}
+	if _, ok := payload["is_deleted_by_sender"]; ok && currentUser != senderID && !isSchoolOperator(c) {
+		return fmt.Errorf("only the sender can update sender delete status")
+	}
+	if _, ok := payload["is_deleted_by_receiver"]; ok && currentUser != receiverID && !isSchoolOperator(c) {
+		return fmt.Errorf("only the receiver can update receiver delete status")
+	}
+	return nil
+}
+
 func (h *TablesMDCRUDHandler) mirrorLegacyID(payload map[string]interface{}) {
 	if !h.columnSet["id"] {
 		return
@@ -388,6 +539,9 @@ func (h *TablesMDCRUDHandler) applyListFilters(c *gin.Context, query *gorm.DB) *
 	if h.resource.Table == "homework" {
 		query = h.applyHomeworkListFilters(c, query)
 	}
+	if h.resource.Table == "communications" {
+		query = h.applyCommunicationListFilters(c, query)
+	}
 	keys := make([]string, 0, len(c.Request.URL.Query()))
 	for key := range c.Request.URL.Query() {
 		keys = append(keys, key)
@@ -406,6 +560,14 @@ func (h *TablesMDCRUDHandler) applyListFilters(c *gin.Context, query *gorm.DB) *
 		}
 	}
 	return query
+}
+
+func (h *TablesMDCRUDHandler) applyCommunicationListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	counterpartID := strings.TrimSpace(c.Query("counterpart_id"))
+	if counterpartID == "" {
+		return query
+	}
+	return query.Where("(sender_id = ? OR receiver_id = ?)", counterpartID, counterpartID)
 }
 
 func (h *TablesMDCRUDHandler) applyHomeworkListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
@@ -512,4 +674,185 @@ func (h *TablesMDCRUDHandler) applyTeacherScope(c *gin.Context, query *gorm.DB) 
 
 func quoteHandlerIdentifier(identifier string) string {
 	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
+}
+
+func payloadValue(payload map[string]interface{}, existing map[string]interface{}, key string) interface{} {
+	if payload != nil {
+		if value, ok := payload[key]; ok {
+			return value
+		}
+	}
+	if existing != nil {
+		return existing[key]
+	}
+	return nil
+}
+
+func tablesMDString(value interface{}) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(typed)
+	case []byte:
+		return strings.TrimSpace(string(typed))
+	case time.Time:
+		return strings.TrimSpace(typed.Format(time.RFC3339))
+	default:
+		out := strings.TrimSpace(fmt.Sprint(value))
+		if out == "<nil>" {
+			return ""
+		}
+		return out
+	}
+}
+
+func tablesMDBool(value interface{}) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "true", "1", "yes", "y":
+			return true
+		default:
+			return false
+		}
+	case float64:
+		return typed != 0
+	case int:
+		return typed != 0
+	default:
+		return false
+	}
+}
+
+func eventDateTimeFromPayload(payload map[string]interface{}, existing map[string]interface{}, dateKey string, timeKey string, endOfDay bool) (time.Time, bool, error) {
+	dateValue := payloadValue(payload, existing, dateKey)
+	date, hasDate, err := parseTablesMDEventDate(dateValue, dateKey)
+	if err != nil || !hasDate {
+		return time.Time{}, hasDate, err
+	}
+	clock, hasClock, err := parseTablesMDEventClock(payloadValue(payload, existing, timeKey), timeKey)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if !hasClock {
+		clock, hasClock = parseTablesMDEventClockFromDatetime(dateValue)
+	}
+	if hasClock {
+		return date.Add(clock), true, nil
+	}
+	if endOfDay {
+		return date.Add(23*time.Hour + 59*time.Minute + 59*time.Second), true, nil
+	}
+	return date, true, nil
+}
+
+func parseTablesMDEventDate(value interface{}, field string) (time.Time, bool, error) {
+	switch typed := value.(type) {
+	case nil:
+		return time.Time{}, false, nil
+	case time.Time:
+		return time.Date(typed.Year(), typed.Month(), typed.Day(), 0, 0, 0, 0, time.UTC), true, nil
+	}
+	raw := tablesMDString(value)
+	if raw == "" {
+		return time.Time{}, false, nil
+	}
+	for _, layout := range []string{"2006-01-02", time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC), true, nil
+		}
+	}
+	return time.Time{}, false, fmt.Errorf("%s must be a valid date", field)
+}
+
+func normalizeTablesMDEventDatePayload(payload map[string]interface{}, key string) {
+	if payload == nil {
+		return
+	}
+	value, ok := payload[key]
+	if !ok {
+		return
+	}
+	parsed, hasValue, err := parseTablesMDEventDate(value, key)
+	if err == nil && hasValue {
+		payload[key] = parsed.Format("2006-01-02")
+	}
+}
+
+func parseTablesMDEventClock(value interface{}, field string) (time.Duration, bool, error) {
+	switch typed := value.(type) {
+	case nil:
+		return 0, false, nil
+	case time.Time:
+		return time.Duration(typed.Hour())*time.Hour + time.Duration(typed.Minute())*time.Minute + time.Duration(typed.Second())*time.Second, true, nil
+	}
+	raw := tablesMDString(value)
+	if raw == "" {
+		return 0, false, nil
+	}
+	for _, layout := range []string{"15:04", "15:04:05", time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return time.Duration(parsed.Hour())*time.Hour + time.Duration(parsed.Minute())*time.Minute + time.Duration(parsed.Second())*time.Second, true, nil
+		}
+	}
+	return 0, false, fmt.Errorf("%s must be a valid time", field)
+}
+
+func parseTablesMDEventClockFromDatetime(value interface{}) (time.Duration, bool) {
+	switch typed := value.(type) {
+	case time.Time:
+		return time.Duration(typed.Hour())*time.Hour + time.Duration(typed.Minute())*time.Minute + time.Duration(typed.Second())*time.Second, true
+	}
+	raw := tablesMDString(value)
+	if !strings.Contains(raw, "T") && !strings.Contains(raw, " ") {
+		return 0, false
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return time.Duration(parsed.Hour())*time.Hour + time.Duration(parsed.Minute())*time.Minute + time.Duration(parsed.Second())*time.Second, true
+		}
+	}
+	return 0, false
+}
+
+func loadActiveCommunicationUser(userID string, schoolID string) (models.User, string, error) {
+	var user models.User
+	if err := database.DB.Preload("Role").
+		Where("id = ? AND school_id = ? AND is_active = ?", strings.TrimSpace(userID), strings.TrimSpace(schoolID), true).
+		First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return user, "", fmt.Errorf("receiver_id must belong to an active user in this school")
+		}
+		return user, "", fmt.Errorf("failed to validate receiver_id")
+	}
+	role := normalizeCommunicationRole(userNotificationRole(user))
+	if role == "" {
+		role = normalizeCommunicationRole(user.RoleSlug)
+	}
+	if role == "" {
+		return user, "", fmt.Errorf("receiver user role is required")
+	}
+	return user, role, nil
+}
+
+func normalizeCommunicationRole(role string) string {
+	return strings.ToLower(strings.TrimSpace(role))
+}
+
+func directCommunicationAllowed(senderRole string, receiverRole string) bool {
+	senderRole = normalizeCommunicationRole(senderRole)
+	receiverRole = normalizeCommunicationRole(receiverRole)
+	switch senderRole {
+	case "principal":
+		return receiverRole == "teacher" || receiverRole == "parent"
+	case "teacher", "parent":
+		return receiverRole == "principal"
+	case "admin":
+		return receiverRole == "principal" || receiverRole == "teacher" || receiverRole == "parent"
+	default:
+		return false
+	}
 }

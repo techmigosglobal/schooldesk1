@@ -721,6 +721,25 @@ func deleteSectionRecordsForSchool(id, schoolID string) error {
 	}
 
 	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var section models.Section
+		if err := tx.
+			Joins("JOIN grades ON grades.id = sections.grade_id").
+			First(&section, "sections.id = ? AND grades.school_id = ?", id, schoolID).Error; err != nil {
+			return err
+		}
+		var siblingCount int64
+		if err := tx.Model(&models.Section{}).
+			Joins("JOIN grades ON grades.id = sections.grade_id").
+			Where(
+				"grades.school_id = ? AND sections.id <> ? AND sections.grade_id = ? AND sections.academic_year_id = ?",
+				schoolID,
+				id,
+				section.GradeID,
+				section.AcademicYearID,
+			).
+			Count(&siblingCount).Error; err != nil {
+			return err
+		}
 		if err := tx.Exec("DELETE FROM student_attendances WHERE session_id IN (SELECT id FROM attendance_sessions WHERE section_id = ?)", id).Error; err != nil {
 			return err
 		}
@@ -770,6 +789,14 @@ func deleteSectionRecordsForSchool(id, schoolID string) error {
 			Where("school_id = ? AND current_section_id = ?", schoolID, id).
 			Update("current_section_id", nil).Error; err != nil {
 			return err
+		}
+		if siblingCount == 0 {
+			if err := tx.Delete(&models.FeeStructure{}, "school_id = ? AND grade_id = ? AND academic_year_id = ?", schoolID, section.GradeID, section.AcademicYearID).Error; err != nil {
+				return err
+			}
+			if err := tx.Delete(&models.GradeSubject{}, "grade_id = ? AND academic_year_id = ?", section.GradeID, section.AcademicYearID).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Delete(&models.Section{}, "id = ?", id).Error
 	})
@@ -1074,7 +1101,7 @@ func (h *SchoolHandler) GetRooms(c *gin.Context) {
 
 func (h *SchoolHandler) CreateRoom(c *gin.Context) {
 	var req struct {
-		SchoolID   string `json:"school_id" binding:"required"`
+		SchoolID   string `json:"school_id"`
 		RoomNumber string `json:"room_number" binding:"required"`
 		RoomType   string `json:"room_type" binding:"required"`
 		Block      string `json:"block"`

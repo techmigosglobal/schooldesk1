@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -16,12 +17,14 @@ class AdminFeeStructureFormArgs {
   final List<GradeModel> grades;
   final List<Map<String, dynamic>> feeCategories;
   final Map<String, dynamic>? feeStructure;
+  final String ownerRole;
 
   const AdminFeeStructureFormArgs({
     required this.academicYears,
     required this.grades,
     required this.feeCategories,
     this.feeStructure,
+    this.ownerRole = 'admin',
   });
 
   bool get isEditing => feeStructure != null;
@@ -42,6 +45,7 @@ class AdminInvoiceGenerationFormArgs {
   final List<StudentModel> students;
   final List<Map<String, dynamic>> feeStructures;
   final Map<String, dynamic>? seedStructure;
+  final String ownerRole;
 
   const AdminInvoiceGenerationFormArgs({
     required this.academicYears,
@@ -50,6 +54,7 @@ class AdminInvoiceGenerationFormArgs {
     required this.students,
     required this.feeStructures,
     this.seedStructure,
+    this.ownerRole = 'admin',
   });
 }
 
@@ -68,10 +73,12 @@ class AdminInvoiceGenerationFormResult {
 class AdminPaymentRecordFormArgs {
   final List<Map<String, dynamic>> pendingDues;
   final Map<String, dynamic>? initialInvoice;
+  final String ownerRole;
 
   const AdminPaymentRecordFormArgs({
     required this.pendingDues,
     this.initialInvoice,
+    this.ownerRole = 'admin',
   });
 }
 
@@ -150,10 +157,14 @@ class _AdminFeeStructureFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: widget.args.isEditing ? 'Edit Fee Structure' : 'New Fee Structure',
-      subtitle: 'Class-wise fee setup connected to backend fee structures',
-      drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      title: widget.args.isEditing
+          ? 'Prepare Fee Structure Update'
+          : 'Prepare Fee Structure Request',
+      subtitle: 'Class-wise fee setup prepared for Principal approval',
+      drawer: _financeDrawer(widget.args.ownerRole),
+      floatingActionButton: DashboardFabWidget(
+        role: _dashboardRole(widget.args.ownerRole),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: Form(
         key: _formKey,
@@ -164,7 +175,7 @@ class _AdminFeeStructureFormScreenState
               const SchoolDeskStatusPanel.empty(
                 title: 'Setup data missing',
                 message:
-                    'Create academic years, classes, and fee categories before adding fee structures.',
+                    'Academic years, classes, and fee categories are required before fee structure requests can be prepared.',
               )
             else ...[
               _buildSummary(),
@@ -182,7 +193,11 @@ class _AdminFeeStructureFormScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_rounded, size: 18),
-                label: Text(_saving ? 'Saving...' : 'Save structure'),
+                label: Text(
+                  _saving
+                      ? 'Submitting...'
+                      : 'Submit Fee Structure for Approval',
+                ),
               ),
             ],
           ],
@@ -221,7 +236,7 @@ class _AdminFeeStructureFormScreenState
                 Text(
                   widget.args.isEditing
                       ? _textValue(fee?['class'], fallback: 'Fee structure')
-                      : 'Create backend fee structure',
+                      : 'Prepare backend fee structure request',
                   style: GoogleFonts.dmSans(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -229,7 +244,7 @@ class _AdminFeeStructureFormScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Select class, category, due day, and amount. This saves directly to /fees/structures.',
+                  'Select the class, fee category, due day, and amount.',
                   style: GoogleFonts.dmSans(
                     color: AppTheme.muted,
                     fontSize: 12,
@@ -379,8 +394,8 @@ class _AdminFeeStructureFormScreenState
         context,
         AdminFeeStructureFormResult(
           widget.args.isEditing
-              ? 'Fee structure updated from backend'
-              : 'Fee structure created',
+              ? 'Fee structure update submitted for Principal approval'
+              : 'Fee structure request submitted for Principal approval',
         ),
       );
     } catch (error) {
@@ -409,8 +424,13 @@ class _AdminInvoiceGenerationFormScreenState
   late String _scope;
   late String _selectedYearId;
   late String _selectedGradeId;
+  String _selectedTermId = '';
   String _selectedSectionId = '';
   String _selectedStudentId = '';
+  List<Map<String, dynamic>> _terms = [];
+  bool _loadingTerms = false;
+  bool _includeOneTime = false;
+  bool _includeYearly = false;
   bool _generating = false;
 
   bool get _hasReferenceData =>
@@ -424,7 +444,21 @@ class _AdminInvoiceGenerationFormScreenState
             '${fee['academic_year_id']}' == _selectedYearId &&
             '${fee['grade_id']}' == _selectedGradeId,
       )
-      .fold<double>(0, (sum, fee) => sum + _numValue(fee['amount']));
+      .fold<double>(0, (sum, fee) {
+        final amount = _numValue(fee['amount']);
+        final frequency = _feeFrequency(fee);
+        if (frequency == 'term') {
+          final count = _terms.isEmpty ? 1 : _terms.length;
+          return sum + (amount / count);
+        }
+        if (frequency == 'one_time') {
+          return _includeOneTime ? sum + amount : sum;
+        }
+        if (frequency == 'yearly') {
+          return _includeYearly ? sum + amount : sum;
+        }
+        return sum + amount;
+      });
 
   List<SectionModel> get _sectionOptions =>
       widget.args.sections.where((section) {
@@ -459,6 +493,7 @@ class _AdminInvoiceGenerationFormScreenState
     _dueDateController = TextEditingController(
       text: _defaultDueDate(dueDay: (seed['due_day'] as num?)?.toInt()),
     );
+    _loadTermsForYear(_selectedYearId);
   }
 
   @override
@@ -471,10 +506,12 @@ class _AdminInvoiceGenerationFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Generate Fee Invoices',
-      subtitle: 'Create backend invoices for a class, section, or student',
-      drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      title: 'Submit Fee Invoice Request',
+      subtitle: 'Prepare term-wise invoices for a class, section, or student',
+      drawer: _financeDrawer(widget.args.ownerRole),
+      floatingActionButton: DashboardFabWidget(
+        role: _dashboardRole(widget.args.ownerRole),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: Form(
         key: _formKey,
@@ -485,7 +522,7 @@ class _AdminInvoiceGenerationFormScreenState
               const SchoolDeskStatusPanel.empty(
                 title: 'Invoice setup data missing',
                 message:
-                    'Academic year, class, and student data must be loaded before generating invoices.',
+                    'Academic year, class, and student data must be loaded before invoice requests can be submitted.',
               )
             else ...[
               _buildInvoiceScope(),
@@ -504,7 +541,9 @@ class _AdminInvoiceGenerationFormScreenState
                       )
                     : const Icon(Icons.receipt_long_rounded, size: 18),
                 label: Text(
-                  _generating ? 'Generating...' : 'Generate invoices',
+                  _generating
+                      ? 'Submitting...'
+                      : 'Submit Invoices for Approval',
                 ),
               ),
             ],
@@ -531,8 +570,36 @@ class _AdminInvoiceGenerationFormScreenState
           validator: (value) => _required(value, 'Select academic year.'),
           onChanged: _generating
               ? null
-              : (value) => setState(() => _selectedYearId = value ?? ''),
+              : (value) => _loadTermsForYear(value ?? ''),
         ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: ValueKey('invoice-term-$_selectedYearId-$_selectedTermId'),
+          initialValue: _selectedTermId.isEmpty ? null : _selectedTermId,
+          decoration: const InputDecoration(labelText: 'Term'),
+          items: _terms
+              .map(
+                (term) => DropdownMenuItem(
+                  value: _textValue(term['id']),
+                  child: Text(_termLabel(term)),
+                ),
+              )
+              .toList(),
+          validator: (value) => _required(value, 'Select term.'),
+          onChanged: _generating || _loadingTerms
+              ? null
+              : (value) {
+                  setState(() {
+                    _selectedTermId = value ?? '';
+                    _labelController.text = _selectedTermLabel;
+                  });
+                },
+        ),
+        if (_loadingTerms)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _selectedGradeId,
@@ -643,22 +710,33 @@ class _AdminInvoiceGenerationFormScreenState
         TextFormField(
           controller: _labelController,
           enabled: !_generating,
-          decoration: const InputDecoration(
-            labelText: 'Invoice label',
-            helperText: 'Example: Term 1, May 2026, Annual 2026',
-          ),
+          decoration: const InputDecoration(labelText: 'Invoice label'),
           validator: (value) => _required(value, 'Enter invoice label.'),
         ),
         const SizedBox(height: 12),
         TextFormField(
           controller: _dueDateController,
           enabled: !_generating,
-          decoration: const InputDecoration(
-            labelText: 'Due date',
-            helperText: 'YYYY-MM-DD',
-          ),
+          decoration: const InputDecoration(labelText: 'Due date'),
           keyboardType: TextInputType.datetime,
           validator: _dateValidator,
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile.adaptive(
+          value: _includeOneTime,
+          onChanged: _generating
+              ? null
+              : (value) => setState(() => _includeOneTime = value),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Include one-time components'),
+        ),
+        SwitchListTile.adaptive(
+          value: _includeYearly,
+          onChanged: _generating
+              ? null
+              : (value) => setState(() => _includeYearly = value),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Include yearly components'),
         ),
       ],
     );
@@ -683,7 +761,7 @@ class _AdminInvoiceGenerationFormScreenState
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Estimated invoice is INR ${_estimatedTotal.toStringAsFixed(0)} per student for the $scopeLabel.',
+              'Estimated invoice is INR ${_estimatedTotal.toStringAsFixed(0)} per student for $_selectedTermLabel and the $scopeLabel.',
               style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
             ),
           ),
@@ -706,6 +784,9 @@ class _AdminInvoiceGenerationFormScreenState
             'grade_id': _selectedGradeId,
             if (_scope == 'section') 'section_id': _selectedSectionId,
             if (_scope == 'student') 'student_id': _selectedStudentId,
+            'term_id': _selectedTermId,
+            'include_one_time': _includeOneTime,
+            'include_yearly': _includeYearly,
             'invoice_label': _labelController.text.trim(),
             'due_date': _dueDateController.text.trim(),
           });
@@ -726,6 +807,7 @@ class _AdminInvoiceGenerationFormScreenState
 
   String _defaultInvoiceLabel() {
     final now = DateTime.now();
+    if (_selectedTermId.isNotEmpty) return _selectedTermLabel;
     final current = widget.args.academicYears
         .where((year) => year.isCurrent)
         .firstOrNull;
@@ -744,6 +826,45 @@ class _AdminInvoiceGenerationFormScreenState
       candidate = DateTime(now.year, now.month + 1, day);
     }
     return _dateInput(candidate);
+  }
+
+  Future<void> _loadTermsForYear(String yearId) async {
+    setState(() {
+      _selectedYearId = yearId;
+      _selectedTermId = '';
+      _terms = [];
+      _loadingTerms = true;
+    });
+    if (yearId.isEmpty) {
+      if (mounted) setState(() => _loadingTerms = false);
+      return;
+    }
+    try {
+      final terms = await BackendApiClient.instance.getTerms(yearId);
+      if (!mounted) return;
+      setState(() {
+        _terms = terms;
+        _selectedTermId = _initialId(
+          '',
+          terms.map((term) => _textValue(term['id'])),
+        );
+        if (_selectedTermId.isNotEmpty) {
+          _labelController.text = _selectedTermLabel;
+        }
+        _loadingTerms = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingTerms = false);
+      _showErrorSnack(context, 'Unable to load terms: $error');
+    }
+  }
+
+  String get _selectedTermLabel {
+    for (final term in _terms) {
+      if (_textValue(term['id']) == _selectedTermId) return _termLabel(term);
+    }
+    return 'Term';
   }
 }
 
@@ -815,10 +936,12 @@ class _AdminPaymentRecordFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Record Payment',
-      subtitle: 'Apply a verified payment to an outstanding backend invoice',
-      drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      title: 'Submit Payment Request',
+      subtitle: 'Prepare a verified payment against an outstanding invoice',
+      drawer: _financeDrawer(widget.args.ownerRole),
+      floatingActionButton: DashboardFabWidget(
+        role: _dashboardRole(widget.args.ownerRole),
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: Form(
         key: _formKey,
@@ -829,7 +952,7 @@ class _AdminPaymentRecordFormScreenState
               const SchoolDeskStatusPanel.empty(
                 title: 'No outstanding invoices',
                 message:
-                    'Payments can be recorded after invoices are generated.',
+                    'Payment requests can be submitted after outstanding invoices are available.',
               )
             else ...[
               _buildInvoiceSelector(),
@@ -847,7 +970,9 @@ class _AdminPaymentRecordFormScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.payments_rounded, size: 18),
-                label: Text(_saving ? 'Recording...' : 'Record payment'),
+                label: Text(
+                  _saving ? 'Submitting...' : 'Submit Payment for Approval',
+                ),
               ),
             ],
           ],
@@ -865,7 +990,7 @@ class _AdminPaymentRecordFormScreenState
             (due) => DropdownMenuItem(
               value: '${due['id']}',
               child: Text(
-                '${_textValue(due['name'], fallback: 'Student')} - INR ${_numValue(due['amount']).toStringAsFixed(0)}',
+                '${_textValue(due['name'], fallback: 'Student')} - INR ${_numValue(due['balance'] ?? due['amount']).toStringAsFixed(0)}',
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -981,7 +1106,10 @@ class _AdminPaymentRecordFormScreenState
           ),
           _summaryRow(
             'Due date',
-            _textValue(invoice['date'], fallback: 'Not recorded'),
+            _textValue(
+              invoice['due_date'] ?? invoice['date'],
+              fallback: 'Not recorded',
+            ),
           ),
         ],
       ),
@@ -1049,6 +1177,22 @@ class _AdminPaymentRecordFormScreenState
   }
 }
 
+Widget _financeDrawer(String ownerRole) {
+  if (_isPrincipalOwner(ownerRole)) {
+    return PrincipalDrawer(selectedIndex: 7, onDestinationSelected: (_) {});
+  }
+  return AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {});
+}
+
+DashboardRole _dashboardRole(String ownerRole) {
+  return _isPrincipalOwner(ownerRole)
+      ? DashboardRole.principal
+      : DashboardRole.admin;
+}
+
+bool _isPrincipalOwner(String ownerRole) =>
+    ownerRole.trim().toLowerCase() == 'principal';
+
 final _decimalFormatter = FilteringTextInputFormatter.allow(
   RegExp(r'^\d*\.?\d{0,2}'),
 );
@@ -1114,6 +1258,28 @@ String _monthName(int month) {
     'December',
   ];
   return names[(month - 1).clamp(0, 11).toInt()];
+}
+
+String _termLabel(Map<String, dynamic> term) {
+  final name = _textValue(term['term_name'] ?? term['name'] ?? term['label']);
+  if (name.isNotEmpty) return name;
+  final number = _textValue(term['term_number']);
+  return number.isEmpty ? 'Term' : 'Term $number';
+}
+
+String _feeFrequency(Map<String, dynamic> fee) {
+  final category = fee['fee_category'] is Map
+      ? Map<String, dynamic>.from(fee['fee_category'] as Map)
+      : const <String, dynamic>{};
+  final raw = _textValue(
+    fee['frequency'] ?? category['frequency'],
+    fallback: 'term',
+  ).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  if (raw.contains('one')) return 'one_time';
+  if (raw.contains('year')) return 'yearly';
+  if (raw.contains('month')) return 'monthly';
+  if (raw.contains('term')) return 'term';
+  return raw.isEmpty ? 'term' : raw;
 }
 
 String _studentLabel(StudentModel student) {

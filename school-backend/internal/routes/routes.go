@@ -35,6 +35,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	accountApprovalHandler := handlers.NewAccountApprovalHandler()
 	classApprovalHandler := handlers.NewClassApprovalHandler()
 	studentApprovalHandler := handlers.NewStudentApprovalHandler()
+	approvalRequestHandler := handlers.NewApprovalRequestHandler()
 	auditLogHandler := handlers.NewAuditLogHandler()
 	dashboardHandler := handlers.NewDashboardHandler()
 	principalClassesHandler := handlers.NewPrincipalClassesHandler()
@@ -253,6 +254,22 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			studentApprovals.PATCH("/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentApprovalHandler.Decide)
 		}
 
+		approvals := api.Group("/approvals")
+		approvals.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			approvals.GET("", middleware.RBACMiddleware("Admin", "Principal"), approvalRequestHandler.List)
+			approvals.GET("/:id", middleware.RBACMiddleware("Admin", "Principal"), approvalRequestHandler.Get)
+			approvals.POST("", middleware.RBACMiddleware("Admin"), approvalRequestHandler.Create)
+			approvals.PUT("/:id", middleware.RBACMiddleware("Admin"), approvalRequestHandler.Update)
+			approvals.PATCH("/:id", middleware.RBACMiddleware("Admin"), approvalRequestHandler.Update)
+			approvals.POST("/:id/submit", middleware.RBACMiddleware("Admin"), approvalRequestHandler.Submit)
+			approvals.POST("/:id/approve", middleware.RBACMiddleware("Principal"), approvalRequestHandler.Approve)
+			approvals.POST("/:id/reject", middleware.RBACMiddleware("Principal"), approvalRequestHandler.Reject)
+			approvals.POST("/:id/request-changes", middleware.RBACMiddleware("Principal"), approvalRequestHandler.RequestChanges)
+			approvals.POST("/:id/cancel", middleware.RBACMiddleware("Admin"), approvalRequestHandler.Cancel)
+			approvals.POST("/:id/apply", middleware.RBACMiddleware("Principal"), approvalRequestHandler.Apply)
+		}
+
 		attendance := api.Group("/attendance")
 		attendance.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
@@ -281,7 +298,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		exams.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			exams.GET("/types", examHandler.GetExamTypes)
-			exams.POST("/types", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamType)
+			exams.POST("/types", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamType)
 			exams.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetExams)
 			exams.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), examHandler.GetExam)
 			exams.GET("/:id/rankings", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), examHandler.GetClassRanking)
@@ -387,26 +404,26 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		{
 			timetable.GET("/slots", timetableHandler.GetTimetableSlots)
 			timetable.GET("/templates", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.GetTimetableTemplates)
-			timetable.PUT("/templates", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SaveTimetableTemplate)
+			timetable.PUT("/templates", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SaveTimetableTemplate)
 			timetable.GET("/constraints", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.GetTimetableConstraints)
-			timetable.POST("/constraints", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableConstraint)
-			timetable.PUT("/constraints/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdateTimetableConstraint)
-			timetable.DELETE("/constraints/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableConstraint)
+			timetable.POST("/constraints", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableConstraint)
+			timetable.PUT("/constraints/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdateTimetableConstraint)
+			timetable.DELETE("/constraints/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableConstraint)
 			timetable.POST("/smart/preview", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SmartTimetablePreview)
 			timetable.POST("/smart/generate", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SmartTimetableGenerate)
-			timetable.GET("/smart/jobs/:id", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.GetSmartTimetableJob)
-			timetable.POST("/smart/validate", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SmartTimetableValidate)
-			timetable.POST("/suggestions", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SuggestTimetableSlots)
-			timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.GenerateTimetableSlots)
+			timetable.GET("/smart/jobs/:id", middleware.RBACMiddleware("Admin"), timetableHandler.GetSmartTimetableJob)
+			timetable.POST("/smart/validate", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SmartTimetableValidate)
+			timetable.POST("/suggestions", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SuggestTimetableSlots)
+			timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.GenerateTimetableSlots)
 			timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableSlot)
 			timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdateTimetableSlot)
-			timetable.POST("/slots/swap", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SwapTimetableSlots)
-			timetable.POST("/slots/:id/override", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.OverrideTimetableSlot)
-			timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableSlot)
+			timetable.POST("/slots/swap", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.SwapTimetableSlots)
+			timetable.POST("/slots/:id/override", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.OverrideTimetableSlot)
+			timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeleteTimetableSlot)
 			timetable.GET("/substitutions", timetableHandler.GetSubstitutions)
-			timetable.POST("/substitutions", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateSubstitution)
+			timetable.POST("/substitutions", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateSubstitution)
 			timetable.GET("/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.List("timetable_reports"))
-			timetable.POST("/exports", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableExport)
+			timetable.POST("/exports", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableExport)
 			timetable.GET("/section/:section_id", timetableHandler.GetTimetableBySection)
 		}
 
@@ -652,7 +669,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			registerTableCRUD(principalReports, "principal_reports", []string{"Admin", "Principal"}, []string{"Admin", "Principal"})
 		}
 
-		frontendResource("/approvals", "Admin", "Principal")
 		frontendResource("/admissions/applications", "Admin", "Principal")
 		frontendResource("/certificates/transfer-requests", "Admin", "Principal")
 		frontendResource("/events/approvals", "Admin", "Principal")

@@ -23,13 +23,16 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
   List<Map<String, dynamic>> _circulars = [];
   List<Map<String, dynamic>> _notices = [];
   List<Map<String, dynamic>> _alerts = [];
+  List<Map<String, dynamic>> _messages = [];
+  List<UserAccountModel> _messageRecipients = [];
+  UserResponse? _profile;
   bool _loading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -39,8 +42,28 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
       final rows = await api.getAnnouncements();
       final notices = await api.getRawList('/notices');
       final alerts = await api.getNotifications();
+      final profile = await api.getProfile();
+      final messages = await api.getCommunications();
+      final teachers = await api.getUsers(
+        role: 'Teacher',
+        status: 'active',
+        pageSize: 500,
+      );
+      final parents = await api.getUsers(
+        role: 'Parent',
+        status: 'active',
+        pageSize: 500,
+      );
+      final recipients =
+          [
+              ...teachers.data,
+              ...parents.data,
+            ].where((user) => user.isActive && user.id != profile.id).toList()
+            ..sort((a, b) => _userLabel(a).compareTo(_userLabel(b)));
+      messages.sort((a, b) => _messageTime(b).compareTo(_messageTime(a)));
       if (!mounted) return;
       setState(() {
+        _profile = profile;
         _circulars = rows
             .map(
               (a) => {
@@ -57,6 +80,8 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             .toList();
         _notices = notices;
         _alerts = alerts;
+        _messages = messages;
+        _messageRecipients = recipients;
         _loading = false;
         _error = null;
       });
@@ -158,6 +183,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
           Tab(text: 'Circulars'),
           Tab(text: 'Notice Board'),
           Tab(text: 'Alerts'),
+          Tab(text: 'Messages'),
         ],
       ),
       body: MediaQuery.of(context).size.width >= 840
@@ -173,6 +199,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         _buildCircularsTab(),
         _buildNoticeBoardTab(),
         _buildAlertsTab(),
+        _buildMessagesTab(),
       ],
     );
   }
@@ -583,6 +610,245 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         ),
       ],
     );
+  }
+
+  Widget _buildMessagesTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Direct Messages',
+                style: GoogleFonts.dmSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _messageRecipients.isEmpty
+                  ? null
+                  : () => _openMessageComposer(),
+              icon: const Icon(Icons.edit_square, size: 16),
+              label: const Text('New Message'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_messageRecipients.isEmpty)
+          Text(
+            'No active Teacher or Parent user accounts are available for one-to-one messages.',
+            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+          ),
+        const SizedBox(height: 12),
+        if (_messages.isEmpty)
+          Text(
+            'No direct messages available from backend.',
+            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+          )
+        else
+          ..._messages.map(
+            (message) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildMessageCard(message),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMessageCard(Map<String, dynamic> message) {
+    final incoming = _isIncomingMessage(message);
+    final unread = incoming && !_messageRead(message);
+    final counterpart = _messageCounterpart(message);
+    final replyRecipient = _messageRecipient(message);
+    final role = _messageCounterpartRole(message);
+    final content =
+        '${message['message_content'] ?? message['message'] ?? message['body'] ?? ''}'
+            .trim();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: unread ? AppTheme.infoContainer : AppTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: unread ? AppTheme.info.withAlpha(70) : AppTheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                incoming
+                    ? Icons.call_received_rounded
+                    : Icons.call_made_rounded,
+                size: 16,
+                color: incoming ? AppTheme.info : AppTheme.success,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${incoming ? 'From' : 'To'} $counterpart',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                role,
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            content.isEmpty ? 'Message' : content,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: AppTheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                _messageDate(message),
+                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              ),
+              const Spacer(),
+              if (unread)
+                TextButton.icon(
+                  onPressed: () => _markDirectMessageRead(message),
+                  icon: const Icon(Icons.done_all_rounded, size: 14),
+                  label: const Text('Mark Read'),
+                ),
+              TextButton.icon(
+                onPressed: replyRecipient == null
+                    ? null
+                    : () => _openMessageComposer(
+                        initialRecipient: replyRecipient,
+                      ),
+                icon: const Icon(Icons.reply_rounded, size: 14),
+                label: const Text('Reply'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openMessageComposer({
+    UserAccountModel? initialRecipient,
+  }) async {
+    if (_messageRecipients.isEmpty) return;
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _PrincipalMessagePage(
+          recipients: _messageRecipients,
+          initialRecipient: initialRecipient,
+          onSubmit: _sendDirectMessage,
+        ),
+      ),
+    );
+    if (sent == true) {
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Direct message sent')));
+    }
+  }
+
+  Future<void> _sendDirectMessage(
+    UserAccountModel recipient,
+    String content,
+  ) async {
+    await BackendApiClient.instance.sendCommunication(
+      receiverId: recipient.id,
+      receiverRole: _userRole(recipient),
+      messageContent: content,
+    );
+  }
+
+  Future<void> _markDirectMessageRead(Map<String, dynamic> message) async {
+    final id = '${message['id'] ?? message['message_id'] ?? ''}'.trim();
+    if (id.isEmpty) return;
+    await BackendApiClient.instance.markCommunicationRead(id);
+    await _loadData();
+  }
+
+  bool _isIncomingMessage(Map<String, dynamic> message) {
+    return '${message['receiver_id'] ?? ''}' == _profile?.id;
+  }
+
+  bool _messageRead(Map<String, dynamic> message) {
+    final value = message['is_read'];
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return '${value ?? ''}'.toLowerCase() == 'true';
+  }
+
+  String _messageCounterpart(Map<String, dynamic> message) {
+    final recipient = _messageRecipient(message);
+    if (recipient != null) return _userLabel(recipient);
+    final id = _isIncomingMessage(message)
+        ? '${message['sender_id'] ?? ''}'
+        : '${message['receiver_id'] ?? ''}';
+    return id.trim().isEmpty ? 'User' : id;
+  }
+
+  String _messageCounterpartRole(Map<String, dynamic> message) {
+    final role = _isIncomingMessage(message)
+        ? '${message['sender_role'] ?? ''}'
+        : '${message['receiver_role'] ?? ''}';
+    final cleanRole = role.trim();
+    if (cleanRole.isEmpty) return 'User';
+    return cleanRole[0].toUpperCase() + cleanRole.substring(1).toLowerCase();
+  }
+
+  UserAccountModel? _messageRecipient(Map<String, dynamic> message) {
+    final id = _isIncomingMessage(message)
+        ? '${message['sender_id'] ?? ''}'
+        : '${message['receiver_id'] ?? ''}';
+    for (final user in _messageRecipients) {
+      if (user.id == id) return user;
+    }
+    return null;
+  }
+
+  DateTime _messageTime(Map<String, dynamic> message) {
+    return DateTime.tryParse(
+          '${message['sent_at'] ?? message['created_at'] ?? ''}',
+        ) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  String _messageDate(Map<String, dynamic> message) {
+    final value = _messageTime(message);
+    if (value.millisecondsSinceEpoch == 0) return '';
+    return DateFormat('d MMM yyyy, h:mm a').format(value.toLocal());
+  }
+
+  static String _userRole(UserAccountModel user) {
+    final role = user.roleName.trim();
+    return role.isEmpty ? user.linkedType.trim().toLowerCase() : role;
+  }
+
+  static String _userLabel(UserAccountModel user) {
+    final name = user.name.trim();
+    if (name.isNotEmpty) return name;
+    final username = user.username.trim();
+    if (username.isNotEmpty) return username;
+    final email = user.email.trim();
+    return email.isEmpty ? user.id : email;
   }
 
   Future<bool> _addNotice(String title, String type) async {
@@ -1084,6 +1350,145 @@ class _UrgentAlertPage extends StatefulWidget {
 
   @override
   State<_UrgentAlertPage> createState() => _UrgentAlertPageState();
+}
+
+class _PrincipalMessagePage extends StatefulWidget {
+  const _PrincipalMessagePage({
+    required this.recipients,
+    required this.onSubmit,
+    this.initialRecipient,
+  });
+
+  final List<UserAccountModel> recipients;
+  final UserAccountModel? initialRecipient;
+  final Future<void> Function(UserAccountModel recipient, String content)
+  onSubmit;
+
+  @override
+  State<_PrincipalMessagePage> createState() => _PrincipalMessagePageState();
+}
+
+class _PrincipalMessagePageState extends State<_PrincipalMessagePage> {
+  final _formKey = GlobalKey<FormState>();
+  final _messageCtrl = TextEditingController();
+  UserAccountModel? _recipient;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _recipient =
+        widget.initialRecipient ??
+        (widget.recipients.isEmpty ? null : widget.recipients.first);
+  }
+
+  @override
+  void dispose() {
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate() || _recipient == null) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSubmit(_recipient!, _messageCtrl.text.trim());
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Message send failed: $e';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Direct Message')),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              DropdownButtonFormField<UserAccountModel>(
+                initialValue: _recipient,
+                decoration: const InputDecoration(
+                  labelText: 'Recipient',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
+                ),
+                items: widget.recipients
+                    .map(
+                      (user) => DropdownMenuItem<UserAccountModel>(
+                        value: user,
+                        child: Text(
+                          _recipientLabel(user),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _recipient = value),
+                validator: (value) =>
+                    value == null ? 'Recipient is required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _messageCtrl,
+                enabled: !_saving,
+                maxLines: 6,
+                minLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Message',
+                  prefixIcon: Icon(Icons.message_outlined),
+                ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? 'Message is required'
+                    : null,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 16),
+                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+              ],
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: _saving ? null : _submit,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded),
+                label: Text(_saving ? 'Sending...' : 'Send Message'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _recipientLabel(UserAccountModel user) {
+    final name = user.name.trim().isNotEmpty
+        ? user.name.trim()
+        : user.username.trim().isNotEmpty
+        ? user.username.trim()
+        : user.email.trim().isNotEmpty
+        ? user.email.trim()
+        : user.id;
+    final role = user.roleName.trim().isEmpty ? 'User' : user.roleName.trim();
+    return '$name - $role';
+  }
 }
 
 class _UrgentAlertPageState extends State<_UrgentAlertPage> {

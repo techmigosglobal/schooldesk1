@@ -40,6 +40,7 @@ class AdminTimetablePeriodFormArgs {
   final int nextPeriodNumber;
   final List<Map<String, dynamic>> subjects;
   final List<StaffModel> staff;
+  final List<Map<String, dynamic>> rooms;
   final Map<String, dynamic>? period;
 
   const AdminTimetablePeriodFormArgs({
@@ -52,6 +53,7 @@ class AdminTimetablePeriodFormArgs {
     required this.nextPeriodNumber,
     required this.subjects,
     required this.staff,
+    required this.rooms,
     this.period,
   });
 
@@ -292,7 +294,12 @@ class _AdminTimetableGenerationFormScreenState
                   ),
                 ),
                 Text(
-                  '${suggestion.staffName} - ${suggestion.startTime} to ${suggestion.endTime}',
+                  [
+                    suggestion.staffName,
+                    if (suggestion.roomName.trim().isNotEmpty)
+                      suggestion.roomName,
+                    '${suggestion.startTime} to ${suggestion.endTime}',
+                  ].join(' - '),
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     color: AppTheme.onSurfaceVariant,
@@ -385,6 +392,7 @@ class _AdminTimetablePeriodFormScreenState
   late final TextEditingController _endController;
   late String _subjectId;
   late String _staffId;
+  late String _roomId;
   bool _saving = false;
 
   bool get _ready =>
@@ -415,6 +423,13 @@ class _AdminTimetablePeriodFormScreenState
     _staffId = _initialId(
       _textValue(period['staff_id']),
       widget.args.staff.map((staff) => staff.id),
+    );
+    _roomId = _initialOptionalId(
+      _textValue(
+        period['room_id'],
+        fallback: widget.args.section?.roomId ?? '',
+      ),
+      widget.args.rooms.map((room) => _textValue(room['id'])),
     );
   }
 
@@ -494,6 +509,35 @@ class _AdminTimetablePeriodFormScreenState
                         : (value) => setState(() => _staffId = value ?? ''),
                   ),
                   const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: _roomId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Room'),
+                    items: [
+                      DropdownMenuItem(
+                        value: '',
+                        child: Text(
+                          widget.args.section?.roomNumber.trim().isEmpty ?? true
+                              ? 'No room assigned'
+                              : 'Use class room (${widget.args.section!.roomNumber})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      ...widget.args.rooms.map(
+                        (room) => DropdownMenuItem(
+                          value: _textValue(room['id']),
+                          child: Text(
+                            _roomName(room),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _roomId = value ?? ''),
+                  ),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -542,6 +586,7 @@ class _AdminTimetablePeriodFormScreenState
       'period_number': int.parse(_periodController.text.trim()),
       'subject_id': _subjectId,
       'staff_id': _staffId,
+      'room_id': _roomId,
       'start_time': _startController.text.trim(),
       'end_time': _endController.text.trim(),
     };
@@ -884,12 +929,26 @@ String _initialId(String preferred, Iterable<String> options) {
   return values.isEmpty ? '' : values.first;
 }
 
+String _initialOptionalId(String preferred, Iterable<String> options) {
+  final values = options.where((value) => value.trim().isNotEmpty).toSet();
+  return preferred.trim().isNotEmpty && values.contains(preferred)
+      ? preferred
+      : '';
+}
+
 String _subjectName(Map<String, dynamic> subject) =>
     _textValue(subject['subject_name'] ?? subject['name'] ?? subject['id']);
 
 String _staffName(StaffModel staff) => staff.fullName.trim().isEmpty
     ? staff.email ?? staff.id
     : staff.fullName.trim();
+
+String _roomName(Map<String, dynamic> room) {
+  final number = _textValue(room['room_number'] ?? room['name'] ?? room['id']);
+  final type = _textValue(room['room_type'] ?? room['type']);
+  if (number.isEmpty) return 'Room';
+  return type.isEmpty ? number : '$number - $type';
+}
 
 String _textValue(Object? value, {String fallback = ''}) {
   final text = '${value ?? ''}'.trim();

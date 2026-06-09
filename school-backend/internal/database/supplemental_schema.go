@@ -11,6 +11,112 @@ func ensureSupplementalSchema() error {
 	}
 }
 
+func ensurePreAutoMigrateSchema() error {
+	if DB == nil || DB.Dialector.Name() != "postgres" {
+		return nil
+	}
+	return ensurePostgresAcademicScopeColumns()
+}
+
+func ensurePostgresAcademicScopeColumns() error {
+	statements := []string{
+		`DO $$
+		BEGIN
+			IF to_regclass('public.sections') IS NOT NULL THEN
+				ALTER TABLE sections ADD COLUMN IF NOT EXISTS school_id text;
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.sections') IS NOT NULL AND to_regclass('public.grades') IS NOT NULL THEN
+				UPDATE sections
+				SET school_id = grades.school_id
+				FROM grades
+				WHERE sections.grade_id = grades.id
+					AND COALESCE(BTRIM(sections.school_id), '') = '';
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.grade_subjects') IS NOT NULL THEN
+				ALTER TABLE grade_subjects ADD COLUMN IF NOT EXISTS school_id text;
+				ALTER TABLE grade_subjects ADD COLUMN IF NOT EXISTS academic_year_id text;
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.grade_subjects') IS NOT NULL AND to_regclass('public.grades') IS NOT NULL THEN
+				UPDATE grade_subjects
+				SET school_id = grades.school_id
+				FROM grades
+				WHERE grade_subjects.grade_id = grades.id
+					AND COALESCE(BTRIM(grade_subjects.school_id), '') = '';
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.grade_subjects') IS NOT NULL AND to_regclass('public.academic_years') IS NOT NULL THEN
+				UPDATE grade_subjects
+				SET academic_year_id = current_year.id
+				FROM (
+					SELECT DISTINCT ON (school_id) id, school_id
+					FROM academic_years
+					ORDER BY school_id, is_current DESC, created_at DESC
+				) current_year
+				WHERE grade_subjects.school_id = current_year.school_id
+					AND COALESCE(BTRIM(grade_subjects.academic_year_id), '') = '';
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.staff_subjects') IS NOT NULL THEN
+				ALTER TABLE staff_subjects ADD COLUMN IF NOT EXISTS school_id text;
+				ALTER TABLE staff_subjects ADD COLUMN IF NOT EXISTS academic_year_id text;
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.staff_subjects') IS NOT NULL AND to_regclass('public.staffs') IS NOT NULL THEN
+				UPDATE staff_subjects
+				SET school_id = staffs.school_id
+				FROM staffs
+				WHERE staff_subjects.staff_id = staffs.id
+					AND COALESCE(BTRIM(staff_subjects.school_id), '') = '';
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.staff_subjects') IS NOT NULL AND to_regclass('public.sections') IS NOT NULL THEN
+				UPDATE staff_subjects
+				SET academic_year_id = sections.academic_year_id
+				FROM sections
+				WHERE staff_subjects.section_id = sections.id
+					AND COALESCE(BTRIM(staff_subjects.academic_year_id), '') = '';
+			END IF;
+		END $$;`,
+		`DO $$
+		BEGIN
+			IF to_regclass('public.staff_subjects') IS NOT NULL AND to_regclass('public.academic_years') IS NOT NULL THEN
+				UPDATE staff_subjects
+				SET academic_year_id = current_year.id
+				FROM (
+					SELECT DISTINCT ON (school_id) id, school_id
+					FROM academic_years
+					ORDER BY school_id, is_current DESC, created_at DESC
+				) current_year
+				WHERE staff_subjects.school_id = current_year.school_id
+					AND COALESCE(BTRIM(staff_subjects.academic_year_id), '') = '';
+			END IF;
+		END $$;`,
+	}
+	for _, statement := range statements {
+		if err := DB.Exec(statement).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensurePostgresSupplementalSchema() error {
 	statements := []string{
 		`DO $$ BEGIN CREATE TYPE school_role AS ENUM ('super_admin','admin','teacher','student','parent','principal'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;`,

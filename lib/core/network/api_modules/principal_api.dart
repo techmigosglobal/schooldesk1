@@ -40,6 +40,11 @@ extension BackendPrincipalApi on BackendApiClient {
     String gradeName = '',
     int? gradeNumber,
     String classTeacherId = '',
+    String roomNumber = '',
+    String roomType = 'classroom',
+    int roomCapacity = 0,
+    List<Map<String, dynamic>> subjectMappings = const [],
+    List<Map<String, dynamic>> feeItems = const [],
   }) async {
     try {
       final response = await _dio.post(
@@ -52,6 +57,15 @@ extension BackendPrincipalApi on BackendApiClient {
           'section_name': sectionName.trim(),
           'capacity': capacity,
           'class_teacher_id': classTeacherId.trim(),
+          if (roomNumber.trim().isNotEmpty) 'room_number': roomNumber.trim(),
+          if (roomNumber.trim().isNotEmpty)
+            'room_type': roomType.trim().isEmpty
+                ? 'classroom'
+                : roomType.trim(),
+          if (roomNumber.trim().isNotEmpty && roomCapacity > 0)
+            'room_capacity': roomCapacity,
+          'subject_mappings': subjectMappings,
+          'fee_items': feeItems,
         },
       );
       final data = _asMap(response.data);
@@ -60,6 +74,46 @@ extension BackendPrincipalApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to create principal class',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> dryRunPrincipalClassCsvImport({
+    required String csvText,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/classes/import/dry-run',
+        data: {'csv_text': csvText},
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to validate class CSV',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> importPrincipalClassCsv({
+    required String csvText,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/principal/classes/import',
+        data: {'csv_text': csvText},
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to import class CSV',
       );
     } on DioException catch (e) {
       throw _handleError(e);
@@ -75,6 +129,9 @@ extension BackendPrincipalApi on BackendApiClient {
     String gradeName = '',
     int? gradeNumber,
     String classTeacherId = '',
+    String? roomNumber,
+    String roomType = 'classroom',
+    int roomCapacity = 0,
     List<Map<String, dynamic>> subjectMappings = const [],
     List<Map<String, dynamic>> feeItems = const [],
     List<String> deletedFeeStructureIds = const [],
@@ -92,6 +149,15 @@ extension BackendPrincipalApi on BackendApiClient {
           'section_name': sectionName.trim(),
           'capacity': capacity,
           'class_teacher_id': classTeacherId.trim(),
+          if (roomNumber != null) 'room_number': roomNumber.trim(),
+          if (roomNumber != null && roomNumber.trim().isNotEmpty)
+            'room_type': roomType.trim().isEmpty
+                ? 'classroom'
+                : roomType.trim(),
+          if (roomNumber != null &&
+              roomNumber.trim().isNotEmpty &&
+              roomCapacity > 0)
+            'room_capacity': roomCapacity,
           'subject_mappings': subjectMappings,
           'fee_items': feeItems,
           'deleted_fee_structure_ids': deletedFeeStructureIds,
@@ -214,6 +280,7 @@ extension BackendPrincipalApi on BackendApiClient {
 
   Future<Map<String, dynamic>> savePrincipalSubjectMapping({
     required String subjectId,
+    required String academicYearId,
     required String gradeId,
     required int periodsPerWeek,
     int maxMarks = 100,
@@ -228,6 +295,7 @@ extension BackendPrincipalApi on BackendApiClient {
       final response = await _dio.post(
         '/principal/subjects/${subjectId.trim()}/mappings',
         data: {
+          'academic_year_id': academicYearId.trim(),
           'grade_id': gradeId.trim(),
           'section_id': sectionId.trim(),
           'teacher_id': teacherId.trim(),

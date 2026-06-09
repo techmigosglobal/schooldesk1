@@ -123,12 +123,20 @@ void main() {
     expect(routes, contains('adminFeeStructureForm'));
     expect(routes, contains('adminInvoiceGenerationForm'));
     expect(routes, contains('adminPaymentRecordForm'));
-    expect(guard, contains('AppRoutes.adminFeeStructureForm: {\'admin\'}'));
     expect(
       guard,
-      contains('AppRoutes.adminInvoiceGenerationForm: {\'admin\'}'),
+      contains('AppRoutes.adminFeeStructureForm: {\'principal\', \'admin\'}'),
     );
-    expect(guard, contains('AppRoutes.adminPaymentRecordForm: {\'admin\'}'));
+    expect(
+      guard,
+      contains(
+        'AppRoutes.adminInvoiceGenerationForm: {\'principal\', \'admin\'}',
+      ),
+    );
+    expect(
+      guard,
+      contains('AppRoutes.adminPaymentRecordForm: {\'principal\', \'admin\'}'),
+    );
     expect(registry, contains('/admin-fees-screen/structures/form'));
     expect(registry, contains('/admin-fees-screen/invoices/generate'));
     expect(registry, contains('/admin-fees-screen/payments/record'));
@@ -317,8 +325,14 @@ void main() {
       expect(routes, contains('AdminExamFormScreen'));
       expect(routes, contains('adminExamScheduleForm'));
       expect(routes, contains('AdminExamScheduleFormScreen'));
-      expect(guard, contains('AppRoutes.adminExamForm: {\'admin\'}'));
-      expect(guard, contains('AppRoutes.adminExamScheduleForm: {\'admin\'}'));
+      expect(
+        guard,
+        contains('AppRoutes.adminExamForm: {\'principal\', \'admin\'}'),
+      );
+      expect(
+        guard,
+        contains('AppRoutes.adminExamScheduleForm: {\'principal\', \'admin\'}'),
+      );
       expect(registry, contains('/admin-exams-screen/form'));
       expect(registry, contains('/admin-exams-screen/schedule'));
       expect(main, contains('examHandler.UpdateExam'));

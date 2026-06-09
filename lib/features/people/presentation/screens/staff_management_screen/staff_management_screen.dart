@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
+import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
@@ -98,9 +99,13 @@ class StaffModel {
         return 'In Class';
       case 'on_leave':
       case 'leave':
-      case 'inactive':
-      case 'pending_approval':
         return 'On Leave';
+      case 'inactive':
+      case 'deleted':
+      case 'archived':
+        return 'Inactive';
+      case 'pending_approval':
+        return 'Pending Approval';
       case 'available':
       case 'active':
       default:
@@ -634,11 +639,15 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          'Remove selected staff',
+          _isAdminOwner
+              ? 'Submit Staff Removal Requests'
+              : 'Remove selected staff',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
         ),
         content: Text(
-          'Remove ${selected.length} selected staff member${selected.length == 1 ? '' : 's'} from staff records?',
+          _isAdminOwner
+              ? 'Submit ${selected.length} staff removal request${selected.length == 1 ? '' : 's'} to the Principal approval queue?'
+              : 'Remove ${selected.length} selected staff member${selected.length == 1 ? '' : 's'} from staff records?',
         ),
         actions: [
           TextButton(
@@ -648,7 +657,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
-            child: const Text('Remove'),
+            child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
       ),
@@ -659,7 +668,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     final failures = <String>[];
     for (final staff in selected) {
       try {
-        await api.BackendApiClient.instance.deleteStaff(staff.id);
+        if (_isAdminOwner) {
+          await _submitStaffRemovalApproval(staff);
+        } else {
+          await api.BackendApiClient.instance.deleteStaff(staff.id);
+        }
         removed++;
       } catch (_) {
         failures.add(staff.name);
@@ -671,10 +684,22 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (!mounted) return;
     _showStaffMessage(
       failures.isEmpty
-          ? '$removed staff member${removed == 1 ? '' : 's'} removed'
+          ? _isAdminOwner
+                ? '$removed staff removal request${removed == 1 ? '' : 's'} submitted for Principal approval'
+                : '$removed staff member${removed == 1 ? '' : 's'} removed'
+          : _isAdminOwner
+          ? '$removed submitted, ${failures.length} failed'
           : '$removed removed, ${failures.length} failed',
       failures.isEmpty ? AppTheme.success : AppTheme.warning,
     );
+  }
+
+  Future<void> _importStaffCsv() async {
+    final imported = await BulkCsvImportService.importCsv(
+      context,
+      BulkCsvImportTarget.staff,
+    );
+    if (imported && mounted) await _loadStaffFromBackend();
   }
 
   @override
@@ -684,6 +709,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       floatingActionButton: _selectionMode
           ? null
           : FloatingActionButton(
+              tooltip: _isAdminOwner ? 'Prepare Staff Request' : 'Add Staff',
               heroTag: _isAdminOwner
                   ? 'add-admin-staff'
                   : 'add-principal-staff',
@@ -755,7 +781,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                           onTap: () => _selectionMode
                               ? _toggleStaffSelection(staff)
                               : _openStaffDetail(staff),
-                          onLongPress: () => _toggleStaffSelection(staff),
+                          onLongPress: _isAdminOwner
+                              ? () {}
+                              : () => _toggleStaffSelection(staff),
                         ),
                       );
                     },
@@ -802,7 +830,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 onPressed: _deleteSelectedStaff,
                 icon: const Icon(Icons.delete_outline_rounded, size: 22),
                 color: AppTheme.error,
-                tooltip: 'Remove selected',
+                tooltip: _isAdminOwner
+                    ? 'Submit removal requests'
+                    : 'Remove selected',
               ),
             ],
           ),
@@ -835,7 +865,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            IconButton(
+              onPressed: _importStaffCsv,
+              icon: const Icon(Icons.upload_file_rounded, size: 22),
+              tooltip: 'Upload staff CSV',
+            ),
           ],
         ),
       ),
@@ -1024,7 +1058,32 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         requestPrincipalApproval: _isAdminOwner,
       );
       staffId = staff.id;
+      if (_isAdminOwner) {
+        await _loadStaffFromBackend();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${input.fullName.trim()} submitted for Principal approval',
+            ),
+          ),
+        );
+        return;
+      }
     } else {
+      if (_isAdminOwner) {
+        await _submitStaffProfileApproval(input);
+        await _loadStaffFromBackend();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${input.fullName.trim()} update submitted for Principal approval',
+            ),
+          ),
+        );
+        return;
+      }
       await api.BackendApiClient.instance.updateStaff(
         staffId,
         firstName: firstName,
@@ -1075,6 +1134,102 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _submitStaffProfileApproval(_StaffProfileInput input) async {
+    final staffId = input.staffId?.trim() ?? '';
+    if (staffId.isEmpty) {
+      throw Exception('Backend staff ID is missing for approval request');
+    }
+    final afterSnapshot = _staffApprovalPayload(input);
+    final request = await api.BackendApiClient.instance.createApprovalRequest(
+      module: 'staff',
+      operationType: 'update',
+      entityType: 'staff',
+      entityId: staffId,
+      status: 'draft',
+      payload: afterSnapshot,
+      beforeSnapshot:
+          _staffById(staffId)?.toMap() ?? const <String, dynamic>{},
+      afterSnapshot: afterSnapshot,
+    );
+    await _submitCreatedApprovalRequest(request);
+  }
+
+  Future<void> _submitStaffRemovalApproval(StaffModel staff) async {
+    final snapshot = staff.toMap();
+    final request = await api.BackendApiClient.instance.createApprovalRequest(
+      module: 'staff',
+      operationType: 'delete',
+      entityType: 'staff',
+      entityId: staff.id,
+      status: 'draft',
+      payload: {
+        'staff_id': staff.id,
+        'staff_name': staff.name,
+        'request': 'Admin requested staff removal for Principal approval.',
+      },
+      beforeSnapshot: snapshot,
+      afterSnapshot: const <String, dynamic>{},
+    );
+    await _submitCreatedApprovalRequest(request);
+  }
+
+  Future<void> _submitCreatedApprovalRequest(
+    Map<String, dynamic> request,
+  ) async {
+    final approvalId = _stringValue(request['id']);
+    if (approvalId.isEmpty) {
+      throw Exception('Approval request ID missing from backend response');
+    }
+    await api.BackendApiClient.instance.submitApprovalRequest(approvalId);
+  }
+
+  StaffModel? _staffById(String staffId) {
+    for (final staff in _allStaff) {
+      if (staff.id == staffId) return staff;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _staffApprovalPayload(_StaffProfileInput input) {
+    return {
+      'staff_id': input.staffId,
+      'full_name': input.fullName,
+      'date_of_birth': input.backendDateOfBirth,
+      'gender': input.gender,
+      'phone': input.phone,
+      'email': input.email,
+      'designation': input.designation,
+      'employment_type': input.employmentType,
+      'join_date': input.backendJoinDate,
+      'employee_id': input.employeeId,
+      'username': input.username,
+      'account_role': input.accountRole,
+      'login_requested': input.createLogin,
+      'photo_name': input.photoName,
+      'assignments': input.assignments
+          .map(
+            (assignment) => {
+              'grade_id': assignment.gradeId,
+              'grade_label': assignment.gradeLabel,
+              'section_id': assignment.sectionId,
+              'section_label': assignment.sectionLabel,
+              'subject_id': assignment.subjectId,
+              'subject_label': assignment.subjectLabel,
+              'is_primary': assignment.isPrimary,
+            },
+          )
+          .toList(),
+      'documents': input.documents
+          .map(
+            (document) => {
+              'document_type': document.documentType,
+              'file_name': document.fileName,
+            },
+          )
+          .toList(),
+    };
   }
 
   Future<void> _syncStaffAssignments(
@@ -1215,6 +1370,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         builder: (_) => _TeacherDetailPage(
           staff: staff,
           imageUrl: _absoluteImageUrl(staff.photoUrl),
+          isAdminOwner: _isAdminOwner,
         ),
       ),
     );
@@ -1231,10 +1387,16 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          'Remove Staff',
+          _isAdminOwner
+              ? 'Submit Staff Removal for Approval'
+              : 'Remove Staff',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
         ),
-        content: Text('Remove ${staff.name} from staff records?'),
+        content: Text(
+          _isAdminOwner
+              ? 'Submit a removal request for ${staff.name} to the Principal approval queue?'
+              : 'Remove ${staff.name} from staff records?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -1243,7 +1405,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
-            child: const Text('Remove'),
+            child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
       ),
@@ -1251,9 +1413,18 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     if (confirmed != true) return;
 
     try {
-      await api.BackendApiClient.instance.deleteStaff(staff.id);
+      if (_isAdminOwner) {
+        await _submitStaffRemovalApproval(staff);
+      } else {
+        await api.BackendApiClient.instance.deleteStaff(staff.id);
+      }
       if (!mounted) return;
-      _showStaffMessage('${staff.name} removed', AppTheme.success);
+      _showStaffMessage(
+        _isAdminOwner
+            ? '${staff.name} removal submitted for Principal approval'
+            : '${staff.name} removed',
+        AppTheme.success,
+      );
       await _loadStaffFromBackend();
     } catch (error) {
       if (!mounted) return;
@@ -1433,6 +1604,8 @@ class _TeacherStatusBadge extends StatelessWidget {
     final colors = switch (label) {
       'On Leave' => (const Color(0xFFFFECEC), const Color(0xFFBA4242)),
       'In Class' => (const Color(0xFFDFF8E7), const Color(0xFF2F9E5B)),
+      'Inactive' => (const Color(0xFFE6EAF0), const Color(0xFF5C6872)),
+      'Pending Approval' => (const Color(0xFFFFF6D8), const Color(0xFF946900)),
       _ => (const Color(0xFFFFF2CE), const Color(0xFFB78412)),
     };
     return Container(
@@ -1939,8 +2112,9 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error =
-            '${_isEdit ? 'Update' : 'Add'} staff failed: ${_friendlyError(error)}';
+        _error = _isAdminOwner
+            ? 'Staff request submission failed: ${_friendlyError(error)}'
+            : '${_isEdit ? 'Update' : 'Add'} staff failed: ${_friendlyError(error)}';
       });
     }
   }
@@ -1972,8 +2146,9 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                     const SizedBox(height: 14),
                     _InlineNotice(
                       icon: Icons.verified_rounded,
-                      text:
-                          'Staff profile, login access, assignments, and documents will sync with the central academic server on submission.',
+                      text: _isAdminOwner
+                          ? 'Staff profile changes are submitted to the Principal approval queue.'
+                          : 'Staff profile, login access, assignments, and documents will sync with the central academic server on submission.',
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
@@ -2168,7 +2343,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                   if (!value) _passwordCtrl.clear();
                 }),
           title: Text(
-            _isEdit ? 'Reset login password' : 'Create staff login',
+            _isAdminOwner
+                ? (_isEdit
+                      ? 'Prepare login change'
+                      : 'Prepare staff login request')
+                : (_isEdit ? 'Reset login password' : 'Create staff login'),
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w900,
@@ -2176,9 +2355,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
             ),
           ),
           subtitle: Text(
-            _isEdit
-                ? 'Use this when the staff member needs a new password.'
-                : 'Email and password create access for admin or teacher roles.',
+            _isAdminOwner
+                ? 'Login details are submitted for Principal approval.'
+                : (_isEdit
+                      ? 'Use this when the staff member needs a new password.'
+                      : 'Email and password create access for admin or teacher roles.'),
             style: GoogleFonts.dmSans(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -2218,7 +2399,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                 label: _isEdit ? 'New Password' : 'Password',
                 child: _TextInput(
                   controller: _passwordCtrl,
-                  hint: _isEdit ? 'Enter new password' : 'Create password',
+                  hint: _isAdminOwner
+                      ? (_isEdit
+                            ? 'Enter requested password'
+                            : 'Enter requested password')
+                      : (_isEdit ? 'Enter new password' : 'Create password'),
                   enabled: !_saving,
                   obscureText: !_passwordVisible,
                   suffixIcon: _passwordVisible
@@ -2387,7 +2572,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                _isEdit ? 'Edit Staff Profile' : 'Add Staff Profile',
+                _isAdminOwner
+                    ? (_isEdit
+                          ? 'Prepare Staff Update Request'
+                          : 'Prepare Staff Request')
+                    : (_isEdit ? 'Edit Staff Profile' : 'Add Staff Profile'),
                 maxLines: 1,
                 style: GoogleFonts.dmSans(
                   fontSize: 16,
@@ -2485,7 +2674,11 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
               ),
             )
           : Text(
-              _isEdit ? 'Save Staff' : 'Add Staff',
+              _isAdminOwner
+                  ? (_isEdit
+                        ? 'Submit Staff Update for Approval'
+                        : 'Submit Staff Request for Approval')
+                  : (_isEdit ? 'Save Staff' : 'Add Staff'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
@@ -3135,8 +3328,13 @@ class _DropdownInput<T> extends StatelessWidget {
 class _TeacherDetailPage extends StatelessWidget {
   final StaffModel staff;
   final String imageUrl;
+  final bool isAdminOwner;
 
-  const _TeacherDetailPage({required this.staff, required this.imageUrl});
+  const _TeacherDetailPage({
+    required this.staff,
+    required this.imageUrl,
+    required this.isAdminOwner,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -3149,9 +3347,21 @@ class _TeacherDetailPage extends StatelessWidget {
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) => Navigator.pop(context, value),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('Edit Staff')),
-              PopupMenuItem(value: 'delete', child: Text('Remove Staff')),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'edit',
+                child: Text(
+                  isAdminOwner ? 'Prepare Staff Update Request' : 'Edit Staff',
+                ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text(
+                  isAdminOwner
+                      ? 'Submit Staff Removal for Approval'
+                      : 'Remove Staff',
+                ),
+              ),
             ],
           ),
         ],

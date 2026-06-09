@@ -16,11 +16,17 @@ enum ApprovalType {
   studentLeave,
   admission,
   feeConcession,
+  fee,
   tc,
   classApproval,
   student,
   event,
   timetable,
+  exam,
+  document,
+  communication,
+  helpdesk,
+  academicInfo,
 }
 
 class ApprovalModel {
@@ -64,6 +70,9 @@ class ApprovalModel {
         return ApprovalType.admission;
       case 'fee_concession':
         return ApprovalType.feeConcession;
+      case 'fee':
+      case 'fees':
+        return ApprovalType.fee;
       case 'tc':
         return ApprovalType.tc;
       case 'class':
@@ -74,6 +83,18 @@ class ApprovalModel {
         return ApprovalType.event;
       case 'timetable':
         return ApprovalType.timetable;
+      case 'exam':
+      case 'exams':
+        return ApprovalType.exam;
+      case 'document':
+      case 'documents':
+        return ApprovalType.document;
+      case 'communication':
+        return ApprovalType.communication;
+      case 'helpdesk':
+        return ApprovalType.helpdesk;
+      case 'academic_info':
+        return ApprovalType.academicInfo;
       default:
         return ApprovalType.leave;
     }
@@ -139,8 +160,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     'TC',
     'Classes',
     'Students',
-    'Event',
+    'Fees',
     'Timetable',
+    'Exams',
+    'Documents',
+    'Communication',
   ];
 
   @override
@@ -159,6 +183,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           path: '/account-approvals',
           type: 'account',
         ),
+      );
+      approvals.addAll(
+        await _loadGenericApprovals(path: '/approvals', type: 'approval'),
       );
       approvals.addAll(
         leaves
@@ -302,28 +329,78 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     String type,
     String path,
   ) {
+    final resolvedType = type == 'approval' ? _generalApprovalType(row) : type;
     return {
       'id': '${row['id'] ?? ''}',
-      'type': type,
+      'type': resolvedType,
       'requesterName':
-          '${row['requester_name'] ?? row['student_name'] ?? row['staff_name'] ?? row['created_by'] ?? 'Requester'}',
-      'requesterRole': '${row['requester_role'] ?? row['role'] ?? ''}',
+          '${row['requester_name'] ?? row['student_name'] ?? row['staff_name'] ?? row['requested_by_user_id'] ?? row['created_by'] ?? 'Requester'}',
+      'requesterRole':
+          '${row['requester_role'] ?? row['requested_by_role'] ?? row['role'] ?? ''}',
       'requesterClass':
           '${row['requesterClass'] ?? row['class_label'] ?? row['class_name'] ?? row['class'] ?? row['section'] ?? ''}',
       'submittedDate':
           '${row['submitted_at'] ?? row['created_at'] ?? row['date'] ?? ''}'
               .split('T')
               .first,
-      'summary': '${row['title'] ?? row['type'] ?? row['summary'] ?? type}',
+      'summary':
+          '${row['title'] ?? row['module_label'] ?? row['summary'] ?? resolvedType}',
       'details':
-          '${row['details'] ?? row['reason'] ?? row['description'] ?? row['purpose'] ?? ''}',
-      'status': '${row['status'] ?? 'pending'}'.toLowerCase(),
-      'remarks': row['remarks'] ?? row['rejection_reason'],
-      'actionDate': row['action_date'],
-      'decisionPath': type == 'fee_concession'
+          '${row['details'] ?? row['reason'] ?? row['description'] ?? row['purpose'] ?? row['operation_type'] ?? ''}',
+      'status': _approvalStatus(row['status']),
+      'remarks':
+          row['remarks'] ??
+          row['rejection_reason'] ??
+          row['change_request_note'],
+      'actionDate': row['action_date'] ?? row['applied_at'],
+      'decisionPath': resolvedType == 'fee_concession'
           ? '$path/${row['id']}/decision'
           : '$path/${row['id']}',
     };
+  }
+
+  String _generalApprovalType(Map<String, dynamic> row) {
+    final module = _text(row['module']).toLowerCase();
+    final type = _text(row['type']).toLowerCase();
+    switch (module.isEmpty ? type : module) {
+      case 'students':
+        return 'student';
+      case 'staff':
+      case 'user_access':
+        return 'account';
+      case 'fees':
+        return 'fee';
+      case 'timetable':
+        return 'timetable';
+      case 'exams':
+        return 'exam';
+      case 'documents':
+        return 'document';
+      case 'communication':
+        return 'communication';
+      case 'helpdesk':
+        return 'helpdesk';
+      case 'academic_info':
+      case 'attendance_operations':
+        return 'class';
+      default:
+        return type.isEmpty ? 'leave' : type;
+    }
+  }
+
+  String _approvalStatus(Object? status) {
+    final normalized = _text(status, fallback: 'pending').toLowerCase();
+    switch (normalized) {
+      case 'submitted':
+      case 'principal_review':
+        return 'pending';
+      case 'changes_requested':
+        return 'changes_requested';
+      case 'applied':
+        return 'approved';
+      default:
+        return normalized;
+    }
   }
 
   @override
@@ -351,8 +428,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       5: ApprovalType.tc,
       6: ApprovalType.classApproval,
       7: ApprovalType.student,
-      8: ApprovalType.event,
+      8: ApprovalType.fee,
       9: ApprovalType.timetable,
+      10: ApprovalType.exam,
+      11: ApprovalType.document,
+      12: ApprovalType.communication,
     };
     return _allApprovals.where((a) => a.type == typeMap[tabIndex]).toList();
   }
@@ -601,11 +681,60 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (path == null || path.isEmpty || path.endsWith('/')) {
       throw const FormatException('Approval decision path is missing');
     }
+    if (path.startsWith('/approvals/')) {
+      if (status == 'approved') {
+        await BackendApiClient.instance.approveApprovalRequest(approval.id);
+        await BackendApiClient.instance.applyApprovalRequest(approval.id);
+        return;
+      }
+      await BackendApiClient.instance.rejectApprovalRequest(
+        approval.id,
+        reason: remarks,
+      );
+      return;
+    }
     await BackendApiClient.instance.updateRaw(path, {
       'type': approval.type.name,
       'status': status,
       'remarks': remarks,
     });
+  }
+
+  Future<void> _handleRequestChanges(
+    ApprovalModel approval,
+    String note,
+  ) async {
+    final path = approval.decisionPath;
+    if (path == null || !path.startsWith('/approvals/')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Change requests are available for Admin submissions.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (_actionLoadingIds.contains(approval.id)) return;
+    setState(() => _actionLoadingIds.add(approval.id));
+    try {
+      await BackendApiClient.instance.requestApprovalChanges(
+        approval.id,
+        note: note,
+      );
+      if (!mounted) return;
+      setState(() {
+        approval.status = 'changes_requested';
+        approval.remarks = note;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Changes requested from Admin'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _actionLoadingIds.remove(approval.id));
+    }
   }
 
   String _monthName(int month) {
@@ -762,6 +891,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                   isActionLoading: _actionLoadingIds.contains(a.id),
                   onApprove: () => _handleApprove(a),
                   onReject: (remarks) => _handleReject(a, remarks),
+                  onRequestChanges: (note) => _handleRequestChanges(a, note),
                 ),
               ),
             ),
@@ -777,6 +907,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
                   approval: a,
                   onApprove: () {},
                   onReject: (_) {},
+                  onRequestChanges: (_) {},
                 ),
               ),
             ),
@@ -873,7 +1004,10 @@ class _ApprovalQueueToolbar extends StatelessWidget {
     final pending = allItems.where((a) => a.status == 'pending').length;
     final approved = allItems.where((a) => a.status == 'approved').length;
     final rejected = allItems.where((a) => a.status == 'rejected').length;
-    final resolved = approved + rejected;
+    final changesRequested = allItems
+        .where((a) => a.status == 'changes_requested')
+        .length;
+    final resolved = approved + rejected + changesRequested;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -896,6 +1030,12 @@ class _ApprovalQueueToolbar extends StatelessWidget {
             value: rejected,
             color: AppTheme.error,
             icon: Icons.cancel_rounded,
+          ),
+          _ApprovalMetricChip(
+            label: 'Changes',
+            value: changesRequested,
+            color: AppTheme.warning,
+            icon: Icons.edit_note_rounded,
           ),
           _ApprovalMetricChip(
             label: 'Showing',
@@ -1016,6 +1156,13 @@ class _ApprovalQueueToolbar extends StatelessWidget {
                     value: 'all',
                     selectedValue: selectedStatus,
                     onChanged: onStatusChanged,
+                  ),
+                  _ApprovalStatusFilterChip(
+                    label: 'Changes',
+                    value: 'changes_requested',
+                    selectedValue: selectedStatus,
+                    onChanged: onStatusChanged,
+                    count: changesRequested,
                   ),
                   _ApprovalStatusFilterChip(
                     label: 'Resolved',

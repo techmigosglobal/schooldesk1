@@ -3,6 +3,13 @@ import 'package:schooldesk1/routes/app_routes.dart';
 class RouteAccessGuard {
   RouteAccessGuard._();
 
+  static const Set<String> authenticatedRoles = {
+    'principal',
+    'admin',
+    'teacher',
+    'parent',
+  };
+
   static const Set<String> publicRoutes = {
     AppRoutes.initial,
     AppRoutes.landingPage,
@@ -34,6 +41,7 @@ class RouteAccessGuard {
     AppRoutes.syllabusMonitoring: {'principal'},
     AppRoutes.examsResults: {'principal'},
     AppRoutes.communicationCenter: {'principal'},
+    AppRoutes.principalChatCommunications: {'principal'},
     AppRoutes.complaintManagement: {'principal'},
     AppRoutes.eventsCalendar: {'principal'},
     AppRoutes.reportsAnalytics: {'principal'},
@@ -61,9 +69,9 @@ class RouteAccessGuard {
     AppRoutes.adminTeachers: {'admin'},
     AppRoutes.adminAttendance: {'admin'},
     AppRoutes.adminFees: {'admin'},
-    AppRoutes.adminFeeStructureForm: {'admin'},
-    AppRoutes.adminInvoiceGenerationForm: {'admin'},
-    AppRoutes.adminPaymentRecordForm: {'admin'},
+    AppRoutes.adminFeeStructureForm: {'principal', 'admin'},
+    AppRoutes.adminInvoiceGenerationForm: {'principal', 'admin'},
+    AppRoutes.adminPaymentRecordForm: {'principal', 'admin'},
     AppRoutes.adminPaymentRequests: {'admin'},
     AppRoutes.adminPaymentRequestDecision: {'admin'},
     AppRoutes.adminTimetable: {'admin'},
@@ -71,8 +79,8 @@ class RouteAccessGuard {
     AppRoutes.adminTimetablePeriodForm: {'admin'},
     AppRoutes.adminTimetableSubstitutionForm: {'admin'},
     AppRoutes.adminExams: {'admin'},
-    AppRoutes.adminExamForm: {'admin'},
-    AppRoutes.adminExamScheduleForm: {'admin'},
+    AppRoutes.adminExamForm: {'principal', 'admin'},
+    AppRoutes.adminExamScheduleForm: {'principal', 'admin'},
     AppRoutes.adminCommunication: {'admin'},
     AppRoutes.adminHelpdesk: {'admin'},
     AppRoutes.adminDocuments: {'admin'},
@@ -151,6 +159,32 @@ class RouteAccessGuard {
     }
 
     return dashboardForRole(normalizedRole) ?? AppRoutes.landingPage;
+  }
+
+  static Set<String> allowedRolesFor(String routeName) {
+    if (publicRoutes.contains(routeName)) {
+      return const <String>{};
+    }
+    if (sharedProtectedRoutes.contains(routeName)) {
+      return authenticatedRoles;
+    }
+    return _routeRoles[routeName] ?? const <String>{};
+  }
+
+  static bool isRoleAllowedFor({
+    required String routeName,
+    required String? role,
+  }) {
+    if (publicRoutes.contains(routeName)) {
+      return true;
+    }
+
+    final normalizedRole = _normalizeRole(role);
+    if (normalizedRole.isEmpty) {
+      return false;
+    }
+
+    return allowedRolesFor(routeName).contains(normalizedRole);
   }
 
   static String initialRouteFor({

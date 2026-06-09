@@ -6,7 +6,15 @@ import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 
-enum _EventFilter { all, today, upcoming, holidays, approvals, cancelled }
+enum _EventFilter {
+  month,
+  all,
+  today,
+  upcoming,
+  holidays,
+  approvals,
+  cancelled,
+}
 
 class EventsCalendarScreen extends StatefulWidget {
   const EventsCalendarScreen({super.key});
@@ -23,7 +31,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   String _query = '';
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
-  _EventFilter _filter = _EventFilter.all;
+  _EventFilter _filter = _EventFilter.month;
 
   @override
   void initState() {
@@ -68,10 +76,21 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return years.isNotEmpty ? years.first.id : '';
   }
 
+  bool get _canManageEvents {
+    final role = BackendApiClient.instance.currentRoleName
+        ?.trim()
+        .toLowerCase();
+    return role == null ||
+        role.isEmpty ||
+        role == 'admin' ||
+        role == 'principal';
+  }
+
   List<_PrincipalEvent> get _visibleEvents {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
     final query = _query.trim().toLowerCase();
-    return _events.where((event) {
+    final rows = _events.where((event) {
       final matchesSearch =
           query.isEmpty ||
           [
@@ -85,21 +104,22 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       if (!matchesSearch) return false;
 
       return switch (_filter) {
+        _EventFilter.month => event.overlapsMonth(_selectedMonth),
         _EventFilter.all => true,
-        _EventFilter.today => DateUtils.isSameDay(event.start, now),
+        _EventFilter.today => event.overlapsDate(today),
         _EventFilter.upcoming =>
-          event.start.isAfter(DateTime(now.year, now.month, now.day)) &&
-              event.status != 'cancelled',
+          !event.start.isBefore(today) && !event.isCancelled,
         _EventFilter.holidays => event.isHoliday,
         _EventFilter.approvals => event.needsApproval,
-        _EventFilter.cancelled => event.status == 'cancelled',
+        _EventFilter.cancelled => event.isCancelled,
       };
     }).toList();
+    rows.sort((a, b) => a.start.compareTo(b.start));
+    return rows;
   }
 
-  List<_PrincipalEvent> get _monthEvents => _visibleEvents
-      .where((event) => event.start.month == _selectedMonth)
-      .toList();
+  int get _selectedMonthCount =>
+      _events.where((event) => event.overlapsMonth(_selectedMonth)).length;
 
   int get _todayCount {
     final now = DateTime.now();
@@ -113,8 +133,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final startOfToday = DateTime(today.year, today.month, today.day);
     return _events
         .where(
-          (event) =>
-              event.start.isAfter(startOfToday) && event.status != 'cancelled',
+          (event) => !event.start.isBefore(startOfToday) && !event.isCancelled,
         )
         .length;
   }
@@ -146,7 +165,8 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           event: event,
           academicYears: _academicYears,
           selectedAcademicYearId: _selectedAcademicYearId,
-          onDelete: () => _deleteEvent(event),
+          canManage: _canManageEvents,
+          onAction: (action) => _handleEventAction(action, event),
         ),
       ),
     );
@@ -224,16 +244,68 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     }
   }
 
+  Future<bool> _setEventStatus(_PrincipalEvent event, String status) async {
+    if (event.id.isEmpty) return false;
+    try {
+      await BackendApiClient.instance.updateRaw('/events/${event.id}', {
+        'status': status,
+      });
+      if (!mounted) return true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${event.title} marked ${_titleCase(status)}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to update event: $error'),
+          backgroundColor: AppTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+  }
+
+  Future<bool> _handleEventAction(String action, _PrincipalEvent event) async {
+    switch (action) {
+      case 'view':
+        await _openDetails(event);
+        return false;
+      case 'edit':
+        await _openEditEvent(event);
+        return false;
+      case 'approve':
+        final changed = await _setEventStatus(event, 'approved');
+        if (changed) await _loadData();
+        return changed;
+      case 'cancel':
+        final changed = await _setEventStatus(event, 'cancelled');
+        if (changed) await _loadData();
+        return changed;
+      case 'delete':
+        final removed = await _deleteEvent(event);
+        if (removed) await _loadData();
+        return removed;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final visible = _monthEvents;
+    final visible = _visibleEvents;
     return PrincipalDirectoryScaffold(
       title: 'Events Directory',
-      subtitle: 'Plan events, holidays, approvals, and school calendar dates',
+      subtitle:
+          'Live school calendar for events, holidays, PTMs, and approvals',
       loading: _loading,
       error: _error,
       onRefresh: _loadData,
-      onAdd: _openCreateEvent,
+      onAdd: _canManageEvents ? _openCreateEvent : null,
       addTooltip: 'Create event',
       addIcon: Icons.event_available_rounded,
       isEmpty: !_loading && _error == null && visible.isEmpty,
@@ -249,6 +321,13 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         SliverToBoxAdapter(
           child: PrincipalDirectoryMetricStrip(
             metrics: [
+              PrincipalDirectoryMetric(
+                label: _monthName(_selectedMonth),
+                value: '$_selectedMonthCount',
+                icon: Icons.calendar_month_rounded,
+                color: principalDirectoryAccent,
+                tone: const Color(0xFFEAF4FF),
+              ),
               PrincipalDirectoryMetric(
                 label: 'Today',
                 value: '$_todayCount',
@@ -288,11 +367,8 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             itemBuilder: (context, index) => _EventDirectoryCard(
               event: visible[index],
               onTap: () => _openDetails(visible[index]),
-              onEdit: () => _openEditEvent(visible[index]),
-              onDelete: () async {
-                final removed = await _deleteEvent(visible[index]);
-                if (removed) await _loadData();
-              },
+              canManage: _canManageEvents,
+              onAction: (action) => _handleEventAction(action, visible[index]),
             ),
           ),
         ),
@@ -363,7 +439,10 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                   child: PrincipalDirectoryChip(
                     label: _monthName(month),
                     selected: _selectedMonth == month,
-                    onTap: () => setState(() => _selectedMonth = month),
+                    onTap: () => setState(() {
+                      _selectedMonth = month;
+                      _filter = _EventFilter.month;
+                    }),
                   ),
                 );
               }),
@@ -376,6 +455,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   String _filterLabel(_EventFilter filter) {
     return switch (filter) {
+      _EventFilter.month => 'Month',
       _EventFilter.all => 'All',
       _EventFilter.today => 'Today',
       _EventFilter.upcoming => 'Upcoming',
@@ -387,6 +467,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   IconData _filterIcon(_EventFilter filter) {
     return switch (filter) {
+      _EventFilter.month => Icons.calendar_month_rounded,
       _EventFilter.all => Icons.all_inclusive_rounded,
       _EventFilter.today => Icons.today_rounded,
       _EventFilter.upcoming => Icons.upcoming_rounded,
@@ -400,14 +481,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 class _EventDirectoryCard extends StatelessWidget {
   final _PrincipalEvent event;
   final VoidCallback onTap;
-  final VoidCallback onEdit;
-  final Future<void> Function() onDelete;
+  final bool canManage;
+  final Future<bool> Function(String action) onAction;
 
   const _EventDirectoryCard({
     required this.event,
     required this.onTap,
-    required this.onEdit,
-    required this.onDelete,
+    required this.canManage,
+    required this.onAction,
   });
 
   @override
@@ -433,20 +514,31 @@ class _EventDirectoryCard extends StatelessWidget {
         ),
         PrincipalInfoPill(icon: Icons.groups_rounded, label: event.audience),
       ],
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Event options',
-        onSelected: (value) async {
-          if (value == 'view') onTap();
-          if (value == 'edit') onEdit();
-          if (value == 'delete') await onDelete();
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'view', child: Text('View details')),
-          PopupMenuItem(value: 'edit', child: Text('Edit event')),
-          PopupMenuDivider(),
-          PopupMenuItem(value: 'delete', child: Text('Remove event')),
-        ],
-      ),
+      trailing: canManage
+          ? PopupMenuButton<String>(
+              tooltip: 'Event options',
+              onSelected: (value) async => onAction(value),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'view', child: Text('View details')),
+                const PopupMenuItem(value: 'edit', child: Text('Edit event')),
+                if (event.needsApproval)
+                  const PopupMenuItem(
+                    value: 'approve',
+                    child: Text('Approve event'),
+                  ),
+                if (!event.isCancelled)
+                  const PopupMenuItem(
+                    value: 'cancel',
+                    child: Text('Cancel event'),
+                  ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Remove record'),
+                ),
+              ],
+            )
+          : const Icon(Icons.chevron_right_rounded),
     );
   }
 }
@@ -455,24 +547,41 @@ class _EventDetailPage extends StatelessWidget {
   final _PrincipalEvent event;
   final List<AcademicYearModel> academicYears;
   final String selectedAcademicYearId;
-  final Future<bool> Function() onDelete;
+  final bool canManage;
+  final Future<bool> Function(String action) onAction;
 
   const _EventDetailPage({
     required this.event,
     required this.academicYears,
     required this.selectedAcademicYearId,
-    required this.onDelete,
+    required this.canManage,
+    required this.onAction,
   });
 
   @override
   Widget build(BuildContext context) {
     return PrincipalDetailPage(
       title: 'Event Details',
-      menuItems: const [
-        PopupMenuItem(value: 'edit', child: Text('Edit event')),
-        PopupMenuDivider(),
-        PopupMenuItem(value: 'delete', child: Text('Remove event')),
-      ],
+      menuItems: canManage
+          ? [
+              const PopupMenuItem(value: 'edit', child: Text('Edit event')),
+              if (event.needsApproval)
+                const PopupMenuItem(
+                  value: 'approve',
+                  child: Text('Approve event'),
+                ),
+              if (!event.isCancelled)
+                const PopupMenuItem(
+                  value: 'cancel',
+                  child: Text('Cancel event'),
+                ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Text('Remove record'),
+              ),
+            ]
+          : const [],
       onMenuSelected: (value) async {
         if (value == 'edit') {
           final saved = await Navigator.of(context).push<bool>(
@@ -488,10 +597,11 @@ class _EventDetailPage extends StatelessWidget {
             ),
           );
           if (saved == true && context.mounted) Navigator.pop(context, true);
+          return;
         }
-        if (value == 'delete') {
-          final removed = await onDelete();
-          if (removed && context.mounted) Navigator.pop(context, true);
+        if (value == 'approve' || value == 'cancel' || value == 'delete') {
+          final changed = await onAction(value);
+          if (changed && context.mounted) Navigator.pop(context, true);
         }
       },
       children: [
@@ -573,6 +683,7 @@ class _EventFormPageState extends State<_EventFormPage> {
   static const _types = [
     'event',
     'meeting',
+    'ptm',
     'academic',
     'exam',
     'holiday',
@@ -583,6 +694,7 @@ class _EventFormPageState extends State<_EventFormPage> {
   ];
 
   static const _statuses = [
+    'draft',
     'scheduled',
     'pending_approval',
     'approved',
@@ -641,6 +753,12 @@ class _EventFormPageState extends State<_EventFormPage> {
       setState(() => _error = 'End date cannot be before start date.');
       return;
     }
+    final startDateTime = _combinedDateTime(_startDate, _effectiveStartTime);
+    final endDateTime = _combinedDateTime(_endDate, _effectiveEndTime);
+    if (!endDateTime.isAfter(startDateTime)) {
+      setState(() => _error = 'End time must be after start time.');
+      return;
+    }
     final yearError = _academicYearRangeError();
     if (yearError != null) {
       setState(() => _error = yearError);
@@ -658,8 +776,8 @@ class _EventFormPageState extends State<_EventFormPage> {
         'description': _descriptionController.text.trim(),
         'start_date': _formatDate(_startDate),
         'end_date': _formatDate(_endDate),
-        'start_time': _formatTime(_startTime),
-        'end_time': _formatTime(_endTime),
+        'start_time': _formatTime(_effectiveStartTime),
+        'end_time': _formatTime(_effectiveEndTime),
         'venue': _venueController.text.trim(),
         'audience_type': _audience,
         'status': _status,
@@ -679,6 +797,16 @@ class _EventFormPageState extends State<_EventFormPage> {
         _error = 'Event save failed: $error';
       });
     }
+  }
+
+  TimeOfDay get _effectiveStartTime =>
+      _isHoliday ? const TimeOfDay(hour: 0, minute: 0) : _startTime;
+
+  TimeOfDay get _effectiveEndTime =>
+      _isHoliday ? const TimeOfDay(hour: 23, minute: 59) : _endTime;
+
+  DateTime _combinedDateTime(DateTime date, TimeOfDay time) {
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
   }
 
   String? _academicYearRangeError() {
@@ -835,28 +963,38 @@ class _EventFormPageState extends State<_EventFormPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _PickerTile(
-                    label: 'Start time',
-                    value: _formatTimeOfDay(_startTime),
-                    icon: Icons.schedule_rounded,
-                    onTap: _saving ? null : () => _pickTime(start: true),
+            if (_isHoliday) ...[
+              const SizedBox(height: 14),
+              const _CalendarNotice(
+                icon: Icons.celebration_rounded,
+                title: 'Holiday calendar entry',
+                message:
+                    'Holiday rows are saved as all-day events and also appear in parent calendars.',
+              ),
+            ] else ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _PickerTile(
+                      label: 'Start time',
+                      value: _formatTimeOfDay(_startTime),
+                      icon: Icons.schedule_rounded,
+                      onTap: _saving ? null : () => _pickTime(start: true),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _PickerTile(
-                    label: 'End time',
-                    value: _formatTimeOfDay(_endTime),
-                    icon: Icons.schedule_send_rounded,
-                    onTap: _saving ? null : () => _pickTime(start: false),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _PickerTile(
+                      label: 'End time',
+                      value: _formatTimeOfDay(_endTime),
+                      icon: Icons.schedule_send_rounded,
+                      onTap: _saving ? null : () => _pickTime(start: false),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             const SizedBox(height: 14),
             TextFormField(
               controller: _venueController,
@@ -1026,6 +1164,62 @@ class _PickerTile extends StatelessWidget {
   }
 }
 
+class _CalendarNotice extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+
+  const _CalendarNotice({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF4FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: principalDirectoryAccent.withAlpha(42)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: principalDirectoryAccent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryText,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryMuted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PrincipalEvent {
   final String id;
   final String academicYearId;
@@ -1091,6 +1285,24 @@ class _PrincipalEvent {
   bool get needsApproval =>
       status == 'pending' || status == 'pending_approval' || status == 'draft';
 
+  bool get isCancelled => status == 'cancelled';
+
+  bool overlapsMonth(int month) {
+    var cursor = DateTime(start.year, start.month, 1);
+    final last = DateTime(end.year, end.month, 1);
+    while (!cursor.isAfter(last)) {
+      if (cursor.month == month) return true;
+      cursor = DateTime(cursor.year, cursor.month + 1, 1);
+    }
+    return false;
+  }
+
+  bool overlapsDate(DateTime date) {
+    final dayStart = DateTime(date.year, date.month, date.day);
+    final dayEnd = dayStart.add(const Duration(days: 1));
+    return start.isBefore(dayEnd) && end.isAfter(dayStart);
+  }
+
   String get statusLabel => _titleCase(status.replaceAll('_', ' '));
 
   String get typeLabel => _titleCase(type.replaceAll('_', ' '));
@@ -1105,6 +1317,7 @@ class _PrincipalEvent {
   }
 
   String get timeLabel {
+    if (isHoliday) return 'All day';
     return '${_formatTimeOfDay(TimeOfDay.fromDateTime(start))} - ${_formatTimeOfDay(TimeOfDay.fromDateTime(end))}';
   }
 
@@ -1112,6 +1325,7 @@ class _PrincipalEvent {
     if (isHoliday) return Icons.celebration_rounded;
     return switch (type) {
       'meeting' => Icons.groups_2_rounded,
+      'ptm' => Icons.people_alt_rounded,
       'exam' => Icons.assignment_rounded,
       'academic' => Icons.school_rounded,
       'sports' => Icons.sports_soccer_rounded,
@@ -1176,6 +1390,7 @@ String _formatTimeOfDay(TimeOfDay time) {
 }
 
 String _titleCase(String value) {
+  if (value.trim().toLowerCase() == 'ptm') return 'PTM';
   return value
       .split(RegExp(r'\s+'))
       .where((part) => part.isNotEmpty)

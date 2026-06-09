@@ -26,7 +26,7 @@ func NewStaffHandler() *StaffHandler {
 func (h *StaffHandler) GetStaff(c *gin.Context) {
 	page, pageSize := parsePagination(c)
 	schoolID := scopedSchoolID(c)
-	status := c.Query("status")
+	status := strings.TrimSpace(c.Query("status"))
 
 	var staff []models.Staff
 	var total int64
@@ -36,7 +36,12 @@ func (h *StaffHandler) GetStaff(c *gin.Context) {
 		query = query.Where("school_id = ?", schoolID)
 	}
 	if status != "" {
-		query = query.Where("status = ?", status)
+		query = query.Where("LOWER(TRIM(status)) = ?", strings.ToLower(status))
+	} else {
+		query = query.Where(
+			"(status IS NULL OR TRIM(status) = '' OR LOWER(TRIM(status)) NOT IN ?)",
+			[]string{"inactive", "deleted", "archived"},
+		)
 	}
 
 	query.Count(&total)

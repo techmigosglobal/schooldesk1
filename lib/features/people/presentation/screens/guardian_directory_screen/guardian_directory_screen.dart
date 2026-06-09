@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
+import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
@@ -424,6 +425,14 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
     );
   }
 
+  Future<void> _importParentsCsv() async {
+    final imported = await BulkCsvImportService.importCsv(
+      context,
+      BulkCsvImportTarget.parents,
+    );
+    if (imported && mounted) await _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -577,7 +586,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 48),
+            IconButton(
+              onPressed: _importParentsCsv,
+              icon: const Icon(Icons.upload_file_rounded, size: 22),
+              tooltip: 'Upload parents CSV',
+            ),
           ],
         ),
       ),

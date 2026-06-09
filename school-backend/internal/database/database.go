@@ -62,6 +62,9 @@ func Initialize(cfg *config.Config) error {
 	log.Println("Database connected successfully")
 
 	if cfg.MigrateOnStart {
+		if err := ensurePreAutoMigrateSchema(); err != nil {
+			return err
+		}
 		if err := autoMigrate(); err != nil {
 			return err
 		}

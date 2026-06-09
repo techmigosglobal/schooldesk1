@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
+	"school-backend/internal/policy"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -305,6 +307,9 @@ func scopedFeeInvoiceQuery(c *gin.Context) *gorm.DB {
 	if academicYearID := strings.TrimSpace(c.Query("academic_year_id")); academicYearID != "" {
 		query = query.Where("fee_invoices.academic_year_id = ?", academicYearID)
 	}
+	if termID := strings.TrimSpace(c.Query("term_id")); termID != "" {
+		query = query.Where("fee_invoices.term_id = ?", termID)
+	}
 	if sectionID := strings.TrimSpace(c.Query("section_id")); sectionID != "" {
 		query = query.Where("students.current_section_id = ?", sectionID)
 	}
@@ -322,6 +327,7 @@ func preloadFeeInvoiceDetails(query *gorm.DB) *gorm.DB {
 		Preload("Student.CurrentSection").
 		Preload("Student.CurrentSection.Grade").
 		Preload("AcademicYear").
+		Preload("Term").
 		Preload("Items").
 		Preload("Items.FeeCategory").
 		Preload("Payments")
@@ -424,6 +430,9 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 		InvoiceDate    string `json:"invoice_date"`
 		DueDate        string `json:"due_date" binding:"required"`
 		InvoiceLabel   string `json:"invoice_label"`
+		TermID         string `json:"term_id"`
+		IncludeOneTime *bool  `json:"include_one_time"`
+		IncludeYearly  *bool  `json:"include_yearly"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -453,6 +462,17 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 	if !gradeBelongsToSchool(req.GradeID, schoolID) {
 		fail(c, http.StatusBadRequest, "grade does not belong to this school")
 		return
+	}
+	var selectedTerm models.Term
+	termID := strings.TrimSpace(req.TermID)
+	if termID != "" {
+		if err := database.DB.
+			Joins("JOIN academic_years ON academic_years.id = terms.academic_year_id").
+			Where("terms.id = ? AND terms.academic_year_id = ? AND academic_years.school_id = ?", termID, req.AcademicYearID, schoolID).
+			First(&selectedTerm).Error; err != nil {
+			fail(c, http.StatusBadRequest, "term must belong to the selected academic year")
+			return
+		}
 	}
 	if strings.TrimSpace(req.SectionID) != "" {
 		if !sectionBelongsToSchool(req.SectionID, schoolID) {
@@ -501,14 +521,36 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 
 	label := strings.TrimSpace(req.InvoiceLabel)
 	if label == "" {
-		label = invoiceDate.Format("Jan-2006")
+		if termID != "" && strings.TrimSpace(selectedTerm.TermName) != "" {
+			label = selectedTerm.TermName
+		} else {
+			label = invoiceDate.Format("Jan-2006")
+		}
 	}
+
+	termCount := 1
+	if termID != "" {
+		var count int64
+		if err := database.DB.Model(&models.Term{}).
+			Where("academic_year_id = ?", req.AcademicYearID).
+			Count(&count).Error; err != nil {
+			fail(c, http.StatusInternalServerError, "Failed to load academic terms")
+			return
+		}
+		if count > 0 {
+			termCount = int(count)
+		}
+	}
+	includeOneTime := req.IncludeOneTime != nil && *req.IncludeOneTime
+	includeYearly := req.IncludeYearly != nil && *req.IncludeYearly
+	billableItems := feeBillableItems(structures, termID != "", termCount, includeOneTime, includeYearly)
 	total := 0.0
-	for _, structure := range structures {
-		total += structure.Amount
+	for _, item := range billableItems {
+		total += item.amount
 	}
+	total = roundMoney(total)
 	if total <= 0 {
-		fail(c, http.StatusBadRequest, "Selected fee structures have no billable amount")
+		fail(c, http.StatusBadRequest, "No billable fee components matched the selected term and options")
 		return
 	}
 
@@ -533,9 +575,15 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 				return err
 			}
 
+			var invoiceTermID *string
+			if termID != "" {
+				value := termID
+				invoiceTermID = &value
+			}
 			invoice := models.FeeInvoice{
 				StudentID:      student.ID,
 				AcademicYearID: req.AcademicYearID,
+				TermID:         invoiceTermID,
 				InvoiceNumber:  invoiceNumber,
 				InvoiceDate:    invoiceDate,
 				DueDate:        dueDate,
@@ -549,16 +597,13 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 			if err := tx.Create(&invoice).Error; err != nil {
 				return err
 			}
-			for _, structure := range structures {
-				description := "Fee"
-				if structure.FeeCategory != nil && strings.TrimSpace(structure.FeeCategory.CategoryName) != "" {
-					description = structure.FeeCategory.CategoryName
-				}
+			for _, billable := range billableItems {
+				structure := billable.structure
 				item := models.FeeInvoiceItem{
 					InvoiceID:     invoice.ID,
 					FeeCategoryID: structure.FeeCategoryID,
-					Amount:        structure.Amount,
-					Description:   description,
+					Amount:        billable.amount,
+					Description:   billable.description,
 				}
 				if err := tx.Create(&item).Error; err != nil {
 					return err
@@ -575,14 +620,94 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 	id := req.GradeID
 	auditAction(c, "fees", "generate", "fee_invoices", &id)
 	success(c, http.StatusCreated, gin.H{
-		"created":        len(created),
-		"skipped":        len(skipped),
-		"total_students": len(students),
-		"invoice_label":  label,
-		"scope":          invoiceScope(req.StudentID, req.SectionID),
-		"invoices":       created,
-		"skipped_rows":   skipped,
+		"created":           len(created),
+		"skipped":           len(skipped),
+		"total_students":    len(students),
+		"invoice_label":     label,
+		"term_id":           termID,
+		"term_count":        termCount,
+		"per_student_total": total,
+		"include_one_time":  includeOneTime,
+		"include_yearly":    includeYearly,
+		"scope":             invoiceScope(req.StudentID, req.SectionID),
+		"invoices":          created,
+		"skipped_rows":      skipped,
 	}, "Fee invoices generated")
+}
+
+type feeBillableItem struct {
+	structure   models.FeeStructure
+	amount      float64
+	description string
+}
+
+func feeBillableItems(structures []models.FeeStructure, termMode bool, termCount int, includeOneTime, includeYearly bool) []feeBillableItem {
+	if termCount <= 0 {
+		termCount = 1
+	}
+	items := make([]feeBillableItem, 0, len(structures))
+	for _, structure := range structures {
+		frequency := normalizedFeeFrequency(structure)
+		amount := structure.Amount
+		if termMode {
+			switch frequency {
+			case "one_time":
+				if !includeOneTime {
+					continue
+				}
+			case "yearly":
+				if !includeYearly {
+					continue
+				}
+			case "term":
+				amount = structure.Amount / float64(termCount)
+			}
+		}
+		amount = roundMoney(amount)
+		if amount <= 0 {
+			continue
+		}
+		items = append(items, feeBillableItem{
+			structure:   structure,
+			amount:      amount,
+			description: feeStructureDescription(structure),
+		})
+	}
+	return items
+}
+
+func normalizedFeeFrequency(structure models.FeeStructure) string {
+	text := ""
+	if structure.FeeCategory != nil {
+		text = structure.FeeCategory.Frequency
+	}
+	text = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(text, "-", "_")))
+	text = strings.ReplaceAll(text, " ", "_")
+	switch {
+	case strings.Contains(text, "one"):
+		return "one_time"
+	case strings.Contains(text, "year"):
+		return "yearly"
+	case strings.Contains(text, "month"):
+		return "monthly"
+	case strings.Contains(text, "term"):
+		return "term"
+	case text == "":
+		return "term"
+	default:
+		return text
+	}
+}
+
+func feeStructureDescription(structure models.FeeStructure) string {
+	if structure.FeeCategory != nil && strings.TrimSpace(structure.FeeCategory.CategoryName) != "" {
+		return structure.FeeCategory.CategoryName
+	}
+	return "Fee"
+}
+
+func roundMoney(amount float64) float64 {
+	return math.Round(amount*100) / 100
 }
 
 func (h *FeeHandler) RecordPayment(c *gin.Context) {
@@ -767,6 +892,10 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "status must be approved or rejected")
 		return
 	}
+	if currentRole(c) == "admin" {
+		h.createPaymentDecisionApproval(c, status, req.AdminRemarks)
+		return
+	}
 
 	var paymentRequest models.ParentPaymentRequest
 	if err := database.DB.First(&paymentRequest, "id = ? AND school_id = ?", c.Param("id"), scopedSchoolID(c)).Error; err != nil {
@@ -778,52 +907,10 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 		return
 	}
 
-	now := time.Now().UTC()
 	decider := currentUserID(c)
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
-		paymentRequest.Status = status
-		paymentRequest.AdminRemarks = strings.TrimSpace(req.AdminRemarks)
-		paymentRequest.DecidedBy = &decider
-		paymentRequest.DecidedAt = &now
-		if status == "rejected" {
-			return tx.Save(&paymentRequest).Error
-		}
-
-		var invoice models.FeeInvoice
-		if err := tx.Model(&models.FeeInvoice{}).
-			Joins("JOIN students ON students.id = fee_invoices.student_id").
-			Where("fee_invoices.id = ? AND students.school_id = ?", paymentRequest.InvoiceID, scopedSchoolID(c)).
-			First(&invoice).Error; err != nil {
-			return fmt.Errorf("invoice not found")
-		}
-		if paymentRequest.Amount > invoice.Balance {
-			return fmt.Errorf("payment request amount exceeds current outstanding balance")
-		}
-		payment := models.Payment{
-			InvoiceID:     paymentRequest.InvoiceID,
-			ReceiptNumber: paymentRequest.RequestReference,
-			AmountPaid:    paymentRequest.Amount,
-			PaymentDate:   paymentRequest.PaymentDate,
-			PaymentMode:   paymentRequest.PaymentMode,
-			TransactionID: paymentRequest.TransactionID,
-			ReceivedBy:    &decider,
-		}
-		if err := tx.Create(&payment).Error; err != nil {
-			return err
-		}
-		invoice.PaidAmount += paymentRequest.Amount
-		invoice.Balance -= paymentRequest.Amount
-		if invoice.Balance <= 0 {
-			invoice.Balance = 0
-			invoice.Status = "paid"
-		} else {
-			invoice.Status = "partial"
-		}
-		if err := tx.Save(&invoice).Error; err != nil {
-			return err
-		}
-		paymentRequest.PaymentID = &payment.ID
-		return tx.Save(&paymentRequest).Error
+		_, err := applyParentPaymentRequestDecisionTx(tx, scopedSchoolID(c), decider, paymentRequest.ID, status, req.AdminRemarks)
+		return err
 	}); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -836,6 +923,164 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 		return
 	}
 	success(c, http.StatusOK, paymentRequest, "Payment request updated")
+}
+
+func (h *FeeHandler) createPaymentDecisionApproval(c *gin.Context, status, remarks string) {
+	var paymentRequest models.ParentPaymentRequest
+	if err := preloadPaymentRequestDetails(database.DB).
+		First(&paymentRequest, "parent_payment_requests.id = ? AND parent_payment_requests.school_id = ?", c.Param("id"), scopedSchoolID(c)).Error; err != nil {
+		fail(c, http.StatusNotFound, "Payment request not found")
+		return
+	}
+	if !strings.EqualFold(paymentRequest.Status, "pending") {
+		fail(c, http.StatusBadRequest, "Payment request has already been actioned")
+		return
+	}
+
+	matrix := policy.MustLoadOwnershipMatrix()
+	module, ok := matrix.Module("fees")
+	if !ok {
+		fail(c, http.StatusInternalServerError, "Fees approval ownership is not configured")
+		return
+	}
+	operation := status + "_payment_request"
+	now := time.Now().UTC()
+	req := approvalMutationRequest{
+		Module:        "fees",
+		OperationType: operation,
+		EntityType:    "payment_request",
+		EntityID:      paymentRequest.ID,
+		Status:        "principal_review",
+		Payload: map[string]interface{}{
+			"payment_request_id": paymentRequest.ID,
+			"status":             status,
+			"admin_remarks":      strings.TrimSpace(remarks),
+			"invoice_id":         paymentRequest.InvoiceID,
+			"student_id":         paymentRequest.StudentID,
+			"amount":             paymentRequest.Amount,
+			"payment_mode":       paymentRequest.PaymentMode,
+			"transaction_id":     paymentRequest.TransactionID,
+			"request_reference":  paymentRequest.RequestReference,
+		},
+	}
+	payload := approvalPayload(c, module, req, "principal_review", now)
+	payload["submitted_at"] = now.Format(time.RFC3339)
+	payload["audit_trail"] = []gin.H{
+		approvalAuditEntry(c, "created", "principal_review", "", now),
+		approvalAuditEntry(c, "submitted", "principal_review", "", now),
+	}
+	encoded, err := jsonMarshal(payload)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "Invalid payment approval payload")
+		return
+	}
+	row := models.FrontendRecord{
+		SchoolID:  scopedSchoolID(c),
+		Resource:  approvalRequestResource,
+		Payload:   encoded,
+		CreatedBy: currentUserID(c),
+	}
+	if err := database.DB.Create(&row).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to create payment approval request")
+		return
+	}
+	auditAction(c, approvalRequestResource, "create", "frontend_records", &row.ID)
+	if logs, err := createApprovalRequestedNotificationsTx(
+		database.DB,
+		c,
+		row.ID,
+		"Payment request pending Principal approval",
+		fmt.Sprintf("%s submitted a payment request decision for Principal approval.", c.GetString("role_name")),
+	); err == nil {
+		enqueuePushNotifications(logs)
+	}
+	success(c, http.StatusCreated, approvalRecordResponse(row), "Payment decision submitted for Principal approval")
+}
+
+func applyParentPaymentRequestDecisionTx(tx *gorm.DB, schoolID, decider, requestID, status, remarks string) (models.ParentPaymentRequest, error) {
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status != "approved" && status != "rejected" {
+		return models.ParentPaymentRequest{}, fmt.Errorf("status must be approved or rejected")
+	}
+	var paymentRequest models.ParentPaymentRequest
+	if err := tx.First(&paymentRequest, "id = ? AND school_id = ?", requestID, schoolID).Error; err != nil {
+		return models.ParentPaymentRequest{}, fmt.Errorf("payment request not found")
+	}
+	if !strings.EqualFold(paymentRequest.Status, "pending") {
+		return models.ParentPaymentRequest{}, fmt.Errorf("Payment request has already been actioned")
+	}
+	now := time.Now().UTC()
+	paymentRequest.Status = status
+	paymentRequest.AdminRemarks = strings.TrimSpace(remarks)
+	paymentRequest.DecidedBy = &decider
+	paymentRequest.DecidedAt = &now
+	if status == "rejected" {
+		if err := tx.Save(&paymentRequest).Error; err != nil {
+			return models.ParentPaymentRequest{}, err
+		}
+		return paymentRequest, nil
+	}
+
+	var invoice models.FeeInvoice
+	if err := tx.Model(&models.FeeInvoice{}).
+		Joins("JOIN students ON students.id = fee_invoices.student_id").
+		Where("fee_invoices.id = ? AND students.school_id = ?", paymentRequest.InvoiceID, schoolID).
+		First(&invoice).Error; err != nil {
+		return models.ParentPaymentRequest{}, fmt.Errorf("invoice not found")
+	}
+	if paymentRequest.Amount > invoice.Balance {
+		return models.ParentPaymentRequest{}, fmt.Errorf("payment request amount exceeds current outstanding balance")
+	}
+	payment := models.Payment{
+		InvoiceID:     paymentRequest.InvoiceID,
+		ReceiptNumber: paymentRequest.RequestReference,
+		AmountPaid:    paymentRequest.Amount,
+		PaymentDate:   paymentRequest.PaymentDate,
+		PaymentMode:   paymentRequest.PaymentMode,
+		TransactionID: paymentRequest.TransactionID,
+	}
+	if isUUIDLike(decider) {
+		payment.ReceivedBy = &decider
+	}
+	if err := tx.Create(&payment).Error; err != nil {
+		return models.ParentPaymentRequest{}, err
+	}
+	invoice.PaidAmount += paymentRequest.Amount
+	invoice.Balance -= paymentRequest.Amount
+	if invoice.Balance <= 0 {
+		invoice.Balance = 0
+		invoice.Status = "paid"
+	} else {
+		invoice.Status = "partial"
+	}
+	if err := tx.Save(&invoice).Error; err != nil {
+		return models.ParentPaymentRequest{}, err
+	}
+	paymentRequest.PaymentID = &payment.ID
+	if err := tx.Save(&paymentRequest).Error; err != nil {
+		return models.ParentPaymentRequest{}, err
+	}
+	return paymentRequest, nil
+}
+
+func isUUIDLike(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 36 {
+		return false
+	}
+	for index, char := range value {
+		switch index {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func scopedPaymentRequestQuery(c *gin.Context) *gorm.DB {

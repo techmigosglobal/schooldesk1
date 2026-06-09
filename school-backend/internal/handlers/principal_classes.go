@@ -57,6 +57,11 @@ type principalClassSetupRequest struct {
 	SectionName            string                         `json:"section_name"`
 	Capacity               int                            `json:"capacity"`
 	ClassTeacherID         string                         `json:"class_teacher_id"`
+	ClassTeacherRef        classImportStaffRef            `json:"-"`
+	RoomID                 *string                        `json:"room_id"`
+	RoomNumber             *string                        `json:"room_number"`
+	RoomType               string                         `json:"room_type"`
+	RoomCapacity           int                            `json:"room_capacity"`
 	FeeItems               []principalClassFeeItem        `json:"fee_items"`
 	SubjectMappings        []principalClassSubjectMapping `json:"subject_mappings"`
 	DeletedFeeStructureIDs []string                       `json:"deleted_fee_structure_ids"`
@@ -76,22 +81,23 @@ type principalClassFeeItem struct {
 }
 
 type principalClassSubjectMapping struct {
-	SubjectID      string `json:"subject_id"`
-	SubjectName    string `json:"subject_name"`
-	SubjectCode    string `json:"subject_code"`
-	SubjectType    string `json:"subject_type"`
-	SubjectColor   string `json:"subject_color"`
-	DepartmentID   string `json:"department_id"`
-	DepartmentName string `json:"department_name"`
-	GradeSubjectID string `json:"grade_subject_id"`
-	StaffSubjectID string `json:"staff_subject_id"`
-	TeacherID      string `json:"teacher_id"`
-	PeriodsPerWeek int    `json:"periods_per_week"`
-	MaxMarks       int    `json:"max_marks"`
-	PassMarks      int    `json:"pass_marks"`
-	IsMandatory    *bool  `json:"is_mandatory"`
-	IsPrimary      *bool  `json:"is_primary"`
-	Delete         bool   `json:"delete"`
+	SubjectID      string              `json:"subject_id"`
+	SubjectName    string              `json:"subject_name"`
+	SubjectCode    string              `json:"subject_code"`
+	SubjectType    string              `json:"subject_type"`
+	SubjectColor   string              `json:"subject_color"`
+	DepartmentID   string              `json:"department_id"`
+	DepartmentName string              `json:"department_name"`
+	GradeSubjectID string              `json:"grade_subject_id"`
+	StaffSubjectID string              `json:"staff_subject_id"`
+	TeacherID      string              `json:"teacher_id"`
+	TeacherRef     classImportStaffRef `json:"-"`
+	PeriodsPerWeek int                 `json:"periods_per_week"`
+	MaxMarks       int                 `json:"max_marks"`
+	PassMarks      int                 `json:"pass_marks"`
+	IsMandatory    *bool               `json:"is_mandatory"`
+	IsPrimary      *bool               `json:"is_primary"`
+	Delete         bool                `json:"delete"`
 }
 
 func (h *PrincipalClassesHandler) Overview(c *gin.Context) {
@@ -104,6 +110,7 @@ func (h *PrincipalClassesHandler) Overview(c *gin.Context) {
 	if err := database.DB.
 		Preload("Grade").
 		Preload("ClassTeacher").
+		Preload("Room").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", schoolID).
 		Order("grades.grade_number ASC, sections.section_name ASC").
@@ -166,6 +173,10 @@ func (h *PrincipalClassesHandler) Overview(c *gin.Context) {
 			"grade_number":           principalGradeNumber(section.Grade),
 			"class_teacher_id":       section.ClassTeacherID,
 			"class_teacher":          teacherName,
+			"room_id":                section.RoomID,
+			"room_number":            principalRoomNumber(section.Room),
+			"room_type":              principalRoomType(section.Room),
+			"room_capacity":          principalRoomCapacity(section.Room),
 			"total_students":         students,
 			"capacity":               section.Capacity,
 			"attendance_percent":     attendancePercent(recent.Present, recent.Marked),
@@ -262,6 +273,10 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		roomID, err := resolvePrincipalClassRoom(tx, schoolID, req, req.Capacity, nil)
+		if err != nil {
+			return err
+		}
 		var existingSection models.Section
 		err = tx.
 			Where("grade_id = ? AND academic_year_id = ? AND LOWER(section_name) = ?", grade.ID, academicYearID, strings.ToLower(sectionName)).
@@ -273,11 +288,13 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 			return err
 		}
 		section = models.Section{
+			SchoolID:       schoolID,
 			GradeID:        grade.ID,
 			AcademicYearID: academicYearID,
 			SectionName:    sectionName,
 			Capacity:       req.Capacity,
 			ClassTeacherID: classTeacherID,
+			RoomID:         roomID,
 		}
 		if err := tx.Create(&section).Error; err != nil {
 			return err
@@ -285,7 +302,7 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 		if err := h.applyClassSetupBundle(tx, schoolID, &section, req); err != nil {
 			return err
 		}
-		if err := tx.Preload("Grade").Preload("ClassTeacher").First(&section, "id = ?", section.ID).Error; err != nil {
+		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
 			return err
 		}
 		setup = h.classSetupResponse(tx, schoolID, section)
@@ -378,17 +395,23 @@ func (h *PrincipalClassesHandler) UpdateClassSetup(c *gin.Context) {
 				return err
 			}
 		}
+		roomID, err := resolvePrincipalClassRoom(tx, schoolID, req, capacity, section.RoomID)
+		if err != nil {
+			return err
+		}
 		section.AcademicYearID = academicYearID
+		section.SchoolID = schoolID
 		section.SectionName = sectionName
 		section.Capacity = capacity
 		section.ClassTeacherID = classTeacherID
+		section.RoomID = roomID
 		if err := tx.Save(&section).Error; err != nil {
 			return err
 		}
 		if err := h.applyClassSetupBundle(tx, schoolID, &section, req); err != nil {
 			return err
 		}
-		if err := tx.Preload("Grade").Preload("ClassTeacher").First(&section, "id = ?", section.ID).Error; err != nil {
+		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
 			return err
 		}
 		setup = h.classSetupResponse(tx, schoolID, section)
@@ -916,6 +939,72 @@ func resolvePrincipalAcademicDepartmentID(tx *gorm.DB, schoolID, departmentID, d
 		return "", err
 	}
 	return dept.ID, nil
+}
+
+func resolvePrincipalClassRoom(tx *gorm.DB, schoolID string, req principalClassSetupRequest, fallbackCapacity int, existingRoomID *string) (*string, error) {
+	roomFieldProvided := req.RoomID != nil || req.RoomNumber != nil
+	if !roomFieldProvided {
+		return existingRoomID, nil
+	}
+
+	if req.RoomID != nil {
+		roomID := strings.TrimSpace(*req.RoomID)
+		if roomID == "" {
+			return nil, nil
+		}
+		var room models.Room
+		if err := tx.First(&room, "id = ? AND school_id = ?", roomID, schoolID).Error; err != nil {
+			return nil, errors.New("room must belong to this school")
+		}
+		return &room.ID, nil
+	}
+
+	roomNumber := strings.TrimSpace(*req.RoomNumber)
+	if roomNumber == "" {
+		return nil, nil
+	}
+	roomType := strings.TrimSpace(req.RoomType)
+	if roomType == "" {
+		roomType = "classroom"
+	}
+	roomCapacity := req.RoomCapacity
+	if roomCapacity <= 0 {
+		roomCapacity = fallbackCapacity
+	}
+
+	var room models.Room
+	err := tx.Where("school_id = ? AND LOWER(room_number) = ?", schoolID, strings.ToLower(roomNumber)).First(&room).Error
+	if err == nil {
+		return &room.ID, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	room = models.Room{
+		SchoolID:   schoolID,
+		RoomNumber: roomNumber,
+		RoomType:   roomType,
+		Capacity:   roomCapacity,
+	}
+	if err := tx.Create(&room).Error; err != nil {
+		return nil, err
+	}
+	return &room.ID, nil
+}
+
+func principalRoomNumber(room *models.Room) string {
+	if room == nil {
+		return ""
+	}
+	return strings.TrimSpace(room.RoomNumber)
+}
+
+func principalRoomCapacity(room *models.Room) int {
+	if room == nil {
+		return 0
+	}
+	return room.Capacity
 }
 
 func compactStrings(values []string) []string {

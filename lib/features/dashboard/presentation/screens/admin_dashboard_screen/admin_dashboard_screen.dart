@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
@@ -22,6 +23,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _staff = 0;
   int _classes = 0;
   int _pendingInvoices = 0;
+  int _approvalPendingSubmissions = 0;
+  int _approvalChangesRequested = 0;
+  int _approvalResolved = 0;
   double _collected = 0;
   double _pending = 0;
   List<Map<String, dynamic>> _alerts = const [];
@@ -46,12 +50,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         storage.getList(BackendDataService.kAcademicClasses),
         storage.getList(BackendDataService.kRuntimeNotifications),
         storage.getList(BackendDataService.kStudentFees),
+        BackendApiClient.instance.getApprovalRequests(),
       ]);
 
       final invoices = results[4];
+      final approvals = results[5];
       var collected = 0.0;
       var pending = 0.0;
       var pendingInvoices = 0;
+      var approvalPendingSubmissions = 0;
+      var approvalChangesRequested = 0;
+      var approvalResolved = 0;
 
       for (final invoice in invoices) {
         final total =
@@ -68,12 +77,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         if (balance > 0) pendingInvoices++;
       }
 
+      for (final approval in approvals) {
+        final status = _approvalStatus(approval['status']);
+        if (status == 'pending') {
+          approvalPendingSubmissions++;
+        } else if (status == 'changes_requested') {
+          approvalChangesRequested++;
+        } else if (status == 'approved' || status == 'rejected') {
+          approvalResolved++;
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _students = results[0].length;
         _staff = results[1].length;
         _classes = results[2].length;
         _alerts = results[3];
+        _approvalPendingSubmissions = approvalPendingSubmissions;
+        _approvalChangesRequested = approvalChangesRequested;
+        _approvalResolved = approvalResolved;
         _collected = collected;
         _pending = pending;
         _pendingInvoices = pendingInvoices;
@@ -162,6 +185,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 students: _students,
                 staff: _staff,
                 classes: _classes,
+                approvalPendingSubmissions: _approvalPendingSubmissions,
+                approvalChangesRequested: _approvalChangesRequested,
+                approvalResolved: _approvalResolved,
                 collected: _collected,
                 pending: _pending,
                 pendingInvoices: _pendingInvoices,
@@ -184,12 +210,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '');
   }
+
+  String _approvalStatus(Object? value) {
+    final status = '${value ?? 'pending'}'.trim().toLowerCase();
+    return switch (status) {
+      'submitted' || 'principal_review' => 'pending',
+      'changes requested' || 'changes_requested' => 'changes_requested',
+      'applied' => 'approved',
+      _ => status.isEmpty ? 'pending' : status,
+    };
+  }
 }
 
 class _DashboardContent extends StatelessWidget {
   final int students;
   final int staff;
   final int classes;
+  final int approvalPendingSubmissions;
+  final int approvalChangesRequested;
+  final int approvalResolved;
   final double collected;
   final double pending;
   final int pendingInvoices;
@@ -200,6 +239,9 @@ class _DashboardContent extends StatelessWidget {
     required this.students,
     required this.staff,
     required this.classes,
+    required this.approvalPendingSubmissions,
+    required this.approvalChangesRequested,
+    required this.approvalResolved,
     required this.collected,
     required this.pending,
     required this.pendingInvoices,
@@ -219,6 +261,9 @@ class _DashboardContent extends StatelessWidget {
         students: students,
         staff: staff,
         classes: classes,
+        approvalPendingSubmissions: approvalPendingSubmissions,
+        approvalChangesRequested: approvalChangesRequested,
+        approvalResolved: approvalResolved,
         collected: collected,
         pending: pending,
         pendingInvoices: pendingInvoices,
@@ -240,13 +285,13 @@ class _DashboardContent extends StatelessWidget {
               onPressed: () =>
                   Navigator.pushNamed(context, AppRoutes.adminStudents),
               icon: const Icon(Icons.person_add_rounded, size: 18),
-              label: const Text('Add student'),
+              label: const Text('Prepare Student Request'),
             ),
             OutlinedButton.icon(
               onPressed: () =>
                   Navigator.pushNamed(context, AppRoutes.adminCommunication),
               icon: const Icon(Icons.campaign_rounded, size: 18),
-              label: const Text('Send notice'),
+              label: const Text('Submit Notice for Approval'),
             ),
           ],
         ),
@@ -309,6 +354,27 @@ class _DashboardContent extends StatelessWidget {
                 arguments: 'admin',
               ),
             ),
+            SchoolDeskKpiCard(
+              title: 'Pending submissions',
+              value: '$approvalPendingSubmissions',
+              subtitle: 'Principal approval queue',
+              icon: Icons.pending_actions_rounded,
+              color: theme.colorScheme.primary,
+            ),
+            SchoolDeskKpiCard(
+              title: 'Changes requested',
+              value: '$approvalChangesRequested',
+              subtitle: 'Needs Admin revision',
+              icon: Icons.rule_folder_rounded,
+              color: theme.colorScheme.tertiary,
+            ),
+            SchoolDeskKpiCard(
+              title: 'Recently approved/rejected',
+              value: '$approvalResolved',
+              subtitle: 'Resolved request states',
+              icon: Icons.fact_check_rounded,
+              color: theme.colorScheme.secondary,
+            ),
           ],
         ),
         SizedBox(height: tokens.spacing.lg),
@@ -344,6 +410,9 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
   final int students;
   final int staff;
   final int classes;
+  final int approvalPendingSubmissions;
+  final int approvalChangesRequested;
+  final int approvalResolved;
   final double collected;
   final double pending;
   final int pendingInvoices;
@@ -355,6 +424,9 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
     required this.students,
     required this.staff,
     required this.classes,
+    required this.approvalPendingSubmissions,
+    required this.approvalChangesRequested,
+    required this.approvalResolved,
     required this.collected,
     required this.pending,
     required this.pendingInvoices,
@@ -443,14 +515,34 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
-          title: 'Pending Notices',
-          subtitle: 'Alerts and circulars',
-          value: '${alerts.length}',
-          icon: Icons.campaign_rounded,
-          color: alerts.isEmpty
+          title: 'Pending Submissions',
+          subtitle: 'Principal approval queue',
+          value: '$approvalPendingSubmissions',
+          icon: Icons.pending_actions_rounded,
+          color: approvalPendingSubmissions == 0
               ? theme.colorScheme.primary
               : theme.colorScheme.error,
-          route: AppRoutes.adminCommunication,
+          route: AppRoutes.adminDashboard,
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        _AdminSummaryRecord(
+          title: 'Changes Requested',
+          subtitle: 'Revise and resubmit',
+          value: '$approvalChangesRequested',
+          icon: Icons.rule_folder_rounded,
+          color: approvalChangesRequested == 0
+              ? theme.colorScheme.secondary
+              : theme.colorScheme.tertiary,
+          route: AppRoutes.adminDashboard,
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        _AdminSummaryRecord(
+          title: 'Approved / Rejected',
+          subtitle: 'Recently resolved requests',
+          value: '$approvalResolved',
+          icon: Icons.fact_check_rounded,
+          color: theme.colorScheme.secondary,
+          route: AppRoutes.adminDashboard,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -704,32 +796,32 @@ class _QuickActionsCard extends StatelessWidget {
     final theme = Theme.of(context);
     final actions = [
       _QuickAction(
-        'Add student',
-        'Create or maintain records',
+        'Prepare student request',
+        'Draft for Principal approval',
         Icons.person_add_rounded,
         AppRoutes.adminStudents,
       ),
       _QuickAction(
-        'Add staff',
-        'Create staff profiles',
+        'Prepare staff request',
+        'Submit staff changes for review',
         Icons.person_add_alt_1_rounded,
         AppRoutes.adminTeachers,
       ),
       _QuickAction(
-        'Record payment',
-        'Open fee operations',
+        'Submit fee request',
+        'Prepare fee changes',
         Icons.payment_rounded,
         AppRoutes.adminFees,
       ),
       _QuickAction(
-        'Timetable',
-        'Manage periods',
+        'Submit timetable request',
+        'Prepare periods for approval',
         Icons.calendar_view_week_rounded,
         AppRoutes.adminTimetable,
       ),
       _QuickAction(
-        'User access',
-        'Accounts and roles',
+        'Prepare access request',
+        'Accounts and roles review',
         Icons.manage_accounts_rounded,
         AppRoutes.adminUserAccess,
       ),

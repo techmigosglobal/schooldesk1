@@ -5,19 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('repository keeps only canonical markdown documentation', () {
     final markdownFiles =
-        (Process.runSync('find', [
-                  '.',
-                  '-name',
-                  '*.md',
-                  '-not',
-                  '-path',
-                  './.git/*',
-                ]).stdout
-                as String)
+        (Process.runSync('git', ['ls-files', '--', '*.md']).stdout as String)
             .trim()
             .split('\n')
             .where((path) => path.isNotEmpty)
-            .map((path) => path.replaceFirst('./', ''))
             .toList()
           ..sort();
 
@@ -25,7 +16,7 @@ void main() {
   });
 
   test('historical artifacts and inactive preview screens are removed', () {
-    for (final path in [
+    final historicalArtifacts = [
       'qa-screenshots',
       'test-artifacts',
       'test-results',
@@ -43,13 +34,26 @@ void main() {
       'lib/theme',
       'lib/widgets',
       'web/school_brochure.html',
-    ]) {
-      expect(
-        FileSystemEntity.typeSync(path),
-        FileSystemEntityType.notFound,
-        reason: '$path must not return to source control.',
-      );
-    }
+    ];
+
+    final trackedArtifacts =
+        (Process.runSync('git', [
+                  'ls-files',
+                  '--',
+                  ...historicalArtifacts,
+                ]).stdout
+                as String)
+            .trim()
+            .split('\n')
+            .where((path) => path.isNotEmpty)
+            .toList();
+
+    expect(
+      trackedArtifacts,
+      isEmpty,
+      reason:
+          '${trackedArtifacts.join(', ')} must not return to source control.',
+    );
   });
 
   test('source declares Riverpod and feature-first module ownership', () {

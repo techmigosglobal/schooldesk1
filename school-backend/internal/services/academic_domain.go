@@ -58,6 +58,16 @@ func (s *AcademicDomainService) ValidateGradeSubjectMapping(schoolID, academicYe
 }
 
 func (s *AcademicDomainService) ValidateStaffSubjectAssignment(schoolID, academicYearID, staffID, subjectID, gradeID, sectionID string) error {
+	if err := s.ValidateStaffSubjectRefs(schoolID, academicYearID, staffID, subjectID, gradeID, sectionID); err != nil {
+		return err
+	}
+	if !s.repo.StaffSubjectExists(schoolID, academicYearID, staffID, subjectID, gradeID, sectionID) {
+		return errors.New("staff must be assigned to this subject for the academic year")
+	}
+	return nil
+}
+
+func (s *AcademicDomainService) ValidateStaffSubjectRefs(schoolID, academicYearID, staffID, subjectID, gradeID, sectionID string) error {
 	if err := s.ValidateGradeSubjectMapping(schoolID, academicYearID, gradeID, subjectID); err != nil {
 		return err
 	}
@@ -75,9 +85,6 @@ func (s *AcademicDomainService) ValidateStaffSubjectAssignment(schoolID, academi
 	}
 	if !s.repo.GradeSubjectExists(schoolID, academicYearID, gradeID, subjectID) {
 		return errors.New("subject must be mapped to this grade for the academic year")
-	}
-	if !s.repo.StaffSubjectExists(schoolID, academicYearID, staffID, subjectID, gradeID, sectionID) {
-		return errors.New("staff must be assigned to this subject for the academic year")
 	}
 	return nil
 }

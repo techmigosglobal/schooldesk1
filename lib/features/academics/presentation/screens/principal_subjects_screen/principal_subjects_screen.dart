@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 
@@ -15,7 +17,6 @@ class PrincipalSubjectsScreen extends StatefulWidget {
 }
 
 class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
-  Map<String, dynamic> _summary = {};
   Map<String, dynamic> _analytics = {};
   List<Map<String, dynamic>> _subjects = [];
   List<Map<String, dynamic>> _gradeSubjects = [];
@@ -27,7 +28,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   bool _loading = true;
   String? _error;
   String _search = '';
-  String _workspaceView = 'Classes';
+  String _workspaceView = 'Subjects';
 
   @override
   void initState() {
@@ -59,7 +60,6 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       final payload = results[0] as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
-        _summary = _asMap(payload['summary']);
         _analytics = _asMap(payload['analytics']);
         _subjects = _asListMap(payload['subjects']);
         _gradeSubjects = results[1] as List<Map<String, dynamic>>;
@@ -80,8 +80,12 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }
 
   List<Map<String, dynamic>> get _filteredSubjects {
+    final activeSubjectIds = _activeSubjectIds;
+    if (_activeGradeIds.isEmpty) return const [];
     final query = _search.trim().toLowerCase();
     return _subjects.where((row) {
+      final subjectId = _text(row['subject_id'] ?? row['id']);
+      if (!activeSubjectIds.contains(subjectId)) return false;
       final teacherNames = _asListMap(
         row['assigned_teachers'],
       ).map((teacher) => _text(teacher['name'])).join(' ');
@@ -97,16 +101,18 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 
   List<_ClassSubjectCoverage> get _classCoverage {
     final rows =
-        _grades.map((grade) {
+        _grades.where((grade) => _activeGradeIds.contains(grade.id)).map((
+          grade,
+        ) {
           final sections =
               _sections.where((section) => section.gradeId == grade.id).toList()
                 ..sort((left, right) {
                   return left.sectionName.compareTo(right.sectionName);
                 });
-          final mappedSubjects = _gradeSubjects
+          final mappedSubjects = _activeGradeSubjects
               .where((row) => _text(row['grade_id']) == grade.id)
               .toList();
-          final assignedSubjects = _staffSubjects
+          final assignedSubjects = _activeStaffSubjects
               .where((row) => _text(row['grade_id']) == grade.id)
               .toList();
           final subjectIds = <String>{
@@ -161,7 +167,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 
   List<_TeacherSubjectLoad> get _teacherLoads {
     final grouped = <String, List<_SubjectAssignment>>{};
-    for (final row in _staffSubjects) {
+    for (final row in _activeStaffSubjects) {
       final assignment = _assignmentFromRow(row);
       if (assignment.teacherId.isEmpty) continue;
       grouped.putIfAbsent(assignment.teacherId, () => []).add(assignment);
@@ -199,74 +205,219 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final cards = _directoryCards;
-    return PrincipalDirectoryScaffold(
-      title: 'Subjects Directory',
-      subtitle: 'Catalog, class mappings, and teacher load in one workflow',
-      loading: _loading,
-      error: _error,
-      onRefresh: _loadData,
-      onAdd: () => _openSubjectEditor(),
-      addTooltip: 'Create subject',
-      filters: _buildDirectoryFilters(),
-      isEmpty: !_loading && _error == null && cards.isEmpty,
-      emptyState: const EmptyStateWidget(
-        icon: Icons.menu_book_rounded,
-        title: 'No subject rows found',
-        description: 'Create a subject or adjust the directory filters.',
-      ),
-      slivers: [
-        SliverToBoxAdapter(
-          child: PrincipalDirectoryMetricStrip(
-            metrics: [
-              PrincipalDirectoryMetric(
-                label: 'Subjects',
-                value: '${_int(_summary['total_subjects'])}',
-                icon: Icons.menu_book_rounded,
-                color: AppTheme.primary,
-                tone: const Color(0xFFEFF6FF),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6FAFF),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: const Color(0xFF0969FF),
+          onRefresh: _loadData,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: [
+              SliverToBoxAdapter(
+                child: _SubjectsDirectoryHeader(
+                  title: _workspaceView == 'Subjects'
+                      ? 'Subjects'
+                      : 'Subjects Directory',
+                  subtitle: _subjectsScopeLabel,
+                  onFilter: _showViewFilterSheet,
+                ),
               ),
-              PrincipalDirectoryMetric(
-                label: 'Classes Mapped',
-                value: '${_int(_summary['classes_covered_count'])}',
-                icon: Icons.apartment_rounded,
-                color: AppTheme.success,
-                tone: const Color(0xFFECFDF3),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Teachers',
-                value: '${_int(_summary['assigned_teacher_count'])}',
-                icon: Icons.groups_rounded,
-                color: AppTheme.warning,
-                tone: const Color(0xFFFFF7ED),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Syllabus Pending',
-                value:
-                    '${_num(_summary['average_pending_syllabus']).toStringAsFixed(0)}%',
-                icon: Icons.track_changes_rounded,
-                color: AppTheme.error,
-                tone: const Color(0xFFFEEFEE),
-              ),
+              SliverToBoxAdapter(child: _buildDirectoryFilters()),
+              if (_loading)
+                const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: EmptyStateWidget(
+                      icon: Icons.cloud_off_rounded,
+                      title: 'Unable to load subjects',
+                      description: _error!,
+                      actionLabel: 'Retry',
+                      onAction: _loadData,
+                    ),
+                  ),
+                )
+              else if (cards.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: EmptyStateWidget(
+                      icon: Icons.menu_book_rounded,
+                      title: _activeGradeIds.isEmpty
+                          ? 'No active classes found'
+                          : 'No subject rows found',
+                      description: _activeGradeIds.isEmpty
+                          ? 'Create classes in Class Hub, then map subjects and teachers.'
+                          : 'Open a class in Class Hub for subject setup, or adjust the directory filters.',
+                      actionLabel: 'Go to Classes Hub',
+                      onAction: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.principalClasses,
+                      ),
+                    ),
+                  ),
+                )
+              else ...[
+                SliverToBoxAdapter(child: _buildMetricsStrip()),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 14),
+                  sliver: SliverList.builder(
+                    itemCount: cards.length,
+                    itemBuilder: (context, index) => Padding(
+                      padding: const EdgeInsets.only(bottom: 13),
+                      child: cards[index],
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: _buildClassHubCta()),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+                    child: _buildAnalyticsSection(),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 14),
-          sliver: SliverList.builder(
-            itemCount: cards.length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.only(bottom: 13),
-              child: cards[index],
+      ),
+    );
+  }
+
+  Set<String> get _activeGradeIds =>
+      _sections.map((section) => section.gradeId).toSet();
+
+  Set<String> get _activeSectionIds =>
+      _sections.map((section) => section.id).toSet();
+
+  List<Map<String, dynamic>> get _activeGradeSubjects => _gradeSubjects
+      .where((row) => _activeGradeIds.contains(_text(row['grade_id'])))
+      .toList();
+
+  List<Map<String, dynamic>> get _activeStaffSubjects =>
+      _staffSubjects.where((row) {
+        final gradeId = _text(row['grade_id']);
+        final sectionId = _text(row['section_id']);
+        return _activeGradeIds.contains(gradeId) &&
+            (sectionId.isEmpty || _activeSectionIds.contains(sectionId));
+      }).toList();
+
+  Set<String> get _activeSubjectIds => {
+    ..._activeGradeSubjects.map((row) => _text(row['subject_id'])),
+    ..._activeStaffSubjects.map((row) => _text(row['subject_id'])),
+  }..removeWhere((id) => id.isEmpty);
+
+  String get _subjectsScopeLabel {
+    if (_classCoverage.length == 1) {
+      final coverage = _classCoverage.first;
+      final section = coverage.sections.isEmpty
+          ? ''
+          : ' - ${coverage.sections.first.sectionName}';
+      return '${coverage.grade.gradeName}$section';
+    }
+    if (_classCoverage.isEmpty) return 'No active class mappings';
+    return '${_classCoverage.length} active classes';
+  }
+
+  Widget _buildMetricsStrip() {
+    final activeSubjects = _filteredSubjects;
+    final coreSubjects = activeSubjects.where((subject) {
+      return _text(
+            subject['subject_type'],
+            fallback: 'core',
+          ).toLowerCase().trim() ==
+          'core';
+    }).length;
+    final teacherCount = _activeStaffSubjects
+        .map((row) => _text(row['staff_id']))
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 4, 22, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _SubjectMetricCard(
+              icon: Icons.menu_book_rounded,
+              label: 'Total Subjects',
+              value: '${activeSubjects.length}',
+              color: const Color(0xFF0969FF),
+              tone: const Color(0xFFEAF2FF),
             ),
           ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-            child: _buildAnalyticsSection(),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _SubjectMetricCard(
+              icon: Icons.fact_check_rounded,
+              label: 'Core Subjects',
+              value: '$coreSubjects',
+              color: const Color(0xFF21A85B),
+              tone: const Color(0xFFE9F8EF),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: _SubjectMetricCard(
+              icon: Icons.groups_rounded,
+              label: 'Teachers',
+              value: '$teacherCount',
+              color: const Color(0xFFF09B22),
+              tone: const Color(0xFFFFF3DE),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassHubCta() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 2, 22, 24),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF0969FF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () =>
+                  Navigator.pushNamed(context, AppRoutes.principalClasses),
+              icon: const Icon(Icons.account_tree_outlined),
+              label: Text(
+                'Setup Subjects in Class Hub',
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Subject creation, removal, and teacher assignment happen from the selected class.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(
+              color: const Color(0xFF5E6C84),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -280,38 +431,6 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
             onChanged: (value) => setState(() => _search = value),
           ),
           const SizedBox(height: 14),
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              children: [
-                for (final option in const [
-                  ('Classes', Icons.apartment_rounded),
-                  ('Subjects', Icons.menu_book_rounded),
-                  ('Teachers', Icons.groups_rounded),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PrincipalDirectoryChip(
-                      label: option.$1,
-                      icon: option.$2,
-                      selected: _workspaceView == option.$1,
-                      onTap: () => setState(() => _workspaceView = option.$1),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: PrincipalDirectoryChip(
-                    label: 'Map Class / Teacher',
-                    icon: Icons.account_tree_rounded,
-                    selected: false,
-                    onTap: () => _openMappingEditor(),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -335,47 +454,21 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 
   Widget _buildSubjectDirectoryTile(Map<String, dynamic> subject) {
     final subjectId = _text(subject['subject_id'] ?? subject['id']);
-    final gradeRows = _gradeSubjects
-        .where((row) => _text(row['subject_id']) == subjectId)
-        .toList();
-    final assignments = _staffSubjects
+    final assignments = _activeStaffSubjects
         .where((row) => _text(row['subject_id']) == subjectId)
         .map(_assignmentFromRow)
         .toList();
-    final teacherCount = assignments
-        .map((assignment) => assignment.teacherId)
-        .where((id) => id.isNotEmpty)
-        .toSet()
-        .length;
-    return PrincipalDirectoryCard(
-      icon: Icons.menu_book_outlined,
-      title: _text(subject['subject_name'], fallback: 'Subject'),
-      subtitle:
-          '${_text(subject['subject_code'], fallback: 'No code')} | ${_text(subject['department'], fallback: 'Academics')}',
-      status: gradeRows.isEmpty ? 'Unmapped' : 'Mapped',
-      statusColor: gradeRows.isEmpty ? AppTheme.warning : AppTheme.success,
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.apartment_rounded,
-          label: '${gradeRows.length} classes',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.groups_rounded,
-          label: '$teacherCount teachers',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.category_outlined,
-          label: _text(subject['subject_type'], fallback: 'core'),
-        ),
-      ],
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Subject options',
-        onSelected: (value) => _handleSubjectAction(value, subject),
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'assign', child: Text('Map / assign')),
-          PopupMenuItem(value: 'edit', child: Text('Edit subject')),
-          PopupMenuItem(value: 'delete', child: Text('Delete subject')),
-        ],
+    final primaryAssignment = _primaryAssignment(assignments);
+    return _SubjectDirectoryTile(
+      subjectName: _text(subject['subject_name'], fallback: 'Subject'),
+      subjectCode: _text(subject['subject_code'], fallback: 'No code'),
+      subjectType: _text(subject['subject_type'], fallback: 'core'),
+      teacherName: primaryAssignment?.teacherName ?? 'Teacher not assigned',
+      teacherRole: primaryAssignment == null ? '' : 'Main Teacher',
+      trailing: IconButton(
+        tooltip: 'Setup in Classes Hub',
+        icon: const Icon(Icons.account_tree_outlined),
+        onPressed: () => _handleSubjectAction('subjects', subject),
       ),
       onTap: () => _openSubjectDetail(subject),
     );
@@ -401,9 +494,9 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         ),
       ],
       trailing: IconButton(
-        tooltip: 'Add Subject / Teacher',
-        icon: const Icon(Icons.add_rounded),
-        onPressed: () => _openMappingEditor(initialGradeId: coverage.grade.id),
+        tooltip: 'Setup subjects in Classes Hub',
+        icon: const Icon(Icons.account_tree_outlined),
+        onPressed: () => _openClassesHubForSubjects(gradeId: coverage.grade.id),
       ),
       onTap: () => _openClassCoverageDetail(coverage),
     );
@@ -428,9 +521,9 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
           ),
       ],
       trailing: IconButton(
-        tooltip: 'Assign subject',
-        icon: const Icon(Icons.add_rounded),
-        onPressed: () => _openMappingEditor(initialTeacherId: load.teacherId),
+        tooltip: 'Open Classes Hub',
+        icon: const Icon(Icons.account_tree_outlined),
+        onPressed: _openClassesHubForSubjects,
       ),
       onTap: () => _openTeacherLoadDetail(load),
     );
@@ -441,17 +534,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
     Map<String, dynamic> subject,
   ) async {
     final subjectId = _text(subject['subject_id'] ?? subject['id']);
-    switch (action) {
-      case 'assign':
-        await _openMappingEditor(initialSubjectId: subjectId);
-        break;
-      case 'edit':
-        await _openSubjectEditor(subject: subject);
-        break;
-      case 'delete':
-        await _deleteSubject(subject);
-        break;
-    }
+    _openClassesHubForSubjects(subjectId: subjectId);
   }
 
   Future<void> _openSubjectDetail(
@@ -462,109 +545,77 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
     final subjectId = _text(subject['subject_id'] ?? subject['id']);
     final gradeRows =
         gradeRowsOverride ??
-        _gradeSubjects
+        _activeGradeSubjects
             .where((row) => _text(row['subject_id']) == subjectId)
             .toList();
     final assignments =
         assignmentsOverride ??
-        _staffSubjects
+        _activeStaffSubjects
             .where((row) => _text(row['subject_id']) == subjectId)
             .map(_assignmentFromRow)
             .toList();
     final action = await Navigator.of(context).push<String>(
       MaterialPageRoute(
-        builder: (detailContext) => PrincipalDetailPage(
-          title: _text(subject['subject_name'], fallback: 'Subject Details'),
-          menuItems: const [
-            PopupMenuItem(value: 'assign', child: Text('Map / assign')),
-            PopupMenuItem(value: 'edit', child: Text('Edit subject')),
-            PopupMenuItem(value: 'delete', child: Text('Delete subject')),
-          ],
-          onMenuSelected: (value) => Navigator.pop(detailContext, value),
-          children: [
-            PrincipalDetailCard(
-              title: 'Subject Profile',
-              trailing: PrincipalStatusPill(
-                label: gradeRows.isEmpty ? 'Unmapped' : 'Mapped',
-                color: gradeRows.isEmpty ? AppTheme.warning : AppTheme.success,
-              ),
-              children: [
-                PrincipalDetailRow(
-                  label: 'Code',
-                  value: _text(subject['subject_code'], fallback: '-'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Department',
-                  value: _text(subject['department'], fallback: 'Academics'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Type',
-                  value: _text(subject['subject_type'], fallback: 'core'),
-                ),
-                PrincipalDetailRow(
-                  label: 'Credits',
-                  value: _num(subject['credit_hours']).toStringAsFixed(0),
-                ),
-              ],
-            ),
-            PrincipalDetailCard(
-              title: 'Class Coverage',
-              children: gradeRows.isEmpty
-                  ? const [Text('No class mappings yet.')]
-                  : [
-                      for (final row in gradeRows)
-                        PrincipalActionTile(
-                          icon: Icons.apartment_rounded,
-                          title: _gradeName(_text(row['grade_id'])),
-                          subtitle:
-                              '${_int(row['periods_per_week'])} periods per week',
-                        ),
-                    ],
-            ),
-            PrincipalDetailCard(
-              title: 'Teacher Assignments',
-              children: assignments.isEmpty
-                  ? const [Text('No teachers assigned yet.')]
-                  : [
-                      for (final assignment in assignments)
-                        PrincipalActionTile(
-                          icon: Icons.badge_outlined,
-                          title: assignment.teacherName,
-                          subtitle: assignment.classLabel,
-                          onTap: () => Navigator.pop(detailContext, 'assign'),
-                        ),
-                    ],
-            ),
-            PrincipalDetailCard(
-              title: 'Actions',
-              children: [
-                PrincipalActionTile(
-                  icon: Icons.account_tree_rounded,
-                  title: 'Map / assign',
-                  subtitle: 'Attach this subject to classes and teachers',
-                  onTap: () => Navigator.pop(detailContext, 'assign'),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.edit_outlined,
-                  title: 'Edit subject',
-                  subtitle: 'Update name, code, department, or credits',
-                  onTap: () => Navigator.pop(detailContext, 'edit'),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.delete_outline_rounded,
-                  title: 'Delete subject',
-                  subtitle: 'Backend blocks deletion when linked records exist',
-                  color: AppTheme.error,
-                  onTap: () => Navigator.pop(detailContext, 'delete'),
-                ),
-              ],
-            ),
-          ],
+        builder: (detailContext) => _SubjectDetailScreen(
+          subjectName: _text(subject['subject_name'], fallback: 'Subject'),
+          subjectCode: _text(subject['subject_code'], fallback: '-'),
+          subjectType: _text(subject['subject_type'], fallback: 'core'),
+          credits: _num(subject['credit_hours']).toStringAsFixed(0),
+          teacher: _primaryAssignment(assignments),
+          weeklyPeriods: _weeklyPeriods(gradeRows),
+          applicableClasses: _applicableClasses(gradeRows),
         ),
       ),
     );
     if (!mounted || action == null) return;
     await _handleSubjectAction(action, subject);
+  }
+
+  _SubjectAssignment? _primaryAssignment(List<_SubjectAssignment> assignments) {
+    if (assignments.isEmpty) return null;
+    final primary = assignments.where((assignment) => assignment.isPrimary);
+    return primary.isEmpty ? assignments.first : primary.first;
+  }
+
+  String _weeklyPeriods(List<Map<String, dynamic>> gradeRows) {
+    if (gradeRows.isEmpty) return '0';
+    final periods =
+        gradeRows
+            .map((row) => _int(row['periods_per_week']))
+            .where((value) => value > 0)
+            .toSet()
+            .toList()
+          ..sort();
+    if (periods.isEmpty) return '0';
+    if (periods.length == 1) return '${periods.first}';
+    return '${periods.first}-${periods.last}';
+  }
+
+  String _applicableClasses(List<Map<String, dynamic>> gradeRows) {
+    final labels =
+        gradeRows
+            .map((row) => _gradeName(_text(row['grade_id'])))
+            .where((name) => name.trim().isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    if (labels.isEmpty) return 'No active class';
+    if (labels.length <= 2) return labels.join(', ');
+    return '${labels.take(2).join(', ')} +${labels.length - 2}';
+  }
+
+  Future<void> _showViewFilterSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _SubjectViewSheet(
+        selected: _workspaceView,
+        onSelected: (value) {
+          Navigator.pop(context);
+          setState(() => _workspaceView = value);
+        },
+      ),
+    );
   }
 
   Future<void> _openClassCoverageDetail(_ClassSubjectCoverage coverage) async {
@@ -573,10 +624,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         builder: (detailContext) => PrincipalDetailPage(
           title: coverage.grade.gradeName,
           menuItems: const [
-            PopupMenuItem(
-              value: 'assign',
-              child: Text('Add Subject / Teacher'),
-            ),
+            PopupMenuItem(value: 'classhub', child: Text('Open Classes Hub')),
           ],
           onMenuSelected: (value) => Navigator.pop(detailContext, value),
           children: [
@@ -613,7 +661,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                           icon: Icons.menu_book_outlined,
                           title: subject.subjectName,
                           subtitle: subject.teacherSummary,
-                          onTap: () => Navigator.pop(detailContext, 'assign'),
+                          onTap: () => Navigator.pop(detailContext, 'classhub'),
                         ),
                     ],
             ),
@@ -621,10 +669,11 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
               title: 'Actions',
               children: [
                 PrincipalActionTile(
-                  icon: Icons.add_rounded,
-                  title: 'Add Subject / Teacher',
-                  subtitle: 'Open the mapping input screen for this class',
-                  onTap: () => Navigator.pop(detailContext, 'assign'),
+                  icon: Icons.account_tree_outlined,
+                  title: 'Setup subjects in Classes Hub',
+                  subtitle:
+                      'Open this class and use Step 2 for subject and teacher changes',
+                  onTap: () => Navigator.pop(detailContext, 'classhub'),
                 ),
               ],
             ),
@@ -632,8 +681,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         ),
       ),
     );
-    if (!mounted || action != 'assign') return;
-    await _openMappingEditor(initialGradeId: coverage.grade.id);
+    if (!mounted || action != 'classhub') return;
+    _openClassesHubForSubjects(gradeId: coverage.grade.id);
   }
 
   Future<void> _openTeacherLoadDetail(_TeacherSubjectLoad load) async {
@@ -642,7 +691,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         builder: (detailContext) => PrincipalDetailPage(
           title: load.teacherName,
           menuItems: const [
-            PopupMenuItem(value: 'assign', child: Text('Assign subject')),
+            PopupMenuItem(value: 'classhub', child: Text('Open Classes Hub')),
           ],
           onMenuSelected: (value) => Navigator.pop(detailContext, value),
           children: [
@@ -682,7 +731,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                           onTap: () {
                             Navigator.pop(
                               detailContext,
-                              'edit:${assignment.id}',
+                              'classhub:${assignment.gradeId}:${assignment.sectionId}',
                             );
                           },
                         ),
@@ -692,10 +741,11 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
               title: 'Actions',
               children: [
                 PrincipalActionTile(
-                  icon: Icons.add_rounded,
-                  title: 'Assign subject',
-                  subtitle: 'Open the mapping input screen for this teacher',
-                  onTap: () => Navigator.pop(detailContext, 'assign'),
+                  icon: Icons.account_tree_outlined,
+                  title: 'Open Classes Hub',
+                  subtitle:
+                      'Choose the class where this teacher assignment should change',
+                  onTap: () => Navigator.pop(detailContext, 'classhub'),
                 ),
               ],
             ),
@@ -704,124 +754,38 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       ),
     );
     if (!mounted || action == null) return;
-    if (action == 'assign') {
-      await _openMappingEditor(initialTeacherId: load.teacherId);
+    if (action == 'classhub') {
+      _openClassesHubForSubjects();
       return;
     }
-    if (action.startsWith('edit:')) {
-      final assignmentId = action.substring('edit:'.length);
-      final assignment = load.assignments.firstWhere(
-        (item) => item.id == assignmentId,
-        orElse: () => load.assignments.first,
-      );
-      await _openMappingEditor(assignment: assignment);
-    }
-  }
-
-  Future<void> _openSubjectEditor({Map<String, dynamic>? subject}) async {
-    final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalInputPage(
-          title: _text(subject?['subject_id'] ?? subject?['id']).isEmpty
-              ? 'Create Subject'
-              : 'Edit Subject',
-          icon: Icons.menu_book_rounded,
-          child: _SubjectEditorSheet(subject: subject),
-        ),
-      ),
-    );
-    if (saved == true) {
-      await _loadData();
-    }
-  }
-
-  Future<void> _openMappingEditor({
-    String initialGradeId = '',
-    String initialSubjectId = '',
-    String initialTeacherId = '',
-    _SubjectAssignment? assignment,
-  }) async {
-    final saved = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalInputPage(
-          title: assignment == null
-              ? 'Map Subject to Class'
-              : 'Edit Teacher Assignment',
-          icon: Icons.account_tree_rounded,
-          child: _SubjectMappingSheet(
-            subjects: _subjects,
-            grades: _grades,
-            sections: _sections,
-            staff: _staff,
-            gradeSubjects: _gradeSubjects,
-            assignment: assignment,
-            initialGradeId: initialGradeId,
-            initialSubjectId: initialSubjectId,
-            initialTeacherId: initialTeacherId,
-          ),
-        ),
-      ),
-    );
-    if (saved == true) {
-      await _loadData();
-    }
-  }
-
-  Future<void> _deleteSubject(Map<String, dynamic> subject) async {
-    final subjectId = _text(subject['subject_id'] ?? subject['id']);
-    final subjectName = _text(subject['subject_name'], fallback: 'Subject');
-    if (subjectId.isEmpty) return;
-    final confirmed = await _confirm(
-      title: 'Delete subject?',
-      message:
-          'Delete $subjectName only if it is not linked to classes, timetable, attendance, or exams.',
-      actionLabel: 'Delete',
-    );
-    if (!confirmed) return;
-    try {
-      await BackendApiClient.instance.deleteRaw('/subjects/$subjectId');
-      await _loadData();
-      _showSnack('$subjectName deleted');
-    } catch (error) {
-      _showSnack(
-        'Unable to delete $subjectName. Remove class mappings and timetable links first.',
-        error: true,
+    if (action.startsWith('classhub:')) {
+      final parts = action.split(':');
+      _openClassesHubForSubjects(
+        gradeId: parts.length > 1 ? parts[1] : '',
+        sectionId: parts.length > 2 ? parts[2] : '',
       );
     }
   }
 
-  Future<bool> _confirm({
-    required String title,
-    required String message,
-    required String actionLabel,
-  }) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(actionLabel),
-          ),
-        ],
-      ),
-    );
-    return result == true;
-  }
-
-  void _showSnack(String message, {bool error = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? AppTheme.error : AppTheme.success,
-      ),
+  void _openClassesHubForSubjects({
+    String gradeId = '',
+    String sectionId = '',
+    String subjectId = '',
+  }) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.principalClasses,
+      arguments: {
+        'class_hub_action': 'subjects',
+        'action': 'subjects',
+        'selectedStep': 'subject_mapping',
+        if (gradeId.isNotEmpty) 'grade_id': gradeId,
+        if (gradeId.isNotEmpty) 'classId': gradeId,
+        if (sectionId.isNotEmpty) 'section_id': sectionId,
+        if (sectionId.isNotEmpty) 'sectionId': sectionId,
+        if (subjectId.isNotEmpty) 'subject_id': subjectId,
+        'source': 'principal_subjects',
+      },
     );
   }
 
@@ -966,6 +930,735 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }
 }
 
+class _SubjectsDirectoryHeader extends StatelessWidget {
+  const _SubjectsDirectoryHeader({
+    required this.title,
+    required this.subtitle,
+    required this.onFilter,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 20,
+                    height: 1.05,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF101828),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF5F6F89),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(14),
+                  blurRadius: 14,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: IconButton(
+              tooltip: 'Filter subjects',
+              onPressed: onFilter,
+              icon: const Icon(Icons.filter_alt_outlined),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectMetricCard extends StatelessWidget {
+  const _SubjectMetricCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.tone,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 82,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE3EAF5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: tone,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF667085),
+                    height: 1.05,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF101828),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectDirectoryTile extends StatelessWidget {
+  const _SubjectDirectoryTile({
+    required this.subjectName,
+    required this.subjectCode,
+    required this.subjectType,
+    required this.teacherName,
+    required this.teacherRole,
+    required this.trailing,
+    required this.onTap,
+  });
+
+  final String subjectName;
+  final String subjectCode;
+  final String subjectType;
+  final String teacherName;
+  final String teacherRole;
+  final Widget trailing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final type = subjectType.trim().isEmpty ? 'core' : subjectType.trim();
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 80),
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE3EAF5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(10),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            _SubjectGlyph(label: subjectName),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    subjectName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF101828),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        subjectCode,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF5F6F89),
+                        ),
+                      ),
+                      _SubjectBadge(label: type),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 142),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SubjectTeacherAvatar(name: teacherName),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          teacherName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF101828),
+                          ),
+                        ),
+                        if (teacherRole.isNotEmpty)
+                          Text(
+                            teacherRole,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF5F6F89),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubjectGlyph extends StatelessWidget {
+  const _SubjectGlyph({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _subjectColors(label);
+    return Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        color: colors.$2,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Icon(_subjectIcon(label), color: colors.$1, size: 28),
+    );
+  }
+}
+
+class _SubjectBadge extends StatelessWidget {
+  const _SubjectBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final activity =
+        label.toLowerCase().contains('activity') ||
+        label.toLowerCase().contains('art') ||
+        label.toLowerCase().contains('music');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: activity ? const Color(0xFFFFEAF4) : const Color(0xFFEAF2FF),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        _titleCase(label),
+        style: GoogleFonts.dmSans(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: activity ? const Color(0xFFD94383) : const Color(0xFF0969FF),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubjectTeacherAvatar extends StatelessWidget {
+  const _SubjectTeacherAvatar({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F0FF),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+      ),
+      child: Center(
+        child: Text(
+          _initials(name),
+          style: GoogleFonts.dmSans(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: const Color(0xFF0969FF),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubjectDetailScreen extends StatelessWidget {
+  const _SubjectDetailScreen({
+    required this.subjectName,
+    required this.subjectCode,
+    required this.subjectType,
+    required this.credits,
+    required this.teacher,
+    required this.weeklyPeriods,
+    required this.applicableClasses,
+  });
+
+  final String subjectName;
+  final String subjectCode;
+  final String subjectType;
+  final String credits;
+  final _SubjectAssignment? teacher;
+  final String weeklyPeriods;
+  final String applicableClasses;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6FAFF),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+          children: [
+            _SubjectsDirectoryHeader(
+              title: 'Subject Details',
+              subtitle: applicableClasses,
+              onFilter: () => Navigator.pop(context),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: _subjectPanelDecoration(),
+              child: Row(
+                children: [
+                  _SubjectGlyph(label: subjectName),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 5,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              subjectName,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF101828),
+                              ),
+                            ),
+                            _SubjectBadge(label: subjectType),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Code: $subjectCode',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF5F6F89),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 26),
+            Text(
+              'Subject Information',
+              style: GoogleFonts.dmSans(
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+                color: const Color(0xFF101828),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              decoration: _subjectPanelDecoration(),
+              child: Column(
+                children: [
+                  _SubjectInfoRow(label: 'Subject Name', value: subjectName),
+                  _SubjectInfoRow(label: 'Code', value: subjectCode),
+                  _SubjectInfoRow(
+                    label: 'Type',
+                    value: _titleCase(subjectType),
+                  ),
+                  _SubjectInfoRow(label: 'Credits', value: credits),
+                  _SubjectInfoRow(
+                    label: 'Teacher',
+                    value: teacher?.teacherName ?? 'Not assigned',
+                    avatarName: teacher?.teacherName,
+                  ),
+                  _SubjectInfoRow(
+                    label: 'Weekly Periods',
+                    value: weeklyPeriods,
+                  ),
+                  _SubjectInfoRow(
+                    label: 'Applicable Classes',
+                    value: applicableClasses,
+                  ),
+                  _SubjectInfoRow(
+                    label: 'Status',
+                    value: teacher == null ? 'Needs teacher' : 'Active',
+                    isLast: true,
+                    status: teacher != null,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF4FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFD5E7FF)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: Color(0xFF0969FF),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'To make changes to this subject, go to Classes Hub and update Step 2 subjects.',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        height: 1.45,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF1F4F8F),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              height: 56,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0969FF),
+                  side: const BorderSide(color: Color(0xFF0969FF)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => Navigator.pushNamed(
+                  context,
+                  AppRoutes.principalClasses,
+                  arguments: const {
+                    'class_hub_action': 'subjects',
+                    'source': 'principal_subjects',
+                  },
+                ),
+                icon: const Icon(Icons.apartment_rounded),
+                label: Text(
+                  'Go to Classes Hub',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubjectInfoRow extends StatelessWidget {
+  const _SubjectInfoRow({
+    required this.label,
+    required this.value,
+    this.avatarName,
+    this.isLast = false,
+    this.status,
+  });
+
+  final String label;
+  final String value;
+  final String? avatarName;
+  final bool isLast;
+  final bool? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final valueWidget = status == null
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (avatarName != null) ...[
+                _SubjectTeacherAvatar(name: avatarName!),
+                const SizedBox(width: 8),
+              ],
+              Flexible(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: _valueStyle,
+                ),
+              ),
+            ],
+          )
+        : _SubjectBadge(label: value);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: isLast
+              ? BorderSide.none
+              : const BorderSide(color: Color(0xFFE3EAF5)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF5F6F89),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Flexible(child: valueWidget),
+        ],
+      ),
+    );
+  }
+}
+
+class _SubjectViewSheet extends StatelessWidget {
+  const _SubjectViewSheet({required this.selected, required this.onSelected});
+
+  final String selected;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final item in const [
+            ('Subjects', Icons.menu_book_rounded),
+            ('Classes', Icons.apartment_rounded),
+            ('Teachers', Icons.groups_rounded),
+          ])
+            ListTile(
+              leading: Icon(item.$2),
+              title: Text(item.$1),
+              trailing: selected == item.$1
+                  ? const Icon(Icons.check_rounded, color: Color(0xFF0969FF))
+                  : null,
+              onTap: () => onSelected(item.$1),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+BoxDecoration _subjectPanelDecoration() {
+  return BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(8),
+    border: Border.all(color: const Color(0xFFE3EAF5)),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withAlpha(10),
+        blurRadius: 10,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
+}
+
+TextStyle get _valueStyle => GoogleFonts.dmSans(
+  fontSize: 14,
+  fontWeight: FontWeight.w900,
+  color: const Color(0xFF101828),
+);
+
+IconData _subjectIcon(String label) {
+  final value = label.toLowerCase();
+  if (value.contains('math')) return Icons.calculate_outlined;
+  if (value.contains('english') || value.contains('language')) {
+    return Icons.abc_rounded;
+  }
+  if (value.contains('science') || value.contains('evs')) {
+    return Icons.eco_outlined;
+  }
+  if (value.contains('computer')) return Icons.computer_rounded;
+  if (value.contains('music')) return Icons.music_note_rounded;
+  if (value.contains('physical') || value.contains('sport')) {
+    return Icons.directions_run_rounded;
+  }
+  if (value.contains('art')) return Icons.palette_outlined;
+  return Icons.menu_book_rounded;
+}
+
+(Color, Color) _subjectColors(String label) {
+  final value = label.toLowerCase();
+  if (value.contains('math')) {
+    return (const Color(0xFF1FB56A), const Color(0xFFE8F8EF));
+  }
+  if (value.contains('science') || value.contains('evs')) {
+    return (const Color(0xFFF59E0B), const Color(0xFFFFF4DD));
+  }
+  if (value.contains('hindi') || value.contains('language')) {
+    return (const Color(0xFF7C3AED), const Color(0xFFF1EAFE));
+  }
+  if (value.contains('art') || value.contains('music')) {
+    return (const Color(0xFFE83E8C), const Color(0xFFFFEAF4));
+  }
+  if (value.contains('physical') || value.contains('sport')) {
+    return (const Color(0xFF00A7A7), const Color(0xFFE7F9F8));
+  }
+  return (const Color(0xFF0969FF), const Color(0xFFEAF2FF));
+}
+
+String _initials(String value) {
+  final parts = value
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty || value == 'Teacher not assigned') return 'NA';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+}
+
+String _titleCase(String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return clean;
+  return clean
+      .split(RegExp(r'\s+'))
+      .map((word) {
+        if (word.isEmpty) return word;
+        return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
+      })
+      .join(' ');
+}
+
 class _ClassSubjectCoverage {
   final GradeModel grade;
   final List<SectionModel> sections;
@@ -1095,525 +1788,6 @@ class _TeacherSubjectLoad {
     assignments.map((assignment) => assignment.subjectName).join(' '),
     assignments.map((assignment) => assignment.classLabel).join(' '),
   ].join(' ').toLowerCase();
-}
-
-class _SubjectEditorSheet extends StatefulWidget {
-  final Map<String, dynamic>? subject;
-
-  const _SubjectEditorSheet({this.subject});
-
-  @override
-  State<_SubjectEditorSheet> createState() => _SubjectEditorSheetState();
-}
-
-class _SubjectEditorSheetState extends State<_SubjectEditorSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameController;
-  late final TextEditingController _codeController;
-  late final TextEditingController _departmentController;
-  late final TextEditingController _typeController;
-  late final TextEditingController _creditController;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final subject = widget.subject ?? {};
-    _nameController = TextEditingController(
-      text: _text(subject['subject_name']),
-    );
-    _codeController = TextEditingController(
-      text: _text(subject['subject_code']),
-    );
-    _departmentController = TextEditingController(
-      text: _text(subject['department'], fallback: 'Academics'),
-    );
-    _typeController = TextEditingController(
-      text: _text(subject['subject_type'], fallback: 'core'),
-    );
-    _creditController = TextEditingController(
-      text: _num(subject['credit_hours']).toStringAsFixed(0),
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _codeController.dispose();
-    _departmentController.dispose();
-    _typeController.dispose();
-    _creditController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final payload = {
-      'subject_name': _nameController.text.trim(),
-      'subject_code': _codeController.text.trim(),
-      'subject_type': _typeController.text.trim().isEmpty
-          ? 'core'
-          : _typeController.text.trim(),
-      'department_name': _departmentController.text.trim().isEmpty
-          ? 'Academics'
-          : _departmentController.text.trim(),
-      'credit_hours': double.tryParse(_creditController.text.trim()) ?? 0,
-      'subject_color': _text(widget.subject?['subject_color']),
-    };
-    try {
-      final id = _text(widget.subject?['subject_id'] ?? widget.subject?['id']);
-      if (id.isEmpty) {
-        await BackendApiClient.instance.createRaw('/subjects', payload);
-      } else {
-        await BackendApiClient.instance.updateRaw('/subjects/$id', payload);
-      }
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = error.toString();
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final editing = _text(
-      widget.subject?['subject_id'] ?? widget.subject?['id'],
-    ).isNotEmpty;
-    return _SheetFrame(
-      title: editing ? 'Edit Subject' : 'Create Subject',
-      icon: Icons.menu_book_rounded,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nameController,
-              enabled: !_saving,
-              decoration: const InputDecoration(labelText: 'Subject Name'),
-              validator: (value) =>
-                  _text(value).isEmpty ? 'Enter subject name' : null,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _codeController,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Code'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _typeController,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Type'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    controller: _departmentController,
-                    enabled: !_saving,
-                    decoration: const InputDecoration(labelText: 'Department'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _creditController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Credits'),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: GoogleFonts.dmSans(
-                  color: AppTheme.error,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_rounded),
-                label: Text(_saving ? 'Saving...' : 'Save Subject'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SubjectMappingSheet extends StatefulWidget {
-  final List<Map<String, dynamic>> subjects;
-  final List<GradeModel> grades;
-  final List<SectionModel> sections;
-  final List<StaffModel> staff;
-  final List<Map<String, dynamic>> gradeSubjects;
-  final _SubjectAssignment? assignment;
-  final String initialGradeId;
-  final String initialSubjectId;
-  final String initialTeacherId;
-
-  const _SubjectMappingSheet({
-    required this.subjects,
-    required this.grades,
-    required this.sections,
-    required this.staff,
-    required this.gradeSubjects,
-    this.assignment,
-    this.initialGradeId = '',
-    this.initialSubjectId = '',
-    this.initialTeacherId = '',
-  });
-
-  @override
-  State<_SubjectMappingSheet> createState() => _SubjectMappingSheetState();
-}
-
-class _SubjectMappingSheetState extends State<_SubjectMappingSheet> {
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _periodsController;
-  String _subjectId = '';
-  String _gradeId = '';
-  String _sectionId = '';
-  String _teacherId = '';
-  bool _isPrimary = true;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final assignment = widget.assignment;
-    _subjectId = assignment?.subjectId ?? widget.initialSubjectId;
-    _gradeId = assignment?.gradeId ?? widget.initialGradeId;
-    _sectionId = assignment?.sectionId ?? '';
-    _teacherId = assignment?.teacherId ?? widget.initialTeacherId;
-    _isPrimary = assignment?.isPrimary ?? true;
-    final gradeSubject = _existingGradeSubject(_gradeId, _subjectId);
-    _periodsController = TextEditingController(
-      text: _int(gradeSubject['periods_per_week']).toString(),
-    );
-  }
-
-  @override
-  void dispose() {
-    _periodsController.dispose();
-    super.dispose();
-  }
-
-  List<SectionModel> get _availableSections {
-    return widget.sections
-        .where((section) => section.gradeId == _gradeId)
-        .toList()
-      ..sort((left, right) => left.sectionName.compareTo(right.sectionName));
-  }
-
-  Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      final assignmentId = widget.assignment?.id ?? '';
-      if (_teacherId.isEmpty && assignmentId.isNotEmpty) {
-        throw Exception('Select teacher for an existing assignment.');
-      }
-      await BackendApiClient.instance.savePrincipalSubjectMapping(
-        subjectId: _subjectId,
-        gradeId: _gradeId,
-        sectionId: _sectionId,
-        teacherId: _teacherId,
-        assignmentId: assignmentId,
-        periodsPerWeek: int.tryParse(_periodsController.text.trim()) ?? 0,
-        isPrimary: _isPrimary,
-      );
-
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = error.toString();
-      });
-    }
-  }
-
-  Map<String, dynamic> _existingGradeSubject(String gradeId, String subjectId) {
-    for (final row in widget.gradeSubjects) {
-      if (_text(row['grade_id']) == gradeId &&
-          _text(row['subject_id']) == subjectId) {
-        return row;
-      }
-    }
-    return {};
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _SheetFrame(
-      title: widget.assignment == null
-          ? 'Map Subject to Class'
-          : 'Edit Teacher Assignment',
-      icon: Icons.account_tree_rounded,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _subjectId.isEmpty ? null : _subjectId,
-              decoration: const InputDecoration(labelText: 'Subject'),
-              items: widget.subjects.map((subject) {
-                final id = _text(subject['subject_id'] ?? subject['id']);
-                return DropdownMenuItem(
-                  value: id,
-                  child: Text(
-                    _text(subject['subject_name'], fallback: 'Subject'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-              validator: (value) =>
-                  _text(value).isEmpty ? 'Select subject' : null,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _subjectId = value ?? ''),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _gradeId.isEmpty ? null : _gradeId,
-              decoration: const InputDecoration(labelText: 'Class'),
-              items: widget.grades
-                  .map(
-                    (grade) => DropdownMenuItem(
-                      value: grade.id,
-                      child: Text(
-                        grade.gradeName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              validator: (value) =>
-                  _text(value).isEmpty ? 'Select class' : null,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _gradeId = value ?? '';
-                      _sectionId = '';
-                    }),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _sectionId,
-              decoration: const InputDecoration(
-                labelText: 'Section',
-                helperText: 'Choose All sections or a specific section.',
-              ),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('All sections')),
-                ..._availableSections.map(
-                  (section) => DropdownMenuItem(
-                    value: section.id,
-                    child: Text('Section ${section.sectionName}'),
-                  ),
-                ),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _sectionId = value ?? ''),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _teacherId,
-              decoration: const InputDecoration(
-                labelText: 'Teacher / Staff',
-                helperText: 'Optional. Leave empty to map subject only.',
-              ),
-              items: [
-                const DropdownMenuItem(
-                  value: '',
-                  child: Text('Teacher not assigned yet'),
-                ),
-                ...widget.staff.map(
-                  (staff) => DropdownMenuItem(
-                    value: staff.id,
-                    child: Text(
-                      _staffName(staff),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ],
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _teacherId = value ?? ''),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _periodsController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Periods / Week',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      'Primary',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
-                    ),
-                    value: _isPrimary,
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _isPrimary = value),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: GoogleFonts.dmSans(
-                  color: AppTheme.error,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-            const SizedBox(height: 18),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_rounded),
-                label: Text(_saving ? 'Saving...' : 'Save Mapping'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SheetFrame extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final Widget child;
-
-  const _SheetFrame({
-    required this.title,
-    required this.icon,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 18,
-        right: 18,
-        top: 16,
-        bottom:
-            MediaQuery.viewInsetsOf(context).bottom +
-            MediaQuery.paddingOf(context).bottom +
-            24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 42,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD3DEE8),
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Icon(icon, color: AppTheme.primary),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF111827),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class SubjectCommandCard extends StatelessWidget {

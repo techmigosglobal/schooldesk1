@@ -382,6 +382,19 @@ func (h *TimetableHandler) GenerateTimetableSlots(c *gin.Context) {
 			skipped = append(skipped, suggestion)
 			continue
 		}
+		if strings.TrimSpace(suggestion.RoomID) != "" {
+			var roomConflict int64
+			tx.Model(&models.TimetableSlot{}).
+				Where("room_id = ? AND academic_year_id = ? AND day_of_week = ? AND period_number = ?",
+					suggestion.RoomID, suggestion.AcademicYearID, suggestion.DayOfWeek, suggestion.PeriodNumber).
+				Count(&roomConflict)
+			if roomConflict > 0 {
+				suggestion.Blocking = true
+				suggestion.Warnings = append(suggestion.Warnings, "Suggested room is already booked in this period.")
+				skipped = append(skipped, suggestion)
+				continue
+			}
+		}
 
 		startTime, err := timetableClockPointer(suggestion.StartTime)
 		if err != nil {
@@ -406,6 +419,10 @@ func (h *TimetableHandler) GenerateTimetableSlots(c *gin.Context) {
 			StartTime:      startTime,
 			EndTime:        endTime,
 			SlotType:       "regular",
+		}
+		if strings.TrimSpace(suggestion.RoomID) != "" {
+			roomID := strings.TrimSpace(suggestion.RoomID)
+			slot.RoomID = &roomID
 		}
 		if err := tx.Create(&slot).Error; err != nil {
 			tx.Rollback()
@@ -483,6 +500,8 @@ type timetableSuggestion struct {
 	SubjectName    string   `json:"subject_name"`
 	StaffID        string   `json:"staff_id"`
 	StaffName      string   `json:"staff_name"`
+	RoomID         string   `json:"room_id"`
+	RoomName       string   `json:"room_name"`
 	StartTime      string   `json:"start_time"`
 	EndTime        string   `json:"end_time"`
 	Confidence     int      `json:"confidence"`
@@ -541,6 +560,7 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 	if err := database.DB.
 		Preload("Grade").
 		Preload("ClassTeacher").
+		Preload("Room").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("sections.id = ? AND grades.school_id = ?", req.SectionID, schoolID).
 		First(&section).Error; err != nil {
@@ -581,6 +601,7 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 
 	sectionPeriods := map[int]bool{}
 	staffBusy := map[string]map[int]bool{}
+	roomBusy := map[string]map[int]bool{}
 	for _, slot := range existing {
 		if slot.SectionID == req.SectionID {
 			sectionPeriods[slot.PeriodNumber] = true
@@ -589,7 +610,16 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 			staffBusy[slot.StaffID] = map[int]bool{}
 		}
 		staffBusy[slot.StaffID][slot.PeriodNumber] = true
+		if slot.RoomID != nil && strings.TrimSpace(*slot.RoomID) != "" {
+			roomID := strings.TrimSpace(*slot.RoomID)
+			if roomBusy[roomID] == nil {
+				roomBusy[roomID] = map[int]bool{}
+			}
+			roomBusy[roomID][slot.PeriodNumber] = true
+		}
 	}
+	var rooms []models.Room
+	_ = database.DB.Where("school_id = ?", schoolID).Order("room_number ASC").Find(&rooms).Error
 	staffLoad := map[string]int{}
 	for _, slot := range allYearSlots {
 		staffLoad[slot.StaffID]++
@@ -625,6 +655,10 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 		suggestion.StaffID = staff.ID
 		suggestion.StaffName = staff.Name
 		suggestion.Warnings = append(suggestion.Warnings, warnings...)
+		roomID, roomName, roomWarnings := chooseTimetableRoom(section, rooms, roomBusy, period)
+		suggestion.RoomID = roomID
+		suggestion.RoomName = roomName
+		suggestion.Warnings = append(suggestion.Warnings, roomWarnings...)
 		suggestion.Blocking = blocking
 		if blocking {
 			suggestion.Confidence = 35
@@ -641,6 +675,12 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 			}
 			staffBusy[suggestion.StaffID][period] = true
 			staffLoad[suggestion.StaffID]++
+		}
+		if !blocking && suggestion.RoomID != "" {
+			if roomBusy[suggestion.RoomID] == nil {
+				roomBusy[suggestion.RoomID] = map[int]bool{}
+			}
+			roomBusy[suggestion.RoomID][period] = true
 		}
 		suggestions = append(suggestions, suggestion)
 	}
@@ -816,6 +856,39 @@ func firstAvailableTimetableStaff(staff []timetableStaffOption, period int, busy
 	return timetableStaffOption{}, false
 }
 
+func chooseTimetableRoom(section models.Section, rooms []models.Room, roomBusy map[string]map[int]bool, period int) (string, string, []string) {
+	warnings := []string{}
+	if section.RoomID != nil && strings.TrimSpace(*section.RoomID) != "" {
+		roomID := strings.TrimSpace(*section.RoomID)
+		if roomBusy[roomID] == nil || !roomBusy[roomID][period] {
+			return roomID, timetableRoomDisplayName(roomID, section.Room, rooms), warnings
+		}
+		warnings = append(warnings, "Class room is busy in this period; suggested another available room.")
+	}
+	for _, room := range rooms {
+		if roomBusy[room.ID] == nil || !roomBusy[room.ID][period] {
+			return room.ID, timetableRoomDisplayName(room.ID, &room, rooms), warnings
+		}
+	}
+	if len(rooms) == 0 {
+		return "", "", warnings
+	}
+	warnings = append(warnings, "No available room was found for this period.")
+	return "", "", warnings
+}
+
+func timetableRoomDisplayName(roomID string, preferred *models.Room, rooms []models.Room) string {
+	if preferred != nil && preferred.ID == roomID {
+		return firstNonEmpty(preferred.RoomNumber, roomID)
+	}
+	for _, room := range rooms {
+		if room.ID == roomID {
+			return firstNonEmpty(room.RoomNumber, roomID)
+		}
+	}
+	return roomID
+}
+
 func containsTimetableStaff(staff []timetableStaffOption, id string) bool {
 	for _, option := range staff {
 		if option.ID == id {
@@ -920,6 +993,22 @@ func validateTimetableSlotRequest(c *gin.Context, req models.CreateTimetableSlot
 	staffConflict.Count(&staffConflictCount)
 	if staffConflictCount > 0 {
 		return &timetableValidationError{Status: http.StatusConflict, Message: fmt.Sprintf("staff is already assigned during period %d", req.PeriodNumber)}
+	}
+	roomID := strings.TrimSpace(req.RoomID)
+	if roomID != "" {
+		roomConflict := database.DB.
+			Model(&models.TimetableSlot{}).
+			Joins("JOIN sections ON sections.id = timetable_slots.section_id").
+			Joins("JOIN grades ON grades.id = sections.grade_id").
+			Where("grades.school_id = ? AND timetable_slots.room_id = ? AND timetable_slots.academic_year_id = ? AND timetable_slots.day_of_week = ? AND timetable_slots.period_number = ?", schoolID, roomID, req.AcademicYearID, req.DayOfWeek, req.PeriodNumber)
+		if excludeID != "" {
+			roomConflict = roomConflict.Where("timetable_slots.id <> ?", excludeID)
+		}
+		var roomConflictCount int64
+		roomConflict.Count(&roomConflictCount)
+		if roomConflictCount > 0 {
+			return &timetableValidationError{Status: http.StatusConflict, Message: fmt.Sprintf("room is already booked during period %d", req.PeriodNumber)}
+		}
 	}
 	return nil
 }

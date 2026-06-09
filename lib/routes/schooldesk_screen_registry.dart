@@ -230,6 +230,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-chat-communications-screen',
+      title: 'Chat Communications',
+      module: 'Communication',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/complaint-management-screen',
       title: SchoolDeskGlossary.complaints,
       module: 'Communication',

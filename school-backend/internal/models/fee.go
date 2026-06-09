@@ -49,6 +49,7 @@ type FeeInvoice struct {
 	BaseModel
 	StudentID       string                 `gorm:"type:uuid;not null" json:"student_id"`
 	AcademicYearID  string                 `gorm:"type:uuid;not null" json:"academic_year_id"`
+	TermID          *string                `gorm:"type:text;index" json:"term_id,omitempty"`
 	InvoiceNumber   string                 `gorm:"size:100;unique" json:"invoice_number"`
 	InvoiceDate     time.Time              `json:"invoice_date"`
 	DueDate         time.Time              `json:"due_date"`
@@ -60,6 +61,7 @@ type FeeInvoice struct {
 	Status          string                 `gorm:"type:text;default:'pending'" json:"status"`
 	Student         *Student               `gorm:"foreignKey:StudentID" json:"student,omitempty"`
 	AcademicYear    *AcademicYear          `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
+	Term            *Term                  `gorm:"foreignKey:TermID" json:"term,omitempty"`
 	Items           []FeeInvoiceItem       `gorm:"foreignKey:InvoiceID" json:"items,omitempty"`
 	Payments        []Payment              `gorm:"foreignKey:InvoiceID" json:"payments,omitempty"`
 	PaymentRequests []ParentPaymentRequest `gorm:"foreignKey:InvoiceID" json:"payment_requests,omitempty"`

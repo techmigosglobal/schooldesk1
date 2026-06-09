@@ -20,14 +20,16 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   bool _loading = true;
   String? _error;
   String _selectedConversationId = '';
+  String _teacherUserId = '';
   List<Map<String, dynamic>> _conversations = const [];
   List<Map<String, dynamic>> _messages = const [];
+  List<Map<String, dynamic>> _directMessages = const [];
   List<AnnouncementModel> _notices = const [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadCommunication();
   }
 
@@ -46,9 +48,14 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     try {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
+      final profile = await api.getProfile();
       final schoolNotices = await api.getAnnouncements();
       final conversations = await api.getRawList('/message-conversations');
       final messages = await api.getRawList('/messages');
+      final directMessages = await api.getCommunications();
+      directMessages.sort(
+        (a, b) => _directMessageTime(b).compareTo(_directMessageTime(a)),
+      );
       final staffId = RoleAccessService.teacherStaffId;
       final visibleConversations = conversations.where((row) {
         final teacherId = teacherFlowText(row['teacher_id'] ?? row['staff_id']);
@@ -56,6 +63,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
       }).toList();
       if (!mounted) return;
       setState(() {
+        _teacherUserId = profile.id;
         _notices = schoolNotices;
         _conversations = visibleConversations;
         _selectedConversationId = _selectedConversationId.isNotEmpty
@@ -64,6 +72,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
                   ? teacherFlowText(visibleConversations.first['id'])
                   : '');
         _messages = messages;
+        _directMessages = directMessages;
         _loading = false;
       });
     } catch (error) {
@@ -115,13 +124,14 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
             greeting: 'Communication center',
             classLabel: RoleAccessService.teacherClassName,
             subject: '${_conversations.length} conversations',
-            timeLabel: '${_notices.length} school notices',
+            timeLabel: '${_directMessages.length} direct messages',
           ),
           const SizedBox(height: 18),
           TabBar(
             controller: _tabController,
             tabs: const [
               Tab(text: 'Chats'),
+              Tab(text: 'Principal'),
               Tab(text: 'School Notices'),
             ],
           ),
@@ -129,7 +139,11 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
             height: 620,
             child: TabBarView(
               controller: _tabController,
-              children: [_buildChats(), _buildNotices()],
+              children: [
+                _buildChats(),
+                _buildPrincipalMessages(),
+                _buildNotices(),
+              ],
             ),
           ),
         ],
@@ -262,6 +276,139 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           ),
       ],
     );
+  }
+
+  Widget _buildPrincipalMessages() {
+    return ListView(
+      padding: const EdgeInsets.only(top: 14, bottom: 24),
+      children: [
+        if (_directMessages.isEmpty)
+          const TeacherFlowCard(
+            icon: Icons.mark_email_unread_outlined,
+            title: 'No direct messages',
+            subtitle: 'Principal direct messages from backend appear here.',
+          )
+        else
+          ..._directMessages.map(
+            (message) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildDirectMessageCard(message),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDirectMessageCard(Map<String, dynamic> message) {
+    final incoming = _directMessageIncoming(message);
+    final unread = incoming && !_directMessageRead(message);
+    final counterpartRole = incoming
+        ? teacherFlowText(message['sender_role'], fallback: 'Principal')
+        : teacherFlowText(message['receiver_role'], fallback: 'Principal');
+    final counterpartId = incoming
+        ? teacherFlowText(message['sender_id'])
+        : teacherFlowText(message['receiver_id']);
+    return TeacherFlowCard(
+      icon: incoming ? Icons.call_received_rounded : Icons.call_made_rounded,
+      title:
+          '${incoming ? 'From' : 'To'} ${teacherFlowTitleCase(counterpartRole)}',
+      subtitle: teacherFlowText(
+        message['message_content'] ?? message['message'] ?? message['body'],
+        fallback: 'Message',
+      ),
+      status: unread ? 'Unread' : _directMessageDate(message),
+      statusColor: unread ? AppTheme.error : teacherFlowAccent,
+      body: TeacherFlowActionWrap(
+        actions: [
+          if (unread)
+            TeacherFlowAction(
+              label: 'Mark Read',
+              icon: Icons.done_all_rounded,
+              onTap: () => _markDirectMessageRead(message),
+            ),
+          TeacherFlowAction(
+            label: 'Reply',
+            icon: Icons.reply_rounded,
+            onTap: counterpartId.isEmpty
+                ? null
+                : () => _replyDirectMessage(
+                    receiverId: counterpartId,
+                    receiverRole: counterpartRole,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _markDirectMessageRead(Map<String, dynamic> message) async {
+    final id = teacherFlowText(message['id'] ?? message['message_id']);
+    if (id.isEmpty) return;
+    await BackendApiClient.instance.markCommunicationRead(id);
+    await _loadCommunication();
+  }
+
+  Future<void> _replyDirectMessage({
+    required String receiverId,
+    required String receiverRole,
+  }) async {
+    final controller = TextEditingController();
+    final content = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Reply'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(labelText: 'Message'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            icon: const Icon(Icons.send_rounded),
+            label: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    final text = content?.trim() ?? '';
+    if (text.isEmpty) return;
+    await BackendApiClient.instance.sendCommunication(
+      receiverId: receiverId,
+      receiverRole: receiverRole,
+      messageContent: text,
+    );
+    await _loadCommunication();
+  }
+
+  bool _directMessageIncoming(Map<String, dynamic> message) {
+    return teacherFlowText(message['receiver_id']) == _teacherUserId;
+  }
+
+  bool _directMessageRead(Map<String, dynamic> message) {
+    final value = message['is_read'];
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return teacherFlowText(value).toLowerCase() == 'true';
+  }
+
+  DateTime _directMessageTime(Map<String, dynamic> message) {
+    return DateTime.tryParse(
+          teacherFlowText(message['sent_at'] ?? message['created_at']),
+        ) ??
+        DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  String _directMessageDate(Map<String, dynamic> message) {
+    final sentAt = _directMessageTime(message);
+    if (sentAt.millisecondsSinceEpoch == 0) return 'Direct';
+    return '${sentAt.day.toString().padLeft(2, '0')}/${sentAt.month.toString().padLeft(2, '0')}';
   }
 
   String _conversationLabel(Map<String, dynamic> row) {
