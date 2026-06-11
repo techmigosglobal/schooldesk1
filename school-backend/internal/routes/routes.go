@@ -9,6 +9,7 @@ import (
 	"school-backend/internal/handlers"
 	"school-backend/internal/middleware"
 	"school-backend/internal/models"
+	"school-backend/internal/payments"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,6 +47,13 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	aliasHandler := handlers.NewOperationalAliasHandler()
 	parentSelfHandler := handlers.NewParentSelfHandler()
 	teacherSelfHandler := handlers.NewTeacherSelfHandler()
+
+	// Initialize payment services
+	razorpayClient := payments.NewRazorpayClient(cfg)
+	paymentService := payments.NewPaymentService(razorpayClient)
+	webhookHandler := payments.NewWebhookHandler(razorpayClient, paymentService)
+	parentFeeHandler := handlers.NewParentFeeHandler(paymentService)
+	paymentWebhookHandler := handlers.NewPaymentWebhookHandler(webhookHandler)
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
 		resource, ok := handlers.TablesMDResourceFor(table)
 		if !ok {
@@ -484,6 +492,22 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		{
 			parents.POST("/:parent_user_id/students", middleware.RBACMiddleware("Admin", "Principal"), parentLinkHandler.AssignParentStudents)
 			parents.GET("/:parent_user_id/students", middleware.RBACMiddleware("Admin", "Principal"), parentLinkHandler.GetParentStudents)
+			parents.GET("/me/students", middleware.RBACMiddleware("Parent"), parentFeeHandler.GetMyStudents)
+			parents.GET("/students/:student_id/fees/summary", middleware.RBACMiddleware("Parent"), parentFeeHandler.GetStudentFeeSummary)
+		}
+
+		parentFees := api.Group("/parents/fees")
+		parentFees.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Parent"))
+		{
+			parentFees.POST("/payment-orders", middleware.RateLimitMiddleware("payment_order_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), parentFeeHandler.CreatePaymentOrder)
+			parentFees.POST("/verify-payment", middleware.RateLimitMiddleware("payment_verify", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), parentFeeHandler.VerifyPayment)
+			parentFees.GET("/payments", parentFeeHandler.GetPaymentHistory)
+			parentFees.GET("/receipts/:receipt_id", parentFeeHandler.GetReceipt)
+		}
+
+		payments := api.Group("/payments")
+		{
+			payments.POST("/razorpay/webhook", paymentWebhookHandler.HandleWebhook)
 		}
 
 		me := api.Group("/me")
