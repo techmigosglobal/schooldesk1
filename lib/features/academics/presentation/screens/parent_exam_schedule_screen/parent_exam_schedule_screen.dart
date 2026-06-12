@@ -11,7 +11,8 @@ class ParentExamScheduleScreen extends StatefulWidget {
   const ParentExamScheduleScreen({super.key});
 
   @override
-  State<ParentExamScheduleScreen> createState() => _ParentExamScheduleScreenState();
+  State<ParentExamScheduleScreen> createState() =>
+      _ParentExamScheduleScreenState();
 }
 
 class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
@@ -38,10 +39,16 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
         _children = childrenResponse.map((c) {
           final first = (c['first_name'] ?? '').toString();
           final last = (c['last_name'] ?? '').toString();
-          final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+          final name = [
+            first,
+            last,
+          ].where((e) => e.isNotEmpty).join(' ').trim();
           final grade = (c['grade_name'] ?? '').toString();
           final section = (c['section_name'] ?? '').toString();
-          final classLabel = [grade, section].where((e) => e.isNotEmpty).join('-');
+          final classLabel = [
+            grade,
+            section,
+          ].where((e) => e.isNotEmpty).join('-');
           return classLabel.isEmpty ? name : '$name ($classLabel)';
         }).toList();
         _childIds = childrenResponse
@@ -66,7 +73,9 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
     setState(() => _loading = true);
     try {
       final studentId = _childIds[childIndex];
-      final response = await BackendApiClient.instance.getRawList('/me/exam-schedule?student_id=$studentId');
+      final response = await BackendApiClient.instance.getRawList(
+        '/me/exam-schedule?student_id=$studentId',
+      );
       setState(() {
         _schedules = response;
         _loading = false;
@@ -101,8 +110,10 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
     // Sort schedules inside each group by date
     groups.forEach((key, list) {
       list.sort((a, b) {
-        final dA = DateTime.tryParse('${a['exam_date'] ?? ''}') ?? DateTime.now();
-        final dB = DateTime.tryParse('${b['exam_date'] ?? ''}') ?? DateTime.now();
+        final dA =
+            DateTime.tryParse('${a['exam_date'] ?? ''}') ?? DateTime.now();
+        final dB =
+            DateTime.tryParse('${b['exam_date'] ?? ''}') ?? DateTime.now();
         return dA.compareTo(dB);
       });
     });
@@ -178,7 +189,9 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -201,7 +214,11 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.assignment_turned_in_rounded, size: 48, color: context.appTheme.muted),
+          Icon(
+            Icons.assignment_turned_in_rounded,
+            size: 48,
+            color: context.appTheme.muted,
+          ),
           const SizedBox(height: 12),
           Text(
             'No published exams found',
@@ -214,7 +231,10 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
           const SizedBox(height: 4),
           Text(
             'Keep checking here for future schedules.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),
@@ -240,7 +260,10 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: const BoxDecoration(
                   color: _headerColor,
                   borderRadius: BorderRadius.only(
@@ -250,7 +273,11 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.quiz_rounded, color: Colors.white, size: 18),
+                    const Icon(
+                      Icons.quiz_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -266,7 +293,8 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                 ),
               ),
               ...list.map((schedule) {
-                final subject = schedule['subject']?['subject_name'] ?? 'Subject';
+                final subject =
+                    schedule['subject']?['subject_name'] ?? 'Subject';
                 final dateStr = schedule['exam_date'] as String? ?? '';
                 final parsedDate = DateTime.tryParse(dateStr);
                 final formattedDate = parsedDate != null
@@ -281,9 +309,14 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                 final syllabus = (schedule['syllabus'] as String? ?? '').trim();
 
                 return Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  data: Theme.of(
+                    context,
+                  ).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    tilePadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     title: Text(
                       subject,
                       style: GoogleFonts.dmSans(
@@ -298,25 +331,43 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.calendar_month_rounded, size: 12, color: context.appTheme.muted),
+                            Icon(
+                              Icons.calendar_month_rounded,
+                              size: 12,
+                              color: context.appTheme.muted,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               formattedDate,
-                              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: context.appTheme.muted,
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.schedule_rounded, size: 12, color: context.appTheme.muted),
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 12,
+                              color: context.appTheme.muted,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               '$startTime - $endTime',
-                              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: context.appTheme.muted,
+                              ),
                             ),
                             const SizedBox(width: 12),
-                            Icon(Icons.room_rounded, size: 12, color: _headerColor),
+                            Icon(
+                              Icons.room_rounded,
+                              size: 12,
+                              color: _headerColor,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Room $room',
@@ -345,9 +396,13 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: context.appTheme.surfaceVariant.withAlpha(40),
+                            color: context.appTheme.surfaceVariant.withAlpha(
+                              40,
+                            ),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: context.appTheme.outlineVariant),
+                            border: Border.all(
+                              color: context.appTheme.outlineVariant,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,7 +417,9 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                syllabus.isEmpty ? 'Syllabus details not published yet.' : syllabus,
+                                syllabus.isEmpty
+                                    ? 'Syllabus details not published yet.'
+                                    : syllabus,
                                 style: GoogleFonts.dmSans(
                                   fontSize: 12,
                                   color: context.appTheme.onSurfaceVariant,

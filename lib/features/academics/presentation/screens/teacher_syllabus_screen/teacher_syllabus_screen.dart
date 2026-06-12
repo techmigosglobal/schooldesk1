@@ -33,20 +33,25 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
     try {
       await RoleAccessService.initialize();
       final rows = await BackendApiClient.instance.getRawList('/syllabus');
-      
+
       // Filter rows by teacher assignment
       final staffId = RoleAccessService.teacherStaffId;
       final classId = RoleAccessService.teacherClassId;
       final filtered = rows.where((row) {
-        final teacherVal = (row['teacher_id'] ?? row['teacher'] ?? '').toString();
-        final classVal = (row['section_id'] ?? row['class_id'] ?? row['class'] ?? '').toString();
+        final teacherVal = (row['teacher_id'] ?? row['teacher'] ?? '')
+            .toString();
+        final classVal =
+            (row['section_id'] ?? row['class_id'] ?? row['class'] ?? '')
+                .toString();
         if (staffId.isNotEmpty && teacherVal == staffId) return true;
         if (classId.isNotEmpty && classVal == classId) return true;
         return false;
       }).toList();
 
       setState(() {
-        _syllabusRecords = filtered.map((e) => Map<String, dynamic>.from(e)).toList();
+        _syllabusRecords = filtered
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
         _loading = false;
       });
     } catch (e) {
@@ -57,7 +62,11 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
     }
   }
 
-  Future<void> _updateTopicStatus(Map<String, dynamic> record, int topicIndex, String nextStatus) async {
+  Future<void> _updateTopicStatus(
+    Map<String, dynamic> record,
+    int topicIndex,
+    String nextStatus,
+  ) async {
     final id = (record['id'] ?? '').toString();
     if (id.isEmpty) return;
 
@@ -67,11 +76,17 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
     setState(() => _saving = true);
     try {
       topics[topicIndex]['status'] = nextStatus;
-      
+
       // Calculate new completion numbers
-      final completedCount = topics.where((t) => t['status'] == 'completed').length;
-      final inProgressCount = topics.where((t) => t['status'] == 'in_progress').length;
-      final pendingCount = topics.where((t) => t['status'] == 'pending' || t['status'] == null).length;
+      final completedCount = topics
+          .where((t) => t['status'] == 'completed')
+          .length;
+      final inProgressCount = topics
+          .where((t) => t['status'] == 'in_progress')
+          .length;
+      final pendingCount = topics
+          .where((t) => t['status'] == 'pending' || t['status'] == null)
+          .length;
 
       final payload = {
         ...record,
@@ -129,9 +144,15 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
         'date': DateTime.now().toLocal().toString().split(' ').first,
       });
 
-      final completedCount = topics.where((t) => t['status'] == 'completed').length;
-      final inProgressCount = topics.where((t) => t['status'] == 'in_progress').length;
-      final pendingCount = topics.where((t) => t['status'] == 'pending' || t['status'] == null).length;
+      final completedCount = topics
+          .where((t) => t['status'] == 'completed')
+          .length;
+      final inProgressCount = topics
+          .where((t) => t['status'] == 'in_progress')
+          .length;
+      final pendingCount = topics
+          .where((t) => t['status'] == 'pending' || t['status'] == null)
+          .length;
 
       final payload = {
         ...record,
@@ -258,7 +279,9 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
                 value: completionPct,
                 minHeight: 6,
                 backgroundColor: context.appTheme.surfaceVariant,
-                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1A6B4A)),
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF1A6B4A),
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -297,25 +320,33 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
               return ListTile(
                 leading: IconButton(
                   icon: Icon(icon, color: iconColor),
-                  onPressed: _saving ? null : () {
-                    String nextStatus;
-                    if (status == 'pending') {
-                      nextStatus = 'in_progress';
-                    } else if (status == 'in_progress') {
-                      nextStatus = 'completed';
-                    } else {
-                      nextStatus = 'pending';
-                    }
-                    _updateTopicStatus(record, idx, nextStatus);
-                  },
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          String nextStatus;
+                          if (status == 'pending') {
+                            nextStatus = 'in_progress';
+                          } else if (status == 'in_progress') {
+                            nextStatus = 'completed';
+                          } else {
+                            nextStatus = 'pending';
+                          }
+                          _updateTopicStatus(record, idx, nextStatus);
+                        },
                 ),
                 title: Text(
                   name,
-                  style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.onSurface),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 13,
+                    color: context.appTheme.onSurface,
+                  ),
                 ),
                 trailing: Text(
                   topic['date']?.toString() ?? '',
-                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    color: context.appTheme.muted,
+                  ),
                 ),
               );
             },

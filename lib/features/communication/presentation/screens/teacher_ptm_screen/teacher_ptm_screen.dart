@@ -11,9 +11,12 @@ class TeacherPTMScreen extends StatefulWidget {
   State<TeacherPTMScreen> createState() => _TeacherPTMScreenState();
 }
 
-class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerProviderStateMixin {
+class _TeacherPTMScreenState extends State<TeacherPTMScreen>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final _dateController = TextEditingController(text: teacherFlowDate(DateTime.now()));
+  final _dateController = TextEditingController(
+    text: teacherFlowDate(DateTime.now()),
+  );
   final _timeController = TextEditingController(text: '16:00');
   final _purposeController = TextEditingController();
 
@@ -45,10 +48,16 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
     });
     try {
       await RoleAccessService.initialize();
-      final rows = await BackendApiClient.instance.getRawList('/parent-teacher-meetings');
+      final rows = await BackendApiClient.instance.getRawList(
+        '/parent-teacher-meetings',
+      );
       final meetings = rows.where(_belongsToTeacher).map(_mapMeeting).toList()
-        ..sort((a, b) => teacherFlowText(a['slot_date']).compareTo(teacherFlowText(b['slot_date'])));
-      
+        ..sort(
+          (a, b) => teacherFlowText(
+            a['slot_date'],
+          ).compareTo(teacherFlowText(b['slot_date'])),
+        );
+
       if (!mounted) return;
       setState(() {
         _meetings = meetings;
@@ -90,13 +99,18 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
       'student_id': teacherFlowText(row['student_id']),
       'student': teacherFlowText(
         row['student_name'],
-        fallback: '${teacherFlowText(student['first_name'])} ${teacherFlowText(student['last_name'])}'.trim(),
+        fallback:
+            '${teacherFlowText(student['first_name'])} ${teacherFlowText(student['last_name'])}'
+                .trim(),
       ),
       'guardian': teacherFlowText(
         row['guardian_name'],
         fallback: teacherFlowText(guardian['full_name']),
       ),
-      'class': [gradeName, sectionName].where((part) => part.trim().isNotEmpty).join(' ').trim(),
+      'class': [
+        gradeName,
+        sectionName,
+      ].where((part) => part.trim().isNotEmpty).join(' ').trim(),
       'slot_date': teacherFlowDateOnly(row['slot_date'] ?? row['date']),
       'slot_time': teacherFlowText(row['slot_time'] ?? row['time']),
       'status': teacherFlowText(row['status'], fallback: 'scheduled'),
@@ -139,16 +153,23 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
     }
   }
 
-  Future<void> _updateMeetingStatus(Map<String, dynamic> meeting, String status) async {
+  Future<void> _updateMeetingStatus(
+    Map<String, dynamic> meeting,
+    String status,
+  ) async {
     final id = teacherFlowText(meeting['id']);
     if (id.isEmpty) return;
     try {
-      await BackendApiClient.instance.updateRaw('/parent-teacher-meetings/$id', {
-        'status': status,
-        'notes': teacherFlowText(meeting['notes']),
-        'teacher_id': RoleAccessService.teacherStaffId,
-        'section_id': teacherFlowText(meeting['section_id'], fallback: RoleAccessService.teacherClassId),
-      });
+      await BackendApiClient.instance
+          .updateRaw('/parent-teacher-meetings/$id', {
+            'status': status,
+            'notes': teacherFlowText(meeting['notes']),
+            'teacher_id': RoleAccessService.teacherStaffId,
+            'section_id': teacherFlowText(
+              meeting['section_id'],
+              fallback: RoleAccessService.teacherClassId,
+            ),
+          });
       await _loadPTMFlow();
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -162,9 +183,26 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    final available = _meetings.where((row) => teacherFlowText(row['status']) == 'available').toList();
-    final booked = _meetings.where((row) => ['booked', 'scheduled', 'confirmed'].contains(teacherFlowText(row['status']))).toList();
-    final completed = _meetings.where((row) => ['completed', 'cancelled'].contains(teacherFlowText(row['status']))).toList();
+    final available = _meetings
+        .where((row) => teacherFlowText(row['status']) == 'available')
+        .toList();
+    final booked = _meetings
+        .where(
+          (row) => [
+            'booked',
+            'scheduled',
+            'confirmed',
+          ].contains(teacherFlowText(row['status'])),
+        )
+        .toList();
+    final completed = _meetings
+        .where(
+          (row) => [
+            'completed',
+            'cancelled',
+          ].contains(teacherFlowText(row['status'])),
+        )
+        .toList();
 
     return TeacherFlowScaffold(
       title: 'PTM Management',
@@ -285,8 +323,11 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
           padding: const EdgeInsets.only(bottom: 10),
           child: TeacherFlowCard(
             icon: Icons.family_restroom_rounded,
-            title: isAvailable ? 'Available Slot' : teacherFlowText(row['guardian'], fallback: 'Parent'),
-            subtitle: '${teacherFlowText(row['student'], fallback: 'No student linked')} · ${teacherFlowText(row['slot_date'])} ${teacherFlowText(row['slot_time'])}',
+            title: isAvailable
+                ? 'Available Slot'
+                : teacherFlowText(row['guardian'], fallback: 'Parent'),
+            subtitle:
+                '${teacherFlowText(row['student'], fallback: 'No student linked')} · ${teacherFlowText(row['slot_date'])} ${teacherFlowText(row['slot_time'])}',
             status: teacherFlowTitleCase(status),
             statusColor: _statusColor(status),
             body: isCompleted
@@ -310,7 +351,7 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
                           icon: Icons.delete_rounded,
                           onTap: () => _updateMeetingStatus(row, 'cancelled'),
                         ),
-                      ]
+                      ],
                     ],
                   ),
           ),

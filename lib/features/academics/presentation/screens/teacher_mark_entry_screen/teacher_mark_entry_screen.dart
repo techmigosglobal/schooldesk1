@@ -36,8 +36,10 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
     });
     try {
       await RoleAccessService.initialize();
-      final schedules = await BackendApiClient.instance.getRawList('/exams/schedules');
-      
+      final schedules = await BackendApiClient.instance.getRawList(
+        '/exams/schedules',
+      );
+
       // Filter schedules to only show sections/subjects assigned to the teacher
       // or show all if there's no strict assignment metadata.
       final filtered = schedules.where((s) {
@@ -95,7 +97,8 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
           }
         }
 
-        final enrollments = await BackendApiClient.instance.getStudentEnrollments(s.id);
+        final enrollments = await BackendApiClient.instance
+            .getStudentEnrollments(s.id);
         dynamic activeEnrollment;
         for (final e in enrollments) {
           if ((e['status'] ?? '').toString().toLowerCase() == 'active') {
@@ -106,28 +109,40 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
         if (activeEnrollment == null && enrollments.isNotEmpty) {
           activeEnrollment = enrollments.first;
         }
-        final enrollmentId = activeEnrollment != null ? (activeEnrollment['id'] ?? activeEnrollment['enrollment_id'] ?? '').toString() : '';
+        final enrollmentId = activeEnrollment != null
+            ? (activeEnrollment['id'] ??
+                      activeEnrollment['enrollment_id'] ??
+                      '')
+                  .toString()
+            : '';
 
         if (existingMark != null) {
-          rows.add(_StudentMarkRow(
-            studentId: s.id,
-            studentName: s.fullName,
-            enrollmentId: enrollmentId,
-            marksObtained: (existingMark['marks_obtained'] as num?)?.toDouble() ?? 0.0,
-            isAbsent: existingMark['is_absent'] == true,
-            isExempted: existingMark['is_exempted'] == true,
-            controller: TextEditingController(text: (existingMark['marks_obtained'] ?? '0').toString()),
-          ));
+          rows.add(
+            _StudentMarkRow(
+              studentId: s.id,
+              studentName: s.fullName,
+              enrollmentId: enrollmentId,
+              marksObtained:
+                  (existingMark['marks_obtained'] as num?)?.toDouble() ?? 0.0,
+              isAbsent: existingMark['is_absent'] == true,
+              isExempted: existingMark['is_exempted'] == true,
+              controller: TextEditingController(
+                text: (existingMark['marks_obtained'] ?? '0').toString(),
+              ),
+            ),
+          );
         } else {
-          rows.add(_StudentMarkRow(
-            studentId: s.id,
-            studentName: s.fullName,
-            enrollmentId: enrollmentId,
-            marksObtained: 0.0,
-            isAbsent: false,
-            isExempted: false,
-            controller: TextEditingController(text: '0'),
-          ));
+          rows.add(
+            _StudentMarkRow(
+              studentId: s.id,
+              studentName: s.fullName,
+              enrollmentId: enrollmentId,
+              marksObtained: 0.0,
+              isAbsent: false,
+              isExempted: false,
+              controller: TextEditingController(text: '0'),
+            ),
+          );
         }
       }
 
@@ -207,7 +222,9 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
       selectedIndex: 2, // Marks/Attendance index
       loading: _loading,
       error: _error,
-      onRefresh: _selectedSchedule != null ? () => _selectSchedule(_selectedSchedule) : _loadData,
+      onRefresh: _selectedSchedule != null
+          ? () => _selectSchedule(_selectedSchedule)
+          : _loadData,
       child: TeacherFlowScrollView(
         children: [
           if (_selectedSchedule == null) ...[
@@ -217,22 +234,26 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
               const TeacherFlowCard(
                 icon: Icons.assignment_rounded,
                 title: 'No Exam Schedules',
-                subtitle: 'There are no active exam schedules for your classes.',
+                subtitle:
+                    'There are no active exam schedules for your classes.',
               )
             else
               ..._schedules.map((s) {
-                final examName = s['exam']?['exam_name'] ?? s['exam_id'] ?? 'Term Exam';
+                final examName =
+                    s['exam']?['exam_name'] ?? s['exam_id'] ?? 'Term Exam';
                 final subject = s['subject']?['subject_name'] ?? 'Subject';
                 final maxMarks = s['max_marks'] ?? 100;
                 final passMarks = s['pass_marks'] ?? 40;
-                final dateStr = s['exam_date']?.toString().split('T').first ?? '';
+                final dateStr =
+                    s['exam_date']?.toString().split('T').first ?? '';
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: TeacherFlowCard(
                     icon: Icons.quiz_rounded,
                     title: '$examName — $subject',
-                    subtitle: 'Max: $maxMarks | Pass: $passMarks | Date: $dateStr',
+                    subtitle:
+                        'Max: $maxMarks | Pass: $passMarks | Date: $dateStr',
                     body: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
@@ -259,7 +280,10 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
   }
 
   Widget _buildMarkEntryGrid() {
-    final examName = _selectedSchedule['exam']?['exam_name'] ?? _selectedSchedule['exam_id'] ?? 'Term Exam';
+    final examName =
+        _selectedSchedule['exam']?['exam_name'] ??
+        _selectedSchedule['exam_id'] ??
+        'Term Exam';
     final subject = _selectedSchedule['subject']?['subject_name'] ?? 'Subject';
     final maxMarks = _selectedSchedule['max_marks'] ?? 100;
 
@@ -339,7 +363,9 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                     width: 72,
                     child: TextField(
                       controller: row.controller,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
                         hintText: 'Marks',
@@ -352,7 +378,10 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: context.appTheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(8),
@@ -380,14 +409,19 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                 ? SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: context.appTheme.surface),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: context.appTheme.surface,
+                    ),
                   )
                 : const Icon(Icons.cloud_done_rounded),
             label: Text(_saving ? 'Saving...' : 'Submit All Marks'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1A6B4A),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           ),
         ),

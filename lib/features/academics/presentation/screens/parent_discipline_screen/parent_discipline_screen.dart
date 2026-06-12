@@ -32,7 +32,9 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
     setState(() => _loading = true);
     try {
       final children = await BackendApiClient.instance.getMyStudents();
-      final incidents = await BackendApiClient.instance.getRawList('/discipline-incidents');
+      final incidents = await BackendApiClient.instance.getRawList(
+        '/discipline-incidents',
+      );
       setState(() {
         _children = children;
         _incidents = incidents;
@@ -73,7 +75,20 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
   String _formatDate(String dateStr) {
     final parsed = DateTime.tryParse(dateStr);
     if (parsed == null) return dateStr.split('T').first;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${parsed.day} ${months[parsed.month - 1]} ${parsed.year}';
   }
 
@@ -122,8 +137,8 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                   const SizedBox(height: 16),
                   Expanded(
                     child: _filteredIncidents.isEmpty
-                      ? _buildEmptyState()
-                      : _buildIncidentsList(),
+                        ? _buildEmptyState()
+                        : _buildIncidentsList(),
                   ),
                 ],
               ),
@@ -141,10 +156,16 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
           final c = _children[i];
           final first = (c['first_name'] ?? '').toString();
           final last = (c['last_name'] ?? '').toString();
-          final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+          final name = [
+            first,
+            last,
+          ].where((e) => e.isNotEmpty).join(' ').trim();
           final grade = (c['grade_name'] ?? '').toString();
           final section = (c['section_name'] ?? '').toString();
-          final classLabel = [grade, section].where((e) => e.isNotEmpty).join('-');
+          final classLabel = [
+            grade,
+            section,
+          ].where((e) => e.isNotEmpty).join('-');
           final label = classLabel.isEmpty ? name : '$name ($classLabel)';
 
           return GestureDetector(
@@ -160,7 +181,9 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -183,7 +206,11 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.shield_rounded, size: 48, color: context.appTheme.success.withAlpha(120)),
+          Icon(
+            Icons.shield_rounded,
+            size: 48,
+            color: context.appTheme.success.withAlpha(120),
+          ),
           const SizedBox(height: 12),
           Text(
             'No discipline records found',
@@ -196,7 +223,10 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
           const SizedBox(height: 4),
           Text(
             'Child has a clean conduct sheet.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),
@@ -208,12 +238,17 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
       itemCount: _filteredIncidents.length,
       itemBuilder: (context, index) {
         final incident = _filteredIncidents[index];
-        final type = (incident['type'] ?? incident['incident_type'] ?? 'Conduct').toString().toUpperCase();
+        final type =
+            (incident['type'] ?? incident['incident_type'] ?? 'Conduct')
+                .toString()
+                .toUpperCase();
         final severity = (incident['severity'] ?? 'low').toString();
         final status = (incident['status'] ?? 'open').toString().toUpperCase();
         final desc = (incident['description'] ?? '').toString();
         final reporter = (incident['reported_by'] ?? 'School Staff').toString();
-        final date = _formatDate((incident['created_at'] ?? incident['date'] ?? '').toString());
+        final date = _formatDate(
+          (incident['created_at'] ?? incident['date'] ?? '').toString(),
+        );
 
         Color sevColor = _severityColor(severity);
 
@@ -231,7 +266,10 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: sevColor.withAlpha(30),
                       borderRadius: BorderRadius.circular(6),
@@ -247,7 +285,10 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: context.appTheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(6),
@@ -285,7 +326,11 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.person_pin_rounded, size: 14, color: context.appTheme.muted),
+                  Icon(
+                    Icons.person_pin_rounded,
+                    size: 14,
+                    color: context.appTheme.muted,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     'Reported by: $reporter',

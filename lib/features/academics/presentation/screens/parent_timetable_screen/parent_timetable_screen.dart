@@ -55,10 +55,16 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
         _children = childrenResponse.map((c) {
           final first = (c['first_name'] ?? '').toString();
           final last = (c['last_name'] ?? '').toString();
-          final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+          final name = [
+            first,
+            last,
+          ].where((e) => e.isNotEmpty).join(' ').trim();
           final grade = (c['grade_name'] ?? '').toString();
           final section = (c['section_name'] ?? '').toString();
-          final classLabel = [grade, section].where((e) => e.isNotEmpty).join('-');
+          final classLabel = [
+            grade,
+            section,
+          ].where((e) => e.isNotEmpty).join('-');
           return classLabel.isEmpty ? name : '$name ($classLabel)';
         }).toList();
         _childIds = childrenResponse
@@ -83,7 +89,9 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     setState(() => _loading = true);
     try {
       final studentId = _childIds[childIndex];
-      final response = await BackendApiClient.instance.getRawList('/me/timetable?student_id=$studentId');
+      final response = await BackendApiClient.instance.getRawList(
+        '/me/timetable?student_id=$studentId',
+      );
       setState(() {
         _allSlots = response;
         _loading = false;
@@ -191,7 +199,9 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -251,7 +261,11 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.calendar_today_rounded, size: 48, color: context.appTheme.muted),
+          Icon(
+            Icons.calendar_today_rounded,
+            size: 48,
+            color: context.appTheme.muted,
+          ),
           const SizedBox(height: 12),
           Text(
             'No classes scheduled for today',
@@ -264,7 +278,10 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           const SizedBox(height: 4),
           Text(
             'Check other days or contact school admin.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),
@@ -278,7 +295,8 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
         final slot = _daySlots[index];
         final subject = slot['subject']?['subject_name'] ?? 'Regular Period';
         final teacher = slot['staff'] != null
-            ? '${slot['staff']['first_name'] ?? ''} ${slot['staff']['last_name'] ?? ''}'.trim()
+            ? '${slot['staff']['first_name'] ?? ''} ${slot['staff']['last_name'] ?? ''}'
+                  .trim()
             : 'Unassigned';
         final room = slot['room']?['room_number'] ?? '—';
         final startTime = slot['start_time'] ?? '—';
@@ -328,12 +346,19 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.person_outline_rounded, size: 12, color: context.appTheme.muted),
+                        Icon(
+                          Icons.person_outline_rounded,
+                          size: 12,
+                          color: context.appTheme.muted,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             teacher,
-                            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: context.appTheme.muted,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),

@@ -33,7 +33,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     setState(() => _loading = true);
     try {
       final children = await BackendApiClient.instance.getMyStudents();
-      final slots = await BackendApiClient.instance.getRawList('/parent-teacher-meetings');
+      final slots = await BackendApiClient.instance.getRawList(
+        '/parent-teacher-meetings',
+      );
       setState(() {
         _children = children;
         _ptmSlots = slots;
@@ -59,14 +61,19 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
     if (_classTeacherOnly) {
       slots = slots.where((slot) {
-        final subject = (slot['subject'] ?? slot['teacher']?['designation'] ?? '').toString().toLowerCase();
-        return subject.contains('class teacher') || subject.contains('homeroom');
+        final subject =
+            (slot['subject'] ?? slot['teacher']?['designation'] ?? '')
+                .toString()
+                .toLowerCase();
+        return subject.contains('class teacher') ||
+            subject.contains('homeroom');
       }).toList();
     }
     return slots;
   }
 
-  List<dynamic> get _availableSlots => _filteredSlots.where((s) => !_isBooked(s)).toList();
+  List<dynamic> get _availableSlots =>
+      _filteredSlots.where((s) => !_isBooked(s)).toList();
   List<dynamic> get _bookedSlots => _filteredSlots.where(_isBooked).toList();
 
   bool _isBooked(dynamic slot) {
@@ -79,7 +86,8 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     if (id.isEmpty) return;
 
     final teacher = slot['teacher'] ?? {};
-    final teacherName = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
+    final teacherName =
+        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
 
     try {
       await BackendApiClient.instance.bookParentTeacherMeeting(id);
@@ -117,7 +125,20 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
   String _formatDateString(String dateStr) {
     final parsed = DateTime.tryParse(dateStr);
     if (parsed == null) return dateStr.split('T').first;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${parsed.day} ${months[parsed.month - 1]} ${parsed.year}';
   }
 
@@ -167,7 +188,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                         ),
                         const SizedBox(height: 8),
                         if (_availableSlots.isEmpty)
-                          _buildEmptyState('No available slots matching criteria')
+                          _buildEmptyState(
+                            'No available slots matching criteria',
+                          )
                         else
                           ..._availableSlots.map(_buildAvailableSlotCard),
                         const SizedBox(height: 24),
@@ -203,10 +226,16 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
           final c = _children[i];
           final first = (c['first_name'] ?? '').toString();
           final last = (c['last_name'] ?? '').toString();
-          final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+          final name = [
+            first,
+            last,
+          ].where((e) => e.isNotEmpty).join(' ').trim();
           final grade = (c['grade_name'] ?? '').toString();
           final section = (c['section_name'] ?? '').toString();
-          final classLabel = [grade, section].where((e) => e.isNotEmpty).join('-');
+          final classLabel = [
+            grade,
+            section,
+          ].where((e) => e.isNotEmpty).join('-');
           final label = classLabel.isEmpty ? name : '$name ($classLabel)';
 
           return GestureDetector(
@@ -222,7 +251,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -250,7 +281,11 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.filter_list_rounded, size: 18, color: context.appTheme.muted),
+          Icon(
+            Icons.filter_list_rounded,
+            size: 18,
+            color: context.appTheme.muted,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -298,7 +333,8 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
   Widget _buildAvailableSlotCard(dynamic slot) {
     final teacher = slot['teacher'] ?? {};
-    final teacherName = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
+    final teacherName =
+        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
     final subject = slot['subject'] ?? teacher['designation'] ?? 'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
@@ -324,7 +360,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
             ),
             alignment: Alignment.center,
             child: Text(
-              teacherName.isNotEmpty ? teacherName.substring(0, 1).toUpperCase() : 'T',
+              teacherName.isNotEmpty
+                  ? teacherName.substring(0, 1).toUpperCase()
+                  : 'T',
               style: GoogleFonts.dmSans(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
@@ -347,7 +385,10 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                 ),
                 Text(
                   subject,
-                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    color: context.appTheme.muted,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Wrap(
@@ -357,25 +398,55 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.calendar_today_rounded, size: 12, color: context.appTheme.muted),
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 12,
+                          color: context.appTheme.muted,
+                        ),
                         const SizedBox(width: 4),
-                        Text(date, style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
+                        Text(
+                          date,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
                       ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.access_time_rounded, size: 12, color: context.appTheme.muted),
+                        Icon(
+                          Icons.access_time_rounded,
+                          size: 12,
+                          color: context.appTheme.muted,
+                        ),
                         const SizedBox(width: 4),
-                        Text('$time ($duration mins)', style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
+                        Text(
+                          '$time ($duration mins)',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
                       ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.location_on_rounded, size: 12, color: context.appTheme.muted),
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 12,
+                          color: context.appTheme.muted,
+                        ),
                         const SizedBox(width: 4),
-                        Text(room, style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
+                        Text(
+                          room,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -389,7 +460,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               backgroundColor: _headerColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             child: Text(
               'Book',
@@ -406,7 +479,8 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
   Widget _buildBookedSlotCard(dynamic slot) {
     final teacher = slot['teacher'] ?? {};
-    final teacherName = '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
+    final teacherName =
+        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
     final subject = slot['subject'] ?? teacher['designation'] ?? 'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
@@ -421,7 +495,11 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle_rounded, color: context.appTheme.success, size: 24),
+          Icon(
+            Icons.check_circle_rounded,
+            color: context.appTheme.success,
+            size: 24,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -437,7 +515,10 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                 ),
                 Text(
                   subject,
-                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    color: context.appTheme.muted,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(

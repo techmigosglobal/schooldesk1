@@ -10,7 +10,8 @@ class ParentReportCardsScreen extends StatefulWidget {
   const ParentReportCardsScreen({super.key});
 
   @override
-  State<ParentReportCardsScreen> createState() => _ParentReportCardsScreenState();
+  State<ParentReportCardsScreen> createState() =>
+      _ParentReportCardsScreenState();
 }
 
 class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
@@ -79,20 +80,20 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
     if (_activeStudentId.isEmpty) return;
     setState(() => _exportLoading = true);
     try {
-      final term = card['exam']?['exam_name'] ?? card['exam_id'] ?? 'Report Card';
+      final term =
+          card['exam']?['exam_name'] ?? card['exam_id'] ?? 'Report Card';
       final export = await BackendApiClient.instance.createReportExport(
         '/exams/report-cards/exports',
         reportTitle: 'Report card $term'.trim(),
         format: 'pdf',
         reportType: 'report_card',
         scope: 'parent',
-        parameters: {
-          'student_id': _activeStudentId,
-          'term': term,
-        },
+        parameters: {'student_id': _activeStudentId, 'term': term},
       );
 
-      _showSuccessSnackBar('Report card export initiated: ${export['status'] ?? 'pending'}');
+      _showSuccessSnackBar(
+        'Report card export initiated: ${export['status'] ?? 'pending'}',
+      );
       // Refresh exports list
       final exports = await BackendApiClient.instance.getReportExports(
         '/exams/report-cards/exports',
@@ -215,10 +216,16 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
           final c = _children[i];
           final first = (c['first_name'] ?? '').toString();
           final last = (c['last_name'] ?? '').toString();
-          final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+          final name = [
+            first,
+            last,
+          ].where((e) => e.isNotEmpty).join(' ').trim();
           final grade = (c['grade_name'] ?? '').toString();
           final section = (c['section_name'] ?? '').toString();
-          final classLabel = [grade, section].where((e) => e.isNotEmpty).join('-');
+          final classLabel = [
+            grade,
+            section,
+          ].where((e) => e.isNotEmpty).join('-');
           final label = classLabel.isEmpty ? name : '$name ($classLabel)';
 
           return GestureDetector(
@@ -235,7 +242,9 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -258,7 +267,11 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.contact_page_rounded, size: 48, color: context.appTheme.muted),
+          Icon(
+            Icons.contact_page_rounded,
+            size: 48,
+            color: context.appTheme.muted,
+          ),
           const SizedBox(height: 12),
           Text(
             'No report cards found',
@@ -271,7 +284,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
           const SizedBox(height: 4),
           Text(
             'Report cards will appear here once published by teachers.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),
@@ -306,11 +322,15 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: published ? _headerColor.withAlpha(20) : context.appTheme.surfaceVariant,
+                  color: published
+                      ? _headerColor.withAlpha(20)
+                      : context.appTheme.surfaceVariant,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  published ? Icons.analytics_rounded : Icons.pending_actions_rounded,
+                  published
+                      ? Icons.analytics_rounded
+                      : Icons.pending_actions_rounded,
                   color: published ? _headerColor : context.appTheme.muted,
                 ),
               ),
@@ -332,7 +352,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                       children: [
                         Text(
                           'Score: ',
-                          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: context.appTheme.muted,
+                          ),
                         ),
                         Text(
                           percentage,
@@ -345,7 +368,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                         const SizedBox(width: 16),
                         Text(
                           'Class Rank: ',
-                          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: context.appTheme.muted,
+                          ),
                         ),
                         Text(
                           rankStr,
@@ -371,7 +397,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: context.appTheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(6),
@@ -481,7 +510,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 else
                   Text(
                     'Format: ${exp['format'] ?? 'PDF'}',
-                    style: GoogleFonts.dmSans(fontSize: 10, color: context.appTheme.muted),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 10,
+                      color: context.appTheme.muted,
+                    ),
                   ),
               ],
             ),
