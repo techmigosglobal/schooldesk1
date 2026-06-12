@@ -16,6 +16,7 @@ import (
 	"school-backend/internal/policy"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -1315,13 +1316,14 @@ func (h *FeeHandler) CreateRazorpayOrder(c *gin.Context) {
 
 	// Create a placeholder PaymentOrder in DB
 	paymentOrder := models.PaymentOrder{
-		SchoolID:     schoolID,
-		ParentUserID: parentUserID,
-		Amount:       totalAmount,
-		Currency:     "INR",
-		Status:       "created",
-		InvoiceIDs:   strings.Join(req.InvoiceIDs, ","),
+		ParentID:  parentUserID,
+		StudentID: invoices[0].StudentID,
+		Amount:    totalAmount,
+		Currency:  "INR",
+		Status:    "created",
 	}
+	_ = paymentOrder.SetInvoiceIDs(req.InvoiceIDs)
+	_ = paymentOrder.SetNotes(map[string]interface{}{"school_id": schoolID})
 	if err := database.DB.Create(&paymentOrder).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment order record"})
 		return
@@ -1401,17 +1403,19 @@ func (h *FeeHandler) VerifyRazorpayPayment(c *gin.Context) {
 
 		receipt := models.FeeReceipt{
 			PaymentTransactionID: txn.ID,
-			ReceiptNumber:        fmt.Sprintf("REC-%d", time.Now().UnixNano()),
-			AmountPaid:           txn.Amount,
-			PaymentDate:          time.Now(),
+			StudentID:            paymentOrder.StudentID,
+			ParentID:             paymentOrder.ParentID,
+			ReceiptNo:            fmt.Sprintf("REC-%d", time.Now().UnixNano()),
+			Amount:               txn.Amount,
+			PaymentMode:          "razorpay",
+			PaidAt:               time.Now(),
 		}
 		if err := tx.Create(&receipt).Error; err != nil {
 			return err
 		}
 
 		// Update Invoices
-		invoiceIDs := strings.Split(paymentOrder.InvoiceIDs, ",")
-		for _, invID := range invoiceIDs {
+		for _, invID := range paymentOrder.GetInvoiceIDs() {
 			var invoice models.FeeInvoice
 			if err := tx.First(&invoice, "id = ?", invID).Error; err != nil {
 				continue
@@ -1458,18 +1462,18 @@ func (h *FeeHandler) RazorpayWebhook(c *gin.Context) {
 
 	webhookEvent := models.PaymentWebhookEvent{
 		EventType: eventType,
-		Payload:   string(payloadBody),
+		Payload:   datatypes.JSON(payloadBody),
 	}
 	// Extract basic info if available (order_id, payment_id) depending on the event type
 	if payload["payload"] != nil {
-		payloadData := payload["payload"].(map[string]interface{})
+		payloadData, _ := payload["payload"].(map[string]interface{})
 		if paymentData, ok := payloadData["payment"].(map[string]interface{}); ok {
 			if entity, ok := paymentData["entity"].(map[string]interface{}); ok {
 				if rzpPaymentID, ok := entity["id"].(string); ok {
-					webhookEvent.RazorpayPaymentID = rzpPaymentID
+					webhookEvent.PaymentID = &rzpPaymentID
 				}
 				if rzpOrderID, ok := entity["order_id"].(string); ok {
-					webhookEvent.RazorpayOrderID = rzpOrderID
+					webhookEvent.RazorpayOrderID = &rzpOrderID
 				}
 			}
 		}

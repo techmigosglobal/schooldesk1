@@ -35,6 +35,10 @@ type Config struct {
 	EnableRelationshipConstraints bool
 	EnableFCMPush                 bool
 	FirebaseProjectID             string
+	RazorpayKeyID                 string
+	RazorpayKeySecret             string
+	RazorpayWebhookSecret         string
+	RazorpayCurrency              string
 }
 
 func Load() *Config {
@@ -79,6 +83,10 @@ func Load() *Config {
 		EnableRelationshipConstraints: getEnvAsBool("ENABLE_RELATIONSHIP_CONSTRAINTS", false),
 		EnableFCMPush:                 getEnvAsBool("ENABLE_FCM_PUSH", false),
 		FirebaseProjectID:             strings.TrimSpace(getEnv("FIREBASE_PROJECT_ID", "")),
+		RazorpayKeyID:                 strings.TrimSpace(getEnv("RAZORPAY_KEY_ID", "")),
+		RazorpayKeySecret:             strings.TrimSpace(getEnv("RAZORPAY_KEY_SECRET", "")),
+		RazorpayWebhookSecret:         strings.TrimSpace(getEnv("RAZORPAY_WEBHOOK_SECRET", "")),
+		RazorpayCurrency:              getEnv("RAZORPAY_CURRENCY", "INR"),
 	}
 }
 
@@ -107,6 +115,15 @@ func (c *Config) Validate() error {
 	}
 	if c.EnableFCMPush && strings.TrimSpace(c.FirebaseProjectID) == "" {
 		return errors.New("missing FIREBASE_PROJECT_ID when ENABLE_FCM_PUSH=true")
+	}
+	if c.RazorpayKeyID == "" {
+		return errors.New("missing RAZORPAY_KEY_ID in production")
+	}
+	if c.RazorpayKeySecret == "" {
+		return errors.New("missing RAZORPAY_KEY_SECRET in production")
+	}
+	if c.RazorpayWebhookSecret == "" {
+		return errors.New("missing RAZORPAY_WEBHOOK_SECRET in production")
 	}
 	return nil
 }

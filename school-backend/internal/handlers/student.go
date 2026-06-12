@@ -172,7 +172,7 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 			student_id,
 			COALESCE(SUM(total_amount), 0) AS total_amount,
 			COALESCE(SUM(discount_amount), 0) AS discount_amount,
-			COALESCE(SUM(net_amount), 0) AS net_amount,
+			COALESCE(SUM(payable_amount), 0) AS net_amount,
 			COALESCE(SUM(paid_amount), 0) AS paid_amount,
 			COALESCE(SUM(balance), 0) AS balance,
 			SUM(CASE WHEN status <> 'paid' THEN 1 ELSE 0 END) AS pending_invoices,

@@ -48,24 +48,29 @@ type FeeConcession struct {
 
 type FeeInvoice struct {
 	BaseModel
-	StudentID       string                 `gorm:"type:uuid;not null" json:"student_id"`
-	AcademicYearID  string                 `gorm:"type:uuid;not null" json:"academic_year_id"`
-	TermID          *string                `gorm:"type:text;index" json:"term_id,omitempty"`
-	InvoiceNumber   string                 `gorm:"size:100;unique" json:"invoice_number"`
-	InvoiceDate     time.Time              `json:"invoice_date"`
-	DueDate         time.Time              `json:"due_date"`
-	TotalAmount     float64                `json:"total_amount"`
-	DiscountAmount  float64                `json:"discount_amount"`
-	NetAmount       float64                `json:"net_amount"`
-	PaidAmount      float64                `json:"paid_amount"`
-	Balance         float64                `json:"balance"`
-	Status          string                 `gorm:"type:text;default:'pending'" json:"status"`
-	Student         *Student               `gorm:"foreignKey:StudentID" json:"student,omitempty"`
-	AcademicYear    *AcademicYear          `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
-	Term            *Term                  `gorm:"foreignKey:TermID" json:"term,omitempty"`
-	Items           []FeeInvoiceItem       `gorm:"foreignKey:InvoiceID" json:"items,omitempty"`
-	Payments        []Payment              `gorm:"foreignKey:InvoiceID" json:"payments,omitempty"`
-	PaymentRequests []ParentPaymentRequest `gorm:"foreignKey:InvoiceID" json:"payment_requests,omitempty"`
+	StudentID        string                 `gorm:"type:uuid;not null" json:"student_id"`
+	AcademicYearID   string                 `gorm:"type:uuid;not null" json:"academic_year_id"`
+	TermID           *string                `gorm:"type:text;index" json:"term_id,omitempty"`
+	InvoiceNumber    string                 `gorm:"size:100;unique" json:"invoice_number"`
+	InvoiceDate      time.Time              `json:"invoice_date"`
+	DueDate          time.Time              `json:"due_date"`
+	TotalAmount      float64                `json:"total_amount"`
+	DiscountAmount   float64                `json:"discount_amount"`
+	ConcessionAmount float64                `gorm:"default:0" json:"concession_amount"`
+	FineAmount       float64                `gorm:"default:0" json:"fine_amount"`
+	PayableAmount    float64                `json:"payable_amount"`      // TotalAmount - DiscountAmount - ConcessionAmount + FineAmount
+	NetAmount        float64                `gorm:"-" json:"net_amount"` // Alias for PayableAmount (backward compatibility)
+	PaidAmount       float64                `json:"paid_amount"`
+	Balance          float64                `json:"balance"`
+	Status           string                 `gorm:"type:text;default:'pending';index" json:"status"` // unpaid, partially_paid, paid, overdue, cancelled
+	StudentParentID  *string                `gorm:"type:uuid" json:"student_parent_id,omitempty"`    // Denormalized parent ID for quick lookup
+	Student          *Student               `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+	AcademicYear     *AcademicYear          `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
+	Term             *Term                  `gorm:"foreignKey:TermID" json:"term,omitempty"`
+	Items            []FeeInvoiceItem       `gorm:"foreignKey:InvoiceID" json:"items,omitempty"`
+	Payments         []Payment              `gorm:"foreignKey:InvoiceID" json:"payments,omitempty"`
+	PaymentRequests  []ParentPaymentRequest `gorm:"foreignKey:InvoiceID" json:"payment_requests,omitempty"`
+	Receipts         []FeeReceipt           `gorm:"many2many:fee_receipt_invoice_map;" json:"receipts,omitempty"`
 }
 
 type FeeInvoiceItem struct {
@@ -112,4 +117,18 @@ type ParentPaymentRequest struct {
 	Student          *Student    `gorm:"foreignKey:StudentID" json:"student,omitempty"`
 	ParentUser       *User       `gorm:"foreignKey:ParentUserID" json:"parent_user,omitempty"`
 	Payment          *Payment    `gorm:"foreignKey:PaymentID" json:"payment,omitempty"`
+}
+
+// AfterScan hook to populate NetAmount from PayableAmount (backward compatibility)
+func (fi *FeeInvoice) AfterScan(tx interface{}) error {
+	fi.NetAmount = fi.PayableAmount
+	return nil
+}
+
+// BeforeSave hook to update PayableAmount if NetAmount is set
+func (fi *FeeInvoice) BeforeSave(tx interface{}) error {
+	if fi.NetAmount != 0 {
+		fi.PayableAmount = fi.NetAmount
+	}
+	return nil
 }

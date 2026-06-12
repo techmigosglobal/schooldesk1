@@ -1,66 +1,92 @@
 package payments
 
 import (
-	"errors"
-	"fmt"
-	"os"
+	"school-backend/internal/config"
 
-	razorpay "github.com/razorpay/razorpay-go"
+	"github.com/razorpay/razorpay-go"
 )
 
-var client *razorpay.Client
+// RazorpayClient wraps the Razorpay API client
+type RazorpayClient struct {
+	client *razorpay.Client
+	cfg    *config.Config
+}
 
-// InitRazorpayClient initializes the Razorpay client with the provided keys
-func InitRazorpayClient() error {
-	keyID := os.Getenv("RAZORPAY_KEY_ID")
-	keySecret := os.Getenv("RAZORPAY_KEY_SECRET")
+// NewRazorpayClient creates a new Razorpay client
+func NewRazorpayClient(cfg *config.Config) *RazorpayClient {
+	client := razorpay.NewClient(cfg.RazorpayKeyID, cfg.RazorpayKeySecret)
+	return &RazorpayClient{
+		client: client,
+		cfg:    cfg,
+	}
+}
 
-	if keyID == "" || keySecret == "" {
-		return errors.New("RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must be set")
+// CreateOrder creates a Razorpay order
+func (rc *RazorpayClient) CreateOrder(amount int64, receiptNo string, notes map[string]interface{}) (map[string]interface{}, error) {
+	params := map[string]interface{}{
+		"amount":   amount, // in paise
+		"currency": rc.cfg.RazorpayCurrency,
+		"receipt":  receiptNo,
+		"notes":    notes,
 	}
 
-	client = razorpay.NewClient(keyID, keySecret)
-	return nil
-}
-
-// GetClient returns the initialized Razorpay client
-func GetClient() *razorpay.Client {
-	return client
-}
-
-// GetKeyID returns the Razorpay public key ID (safe to expose to frontend).
-func GetKeyID() string {
-	return os.Getenv("RAZORPAY_KEY_ID")
-}
-
-// CreateOrder payload for razorpay order creation
-type CreateOrderRequest struct {
-	Amount   float64 // Amount in INR (e.g. 100.50)
-	Currency string  // "INR"
-	Receipt  string  // Internal receipt or reference id
-	Notes    map[string]interface{}
-}
-
-// CreateOrder creates a new order in Razorpay
-func CreateOrder(req CreateOrderRequest) (map[string]interface{}, error) {
-	if client == nil {
-		return nil, errors.New("razorpay client not initialized")
-	}
-
-	// Razorpay expects amount in the smallest subunit (e.g., paise for INR)
-	amountInSubunits := int(req.Amount * 100)
-
-	data := map[string]interface{}{
-		"amount":   amountInSubunits,
-		"currency": req.Currency,
-		"receipt":  req.Receipt,
-		"notes":    req.Notes,
-	}
-
-	body, err := client.Order.Create(data, nil)
+	order, err := rc.client.Order.Create(params, map[string]string{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create razorpay order: %w", err)
+		return nil, err
 	}
 
-	return body, nil
+	return order, nil
+}
+
+// FetchOrder fetches an order from Razorpay
+func (rc *RazorpayClient) FetchOrder(orderID string) (map[string]interface{}, error) {
+	order, err := rc.client.Order.Fetch(orderID, map[string]interface{}{}, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	return order, nil
+}
+
+// FetchPayment fetches a payment from Razorpay
+func (rc *RazorpayClient) FetchPayment(paymentID string) (map[string]interface{}, error) {
+	payment, err := rc.client.Payment.Fetch(paymentID, map[string]interface{}{}, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	return payment, nil
+}
+
+// CapturePayment captures a payment (for authorized payments)
+func (rc *RazorpayClient) CapturePayment(paymentID string, amount int64) (map[string]interface{}, error) {
+	params := map[string]interface{}{
+		"amount": amount,
+	}
+	payment, err := rc.client.Payment.Capture(paymentID, int(amount), params, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	return payment, nil
+}
+
+// RefundPayment initiates a refund for a payment
+func (rc *RazorpayClient) RefundPayment(paymentID string, amount int64, notes map[string]interface{}) (map[string]interface{}, error) {
+	params := map[string]interface{}{
+		"notes": notes,
+	}
+
+	refund, err := rc.client.Payment.Refund(paymentID, int(amount), params, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	return refund, nil
+}
+
+// GetWebhookSignature returns the webhook secret for signature verification
+func (rc *RazorpayClient) GetWebhookSignature() string {
+	return rc.cfg.RazorpayWebhookSecret
+}
+
+// GetKeyID returns the public key ID
+func (rc *RazorpayClient) GetKeyID() string {
+	return rc.cfg.RazorpayKeyID
 }

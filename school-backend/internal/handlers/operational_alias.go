@@ -754,7 +754,7 @@ func (h *OperationalAliasHandler) GetFeeStats(c *gin.Context) {
 		Overdue int64
 	}
 	query := scopedFeeInvoiceQuery(c)
-	_ = query.Select("COALESCE(SUM(fee_invoices.net_amount), 0) AS total, COALESCE(SUM(fee_invoices.paid_amount), 0) AS paid, COALESCE(SUM(fee_invoices.balance), 0) AS balance").Scan(&row).Error
+	_ = query.Select("COALESCE(SUM(fee_invoices.payable_amount), 0) AS total, COALESCE(SUM(fee_invoices.paid_amount), 0) AS paid, COALESCE(SUM(fee_invoices.balance), 0) AS balance").Scan(&row).Error
 	scopedFeeInvoiceQuery(c).Where("fee_invoices.due_date < ? AND fee_invoices.status != ?", time.Now().UTC(), "paid").Count(&row.Overdue)
 	success(c, http.StatusOK, gin.H{"total": row.Total, "paid": row.Paid, "balance": row.Balance, "overdue": row.Overdue}, "")
 }
