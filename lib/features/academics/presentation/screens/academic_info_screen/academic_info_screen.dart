@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/services/backend_data_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 /// Read-only Academic Info screen — shows Principal-published academic year,
 /// subjects, classes, and curriculum. Used by Teacher, Admin, and Parent modules.
@@ -74,7 +75,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
   Widget build(BuildContext context) {
     final isTablet = MediaQuery.of(context).size.width >= 840;
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       drawer: isTablet ? null : widget.drawer,
       body: isTablet
           ? Row(
@@ -93,7 +94,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
         SliverAppBar(
           pinned: true,
           floating: true,
-          backgroundColor: AppTheme.surface,
+          backgroundColor: context.appTheme.surface,
           elevation: 0,
           scrolledUnderElevation: 1,
           title: Text(
@@ -101,12 +102,12 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
             style: GoogleFonts.dmSans(
               fontSize: 18,
               fontWeight: FontWeight.w700,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppTheme.primary),
+              icon: Icon(Icons.refresh_rounded, color: context.appTheme.primary),
               onPressed: () {
                 setState(() => _loading = true);
                 _loadData();
@@ -122,9 +123,9 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
               fontWeight: FontWeight.w600,
             ),
             unselectedLabelStyle: GoogleFonts.dmSans(fontSize: 13),
-            labelColor: AppTheme.primary,
-            unselectedLabelColor: AppTheme.muted,
-            indicatorColor: AppTheme.primary,
+            labelColor: context.appTheme.primary,
+            unselectedLabelColor: context.appTheme.muted,
+            indicatorColor: context.appTheme.primary,
             indicatorWeight: 2.5,
             tabs: const [
               Tab(text: 'Curriculum'),
@@ -135,8 +136,8 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
         ),
       ],
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(color: AppTheme.primary),
+          ? Center(
+              child: CircularProgressIndicator(color: context.appTheme.primary),
             )
           : Column(
               children: [
@@ -160,13 +161,13 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: AppTheme.primaryContainer,
+      color: context.appTheme.primaryContainer,
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.calendar_today_rounded,
             size: 16,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -175,7 +176,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -191,20 +192,20 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.menu_book_outlined,
               size: 48,
-              color: AppTheme.outline,
+              color: context.appTheme.outline,
             ),
             const SizedBox(height: 12),
             Text(
               'No curriculum published yet',
-              style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 14, color: context.appTheme.muted),
             ),
             const SizedBox(height: 4),
             Text(
               'Principal will publish curriculum soon',
-              style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
             ),
           ],
         ),
@@ -212,7 +213,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
     }
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _curriculum.length,
@@ -225,9 +226,9 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,7 +251,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.successContainer,
+                        color: context.appTheme.successContainer,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -258,7 +259,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: AppTheme.success,
+                          color: context.appTheme.success,
                         ),
                       ),
                     ),
@@ -276,7 +277,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryContainer,
+                            color: context.appTheme.primaryContainer,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -284,7 +285,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                             style: GoogleFonts.dmSans(
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
-                              color: AppTheme.primary,
+                              color: context.appTheme.primary,
                             ),
                           ),
                         ),
@@ -302,7 +303,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
   Widget _buildSubjectsTab() {
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -311,7 +312,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
             style: GoogleFonts.dmSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
           const SizedBox(height: 12),
@@ -324,7 +325,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                   'No subjects configured',
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ),
@@ -338,7 +339,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
   Widget _buildClassesTab() {
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -347,7 +348,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
             style: GoogleFonts.dmSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
           const SizedBox(height: 12),
@@ -360,7 +361,7 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
                   'No classes configured',
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ),
@@ -377,30 +378,30 @@ class _SubjectInfoTile extends StatelessWidget {
 
   const _SubjectInfoTile({required this.subject});
 
-  Color _typeColor(String type) {
+  Color _typeColor(BuildContext context, String type) {
     switch (type) {
       case 'Core':
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case 'Elective':
-        return AppTheme.secondary;
+        return context.appTheme.secondary;
       case 'Co-curricular':
-        return AppTheme.success;
+        return context.appTheme.success;
       default:
-        return AppTheme.info;
+        return context.appTheme.info;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final type = subject['type'] as String? ?? 'Core';
-    final color = _typeColor(type);
+    final color = _typeColor(context, type);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -430,7 +431,7 @@ class _SubjectInfoTile extends StatelessWidget {
                   'Code: ${subject['code'] ?? '—'}  ·  ${subject['periodsPerWeek'] ?? 5} periods/week',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -471,9 +472,9 @@ class _ClassInfoTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -481,13 +482,13 @@ class _ClassInfoTile extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppTheme.primaryContainer,
+              color: context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.class_rounded,
               size: 18,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
             ),
           ),
           const SizedBox(width: 12),
@@ -507,7 +508,7 @@ class _ClassInfoTile extends StatelessWidget {
                   'Sections: ${sections.join(', ')}  ·  Strength: ${classData['strength'] ?? 40}',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 if ((classData['classTeacher'] as String? ?? '').isNotEmpty)
@@ -515,7 +516,7 @@ class _ClassInfoTile extends StatelessWidget {
                     'Class Teacher: ${classData['classTeacher']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),

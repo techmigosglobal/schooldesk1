@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 /// Role identifiers for the dashboard FAB
 enum DashboardRole { principal, admin, teacher, parent }
@@ -37,10 +37,10 @@ class DashboardFabWidget extends StatelessWidget {
     }
   }
 
-  Color get _roleColor {
+  Color _roleColor(BuildContext context) {
     switch (role) {
       case DashboardRole.principal:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case DashboardRole.admin:
         return const Color(0xFF0D3B6E);
       case DashboardRole.teacher:
@@ -61,7 +61,7 @@ class DashboardFabWidget extends StatelessWidget {
           (route) => route.settings.name == _dashboardRoute || route.isFirst,
         );
       },
-      backgroundColor: _roleColor,
+      backgroundColor: _roleColor(context),
       foregroundColor: Colors.white,
       tooltip: 'Go to Dashboard',
       child: const Icon(Icons.dashboard_rounded, size: 20),

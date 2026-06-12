@@ -8,7 +8,7 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -158,12 +158,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget _buildFormCard() {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
+            color: context.appTheme.onSurface.withAlpha(12),
             blurRadius: 22,
             offset: const Offset(0, 12),
           ),
@@ -392,10 +392,10 @@ class _IntroPanel extends StatelessWidget {
           width: 84,
           height: 84,
           decoration: BoxDecoration(
-            color: AppTheme.primary.withAlpha(18),
+            color: context.appTheme.primary.withAlpha(18),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.school_rounded, size: 42, color: AppTheme.primary),
+          child: Icon(Icons.school_rounded, size: 42, color: context.appTheme.primary),
         ),
         const SizedBox(height: 24),
         Text(
@@ -404,7 +404,7 @@ class _IntroPanel extends StatelessWidget {
             fontSize: 34,
             height: 1.08,
             fontWeight: FontWeight.w800,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         const SizedBox(height: 14),
@@ -413,7 +413,7 @@ class _IntroPanel extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: 15,
             height: 1.55,
-            color: AppTheme.onSurfaceVariant,
+            color: context.appTheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 20),
@@ -448,7 +448,7 @@ class _SectionTitle extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: 22,
             fontWeight: FontWeight.w800,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         const SizedBox(height: 4),
@@ -457,7 +457,7 @@ class _SectionTitle extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: 13,
             height: 1.4,
-            color: AppTheme.muted,
+            color: context.appTheme.muted,
           ),
         ),
       ],
@@ -474,10 +474,10 @@ class _SetupChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      avatar: Icon(icon, size: 18, color: AppTheme.primary),
+      avatar: Icon(icon, size: 18, color: context.appTheme.primary),
       label: Text(label),
-      backgroundColor: AppTheme.primary.withAlpha(14),
-      side: BorderSide(color: AppTheme.primary.withAlpha(36)),
+      backgroundColor: context.appTheme.primary.withAlpha(14),
+      side: BorderSide(color: context.appTheme.primary.withAlpha(36)),
     );
   }
 }
@@ -492,14 +492,14 @@ class _ErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.error.withAlpha(12),
+        color: context.appTheme.error.withAlpha(12),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.error.withAlpha(50)),
+        border: Border.all(color: context.appTheme.error.withAlpha(50)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 20),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -507,7 +507,7 @@ class _ErrorBanner extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 height: 1.35,
-                color: AppTheme.error,
+                color: context.appTheme.error,
                 fontWeight: FontWeight.w700,
               ),
             ),

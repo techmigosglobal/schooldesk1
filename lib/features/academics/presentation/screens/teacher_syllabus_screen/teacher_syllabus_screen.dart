@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherSyllabusScreen extends StatefulWidget {
   const TeacherSyllabusScreen({super.key});
@@ -156,7 +156,7 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -168,7 +168,7 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -234,9 +234,9 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.all(16),
@@ -245,7 +245,7 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
           style: GoogleFonts.dmSans(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         subtitle: Column(
@@ -257,7 +257,7 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
               child: LinearProgressIndicator(
                 value: completionPct,
                 minHeight: 6,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1A6B4A)),
               ),
             ),
@@ -284,7 +284,7 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
               final name = topic['name']?.toString() ?? 'Untitled Topic';
               final status = topic['status']?.toString() ?? 'pending';
 
-              Color iconColor = Colors.grey;
+              Color iconColor = context.appTheme.muted;
               IconData icon = Icons.radio_button_unchecked_rounded;
               if (status == 'completed') {
                 iconColor = Colors.green;
@@ -311,11 +311,11 @@ class _TeacherSyllabusScreenState extends State<TeacherSyllabusScreen> {
                 ),
                 title: Text(
                   name,
-                  style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.onSurface),
+                  style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.onSurface),
                 ),
                 trailing: Text(
                   topic['date']?.toString() ?? '',
-                  style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
                 ),
               );
             },

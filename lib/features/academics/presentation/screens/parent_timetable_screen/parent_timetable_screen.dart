@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentTimetableScreen extends StatefulWidget {
   const ParentTimetableScreen({super.key});
@@ -99,7 +99,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -188,10 +188,10 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surface,
+                color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : AppTheme.outlineVariant,
+                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -199,7 +199,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -213,7 +213,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant.withAlpha(80),
+        color: context.appTheme.surfaceVariant.withAlpha(80),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -235,7 +235,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isActive ? Colors.white : AppTheme.muted,
+                    color: isActive ? Colors.white : context.appTheme.muted,
                   ),
                 ),
               ),
@@ -251,20 +251,20 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.calendar_today_rounded, size: 48, color: AppTheme.muted),
+          Icon(Icons.calendar_today_rounded, size: 48, color: context.appTheme.muted),
           const SizedBox(height: 12),
           Text(
             'No classes scheduled for today',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Check other days or contact school admin.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -289,9 +289,9 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -322,18 +322,18 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.person_outline_rounded, size: 12, color: AppTheme.muted),
+                        Icon(Icons.person_outline_rounded, size: 12, color: context.appTheme.muted),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
                             teacher,
-                            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+                            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -350,7 +350,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.onSurface,
+                      color: context.appTheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 2),

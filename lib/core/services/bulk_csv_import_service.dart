@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -5,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum BulkCsvImportTarget { students, staff, parents, classes, classTimetables }
 
@@ -34,7 +35,7 @@ class BulkCsvImportService {
         _snack(
           context,
           'Unable to read the selected CSV file.',
-          AppTheme.error,
+          context.appTheme.error,
         );
       }
       return false;
@@ -80,7 +81,7 @@ class BulkCsvImportService {
     final schema = _schema(target);
     await Clipboard.setData(ClipboardData(text: schema.template));
     if (context.mounted) {
-      _snack(context, '${schema.label} CSV template copied.', AppTheme.success);
+      _snack(context, '${schema.label} CSV template copied.', context.appTheme.success);
     }
   }
 
@@ -639,8 +640,8 @@ class BulkCsvImportService {
     _BulkImportResult result,
   ) {
     final color = result.failures.isEmpty && result.warnings.isEmpty
-        ? AppTheme.success
-        : AppTheme.warning;
+        ? context.appTheme.success
+        : context.appTheme.warning;
     return showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(

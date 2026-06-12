@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ApprovalItemWidget extends StatefulWidget {
   final ApprovalModel approval;
@@ -29,37 +30,37 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
   Color _getTypeColor() {
     switch (widget.approval.type) {
       case ApprovalType.account:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case ApprovalType.leave:
-        return AppTheme.info;
+        return context.appTheme.info;
       case ApprovalType.studentLeave:
-        return AppTheme.info;
+        return context.appTheme.info;
       case ApprovalType.admission:
-        return AppTheme.success;
+        return context.appTheme.success;
       case ApprovalType.feeConcession:
-        return AppTheme.warning;
+        return context.appTheme.warning;
       case ApprovalType.fee:
-        return AppTheme.warning;
+        return context.appTheme.warning;
       case ApprovalType.tc:
-        return AppTheme.secondary;
+        return context.appTheme.secondary;
       case ApprovalType.classApproval:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case ApprovalType.student:
-        return AppTheme.success;
+        return context.appTheme.success;
       case ApprovalType.event:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case ApprovalType.timetable:
-        return AppTheme.error;
+        return context.appTheme.error;
       case ApprovalType.exam:
-        return AppTheme.secondary;
+        return context.appTheme.secondary;
       case ApprovalType.document:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case ApprovalType.communication:
-        return AppTheme.info;
+        return context.appTheme.info;
       case ApprovalType.helpdesk:
-        return AppTheme.warning;
+        return context.appTheme.warning;
       case ApprovalType.academicInfo:
-        return AppTheme.primary;
+        return context.appTheme.primary;
     }
   }
 
@@ -157,7 +158,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           hintText: 'Tell Admin what needs to change...',
           actionLabel: 'Request changes',
           icon: Icons.edit_note_rounded,
-          color: AppTheme.warning,
+          color: context.appTheme.warning,
         ),
       ),
     );
@@ -167,15 +168,15 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
 
   Widget _statusChip(bool isPending, bool isApproved, bool isChangesRequested) {
     final color = isPending || isChangesRequested
-        ? AppTheme.warning
+        ? context.appTheme.warning
         : isApproved
-        ? AppTheme.success
-        : AppTheme.error;
+        ? context.appTheme.success
+        : context.appTheme.error;
     final containerColor = isPending || isChangesRequested
-        ? AppTheme.warningContainer
+        ? context.appTheme.warningContainer
         : isApproved
-        ? AppTheme.successContainer
-        : AppTheme.errorContainer;
+        ? context.appTheme.successContainer
+        : context.appTheme.errorContainer;
     final icon = isPending
         ? Icons.hourglass_empty_rounded
         : isChangesRequested
@@ -237,13 +238,13 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: AppTheme.muted),
+        Icon(icon, size: 12, color: context.appTheme.muted),
         const SizedBox(width: 4),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 230),
           child: Text(
             text,
-            style: GoogleFonts.ibmPlexSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -261,8 +262,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           icon: const Icon(Icons.close_rounded, size: 16),
           label: const Text('Reject'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppTheme.error,
-            side: const BorderSide(color: AppTheme.error, width: 1),
+            foregroundColor: context.appTheme.error,
+            side: BorderSide(color: context.appTheme.error, width: 1),
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -278,8 +279,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           icon: const Icon(Icons.edit_note_rounded, size: 16),
           label: const Text('Request changes'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppTheme.warning,
-            side: const BorderSide(color: AppTheme.warning, width: 1),
+            foregroundColor: context.appTheme.warning,
+            side: BorderSide(color: context.appTheme.warning, width: 1),
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -293,18 +294,18 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         final approveButton = ElevatedButton.icon(
           onPressed: isBusy ? null : widget.onApprove,
           icon: isBusy
-              ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: context.appTheme.surface,
                   ),
                 )
               : const Icon(Icons.check_rounded, size: 16),
           label: Text(isBusy ? 'Working…' : 'Approve'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.success,
+            backgroundColor: context.appTheme.success,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
             shape: RoundedRectangleBorder(
@@ -357,14 +358,14 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: isPending || isChangesRequested
-            ? Border.all(color: AppTheme.warning.withAlpha(77), width: 1)
-            : Border.all(color: AppTheme.outlineVariant, width: 1),
+            ? Border.all(color: context.appTheme.warning.withAlpha(77), width: 1)
+            : Border.all(color: context.appTheme.outlineVariant, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: context.appTheme.onSurface.withAlpha(10),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -382,10 +383,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                 Container(
                   width: 4,
                   color: isPending || isChangesRequested
-                      ? AppTheme.warning
+                      ? context.appTheme.warning
                       : isApproved
-                      ? AppTheme.success
-                      : AppTheme.error,
+                      ? context.appTheme.success
+                      : context.appTheme.error,
                 ),
                 Expanded(
                   child: Material(
@@ -441,7 +442,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                                         style: GoogleFonts.ibmPlexSans(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: AppTheme.onSurface,
+                                          color: context.appTheme.onSurface,
                                         ),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
@@ -452,7 +453,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                                           style: GoogleFonts.ibmPlexSans(
                                             fontSize: 11,
                                             fontWeight: FontWeight.w400,
-                                            color: AppTheme.muted,
+                                            color: context.appTheme.muted,
                                           ),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
@@ -468,7 +469,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                               style: GoogleFonts.ibmPlexSans(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: AppTheme.onSurface,
+                                color: context.appTheme.onSurface,
                               ),
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
@@ -501,7 +502,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                                   _isExpanded
                                       ? Icons.keyboard_arrow_up_rounded
                                       : Icons.keyboard_arrow_down_rounded,
-                                  color: AppTheme.muted,
+                                  color: context.appTheme.muted,
                                   size: 18,
                                 ),
                               ],
@@ -528,9 +529,9 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           if (isPending)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: AppTheme.outlineVariant, width: 1),
+                  top: BorderSide(color: context.appTheme.outlineVariant, width: 1),
                 ),
               ),
               child: _buildActionButtons(isBusy),
@@ -543,9 +544,9 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
   Widget _buildExpandedSection() {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppTheme.outlineVariant, width: 1),
+          top: BorderSide(color: context.appTheme.outlineVariant, width: 1),
         ),
       ),
       child: Column(
@@ -557,7 +558,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
             style: GoogleFonts.ibmPlexSans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
               letterSpacing: 0.5,
             ),
           ),
@@ -565,7 +566,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceVariant,
+              color: context.appTheme.surfaceVariant,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -573,7 +574,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               style: GoogleFonts.ibmPlexSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
                 height: 1.6,
               ),
             ),
@@ -585,7 +586,7 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               style: GoogleFonts.ibmPlexSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 letterSpacing: 0.5,
               ),
             ),
@@ -594,13 +595,13 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: widget.approval.status == 'approved'
-                    ? AppTheme.successContainer
-                    : AppTheme.errorContainer,
+                    ? context.appTheme.successContainer
+                    : context.appTheme.errorContainer,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: widget.approval.status == 'approved'
-                      ? AppTheme.success.withAlpha(77)
-                      : AppTheme.error.withAlpha(77),
+                      ? context.appTheme.success.withAlpha(77)
+                      : context.appTheme.error.withAlpha(77),
                   width: 1,
                 ),
               ),
@@ -613,8 +614,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                         : Icons.cancel_outlined,
                     size: 16,
                     color: widget.approval.status == 'approved'
-                        ? AppTheme.success
-                        : AppTheme.error,
+                        ? context.appTheme.success
+                        : context.appTheme.error,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -624,8 +625,8 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
                         fontSize: 13,
                         fontWeight: FontWeight.w400,
                         color: widget.approval.status == 'approved'
-                            ? AppTheme.success
-                            : AppTheme.error,
+                            ? context.appTheme.success
+                            : context.appTheme.error,
                         height: 1.5,
                       ),
                     ),
@@ -656,7 +657,7 @@ class _ApprovalRejectPage extends StatefulWidget {
     this.hintText = 'Enter rejection reason...',
     this.actionLabel = 'Reject',
     this.icon = Icons.close_rounded,
-    this.color = AppTheme.error,
+    this.color = Colors.red,
   });
 
   @override
@@ -681,13 +682,13 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           widget.title,
           style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         elevation: 0,
       ),
       body: SafeArea(
@@ -708,7 +709,7 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
                 widget.approval.details,
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 13,
-                  color: AppTheme.onSurfaceVariant,
+                  color: context.appTheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 18),
@@ -720,7 +721,7 @@ class _ApprovalRejectPageState extends State<_ApprovalRejectPage> {
                   labelText: widget.fieldLabel,
                   hintText: widget.hintText,
                   filled: true,
-                  fillColor: AppTheme.surfaceVariant,
+                  fillColor: context.appTheme.surfaceVariant,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,

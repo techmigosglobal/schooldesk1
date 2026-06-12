@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/status_badge_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StaffListItemWidget extends StatefulWidget {
   final StaffModel staff;
@@ -73,13 +73,13 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
   Color _getAvatarColor() {
     switch (widget.staff.status) {
       case 'active':
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case 'on_leave':
-        return AppTheme.info;
+        return context.appTheme.info;
       case 'absent':
-        return AppTheme.error;
+        return context.appTheme.error;
       default:
-        return AppTheme.muted;
+        return context.appTheme.muted;
     }
   }
 
@@ -96,7 +96,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
             alignment: Alignment.centerRight,
             padding: const EdgeInsets.only(right: 20),
             decoration: BoxDecoration(
-              color: AppTheme.error,
+              color: context.appTheme.error,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -121,9 +121,9 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
           },
           child: Container(
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.outlineVariant, width: 1),
+              border: Border.all(color: context.appTheme.outlineVariant, width: 1),
             ),
             clipBehavior: Clip.hardEdge,
             child: Column(
@@ -133,7 +133,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: () => setState(() => _isExpanded = !_isExpanded),
-                    splashColor: AppTheme.primary.withAlpha(15),
+                    splashColor: context.appTheme.primary.withAlpha(15),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Row(
@@ -171,7 +171,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                                         style: GoogleFonts.ibmPlexSans(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: AppTheme.onSurface,
+                                          color: context.appTheme.onSurface,
                                         ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
@@ -191,7 +191,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                                       style: GoogleFonts.ibmPlexSans(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
-                                        color: AppTheme.muted,
+                                        color: context.appTheme.muted,
                                         fontFeatures: const [
                                           FontFeature.tabularFigures(),
                                         ],
@@ -201,8 +201,8 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                                     Container(
                                       width: 3,
                                       height: 3,
-                                      decoration: const BoxDecoration(
-                                        color: AppTheme.muted,
+                                      decoration: BoxDecoration(
+                                        color: context.appTheme.muted,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
@@ -212,7 +212,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                                       style: GoogleFonts.ibmPlexSans(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w400,
-                                        color: AppTheme.muted,
+                                        color: context.appTheme.muted,
                                       ),
                                     ),
                                   ],
@@ -247,7 +247,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                               IconButton(
                                 onPressed: widget.onEdit,
                                 icon: const Icon(Icons.edit_rounded, size: 18),
-                                color: AppTheme.primary,
+                                color: context.appTheme.primary,
                                 constraints: const BoxConstraints(
                                   minWidth: 32,
                                   minHeight: 32,
@@ -258,7 +258,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                                 _isExpanded
                                     ? Icons.keyboard_arrow_up_rounded
                                     : Icons.keyboard_arrow_down_rounded,
-                                color: AppTheme.muted,
+                                color: context.appTheme.muted,
                                 size: 18,
                               ),
                             ],
@@ -288,9 +288,9 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
   Widget _buildExpandedDetail() {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          top: BorderSide(color: AppTheme.outlineVariant, width: 1),
+          top: BorderSide(color: context.appTheme.outlineVariant, width: 1),
         ),
       ),
       child: Column(
@@ -351,7 +351,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
               const Spacer(),
@@ -361,8 +361,8 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: widget.staff.attendancePercent >= 90
-                      ? AppTheme.success
-                      : AppTheme.warning,
+                      ? context.appTheme.success
+                      : context.appTheme.warning,
                 ),
               ),
             ],
@@ -372,11 +372,11 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: widget.staff.attendancePercent / 100,
-              backgroundColor: AppTheme.outlineVariant,
+              backgroundColor: context.appTheme.outlineVariant,
               valueColor: AlwaysStoppedAnimation<Color>(
                 widget.staff.attendancePercent >= 90
-                    ? AppTheme.success
-                    : AppTheme.warning,
+                    ? context.appTheme.success
+                    : context.appTheme.warning,
               ),
               minHeight: 6,
             ),
@@ -397,7 +397,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
             style: GoogleFonts.ibmPlexSans(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
         ),
@@ -407,7 +407,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
             style: GoogleFonts.ibmPlexSans(
               fontSize: 12,
               fontWeight: FontWeight.w400,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
         ),
@@ -419,14 +419,14 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: AppTheme.muted),
+        Icon(icon, size: 12, color: context.appTheme.muted),
         const SizedBox(width: 3),
         Text(
           label,
           style: GoogleFonts.ibmPlexSans(
             fontSize: 10,
             fontWeight: FontWeight.w400,
-            color: AppTheme.muted,
+            color: context.appTheme.muted,
           ),
         ),
       ],
@@ -434,7 +434,7 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
   }
 
   Widget _buildAttendanceChip(double percent) {
-    final color = percent >= 90 ? AppTheme.success : AppTheme.warning;
+    final color = percent >= 90 ? context.appTheme.success : context.appTheme.warning;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

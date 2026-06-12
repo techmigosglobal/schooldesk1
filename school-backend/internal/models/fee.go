@@ -18,17 +18,18 @@ type FeeCategory struct {
 
 type FeeStructure struct {
 	BaseModel
-	SchoolID       string        `gorm:"type:uuid;not null" json:"school_id"`
-	AcademicYearID string        `gorm:"type:uuid;not null" json:"academic_year_id"`
-	GradeID        string        `gorm:"type:uuid;not null" json:"grade_id"`
-	FeeCategoryID  string        `gorm:"type:uuid;not null" json:"fee_category_id"`
-	Amount         float64       `json:"amount"`
-	DueDay         int           `json:"due_day"`
-	LateFinePerDay float64       `json:"late_fine_per_day"`
-	School         *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
-	AcademicYear   *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
-	Grade          *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
-	FeeCategory    *FeeCategory  `gorm:"foreignKey:FeeCategoryID" json:"fee_category,omitempty"`
+	SchoolID         string        `gorm:"type:uuid;not null" json:"school_id"`
+	AcademicYearID   string        `gorm:"type:uuid;not null" json:"academic_year_id"`
+	GradeID          string        `gorm:"type:uuid;not null" json:"grade_id"`
+	FeeCategoryID    string        `gorm:"type:uuid;not null" json:"fee_category_id"`
+	Amount           float64       `json:"amount"`
+	DueDay           int           `json:"due_day"`
+	LateFinePerDay   float64       `json:"late_fine_per_day"`
+	InstallmentCount int           `gorm:"default:3" json:"installment_count"`
+	School           *School       `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
+	AcademicYear     *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
+	Grade            *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
+	FeeCategory      *FeeCategory  `gorm:"foreignKey:FeeCategoryID" json:"fee_category,omitempty"`
 }
 
 type FeeConcession struct {

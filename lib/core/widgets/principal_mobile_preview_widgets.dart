@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalPreviewColors {
   PrincipalPreviewColors._();
@@ -18,7 +19,7 @@ class PrincipalPreviewColors {
   static const gray200 = Color(0xFFE5E7EB);
   static const gray100 = Color(0xFFF3F4F6);
   static const bg = Color(0xFFF3F6FA);
-  static const white = Color(0xFFFFFFFF);
+  static const white = Colors.white;
   static const green = Color(0xFF16A34A);
   static const greenSoft = Color(0xFFDCFCE7);
   static const orange = Color(0xFFF97316);
@@ -113,7 +114,7 @@ class PrincipalPreviewCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(14),
-    this.color = PrincipalPreviewColors.white,
+    this.color = Colors.white,
     this.border,
     this.onTap,
     this.semanticLabel,
@@ -176,8 +177,8 @@ class PrincipalPreviewHeader extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: const BoxDecoration(
-        color: PrincipalPreviewColors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
         border: Border(
           bottom: BorderSide(color: PrincipalPreviewColors.gray200),
         ),
@@ -560,7 +561,7 @@ class PrincipalPreviewSearchField extends StatelessWidget {
         height: 46,
         padding: const EdgeInsets.symmetric(horizontal: 13),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: PrincipalPreviewColors.gray200),
           boxShadow: const [
@@ -859,8 +860,8 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
       top: false,
       child: Container(
         height: 72,
-        decoration: const BoxDecoration(
-          color: PrincipalPreviewColors.white,
+        decoration: BoxDecoration(
+          color: Colors.white,
           border: Border(
             top: BorderSide(color: PrincipalPreviewColors.gray200),
           ),

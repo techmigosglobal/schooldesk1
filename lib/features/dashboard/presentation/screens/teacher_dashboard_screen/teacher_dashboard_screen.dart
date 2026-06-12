@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -238,7 +238,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       subtitle: notice.content,
                       status: notice.isUrgent ? 'Urgent' : 'Notice',
                       statusColor: notice.isUrgent
-                          ? AppTheme.error
+                          ? context.appTheme.error
                           : teacherFlowAccent,
                     ),
                   ),

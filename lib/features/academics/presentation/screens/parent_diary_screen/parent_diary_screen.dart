@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentDiaryScreen extends StatefulWidget {
   const ParentDiaryScreen({super.key});
@@ -181,26 +181,26 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
   Color _typeColor(String type) {
     switch (type) {
       case 'exam':
-        return AppTheme.error;
+        return context.appTheme.error;
       case 'event':
-        return AppTheme.secondary;
+        return context.appTheme.secondary;
       case 'holiday':
-        return AppTheme.accent;
+        return context.appTheme.accent;
       default:
-        return AppTheme.primary;
+        return context.appTheme.primary;
     }
   }
 
   Color _typeBg(String type) {
     switch (type) {
       case 'exam':
-        return AppTheme.errorContainer;
+        return context.appTheme.errorContainer;
       case 'event':
-        return AppTheme.secondaryContainer;
+        return context.appTheme.secondaryContainer;
       case 'holiday':
-        return AppTheme.successContainer;
+        return context.appTheme.successContainer;
       default:
-        return AppTheme.primaryContainer;
+        return context.appTheme.primaryContainer;
     }
   }
 
@@ -246,7 +246,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
@@ -264,9 +264,9 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
+          indicatorColor: context.appTheme.surface,
+          labelColor: context.appTheme.surface,
+          unselectedLabelColor: context.appTheme.surface60,
           labelStyle: GoogleFonts.dmSans(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -300,12 +300,12 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: sel ? Colors.white : Colors.white.withAlpha(30),
+                        color: sel ? context.appTheme.surface : context.appTheme.surface.withAlpha(30),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: sel
-                              ? Colors.white
-                              : Colors.white.withAlpha(60),
+                              ? context.appTheme.surface
+                              : context.appTheme.surface.withAlpha(60),
                         ),
                       ),
                       child: Text(
@@ -324,14 +324,14 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
           ),
           // Subject filter
           Container(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.subject_rounded,
                   size: 16,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -355,7 +355,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                               decoration: BoxDecoration(
                                 color: sel
                                     ? _headerColor
-                                    : AppTheme.surfaceVariant,
+                                    : context.appTheme.surfaceVariant,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -365,7 +365,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                                   fontWeight: FontWeight.w600,
                                   color: sel
                                       ? Colors.white
-                                      : AppTheme.onSurfaceVariant,
+                                      : context.appTheme.onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -454,7 +454,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(30),
+                    color: context.appTheme.surface.withAlpha(30),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -481,7 +481,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
             const SizedBox(height: 10),
@@ -492,10 +492,10 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
             const SizedBox(height: 16),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.assignment_late_outlined,
                   size: 18,
-                  color: AppTheme.error,
+                  color: context.appTheme.error,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -503,7 +503,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
               ],
@@ -559,7 +559,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                       'All ${_filteredEntries.length} entries loaded',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ),
@@ -590,7 +590,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isToday ? _headerColor : AppTheme.surfaceVariant,
+                  color: isToday ? _headerColor : context.appTheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -598,7 +598,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isToday ? Colors.white : AppTheme.onSurfaceVariant,
+                    color: isToday ? Colors.white : context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -619,12 +619,12 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: context.appTheme.onSurface.withAlpha(8),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -692,7 +692,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.onSurface,
+                      color: context.appTheme.onSurface,
                     ),
                   ),
                 if ((entry['classwork'] as String? ?? '').isNotEmpty) ...[
@@ -709,7 +709,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     Icons.assignment_outlined,
                     'Homework',
                     entry['homework'] as String,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ],
                 if ((entry['schedule'] as String? ?? '').isNotEmpty) ...[
@@ -718,7 +718,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     Icons.event_outlined,
                     'Schedule',
                     entry['schedule'] as String,
-                    color: AppTheme.secondary,
+                    color: context.appTheme.secondary,
                   ),
                 ],
                 if ((entry['notes'] as String? ?? '').isNotEmpty) ...[
@@ -727,24 +727,24 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                     Icons.sticky_note_2_outlined,
                     'Teacher Note',
                     entry['notes'] as String,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ],
                 if (createdBy.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person_outline,
                         size: 13,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         createdBy,
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -763,17 +763,17 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(40)),
+        border: Border.all(color: context.appTheme.error.withAlpha(40)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.assignment_outlined,
             size: 18,
-            color: AppTheme.error,
+            color: context.appTheme.error,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -785,7 +785,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -793,7 +793,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   entry['homework'] as String? ?? '',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -810,12 +810,13 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     IconData icon,
     String label,
     String value, {
-    Color color = AppTheme.primary,
+    Color? color,
   }) {
+    final effectiveColor = color ?? context.appTheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 14, color: color),
+        Icon(icon, size: 14, color: effectiveColor),
         const SizedBox(width: 6),
         Expanded(
           child: RichText(
@@ -833,7 +834,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   text: value,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -854,7 +855,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
             Icon(
               Icons.menu_book_outlined,
               size: 56,
-              color: AppTheme.muted.withAlpha(100),
+              color: context.appTheme.muted.withAlpha(100),
             ),
             const SizedBox(height: 12),
             Text(
@@ -862,14 +863,14 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
             ),
           ],
         ),

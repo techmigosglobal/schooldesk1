@@ -35,11 +35,20 @@ void main() {
     }
 
     for (final source in [students, oversightFilters]) {
-      expect(source, contains('backgroundColor: AppTheme.surfaceVariant'));
+      expect(
+        source,
+        contains('backgroundColor: context.appTheme.surfaceVariant'),
+      );
       expect(source, contains('MaterialTapTargetSize.shrinkWrap'));
     }
-    expect(students, contains('selectedColor: AppTheme.primaryContainer'));
-    expect(oversightFilters, contains('selectedColor: AppTheme.primary'));
+    expect(
+      students,
+      contains('selectedColor: context.appTheme.primaryContainer'),
+    );
+    expect(
+      oversightFilters,
+      contains('selectedColor: context.appTheme.primary'),
+    );
 
     for (final source in [fees, receipt, parentFees]) {
       expect(source, contains('previewDocument('));
@@ -66,6 +75,19 @@ void main() {
             .where((path) => path.isNotEmpty)
             .toSet();
 
-    expect(markdownFiles, {'README.md', 'docs/PRD.md', 'docs/SPEC.md'});
+    expect(markdownFiles, {
+      'README.md',
+      'docs/FINANCE_MODULE_DOCS.md',
+      'docs/PARENT_ROLE_WORKFLOW_AUDIT.md',
+      'docs/PRD.md',
+      'docs/PRINCIPAL_ROLE_WORKFLOW_AUDIT.md',
+      'docs/RAZORPAY_INTEGRATION_COMPLETE.md',
+      'docs/ROLE_INTERCONNECTION_AUDIT.md',
+      'docs/SINGLE_SCHOOL_HOME_PARENT_TEACHER_AUDIT.md',
+      'docs/SPEC.md',
+      'docs/TEACHER_PARENT_BACKEND_INTEGRATION_AUDIT.md',
+      'docs/TEACHER_ROLE_MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md',
+      'docs/TEACHER_ROLE_WORKFLOW_AUDIT.md',
+    });
   });
 }

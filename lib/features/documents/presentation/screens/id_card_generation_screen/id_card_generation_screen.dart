@@ -4,10 +4,10 @@ import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class IdCardGenerationScreen extends StatefulWidget {
   const IdCardGenerationScreen({super.key});
@@ -112,7 +112,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
               'Failed to generate ID card. Please try again.',
               style: GoogleFonts.dmSans(),
             ),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -156,7 +156,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
               '${selected.length} ID cards generated!',
               style: GoogleFonts.dmSans(),
             ),
-            backgroundColor: AppTheme.success,
+            backgroundColor: context.appTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -171,18 +171,18 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : AppTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : AppTheme.surface;
+    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
+    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
-        : AppTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : AppTheme.muted;
+        : context.appTheme.onSurface;
+    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
-        : AppTheme.outlineVariant;
+        : context.appTheme.outlineVariant;
     final surfaceVariantColor = isDark
         ? const Color(0xFF252D3A)
-        : AppTheme.surfaceVariant;
+        : context.appTheme.surfaceVariant;
 
     return SchoolDeskModuleScaffold(
       title: 'ID Cards',
@@ -260,7 +260,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? AppTheme.primary
+                                        ? context.appTheme.primary
                                         : surfaceVariantColor,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -289,7 +289,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                     ),
                     color: isDark
                         ? const Color(0xFF1A3A5C)
-                        : AppTheme.primaryContainer,
+                        : context.appTheme.primaryContainer,
                     child: Row(
                       children: [
                         Text(
@@ -297,7 +297,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.primary,
+                            color: context.appTheme.primary,
                           ),
                         ),
                         const Spacer(),
@@ -307,7 +307,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                             style: GoogleFonts.dmSans(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.primary,
+                              color: context.appTheme.primary,
                             ),
                           ),
                         if (_selectedIds.isNotEmpty) ...[
@@ -318,7 +318,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                               'Clear',
                               style: GoogleFonts.dmSans(
                                 fontSize: 12,
-                                color: AppTheme.error,
+                                color: context.appTheme.error,
                               ),
                             ),
                           ),
@@ -369,9 +369,9 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: isSelected ? AppTheme.primaryContainer : surfaceColor,
+        color: isSelected ? context.appTheme.primaryContainer : surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isSelected ? AppTheme.primary : outlineColor),
+        border: Border.all(color: isSelected ? context.appTheme.primary : outlineColor),
       ),
       child: ListTile(
         leading: GestureDetector(
@@ -388,7 +388,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isSelected ? AppTheme.primary : AppTheme.primaryContainer,
+              color: isSelected ? context.appTheme.primary : context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: isSelected
@@ -399,7 +399,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.primary,
+                        color: context.appTheme.primary,
                       ),
                     ),
                   ),
@@ -424,7 +424,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : IconButton(
-                icon: const Icon(Icons.badge_rounded, color: AppTheme.primary),
+                icon: Icon(Icons.badge_rounded, color: context.appTheme.primary),
                 tooltip: 'Generate ID Card',
                 onPressed: () => _generateIdCard(student),
               ),

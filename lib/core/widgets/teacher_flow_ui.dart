@@ -3,10 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 const Color teacherFlowBackground = Color(0xFFF4FAFB);
 const Color teacherFlowAccent = Color(0xFF0F9F8E);
@@ -144,7 +145,7 @@ class TeacherCurrentClassCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: teacherColor.withAlpha(48)),
         boxShadow: [
@@ -289,7 +290,7 @@ class _TeacherMetricTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(220),
+              color: context.appTheme.surface.withAlpha(220),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(metric.icon, color: metric.color, size: 22),
@@ -640,10 +641,10 @@ class TeacherFlowError extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.cloud_off_rounded,
               size: 40,
-              color: AppTheme.error,
+              color: context.appTheme.error,
             ),
             const SizedBox(height: 12),
             Text(

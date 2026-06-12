@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -8,6 +7,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:printing/printing.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ExamsResultsScreen extends StatefulWidget {
   const ExamsResultsScreen({super.key});
@@ -139,14 +139,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isPending
-                ? AppTheme.warning.withAlpha(100)
+                ? context.appTheme.warning.withAlpha(100)
                 : isRejected
-                ? AppTheme.error.withAlpha(80)
-                : AppTheme.outlineVariant,
+                ? context.appTheme.error.withAlpha(80)
+                : context.appTheme.outlineVariant,
           ),
         ),
         child: Row(
@@ -155,7 +155,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppTheme.primaryContainer,
+                color: context.appTheme.primaryContainer,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -166,14 +166,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                   ),
                   Text(
                     e['date'].toString().split(' ')[1],
                     style: GoogleFonts.dmSans(
                       fontSize: 9,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -195,14 +195,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                     '${e['class']} · ${e['time']} · ${e['duration']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   Text(
                     'Venue: ${e['room']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -212,7 +212,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.warningContainer,
+                  color: context.appTheme.warningContainer,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -220,7 +220,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                 ),
               )
@@ -228,7 +228,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.errorContainer,
+                  color: context.appTheme.errorContainer,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -236,14 +236,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ),
               )
             else
-              const Icon(
+              Icon(
                 Icons.check_circle_rounded,
-                color: AppTheme.success,
+                color: context.appTheme.success,
                 size: 20,
               ),
           ],
@@ -262,14 +262,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
     return Column(
       children: [
         Container(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.filter_list_rounded,
                 size: 16,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -311,28 +311,28 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
     Color gradeColor;
     switch (r['grade']) {
       case 'A+':
-        gradeColor = AppTheme.success;
+        gradeColor = context.appTheme.success;
         break;
       case 'A':
-        gradeColor = AppTheme.accent;
+        gradeColor = context.appTheme.accent;
         break;
       case 'B+':
       case 'B':
-        gradeColor = AppTheme.info;
+        gradeColor = context.appTheme.info;
         break;
       case 'C':
-        gradeColor = AppTheme.warning;
+        gradeColor = context.appTheme.warning;
         break;
       default:
-        gradeColor = AppTheme.error;
+        gradeColor = context.appTheme.error;
     }
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -370,7 +370,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   'Class ${r['class']} · Roll: ${r['roll']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -378,7 +378,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   'M:${r['math']} | Sc:${r['science']} | En:${r['english']} | Hi:${r['hindi']} | SS:${r['social']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -417,7 +417,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   'Marksheet',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.primary,
+                    color: context.appTheme.primary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -530,9 +530,9 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -542,7 +542,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.infoContainer,
+                  color: context.appTheme.infoContainer,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -550,14 +550,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.info,
+                    color: context.appTheme.info,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 a['date'],
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ],
           ),
@@ -571,14 +571,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
           ),
           Text(
             'By: ${a['submittedBy']}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           const SizedBox(height: 6),
           Text(
             a['details'],
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 12),
@@ -588,8 +588,8 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 child: OutlinedButton(
                   onPressed: () => _handleApproval(a, false),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.error,
-                    side: const BorderSide(color: AppTheme.error),
+                    foregroundColor: context.appTheme.error,
+                    side: BorderSide(color: context.appTheme.error),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                   child: const Text('Reject'),
@@ -600,7 +600,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 child: ElevatedButton(
                   onPressed: () => _handleApproval(a, true),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.success,
+                    backgroundColor: context.appTheme.success,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                   child: const Text('Approve'),
@@ -630,7 +630,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [AppTheme.primary, AppTheme.primary.withAlpha(200)],
+              colors: [context.appTheme.primary, context.appTheme.primary.withAlpha(200)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -641,7 +641,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(30),
+                  color: context.appTheme.surface.withAlpha(30),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -684,8 +684,8 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 'Class Average',
                 '${avgPercent.toStringAsFixed(1)}%',
                 Icons.bar_chart_rounded,
-                AppTheme.primary,
-                AppTheme.primaryContainer,
+                context.appTheme.primary,
+                context.appTheme.primaryContainer,
               ),
             ),
             const SizedBox(width: 12),
@@ -694,8 +694,8 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 'Toppers (A+)',
                 '$toppers students',
                 Icons.emoji_events_rounded,
-                AppTheme.secondary,
-                AppTheme.secondaryContainer,
+                context.appTheme.secondary,
+                context.appTheme.secondaryContainer,
               ),
             ),
           ],
@@ -708,8 +708,8 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 'Pass Rate',
                 '${_results.isEmpty ? 0 : ((_results.length - weak) / _results.length * 100).toStringAsFixed(0)}%',
                 Icons.check_circle_outline_rounded,
-                AppTheme.success,
-                AppTheme.successContainer,
+                context.appTheme.success,
+                context.appTheme.successContainer,
               ),
             ),
             const SizedBox(width: 12),
@@ -718,8 +718,8 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                 'Need Support',
                 '$weak students',
                 Icons.support_agent_outlined,
-                AppTheme.error,
-                AppTheme.errorContainer,
+                context.appTheme.error,
+                context.appTheme.errorContainer,
               ),
             ),
           ],
@@ -734,31 +734,31 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
           'A+',
           _results.where((r) => r['grade'] == 'A+').length,
           _results.length,
-          AppTheme.success,
+          context.appTheme.success,
         ),
         _buildGradeBar(
           'A',
           _results.where((r) => r['grade'] == 'A').length,
           _results.length,
-          AppTheme.accent,
+          context.appTheme.accent,
         ),
         _buildGradeBar(
           'B+/B',
           _results.where((r) => r['grade'] == 'B+' || r['grade'] == 'B').length,
           _results.length,
-          AppTheme.info,
+          context.appTheme.info,
         ),
         _buildGradeBar(
           'C',
           _results.where((r) => r['grade'] == 'C').length,
           _results.length,
-          AppTheme.warning,
+          context.appTheme.warning,
         ),
         _buildGradeBar(
           'D/F',
           _results.where((r) => r['grade'] == 'D' || r['grade'] == 'F').length,
           _results.length,
-          AppTheme.error,
+          context.appTheme.error,
         ),
         const SizedBox(height: 20),
         Text(
@@ -812,7 +812,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
           ),
           Text(
             title,
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -841,7 +841,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               child: LinearProgressIndicator(
                 value: total > 0 ? count / total : 0,
                 minHeight: 10,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -849,7 +849,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
           const SizedBox(width: 8),
           Text(
             '$count',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -860,16 +860,16 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(60)),
+        border: Border.all(color: context.appTheme.error.withAlpha(60)),
       ),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.trending_down_rounded,
             size: 18,
-            color: AppTheme.error,
+            color: context.appTheme.error,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -881,14 +881,14 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ),
                 Text(
                   '$count record${count == 1 ? '' : 's'} · $note',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -917,7 +917,7 @@ class _ExamsResultsScreenState extends State<ExamsResultsScreen>
               ? '${a['subject']} approved successfully'
               : '${a['subject']} rejected',
         ),
-        backgroundColor: approved ? AppTheme.success : AppTheme.error,
+        backgroundColor: approved ? context.appTheme.success : context.appTheme.error,
       ),
     );
   }
@@ -955,7 +955,7 @@ class _ExamDetailPageState extends State<_ExamDetailPage> {
             const SizedBox(height: 4),
             Text(
               '${exam['class'] ?? ''} · ${exam['duration'] ?? ''}',
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
             ),
             const SizedBox(height: 20),
             _ExamDetailRow(label: 'Date', value: '${exam['date'] ?? ''}'),
@@ -966,14 +966,14 @@ class _ExamDetailPageState extends State<_ExamDetailPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.errorContainer,
+                  color: context.appTheme.errorContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   _blockingMessage!,
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ),
               ),
@@ -1044,7 +1044,7 @@ class _ExamDetailRow extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ),
           ),

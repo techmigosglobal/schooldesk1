@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 /// App-wide extension methods for common formatting and utility operations.
 extension StringExtensions on String {
@@ -100,6 +101,7 @@ extension ContextExtensions on BuildContext {
   ThemeData get theme => Theme.of(this);
   ColorScheme get colors => Theme.of(this).colorScheme;
   TextTheme get textTheme => Theme.of(this).textTheme;
+  SchoolDeskTheme get appTheme => Theme.of(this).schoolDesk;
   double get screenWidth => MediaQuery.of(this).size.width;
   double get screenHeight => MediaQuery.of(this).size.height;
   bool get isMobile => screenWidth < 600;

@@ -15,13 +15,8 @@ class TeacherMyAttendanceScreen extends StatefulWidget {
 }
 
 class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
-  final MobileScannerController _scannerController = MobileScannerController(
-    formats: const [BarcodeFormat.qrCode],
-  );
-
   StaffAttendanceModel? _attendance;
   bool _loading = true;
-  bool _scannerOpen = false;
   bool _submitting = false;
   String? _error;
   String? _message;
@@ -34,7 +29,6 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
 
   @override
   void dispose() {
-    _scannerController.dispose();
     super.dispose();
   }
 
@@ -61,13 +55,12 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     }
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_submitting) return;
-    for (final barcode in capture.barcodes) {
-      final token = barcode.rawValue?.trim();
-      if (token == null || token.isEmpty) continue;
+  void _openScanner() async {
+    final token = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const FullScreenScannerScreen()),
+    );
+    if (token != null && token.isNotEmpty) {
       unawaited(_submitToken(token));
-      return;
     }
   }
 
@@ -79,37 +72,27 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
       _message = null;
     });
     try {
-      await _scannerController.stop();
       final attendance = await BackendApiClient.instance.scanStaffQr(token);
       if (!mounted) return;
       setState(() {
         _attendance = attendance;
-        _scannerOpen = false;
         _submitting = false;
-        _message = attendance.checkedIn
-            ? 'Punch-in recorded at ${attendance.checkInTimeLabel}'
-            : 'Attendance recorded';
+        _message = 'Attendance punch recorded';
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _scannerOpen = false;
         _submitting = false;
         _error = error.toString();
       });
     }
   }
 
-  Future<void> _closeScanner() async {
-    await _scannerController.stop();
-    if (mounted) setState(() => _scannerOpen = false);
-  }
-
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
       title: 'My Attendance',
-      subtitle: 'QR punch-in and punch-out',
+      subtitle: 'QR Punch-in',
       selectedIndex: 14,
       loading: _loading,
       error: _error,
@@ -120,19 +103,17 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
             label: 'Teacher QR attendance punch screen',
             child: TeacherCurrentClassCard(
               greeting: _attendance?.checkedIn == true
-                  ? 'You are checked in'
+                  ? 'Attendance Recorded'
                   : 'Ready to punch in',
-              classLabel: _attendance?.checkedIn == true
-                  ? 'Working day active'
-                  : 'Scan the live staff QR',
-              subject: _attendance?.checkInTimeLabel ?? 'Punch In',
-              timeLabel: _attendance?.checkOutTimeLabel ?? 'Punch Out pending',
+              classLabel: 'Scan the live staff QR',
+              subject: _attendance?.checkInTimeLabel ?? 'Punch In pending',
+              timeLabel: '',
               actions: [
                 TeacherFlowAction(
                   label: 'Scan QR',
                   icon: Icons.qr_code_scanner_rounded,
                   filled: true,
-                  onTap: () => setState(() => _scannerOpen = true),
+                  onTap: _openScanner,
                 ),
                 TeacherFlowAction(
                   label: 'Refresh Status',
@@ -153,13 +134,6 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
                 tone: const Color(0xFFE3FAF5),
               ),
               TeacherFlowMetric(
-                label: 'Punch Out',
-                value: _attendance?.checkOutTimeLabel ?? '--:--',
-                icon: Icons.logout_rounded,
-                color: Colors.indigo,
-                tone: const Color(0xFFEAF0FF),
-              ),
-              TeacherFlowMetric(
                 label: 'Status',
                 value: teacherFlowTitleCase(_attendance?.status ?? 'Pending'),
                 icon: Icons.verified_rounded,
@@ -175,16 +149,16 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
               ),
             ],
           ),
-          if (_scannerOpen) ...[
+          if (_submitting) ...[
             const SizedBox(height: 18),
-            _ScannerCard(
-              controller: _scannerController,
-              submitting: _submitting,
-              onDetect: _onDetect,
-              onClose: _closeScanner,
+            TeacherFlowCard(
+              icon: Icons.hourglass_top_rounded,
+              title: 'Recording punch...',
+              subtitle: 'Saving your attendance to the system.',
+              status: 'Saving',
+              statusColor: Colors.orange,
             ),
-          ],
-          if (_message != null) ...[
+          ] else if (_message != null) ...[
             const SizedBox(height: 18),
             TeacherFlowCard(
               icon: Icons.check_circle_rounded,
@@ -200,43 +174,195 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
   }
 }
 
-class _ScannerCard extends StatelessWidget {
-  final MobileScannerController controller;
-  final bool submitting;
-  final void Function(BarcodeCapture) onDetect;
-  final Future<void> Function() onClose;
+class FullScreenScannerScreen extends StatefulWidget {
+  const FullScreenScannerScreen({super.key});
 
-  const _ScannerCard({
-    required this.controller,
-    required this.submitting,
-    required this.onDetect,
-    required this.onClose,
-  });
+  @override
+  State<FullScreenScannerScreen> createState() =>
+      _FullScreenScannerScreenState();
+}
+
+class _FullScreenScannerScreenState extends State<FullScreenScannerScreen> {
+  final MobileScannerController _scannerController = MobileScannerController(
+    formats: const [BarcodeFormat.qrCode],
+  );
+
+  bool _isProcessing = false;
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_isProcessing) return;
+    for (final barcode in capture.barcodes) {
+      final token = barcode.rawValue?.trim();
+      if (token == null || token.isEmpty) continue;
+      setState(() => _isProcessing = true);
+      _scannerController.stop().then((_) {
+        if (mounted) Navigator.of(context).pop(token);
+      });
+      return;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return TeacherFlowCard(
-      icon: Icons.qr_code_scanner_rounded,
-      title: submitting ? 'Recording punch...' : 'Scan live QR',
-      subtitle: 'Use the entrance QR. Screenshots and expired QR codes fail.',
-      status: submitting ? 'Saving' : 'Live',
-      statusColor: submitting ? Colors.orange : teacherFlowAccent,
-      body: Column(
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              height: 280,
-              child: MobileScanner(controller: controller, onDetect: onDetect),
+          MobileScanner(controller: _scannerController, onDetect: _onDetect),
+          ColorFiltered(
+            colorFilter: ColorFilter.mode(
+              Colors.black.withAlpha(178),
+              BlendMode.srcOut,
+            ),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                    backgroundBlendMode: BlendMode.dstOut,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.center,
+                  child: Container(
+                    height: 280,
+                    width: 280,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: submitting ? null : () => onClose(),
-            icon: const Icon(Icons.close_rounded),
-            label: const Text('Close Scanner'),
+          Align(
+            alignment: Alignment.center,
+            child: SizedBox(
+              height: 280,
+              width: 280,
+              child: Stack(
+                children: const [
+                  _ScannerCorner(alignment: Alignment.topLeft),
+                  _ScannerCorner(alignment: Alignment.topRight),
+                  _ScannerCorner(alignment: Alignment.bottomLeft),
+                  _ScannerCorner(alignment: Alignment.bottomRight),
+                ],
+              ),
+            ),
           ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Colors.white,
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.only(top: 100),
+                child: Text(
+                  'Scan Staff QR Code',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 60),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Text(
+                    'Align QR code within the frame to punch in',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_isProcessing)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _ScannerCorner extends StatelessWidget {
+  final Alignment alignment;
+
+  const _ScannerCorner({required this.alignment});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          border: Border(
+            top:
+                alignment == Alignment.topLeft ||
+                    alignment == Alignment.topRight
+                ? const BorderSide(color: Colors.white, width: 4)
+                : BorderSide.none,
+            bottom:
+                alignment == Alignment.bottomLeft ||
+                    alignment == Alignment.bottomRight
+                ? const BorderSide(color: Colors.white, width: 4)
+                : BorderSide.none,
+            left:
+                alignment == Alignment.topLeft ||
+                    alignment == Alignment.bottomLeft
+                ? const BorderSide(color: Colors.white, width: 4)
+                : BorderSide.none,
+            right:
+                alignment == Alignment.topRight ||
+                    alignment == Alignment.bottomRight
+                ? const BorderSide(color: Colors.white, width: 4)
+                : BorderSide.none,
+          ),
+        ),
       ),
     );
   }

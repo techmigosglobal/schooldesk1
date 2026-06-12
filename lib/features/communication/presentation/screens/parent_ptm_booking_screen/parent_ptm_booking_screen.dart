@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentPTMBookingScreen extends StatefulWidget {
   const ParentPTMBookingScreen({super.key});
@@ -95,7 +95,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -107,7 +107,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -162,7 +162,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                           style: GoogleFonts.dmSans(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -176,7 +176,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                           style: GoogleFonts.dmSans(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -219,10 +219,10 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surface,
+                color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : AppTheme.outlineVariant,
+                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -230,7 +230,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -244,20 +244,20 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
-          Icon(Icons.filter_list_rounded, size: 18, color: AppTheme.muted),
+          Icon(Icons.filter_list_rounded, size: 18, color: context.appTheme.muted),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Show Class Teacher slots only',
               style: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
@@ -279,16 +279,16 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Center(
         child: Text(
           message,
           style: GoogleFonts.dmSans(
             fontSize: 12,
-            color: AppTheme.muted,
+            color: context.appTheme.muted,
             fontStyle: FontStyle.italic,
           ),
         ),
@@ -309,9 +309,9 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -342,12 +342,12 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 Text(
                   subject,
-                  style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
                 ),
                 const SizedBox(height: 6),
                 Wrap(
@@ -357,25 +357,25 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.calendar_today_rounded, size: 12, color: AppTheme.muted),
+                        Icon(Icons.calendar_today_rounded, size: 12, color: context.appTheme.muted),
                         const SizedBox(width: 4),
-                        Text(date, style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted)),
+                        Text(date, style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
                       ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.access_time_rounded, size: 12, color: AppTheme.muted),
+                        Icon(Icons.access_time_rounded, size: 12, color: context.appTheme.muted),
                         const SizedBox(width: 4),
-                        Text('$time ($duration mins)', style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted)),
+                        Text('$time ($duration mins)', style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
                       ],
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.location_on_rounded, size: 12, color: AppTheme.muted),
+                        Icon(Icons.location_on_rounded, size: 12, color: context.appTheme.muted),
                         const SizedBox(width: 4),
-                        Text(room, style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted)),
+                        Text(room, style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted)),
                       ],
                     ),
                   ],
@@ -415,13 +415,13 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.success.withAlpha(80)),
+        border: Border.all(color: context.appTheme.success.withAlpha(80)),
       ),
       child: Row(
         children: [
-          Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 24),
+          Icon(Icons.check_circle_rounded, color: context.appTheme.success, size: 24),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -432,12 +432,12 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 Text(
                   subject,
-                  style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                  style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -445,7 +445,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -454,7 +454,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: AppTheme.successContainer,
+              color: context.appTheme.successContainer,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -462,7 +462,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.success,
+                color: context.appTheme.success,
               ),
             ),
           ),

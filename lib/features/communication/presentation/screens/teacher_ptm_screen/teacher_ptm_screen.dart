@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherPTMScreen extends StatefulWidget {
   const TeacherPTMScreen({super.key});
@@ -322,13 +322,13 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen> with SingleTickerPr
   Color _statusColor(String status) {
     switch (status) {
       case 'completed':
-        return AppTheme.success;
+        return context.appTheme.success;
       case 'booked':
       case 'scheduled':
       case 'confirmed':
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case 'cancelled':
-        return AppTheme.error;
+        return context.appTheme.error;
       case 'available':
       default:
         return teacherFlowAccent;

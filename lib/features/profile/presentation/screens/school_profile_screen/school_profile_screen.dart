@@ -6,9 +6,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class SchoolProfileScreen extends StatefulWidget {
   const SchoolProfileScreen({super.key});
@@ -204,7 +204,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.dmSans()),
-        backgroundColor: isError ? AppTheme.error : AppTheme.success,
+        backgroundColor: isError ? context.appTheme.error : context.appTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -406,7 +406,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.primary,
+        color: context.appTheme.primary,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -415,7 +415,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(36),
+              color: context.appTheme.surface.withAlpha(36),
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
@@ -471,7 +471,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white70),
+                    side: BorderSide(color: context.appTheme.surface70),
                   ),
                 ),
               ],
@@ -493,16 +493,16 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w800,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Column(children: children),
           ),
@@ -535,7 +535,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
             vertical: 12,
           ),
           filled: true,
-          fillColor: _editing ? AppTheme.surface : AppTheme.surfaceVariant,
+          fillColor: _editing ? context.appTheme.surface : context.appTheme.surfaceVariant,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
@@ -656,7 +656,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
               : 'School identity is synced from the local Docker backend.',
           style: GoogleFonts.dmSans(
             fontSize: 12,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
             fontWeight: FontWeight.w600,
           ),
         );
@@ -673,9 +673,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
           margin: const EdgeInsets.only(top: 4),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: compact
               ? Column(
@@ -683,9 +683,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.verified_user_rounded,
-                          color: AppTheme.primary,
+                          color: context.appTheme.primary,
                         ),
                         const SizedBox(width: 10),
                         Expanded(child: message),
@@ -697,9 +697,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
                 )
               : Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.verified_user_rounded,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: message),
@@ -719,9 +719,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.cloud_off_rounded,
-              color: AppTheme.error,
+              color: context.appTheme.error,
               size: 40,
             ),
             const SizedBox(height: 12),
@@ -736,7 +736,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(color: AppTheme.muted),
+              style: GoogleFonts.dmSans(color: context.appTheme.muted),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StudentListItemWidget extends StatelessWidget {
   final dynamic student;
@@ -19,15 +19,15 @@ class StudentListItemWidget extends StatelessWidget {
     String feeLabel;
     switch (s.feeStatus) {
       case 'paid':
-        feeColor = AppTheme.success;
+        feeColor = context.appTheme.success;
         feeLabel = 'Paid';
         break;
       case 'pending':
-        feeColor = AppTheme.warning;
+        feeColor = context.appTheme.warning;
         feeLabel = 'Pending';
         break;
       case 'overdue':
-        feeColor = AppTheme.error;
+        feeColor = context.appTheme.error;
         feeLabel = 'Overdue';
         break;
       default:
@@ -39,18 +39,18 @@ class StudentListItemWidget extends StatelessWidget {
     switch (s.performanceGrade) {
       case 'A+':
       case 'A':
-        gradeColor = AppTheme.success;
+        gradeColor = context.appTheme.success;
         break;
       case 'B+':
       case 'B':
-        gradeColor = AppTheme.info;
+        gradeColor = context.appTheme.info;
         break;
       case 'C+':
       case 'C':
-        gradeColor = AppTheme.warning;
+        gradeColor = context.appTheme.warning;
         break;
       default:
-        gradeColor = AppTheme.error;
+        gradeColor = context.appTheme.error;
     }
 
     return GestureDetector(
@@ -58,12 +58,12 @@ class StudentListItemWidget extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: (s.hasAttendanceAlert || s.hasFeeAlert)
-                ? AppTheme.error.withAlpha(80)
-                : AppTheme.outlineVariant,
+                ? context.appTheme.error.withAlpha(80)
+                : context.appTheme.outlineVariant,
           ),
         ),
         child: Row(
@@ -73,7 +73,7 @@ class StudentListItemWidget extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: AppTheme.primaryContainer,
+                color: context.appTheme.primaryContainer,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
@@ -82,7 +82,7 @@ class StudentListItemWidget extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
+                    color: context.appTheme.primary,
                   ),
                 ),
               ),
@@ -106,10 +106,10 @@ class StudentListItemWidget extends StatelessWidget {
                         ),
                       ),
                       if (s.hasAttendanceAlert)
-                        const Icon(
+                        Icon(
                           Icons.warning_amber_rounded,
                           size: 14,
-                          color: AppTheme.error,
+                          color: context.appTheme.error,
                         ),
                     ],
                   ),
@@ -117,7 +117,7 @@ class StudentListItemWidget extends StatelessWidget {
                     'Class ${s.classSection} · Roll: ${s.rollNumber}',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      color: AppTheme.onSurfaceVariant,
+                      color: context.appTheme.onSurfaceVariant,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -130,8 +130,8 @@ class StudentListItemWidget extends StatelessWidget {
                       _buildBadge(
                         '${s.attendancePercent.toStringAsFixed(0)}% att.',
                         s.attendancePercent < 75
-                            ? AppTheme.error
-                            : AppTheme.success,
+                            ? context.appTheme.error
+                            : context.appTheme.success,
                       ),
                       _buildBadge(s.performanceGrade, gradeColor),
                       _buildBadge(feeLabel, feeColor),
@@ -140,10 +140,10 @@ class StudentListItemWidget extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right_rounded,
               size: 18,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ],
         ),

@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class SchoolDeskAdaptiveText extends StatelessWidget {
   final String data;
@@ -599,7 +600,7 @@ class SchoolDeskBottomNavigationBar extends StatelessWidget {
       child: Material(
         color: tokens.panel,
         elevation: 10,
-        shadowColor: Colors.black.withAlpha(24),
+        shadowColor: context.appTheme.onSurface.withAlpha(24),
         child: Container(
           decoration: BoxDecoration(
             border: Border(top: BorderSide(color: tokens.panelBorder)),

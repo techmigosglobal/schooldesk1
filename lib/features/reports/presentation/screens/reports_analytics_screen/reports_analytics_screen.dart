@@ -3,13 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ReportsAnalyticsScreen extends StatefulWidget {
   const ReportsAnalyticsScreen({super.key});
@@ -135,7 +135,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           const SizedBox(height: 4),
           Text(
             'Public School · Academic Year 2025–26',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           const SizedBox(height: 16),
           Row(
@@ -145,8 +145,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                   'Total Students',
                   '$_totalStudents',
                   Icons.school_rounded,
-                  AppTheme.primary,
-                  AppTheme.primaryContainer,
+                  context.appTheme.primary,
+                  context.appTheme.primaryContainer,
                 ),
               ),
               const SizedBox(width: 12),
@@ -155,8 +155,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                   'Total Staff',
                   '$_totalStaff',
                   Icons.people_rounded,
-                  AppTheme.secondary,
-                  AppTheme.secondaryContainer,
+                  context.appTheme.secondary,
+                  context.appTheme.secondaryContainer,
                 ),
               ),
             ],
@@ -169,8 +169,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                   'Avg Attendance',
                   _attendanceAverageLabel(),
                   Icons.how_to_reg_rounded,
-                  AppTheme.success,
-                  AppTheme.successContainer,
+                  context.appTheme.success,
+                  context.appTheme.successContainer,
                 ),
               ),
               const SizedBox(width: 12),
@@ -181,8 +181,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                       ? '${((_totalCollected / _totalBilled) * 100).toStringAsFixed(1)}%'
                       : '0%',
                   Icons.account_balance_wallet_rounded,
-                  AppTheme.info,
-                  AppTheme.infoContainer,
+                  context.appTheme.info,
+                  context.appTheme.infoContainer,
                 ),
               ),
             ],
@@ -200,35 +200,35 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             'Monthly Attendance Report',
             DateFormat('MMMM yyyy').format(DateTime.now()),
             Icons.calendar_month_rounded,
-            AppTheme.primary,
+            context.appTheme.primary,
           ),
           const SizedBox(height: 8),
           _buildReportButton(
             'Fee Collection Summary',
             DateFormat('MMMM yyyy').format(DateTime.now()),
             Icons.receipt_long_rounded,
-            AppTheme.secondary,
+            context.appTheme.secondary,
           ),
           const SizedBox(height: 8),
           _buildReportButton(
             'Exam Results Report',
             DateFormat('yyyy').format(DateTime.now()),
             Icons.quiz_rounded,
-            AppTheme.info,
+            context.appTheme.info,
           ),
           const SizedBox(height: 8),
           _buildReportButton(
             'Staff Attendance Report',
             DateFormat('MMMM yyyy').format(DateTime.now()),
             Icons.badge_rounded,
-            AppTheme.success,
+            context.appTheme.success,
           ),
           const SizedBox(height: 8),
           _buildReportButton(
             'Complaint Summary',
             DateFormat('MMMM yyyy').format(DateTime.now()),
             Icons.support_agent_rounded,
-            AppTheme.warning,
+            context.appTheme.warning,
           ),
           const SizedBox(height: 20),
           Text(
@@ -294,7 +294,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         if (rows.isEmpty)
           Text(
             'Backend attendance rows will appear here.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           )
         else
           ...rows.map((c) => _buildAttendanceRow(c)),
@@ -302,7 +302,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.primaryContainer,
+            color: context.appTheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -313,7 +313,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
               Text(
@@ -321,7 +321,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
             ],
@@ -333,13 +333,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           style: GoogleFonts.dmSans(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppTheme.error,
+            color: context.appTheme.error,
           ),
         ),
         const SizedBox(height: 10),
         Text(
           'Backend low-attendance records will appear here.',
-          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
         ),
       ],
     );
@@ -368,18 +368,18 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         (c['percent'] as num?)?.toDouble() ??
         (total > 0 ? (present / total) * 100 : 0);
     Color color = percent >= 90
-        ? AppTheme.success
+        ? context.appTheme.success
         : percent >= 80
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -400,7 +400,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               child: LinearProgressIndicator(
                 value: percent / 100,
                 minHeight: 8,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -408,7 +408,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           const SizedBox(width: 8),
           Text(
             '${c['present']}/${c['total']}',
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
           const SizedBox(width: 6),
           Text(
@@ -479,7 +479,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.primaryContainer,
+            color: context.appTheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -492,7 +492,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                   ),
                   Text(
@@ -500,7 +500,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                   ),
                 ],
@@ -513,7 +513,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     'Total Collected',
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                     ),
                   ),
                   Text(
@@ -521,7 +521,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                     ),
                   ),
                 ],
@@ -534,7 +534,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     'Outstanding',
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
-                      color: AppTheme.error,
+                      color: context.appTheme.error,
                     ),
                   ),
                   Text(
@@ -542,7 +542,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.error,
+                      color: context.appTheme.error,
                     ),
                   ),
                 ],
@@ -556,7 +556,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.info,
+                      color: context.appTheme.info,
                     ),
                   ),
                   Text(
@@ -564,7 +564,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.info,
+                      color: context.appTheme.info,
                     ),
                   ),
                 ],
@@ -583,16 +583,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     double percent,
   ) {
     Color color = percent >= 90
-        ? AppTheme.success
+        ? context.appTheme.success
         : percent >= 75
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,7 +623,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             child: LinearProgressIndicator(
               value: percent / 100,
               minHeight: 8,
-              backgroundColor: AppTheme.surfaceVariant,
+              backgroundColor: context.appTheme.surfaceVariant,
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -632,14 +632,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             children: [
               Text(
                 'Billed: ₹${(billed / 1000).toStringAsFixed(0)}K',
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
               const SizedBox(width: 12),
               Text(
                 'Collected: ₹${(collected / 1000).toStringAsFixed(0)}K',
                 style: GoogleFonts.dmSans(
                   fontSize: 11,
-                  color: AppTheme.success,
+                  color: context.appTheme.success,
                 ),
               ),
             ],
@@ -703,16 +703,16 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     int failed,
   ) {
     Color color = avg >= 80
-        ? AppTheme.success
+        ? context.appTheme.success
         : avg >= 65
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -750,7 +750,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                   'Total: $total · Passed: $passed · Failed: $failed',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -771,10 +771,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
 
   Widget _buildSubjectBar(String subject, int percent) {
     Color color = percent >= 80
-        ? AppTheme.success
+        ? context.appTheme.success
         : percent >= 70
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -789,7 +789,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               child: LinearProgressIndicator(
                 value: percent / 100,
                 minHeight: 10,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -841,8 +841,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 'Total Staff',
                 '$_totalStaff',
                 Icons.people_rounded,
-                AppTheme.primary,
-                AppTheme.primaryContainer,
+                context.appTheme.primary,
+                context.appTheme.primaryContainer,
               ),
             ),
             const SizedBox(width: 12),
@@ -851,8 +851,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 'Present Today',
                 '$activeStaff',
                 Icons.how_to_reg_rounded,
-                AppTheme.success,
-                AppTheme.successContainer,
+                context.appTheme.success,
+                context.appTheme.successContainer,
               ),
             ),
           ],
@@ -865,8 +865,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 'On Leave',
                 '0',
                 Icons.event_busy_rounded,
-                AppTheme.warning,
-                AppTheme.warningContainer,
+                context.appTheme.warning,
+                context.appTheme.warningContainer,
               ),
             ),
             const SizedBox(width: 12),
@@ -875,8 +875,8 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 'Absent',
                 '$inactiveStaff',
                 Icons.person_off_rounded,
-                AppTheme.error,
-                AppTheme.errorContainer,
+                context.appTheme.error,
+                context.appTheme.errorContainer,
               ),
             ),
           ],
@@ -890,14 +890,14 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         if (_staffRows.isEmpty)
           Text(
             'Backend staff records will appear here.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           )
         else
           ..._staffRows.map(
             (staff) => _buildDeptRow(
               '${staff['designation'] ?? staff['name'] ?? 'Staff'}',
               1,
-              AppTheme.primary,
+              context.appTheme.primary,
             ),
           ),
         const SizedBox(height: 16),
@@ -908,7 +908,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         const SizedBox(height: 10),
         Text(
           'Backend leave summary rows will appear here.',
-          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
         ),
       ],
     );
@@ -929,7 +929,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               child: LinearProgressIndicator(
                 value: count / 10,
                 minHeight: 8,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -979,7 +979,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               ),
               Text(
                 title,
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ],
           ),
@@ -999,9 +999,9 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.outlineVariant),
+          border: Border.all(color: context.appTheme.outlineVariant),
         ),
         child: Row(
           children: [
@@ -1030,13 +1030,13 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                     subtitle,
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.download_rounded, size: 18, color: AppTheme.muted),
+            Icon(Icons.download_rounded, size: 18, color: context.appTheme.muted),
           ],
         ),
       ),
@@ -1090,7 +1090,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Report export request failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return false;

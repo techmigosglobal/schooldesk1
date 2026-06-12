@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherAttendanceScreen extends StatefulWidget {
   const TeacherAttendanceScreen({super.key});
@@ -161,7 +162,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to submit attendance: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -238,7 +239,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 label: 'Absent',
                 value: '${_students.where((s) => s.status == 'absent').length}',
                 icon: Icons.cancel_rounded,
-                color: AppTheme.error,
+                color: context.appTheme.error,
                 tone: const Color(0xFFFFEEEE),
               ),
               TeacherFlowMetric(
@@ -264,26 +265,53 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                     : student.roll,
                 status: teacherFlowTitleCase(student.status),
                 statusColor: student.statusColor,
-                body: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final status in ['present', 'absent', 'late'])
-                      ChoiceChip(
-                        label: Text(teacherFlowTitleCase(status)),
-                        selected: student.status == status,
-                        onSelected: (_) => _markOne(student, status),
+                body: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildAttendanceButton(
+                        student: student,
+                        status: 'present',
+                        label: 'Present',
+                        color: Colors.green,
+                        isFirst: true,
                       ),
-                    if (student.enrollmentMissing)
-                      const TeacherInfoPill(
-                        icon: Icons.warning_amber_rounded,
-                        label: 'Enrollment missing',
+                      Container(width: 1, height: 40, color: Colors.grey.shade300),
+                      _buildAttendanceButton(
+                        student: student,
+                        status: 'absent',
+                        label: 'Absent',
+                        color: Colors.red,
+                        isFirst: false,
                       ),
-                  ],
+                      Container(width: 1, height: 40, color: Colors.grey.shade300),
+                      _buildAttendanceButton(
+                        student: student,
+                        status: 'late',
+                        label: 'Late',
+                        color: Colors.orange,
+                        isFirst: false,
+                        isLast: true,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
+          if (_students.any((s) => s.enrollmentMissing))
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: TeacherInfoPill(
+                icon: Icons.warning_amber_rounded,
+                label: 'Some students are missing enrollments',
+              ),
+            ),
           const SizedBox(height: 10),
           FilledButton.icon(
             onPressed: _saving || _students.isEmpty ? null : _submit,
@@ -297,6 +325,49 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             label: Text(_saving ? 'Submitting...' : 'Submit Attendance'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceButton({
+    required _AttendanceStudent student,
+    required String status,
+    required String label,
+    required Color color,
+    bool isFirst = false,
+    bool isLast = false,
+  }) {
+    final isSelected = student.status == status;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _markOne(student, status),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+            borderRadius: BorderRadius.horizontal(
+              left: isFirst ? const Radius.circular(12) : Radius.zero,
+              right: isLast ? const Radius.circular(12) : Radius.zero,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isSelected) ...[
+                Icon(Icons.check_circle_rounded, color: color, size: 16),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: isSelected ? color : Colors.grey.shade600,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -381,7 +452,7 @@ class _AttendanceStudent {
   Color get statusColor {
     return switch (status) {
       'present' => Colors.green,
-      'absent' => AppTheme.error,
+      'absent' => Colors.red,
       'late' => Colors.orange,
       _ => teacherFlowAccent,
     };

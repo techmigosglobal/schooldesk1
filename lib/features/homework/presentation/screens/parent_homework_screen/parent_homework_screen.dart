@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentHomeworkScreen extends StatefulWidget {
   const ParentHomeworkScreen({super.key});
@@ -217,7 +217,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
 
   Widget _buildChildSelector() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: List.generate(_children.length, (i) {
@@ -228,7 +228,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surfaceVariant,
+                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -238,7 +238,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -250,26 +250,26 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
 
   Widget _buildSummaryBar() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Row(
         children: [
           _summaryChip(
             '${_pending.length} Pending',
-            AppTheme.warning,
-            AppTheme.warningContainer,
+            context.appTheme.warning,
+            context.appTheme.warningContainer,
           ),
           const SizedBox(width: 8),
           _summaryChip(
             '${_submitted.length} Submitted',
-            AppTheme.success,
-            AppTheme.successContainer,
+            context.appTheme.success,
+            context.appTheme.successContainer,
           ),
           const SizedBox(width: 8),
           _summaryChip(
             '${_homework.length} Total',
-            AppTheme.primary,
-            AppTheme.primaryContainer,
+            context.appTheme.primary,
+            context.appTheme.primaryContainer,
           ),
         ],
       ),
@@ -300,15 +300,15 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.assignment_turned_in_rounded,
               size: 48,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             const SizedBox(height: 12),
             Text(
               'No homework published',
-              style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 14, color: context.appTheme.muted),
             ),
           ],
         ),
@@ -339,12 +339,12 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isUrgent
-              ? AppTheme.warning.withAlpha(100)
-              : AppTheme.outlineVariant,
+              ? context.appTheme.warning.withAlpha(100)
+              : context.appTheme.outlineVariant,
           width: isUrgent ? 1.5 : 1,
         ),
       ),
@@ -356,15 +356,15 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           height: 40,
           decoration: BoxDecoration(
             color: isPending
-                ? AppTheme.warningContainer
-                : AppTheme.successContainer,
+                ? context.appTheme.warningContainer
+                : context.appTheme.successContainer,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
             isPending
                 ? Icons.assignment_late_rounded
                 : Icons.assignment_turned_in_rounded,
-            color: isPending ? AppTheme.warning : AppTheme.success,
+            color: isPending ? context.appTheme.warning : context.appTheme.success,
             size: 20,
           ),
         ),
@@ -385,7 +385,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                 margin: const EdgeInsets.only(left: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppTheme.warningContainer,
+                  color: context.appTheme.warningContainer,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -393,7 +393,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                 ),
               ),
@@ -403,7 +403,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             ? null
             : Text(
                 subtitleParts.join(' • '),
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
         children: [
           const Divider(height: 1),
@@ -411,17 +411,17 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           if (teacher.isNotEmpty) ...[
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.person_outline_rounded,
                   size: 14,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   'Teacher: $teacher',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -441,7 +441,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               instructions,
               style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: AppTheme.onSurfaceVariant,
+                color: context.appTheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -455,7 +455,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               'Teacher remarks: ${hw['submission_remarks']}',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: AppTheme.onSurfaceVariant,
+                color: context.appTheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -473,7 +473,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                   horizontal: 12,
                   vertical: 6,
                 ),
-                side: const BorderSide(color: AppTheme.primary),
+                side: BorderSide(color: context.appTheme.primary),
               ),
             ),
           ],
@@ -500,10 +500,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Widget _submissionStatusChip(Map<String, dynamic> hw) {
     final status = _text(hw['submission_status']);
     final color = status == 'reviewed'
-        ? AppTheme.success
+        ? context.appTheme.success
         : status == 'needs_revision'
-        ? AppTheme.warning
-        : AppTheme.primary;
+        ? context.appTheme.warning
+        : context.appTheme.primary;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -575,7 +575,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.message),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -598,7 +598,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Attachment is not available: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }

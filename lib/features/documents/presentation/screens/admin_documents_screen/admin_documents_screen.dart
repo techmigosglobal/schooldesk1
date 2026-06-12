@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminDocumentsScreen extends StatefulWidget {
   const AdminDocumentsScreen({super.key});
@@ -22,23 +22,23 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
   bool _loading = true;
   String? _error;
 
-  final List<Map<String, dynamic>> _docTypes = [
+  List<Map<String, dynamic>> get _docTypes => [
     {
       'type': 'Bonafide Certificate',
       'icon': Icons.verified_rounded,
-      'color': AppTheme.primary,
+      'color': Colors.blue,
       'desc': 'Confirms student enrollment',
     },
     {
       'type': 'Transfer Certificate',
       'icon': Icons.swap_horiz_rounded,
-      'color': AppTheme.warning,
+      'color': Colors.orange,
       'desc': 'For school transfers',
     },
     {
       'type': 'Marks Memo',
       'icon': Icons.grade_rounded,
-      'color': AppTheme.success,
+      'color': Colors.green,
       'desc': 'Academic performance record',
     },
     {
@@ -50,13 +50,13 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     {
       'type': 'Character Certificate',
       'icon': Icons.star_rounded,
-      'color': AppTheme.info,
+      'color': context.appTheme.info,
       'desc': 'Conduct and character',
     },
     {
       'type': 'Migration Certificate',
       'icon': Icons.flight_rounded,
-      'color': AppTheme.error,
+      'color': Colors.red,
       'desc': 'For board migration',
     },
   ];
@@ -191,22 +191,22 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.warningContainer,
+              color: context.appTheme.warningContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.pending_actions_rounded,
                   size: 16,
-                  color: AppTheme.warning,
+                  color: Colors.orange,
                 ),
                 const SizedBox(width: 8),
                 Text(
                   '$pending pending document request(s)',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.warning,
+                    color: Colors.orange,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -227,20 +227,20 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   Widget _buildRequestCard(Map<String, dynamic> r) {
     final statusColors = {
-      'Pending': AppTheme.warning,
-      'Approved': AppTheme.info,
-      'Issued': AppTheme.success,
+      'Pending': Colors.orange,
+      'Approved': context.appTheme.info,
+      'Issued': Colors.green,
     };
-    final c = statusColors[r['status']] ?? AppTheme.muted;
+    final c = statusColors[r['status']] ?? Colors.grey;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: r['status'] == 'Pending'
-              ? AppTheme.warningContainer
-              : AppTheme.outlineVariant,
+              ? context.appTheme.warningContainer
+              : context.appTheme.surfaceVariant,
         ),
       ),
       child: Column(
@@ -263,7 +263,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                       '${r['class']} • ${r['parent']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: Colors.grey,
                       ),
                     ),
                   ],
@@ -289,10 +289,10 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.description_rounded,
                 size: 14,
-                color: AppTheme.muted,
+                color: Colors.grey,
               ),
               const SizedBox(width: 4),
               Text(
@@ -305,7 +305,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
               const Spacer(),
               Text(
                 'Requested: ${r['requestDate']}',
-                style: GoogleFonts.dmSans(fontSize: 10, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 10, color: Colors.grey),
               ),
             ],
           ),
@@ -318,8 +318,8 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                     onPressed: () => _decideRequest(r, 'Rejected'),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 6),
-                      foregroundColor: AppTheme.error,
-                      side: const BorderSide(color: AppTheme.error),
+                      foregroundColor: Colors.red,
+                      side: BorderSide(color: Colors.red),
                     ),
                     child: Text(
                       'Reject',
@@ -381,9 +381,9 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.surfaceVariant),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -414,7 +414,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                 const SizedBox(height: 4),
                 Text(
                   d['desc'] as String,
-                  style: GoogleFonts.dmSans(fontSize: 9, color: AppTheme.muted),
+                  style: GoogleFonts.dmSans(fontSize: 9, color: Colors.grey),
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -438,22 +438,22 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.surfaceVariant),
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.successContainer,
+                  color: context.appTheme.successContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.check_circle_rounded,
                   size: 18,
-                  color: AppTheme.success,
+                  color: Colors.green,
                 ),
               ),
               const SizedBox(width: 12),
@@ -472,7 +472,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                       '${r['type']} • ${r['class']} • ${r['requestDate']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: Colors.grey,
                       ),
                     ),
                   ],
@@ -484,7 +484,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                   'Reprint',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.primary,
+                    color: Colors.blue,
                   ),
                 ),
               ),
@@ -549,7 +549,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Document request update failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -570,7 +570,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Document print request failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -578,9 +578,9 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   void _showDocumentRequestSaved() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('Document request saved'),
-        backgroundColor: AppTheme.success,
+        backgroundColor: Colors.green,
       ),
     );
   }
@@ -713,12 +713,12 @@ class _InputErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: Colors.red),
       ),
     );
   }

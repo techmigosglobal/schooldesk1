@@ -6,7 +6,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
   final String role;
@@ -140,7 +140,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.dmSans()),
-        backgroundColor: isError ? AppTheme.error : AppTheme.success,
+        backgroundColor: isError ? context.appTheme.error : context.appTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -184,13 +184,13 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         : rawBottomPadding;
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           'My Profile',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         actions: [
           if (!_loading && _error == null)
             TextButton.icon(
@@ -311,9 +311,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.cloud_off_rounded,
-              color: AppTheme.error,
+              color: context.appTheme.error,
               size: 40,
             ),
             const SizedBox(height: 12),
@@ -328,7 +328,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
             Text(
               _error!,
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(color: AppTheme.muted),
+              style: GoogleFonts.dmSans(color: context.appTheme.muted),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -350,14 +350,14 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.primary,
+        color: context.appTheme.primary,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 32,
-            backgroundColor: Colors.white24,
+            backgroundColor: context.appTheme.surface24,
             backgroundImage: avatar.isEmpty
                 ? null
                 : NetworkImage(_avatarUrl(avatar)),
@@ -417,16 +417,16 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
           style: GoogleFonts.dmSans(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: AppTheme.muted,
+            color: context.appTheme.muted,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(children: children),
         ),
@@ -456,7 +456,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
             vertical: 12,
           ),
           filled: true,
-          fillColor: _isEditing ? AppTheme.surface : AppTheme.surfaceVariant,
+          fillColor: _isEditing ? context.appTheme.surface : context.appTheme.surfaceVariant,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
@@ -483,9 +483,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         children: [

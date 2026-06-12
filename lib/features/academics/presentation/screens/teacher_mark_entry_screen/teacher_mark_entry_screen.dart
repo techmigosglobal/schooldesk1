@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherMarkEntryScreen extends StatefulWidget {
   const TeacherMarkEntryScreen({super.key});
@@ -180,7 +180,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -192,7 +192,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -286,9 +286,9 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Row(
               children: [
@@ -301,7 +301,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                         style: GoogleFonts.dmSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.onSurface,
+                          color: context.appTheme.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -354,7 +354,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceVariant,
+                      color: context.appTheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -362,7 +362,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ),
@@ -377,10 +377,10 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
           child: ElevatedButton.icon(
             onPressed: _saving ? null : _submitMarks,
             icon: _saving
-                ? const SizedBox(
+                ? SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: context.appTheme.surface),
                   )
                 : const Icon(Icons.cloud_done_rounded),
             label: Text(_saving ? 'Saving...' : 'Submit All Marks'),

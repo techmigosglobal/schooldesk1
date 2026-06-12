@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StaffQrAttendancePanel extends StatefulWidget {
   final bool compact;
@@ -212,7 +213,7 @@ class _QrBlock extends StatelessWidget {
             height: compact ? 190 : 260,
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(tokens.radius.card),
               border: Border.all(color: tokens.panelBorder),
             ),
@@ -226,7 +227,7 @@ class _QrBlock extends StatelessWidget {
                     data: token!.token,
                     version: QrVersions.auto,
                     errorCorrectionLevel: QrErrorCorrectLevel.M,
-                    backgroundColor: Colors.white,
+                    backgroundColor: context.appTheme.surface,
                   ),
           ),
         ),

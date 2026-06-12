@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
   const TeacherHomeworkScreen({super.key});
@@ -106,6 +107,42 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       ),
     );
     await _loadHomework();
+  }
+
+  Future<void> _deleteHomework(Map<String, dynamic> row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Homework'),
+        content: Text('Are you sure you want to delete "${teacherFlowText(row['title'], fallback: 'Homework')}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: context.appTheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final id = teacherFlowText(row['id']);
+      await BackendApiClient.instance.deleteHomework(id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Homework deleted successfully')),
+      );
+      await _loadHomework();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete: $e')),
+      );
+    }
   }
 
   @override
@@ -227,6 +264,11 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                             homework: row,
                           ),
                         ).then((_) => _loadHomework()),
+                      ),
+                      TeacherFlowAction(
+                        label: 'Delete',
+                        icon: Icons.delete_rounded,
+                        onTap: () => _deleteHomework(row),
                       ),
                     ],
                   ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StaffFilterBarWidget extends StatelessWidget {
   final String searchQuery;
@@ -36,25 +36,25 @@ class StaffFilterBarWidget extends StatelessWidget {
         // Search bar
         Container(
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant, width: 1),
+            border: Border.all(color: context.appTheme.outlineVariant, width: 1),
           ),
           child: TextField(
             onChanged: onSearchChanged,
             style: GoogleFonts.ibmPlexSans(
               fontSize: 14,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
             decoration: InputDecoration(
               hintText: 'Search by name, ID, or designation...',
               hintStyle: GoogleFonts.ibmPlexSans(
                 fontSize: 14,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
-              prefixIcon: const Icon(
+              prefixIcon: Icon(
                 Icons.search_rounded,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 size: 20,
               ),
               border: InputBorder.none,
@@ -85,12 +85,12 @@ class StaffFilterBarWidget extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppTheme.primary : AppTheme.surface,
+                    color: isSelected ? context.appTheme.primary : context.appTheme.surface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isSelected
-                          ? AppTheme.primary
-                          : AppTheme.outlineVariant,
+                          ? context.appTheme.primary
+                          : context.appTheme.outlineVariant,
                       width: 1,
                     ),
                   ),
@@ -103,7 +103,7 @@ class StaffFilterBarWidget extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: isSelected
                           ? Colors.white
-                          : AppTheme.onSurfaceVariant,
+                          : context.appTheme.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -122,10 +122,10 @@ class StaffFilterBarWidget extends StatelessWidget {
             itemBuilder: (context, i) {
               final status = statuses[i];
               final isSelected = selectedStatus == status;
-              Color chipColor = AppTheme.muted;
-              if (status == 'Active') chipColor = AppTheme.success;
-              if (status == 'On Leave') chipColor = AppTheme.info;
-              if (status == 'Absent') chipColor = AppTheme.error;
+              Color chipColor = context.appTheme.muted;
+              if (status == 'Active') chipColor = context.appTheme.success;
+              if (status == 'On Leave') chipColor = context.appTheme.info;
+              if (status == 'Absent') chipColor = context.appTheme.error;
 
               return GestureDetector(
                 onTap: () => onStatusChanged(status),
@@ -141,7 +141,7 @@ class StaffFilterBarWidget extends StatelessWidget {
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: isSelected ? chipColor : AppTheme.outlineVariant,
+                      color: isSelected ? chipColor : context.appTheme.outlineVariant,
                       width: 1,
                     ),
                   ),
@@ -152,7 +152,7 @@ class StaffFilterBarWidget extends StatelessWidget {
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: isSelected ? chipColor : AppTheme.muted,
+                      color: isSelected ? chipColor : context.appTheme.muted,
                     ),
                   ),
                 ),

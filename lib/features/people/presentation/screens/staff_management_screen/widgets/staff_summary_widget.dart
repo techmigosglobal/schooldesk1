@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StaffSummaryWidget extends StatelessWidget {
   final List<StaffModel> staff;
@@ -21,8 +21,8 @@ class StaffSummaryWidget extends StatelessWidget {
             'Total Staff',
             staff.length.toString(),
             Icons.people_rounded,
-            AppTheme.primary,
-            AppTheme.primaryContainer,
+            context.appTheme.primary,
+            context.appTheme.primaryContainer,
           ),
         ),
         const SizedBox(width: 10),
@@ -31,8 +31,8 @@ class StaffSummaryWidget extends StatelessWidget {
             'Present Today',
             active.toString(),
             Icons.check_circle_rounded,
-            AppTheme.success,
-            AppTheme.successContainer,
+            context.appTheme.success,
+            context.appTheme.successContainer,
           ),
         ),
         const SizedBox(width: 10),
@@ -41,8 +41,8 @@ class StaffSummaryWidget extends StatelessWidget {
             'On Leave',
             onLeave.toString(),
             Icons.event_busy_rounded,
-            AppTheme.info,
-            AppTheme.infoContainer,
+            context.appTheme.info,
+            context.appTheme.infoContainer,
           ),
         ),
         const SizedBox(width: 10),
@@ -51,8 +51,8 @@ class StaffSummaryWidget extends StatelessWidget {
             'Absent',
             absent.toString(),
             Icons.person_off_rounded,
-            AppTheme.error,
-            AppTheme.errorContainer,
+            context.appTheme.error,
+            context.appTheme.errorContainer,
           ),
         ),
       ],

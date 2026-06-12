@@ -290,6 +290,36 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
   final Color textMuted;
   final Color focusRing;
 
+  // Added semantic colors
+  final Color primary;
+  final Color primaryLight;
+  final Color primaryContainer;
+  final Color onPrimary;
+  final Color secondary;
+  final Color secondaryContainer;
+  final Color onSecondary;
+  final Color accent;
+  final Color success;
+  final Color successContainer;
+  final Color warning;
+  final Color warningContainer;
+  final Color error;
+  final Color errorContainer;
+  final Color info;
+  final Color infoContainer;
+  final Color surface;
+  final Color surfaceVariant;
+  final Color background;
+  final Color outline;
+  final Color outlineVariant;
+  final Color onSurface;
+  final Color onSurfaceVariant;
+  final Color muted;
+
+  Color get surface24 => surface.withOpacity(0.24);
+  Color get surface60 => surface.withOpacity(0.60);
+  Color get surface70 => surface.withOpacity(0.70);
+
   const SchoolDeskTheme({
     required this.isDark,
     required this.spacing,
@@ -305,6 +335,30 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
     required this.panelBorder,
     required this.textMuted,
     required this.focusRing,
+    required this.primary,
+    required this.primaryLight,
+    required this.primaryContainer,
+    required this.onPrimary,
+    required this.secondary,
+    required this.secondaryContainer,
+    required this.onSecondary,
+    required this.accent,
+    required this.success,
+    required this.successContainer,
+    required this.warning,
+    required this.warningContainer,
+    required this.error,
+    required this.errorContainer,
+    required this.info,
+    required this.infoContainer,
+    required this.surface,
+    required this.surfaceVariant,
+    required this.background,
+    required this.outline,
+    required this.outlineVariant,
+    required this.onSurface,
+    required this.onSurfaceVariant,
+    required this.muted,
   });
 
   factory SchoolDeskTheme.fallback({required bool isDark}) {
@@ -331,6 +385,30 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       panelBorder: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
       textMuted: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF667085),
       focusRing: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
+      primary: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
+      primaryLight: const Color(0xFF7EA2FF),
+      primaryContainer: isDark ? const Color(0xFF1A3A5C) : const Color(0xFFE6EDFF),
+      onPrimary: const Color(0xFFFFFFFF),
+      secondary: const Color(0xFF0E9384),
+      secondaryContainer: isDark ? const Color(0xFF4A2E00) : const Color(0xFFDDFCF6),
+      onSecondary: const Color(0xFFFFFFFF),
+      accent: const Color(0xFF16A34A),
+      success: const Color(0xFF15803D),
+      successContainer: isDark ? const Color(0xFF14301B) : const Color(0xFFDCFCE7),
+      warning: const Color(0xFFB45309),
+      warningContainer: isDark ? const Color(0xFF4A2A04) : const Color(0xFFFEF3C7),
+      error: const Color(0xFFE57373),
+      errorContainer: isDark ? const Color(0xFF4A1515) : const Color(0xFFFEE4E2),
+      info: const Color(0xFF2563EB),
+      infoContainer: isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE0EAFF),
+      surface: isDark ? const Color(0xFF1E2530) : const Color(0xFFFFFFFF),
+      surfaceVariant: isDark ? const Color(0xFF252D3A) : const Color(0xFFF6F8FB),
+      background: isDark ? const Color(0xFF151C26) : const Color(0xFFF3F6FA),
+      outline: isDark ? const Color(0xFF455A64) : const Color(0xFFCBD5E1),
+      outlineVariant: isDark ? const Color(0xFF2D3748) : const Color(0xFFE2E8F0),
+      onSurface: isDark ? const Color(0xFFE8EDF2) : const Color(0xFF101828),
+      onSurfaceVariant: isDark ? const Color(0xFFB0BEC5) : const Color(0xFF475467),
+      muted: isDark ? const Color(0xFF90A4AE) : const Color(0xFF667085),
     );
   }
 
@@ -354,6 +432,30 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
     Color? panelBorder,
     Color? textMuted,
     Color? focusRing,
+    Color? primary,
+    Color? primaryLight,
+    Color? primaryContainer,
+    Color? onPrimary,
+    Color? secondary,
+    Color? secondaryContainer,
+    Color? onSecondary,
+    Color? accent,
+    Color? success,
+    Color? successContainer,
+    Color? warning,
+    Color? warningContainer,
+    Color? error,
+    Color? errorContainer,
+    Color? info,
+    Color? infoContainer,
+    Color? surface,
+    Color? surfaceVariant,
+    Color? background,
+    Color? outline,
+    Color? outlineVariant,
+    Color? onSurface,
+    Color? onSurfaceVariant,
+    Color? muted,
   }) {
     return SchoolDeskTheme(
       isDark: isDark ?? this.isDark,
@@ -370,6 +472,30 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       panelBorder: panelBorder ?? this.panelBorder,
       textMuted: textMuted ?? this.textMuted,
       focusRing: focusRing ?? this.focusRing,
+      primary: primary ?? this.primary,
+      primaryLight: primaryLight ?? this.primaryLight,
+      primaryContainer: primaryContainer ?? this.primaryContainer,
+      onPrimary: onPrimary ?? this.onPrimary,
+      secondary: secondary ?? this.secondary,
+      secondaryContainer: secondaryContainer ?? this.secondaryContainer,
+      onSecondary: onSecondary ?? this.onSecondary,
+      accent: accent ?? this.accent,
+      success: success ?? this.success,
+      successContainer: successContainer ?? this.successContainer,
+      warning: warning ?? this.warning,
+      warningContainer: warningContainer ?? this.warningContainer,
+      error: error ?? this.error,
+      errorContainer: errorContainer ?? this.errorContainer,
+      info: info ?? this.info,
+      infoContainer: infoContainer ?? this.infoContainer,
+      surface: surface ?? this.surface,
+      surfaceVariant: surfaceVariant ?? this.surfaceVariant,
+      background: background ?? this.background,
+      outline: outline ?? this.outline,
+      outlineVariant: outlineVariant ?? this.outlineVariant,
+      onSurface: onSurface ?? this.onSurface,
+      onSurfaceVariant: onSurfaceVariant ?? this.onSurfaceVariant,
+      muted: muted ?? this.muted,
     );
   }
 
@@ -394,6 +520,30 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       panelBorder: Color.lerp(panelBorder, other.panelBorder, t)!,
       textMuted: Color.lerp(textMuted, other.textMuted, t)!,
       focusRing: Color.lerp(focusRing, other.focusRing, t)!,
+      primary: Color.lerp(primary, other.primary, t)!,
+      primaryLight: Color.lerp(primaryLight, other.primaryLight, t)!,
+      primaryContainer: Color.lerp(primaryContainer, other.primaryContainer, t)!,
+      onPrimary: Color.lerp(onPrimary, other.onPrimary, t)!,
+      secondary: Color.lerp(secondary, other.secondary, t)!,
+      secondaryContainer: Color.lerp(secondaryContainer, other.secondaryContainer, t)!,
+      onSecondary: Color.lerp(onSecondary, other.onSecondary, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      successContainer: Color.lerp(successContainer, other.successContainer, t)!,
+      warning: Color.lerp(warning, other.warning, t)!,
+      warningContainer: Color.lerp(warningContainer, other.warningContainer, t)!,
+      error: Color.lerp(error, other.error, t)!,
+      errorContainer: Color.lerp(errorContainer, other.errorContainer, t)!,
+      info: Color.lerp(info, other.info, t)!,
+      infoContainer: Color.lerp(infoContainer, other.infoContainer, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      surfaceVariant: Color.lerp(surfaceVariant, other.surfaceVariant, t)!,
+      background: Color.lerp(background, other.background, t)!,
+      outline: Color.lerp(outline, other.outline, t)!,
+      outlineVariant: Color.lerp(outlineVariant, other.outlineVariant, t)!,
+      onSurface: Color.lerp(onSurface, other.onSurface, t)!,
+      onSurfaceVariant: Color.lerp(onSurfaceVariant, other.onSurfaceVariant, t)!,
+      muted: Color.lerp(muted, other.muted, t)!,
     );
   }
 }

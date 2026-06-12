@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class AdminExamFormArgs {
@@ -761,7 +761,7 @@ class _AdminExamMarksEntryScreenState extends State<AdminExamMarksEntryScreen> {
           'Maximum marks: ${_maxMarks.toStringAsFixed(_maxMarks.truncateToDouble() == _maxMarks ? 0 : 1)}',
           style: Theme.of(
             context,
-          ).textTheme.bodySmall?.copyWith(color: AppTheme.muted),
+          ).textTheme.bodySmall?.copyWith(color: context.appTheme.muted),
         ),
         const SizedBox(height: 14),
         ..._entries.map(_entryTile),
@@ -791,13 +791,13 @@ class _AdminExamMarksEntryScreenState extends State<AdminExamMarksEntryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryContainer,
+                  color: context.appTheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   grade,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppTheme.primary,
+                    color: context.appTheme.primary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -983,9 +983,9 @@ class _ExamFormScaffold extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: child,
           ),
@@ -1099,7 +1099,7 @@ String? _nonNegativeIntValidator(String? value) {
 
 void _showError(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+    SnackBar(content: Text(message), backgroundColor: context.appTheme.error),
   );
 }
 

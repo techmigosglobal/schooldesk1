@@ -7,13 +7,13 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 import 'principal_exam_review_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _TimetableHomeMode { classes, teachers, rooms }
 
@@ -268,15 +268,15 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
           label: 'Slots',
           value: '${_int(summary['total_slots'])}',
           icon: Icons.event_note_rounded,
-          color: AppTheme.primary,
-          tone: AppTheme.primaryContainer,
+          color: context.appTheme.primary,
+          tone: context.appTheme.primaryContainer,
         ),
         PrincipalDirectoryMetric(
           label: 'Classes',
           value: '${_int(summary['classes_covered'])}',
           icon: Icons.groups_2_outlined,
-          color: AppTheme.secondary,
-          tone: AppTheme.secondaryContainer,
+          color: context.appTheme.secondary,
+          tone: context.appTheme.secondaryContainer,
         ),
         PrincipalDirectoryMetric(
           label: 'Teachers',
@@ -290,11 +290,11 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
           value: '${_int(summary['conflict_alerts'])}',
           icon: Icons.warning_amber_rounded,
           color: _int(summary['conflict_alerts']) == 0
-              ? AppTheme.success
-              : AppTheme.warning,
+              ? context.appTheme.success
+              : context.appTheme.warning,
           tone: _int(summary['conflict_alerts']) == 0
-              ? AppTheme.successContainer
-              : AppTheme.warningContainer,
+              ? context.appTheme.successContainer
+              : context.appTheme.warningContainer,
         ),
       ],
     );
@@ -323,7 +323,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDCE8F5)),
       ),
@@ -367,7 +367,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
           constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? principalDirectoryAccent : Colors.white,
+            color: selected ? principalDirectoryAccent : context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
@@ -386,7 +386,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
                   maxLines: 1,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     fontWeight: FontWeight.w900,
-                    color: selected ? Colors.white : principalDirectoryText,
+                    color: selected ? context.appTheme.surface : principalDirectoryText,
                   ),
                 ),
               ),
@@ -426,8 +426,8 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
               subtitle: '${_int(row['slot_count'])} Periods / Week',
               status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
               statusColor: _int(row['slot_count']) > 0
-                  ? AppTheme.success
-                  : AppTheme.warning,
+                  ? context.appTheme.success
+                  : context.appTheme.warning,
               chips: [
                 PrincipalInfoPill(
                   icon: Icons.co_present_outlined,
@@ -511,8 +511,8 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
               subtitle: _roomCapacityLabel(row),
               status: _int(row['conflicts']) == 0 ? 'Clear' : 'Conflict',
               statusColor: _int(row['conflicts']) == 0
-                  ? AppTheme.success
-                  : AppTheme.warning,
+                  ? context.appTheme.success
+                  : context.appTheme.warning,
               chips: [
                 PrincipalInfoPill(
                   icon: Icons.event_note_outlined,
@@ -661,12 +661,12 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: AppTheme.successContainer,
+                  color: context.appTheme.successContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.calendar_today_rounded,
-                  color: AppTheme.success,
+                  color: context.appTheme.success,
                 ),
               ),
               const SizedBox(width: 12),
@@ -696,9 +696,9 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
                   ],
                 ),
               ),
-              const PrincipalStatusPill(
+              PrincipalStatusPill(
                 label: 'Active',
-                color: AppTheme.success,
+                color: context.appTheme.success,
               ),
             ],
           ),
@@ -755,7 +755,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
             title: _subjectName(period),
             subtitle: _slotTime(period),
             status: 'Selected Period',
-            statusColor: AppTheme.primary,
+            statusColor: context.appTheme.primary,
             chips: [
               PrincipalInfoPill(
                 icon: Icons.person_pin_outlined,
@@ -862,8 +862,8 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
           subtitle: _roomCapacityLabel(row),
           status: _int(row['conflicts']) == 0 ? 'Clear' : 'Conflict',
           statusColor: _int(row['conflicts']) == 0
-              ? AppTheme.success
-              : AppTheme.warning,
+              ? context.appTheme.success
+              : context.appTheme.warning,
           chips: [
             PrincipalInfoPill(
               icon: Icons.event_note_outlined,
@@ -908,8 +908,8 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
       ),
       status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
       statusColor: _int(row['slot_count']) > 0
-          ? AppTheme.success
-          : AppTheme.warning,
+          ? context.appTheme.success
+          : context.appTheme.warning,
       chips: [
         PrincipalInfoPill(
           icon: Icons.event_note_outlined,
@@ -1040,10 +1040,10 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isBreak
-            ? AppTheme.warningContainer.withAlpha(120)
+            ? context.appTheme.warningContainer.withAlpha(120)
             : isFree
-            ? AppTheme.successContainer.withAlpha(120)
-            : Colors.white,
+            ? context.appTheme.successContainer.withAlpha(120)
+            : context.appTheme.surface,
         border: const Border(top: BorderSide(color: Color(0xFFE7EEF6))),
       ),
       child: Row(
@@ -1161,7 +1161,7 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
         color: header
             ? const Color(0xFFF8FBFF)
             : empty
-            ? Colors.white
+            ? context.appTheme.surface
             : _subjectTone(label),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2EAF2)),
@@ -1202,9 +1202,9 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: isBreak
-            ? AppTheme.warningContainer
+            ? context.appTheme.warningContainer
             : isFree
-            ? AppTheme.successContainer
+            ? context.appTheme.successContainer
             : _subjectTone(label),
         borderRadius: BorderRadius.circular(7),
       ),
@@ -1215,10 +1215,10 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           fontWeight: FontWeight.w900,
           color: isBreak
-              ? AppTheme.warning
+              ? context.appTheme.warning
               : isFree
-              ? AppTheme.success
-              : AppTheme.primary,
+              ? context.appTheme.success
+              : context.appTheme.primary,
         ),
       ),
     );
@@ -1264,14 +1264,14 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
     return Container(
       padding: EdgeInsets.all(compact ? 12 : 16),
       decoration: BoxDecoration(
-        color: AppTheme.primaryContainer.withAlpha(150),
+        color: context.appTheme.primaryContainer.withAlpha(150),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.primary.withAlpha(45)),
+        border: Border.all(color: context.appTheme.primary.withAlpha(45)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: AppTheme.primary),
+          Icon(Icons.info_outline_rounded, color: context.appTheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1641,11 +1641,11 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
     final id = _text(period['id'] ?? period['slot_id']);
     if (id.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             'Unable to edit this timetable period. Slot id missing.',
           ),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return;
@@ -2314,20 +2314,20 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
   Color _subjectTone(String label) {
     final key = label.toUpperCase();
     if (key.contains('MATH')) return const Color(0xFFE0F7EA);
-    if (key.contains('EN')) return AppTheme.primaryContainer;
+    if (key.contains('EN')) return context.appTheme.primaryContainer;
     if (key.contains('SCI')) return const Color(0xFFE5FAFF);
     if (key.contains('HIN')) return const Color(0xFFF0E7FF);
     if (key.contains('ART')) return const Color(0xFFFFE7F0);
     if (key.contains('PE')) return const Color(0xFFE0FBF4);
     if (key.contains('BREAK') || key.contains('LUNCH')) {
-      return AppTheme.warningContainer;
+      return context.appTheme.warningContainer;
     }
     return const Color(0xFFF2F6FA);
   }
 
   BoxDecoration _panelDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       border: Border.all(color: const Color(0xFFDDE7F0)),
       boxShadow: [
@@ -2907,7 +2907,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
                       icon: Icons.delete_outline_rounded,
                       title: _deleteMenuLabel,
                       subtitle: _deleteDetailHelp,
-                      color: AppTheme.error,
+                      color: context.appTheme.error,
                       onTap: () {
                         Navigator.pop(detailContext);
                         _deleteEntry(entry);
@@ -3092,7 +3092,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             onPressed: () => Navigator.of(context).pop(true),
             icon: const Icon(Icons.delete_outline_rounded),
             label: const Text('Delete'),
@@ -3108,7 +3108,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? AppTheme.success : AppTheme.error,
+        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
       ),
     );
   }
@@ -3138,7 +3138,7 @@ class _PrincipalCommandScreenState extends State<_PrincipalCommandScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Unable to save action: $error'),
-                      backgroundColor: AppTheme.error,
+                      backgroundColor: context.appTheme.error,
                     ),
                   );
                 }
@@ -3334,7 +3334,7 @@ class _PrincipalWorkflowStrip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFFDDEAF2)),
           boxShadow: [
@@ -3765,9 +3765,9 @@ class _ExamInputFormState extends State<_ExamInputForm> {
     final end = DateTime.parse(_endDate.text.trim());
     if (end.isBefore(start)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('End date cannot be before start date.'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return;
@@ -3789,7 +3789,7 @@ class _ExamInputFormState extends State<_ExamInputForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save exam: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
@@ -3943,7 +3943,7 @@ class _ExamTypeInputFormState extends State<_ExamTypeInputForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save exam type: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
@@ -4282,9 +4282,9 @@ class _ExamScheduleInputFormState extends State<_ExamScheduleInputForm> {
     final passMarks = int.parse(_passMarks.text.trim());
     if (passMarks > maxMarks) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Pass marks cannot exceed max marks.'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return;
@@ -4311,7 +4311,7 @@ class _ExamScheduleInputFormState extends State<_ExamScheduleInputForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save exam schedule: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
@@ -4847,7 +4847,7 @@ class _TimetableSlotInputFormState extends State<_TimetableSlotInputForm> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save timetable period: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {

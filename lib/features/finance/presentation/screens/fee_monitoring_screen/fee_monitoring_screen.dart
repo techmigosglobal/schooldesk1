@@ -3,9 +3,9 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _FeeView {
   home,
@@ -169,7 +169,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _loadData,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             child: _buildContent(),
           ),
         ),
@@ -391,19 +391,19 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           bundle.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 14,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Applicable for ${bundle.classLabel}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                           ),
                         ),
                       ],
@@ -626,9 +626,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                         const SizedBox(height: 4),
                         Text(
                           account.rollNumber,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -668,13 +668,13 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Fee Structure',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ),
@@ -909,8 +909,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               Text(
                 'Fee payment of ${_money(result.amount)} has been recorded for ${result.studentName}.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppTheme.muted,
+                style: TextStyle(
+                  color: context.appTheme.muted,
                   fontWeight: FontWeight.w700,
                   height: 1.35,
                 ),
@@ -1890,7 +1890,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? AppTheme.success : AppTheme.error,
+        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
       ),
     );
   }
@@ -1947,10 +1947,10 @@ class _FeeHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
-                  color: AppTheme.onSurface,
+                  color: context.appTheme.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1958,10 +1958,10 @@ class _FeeHeader extends StatelessWidget {
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
             ],
@@ -1985,12 +1985,12 @@ class _FeeCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: context.appTheme.onSurface.withAlpha(8),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2037,10 +2037,10 @@ class _FeeMetricTile extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
               const SizedBox(height: 4),
@@ -2051,9 +2051,9 @@ class _FeeMetricTile extends StatelessWidget {
                   child: Text(
                     value,
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      color: AppTheme.onSurface,
+                      color: context.appTheme.onSurface,
                     ),
                   ),
                 ),
@@ -2099,11 +2099,11 @@ class _FeeMiniMetric extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 8.5,
               height: 1.05,
               fontWeight: FontWeight.w800,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
         ],
@@ -2151,16 +2151,16 @@ class _FeeActionRow extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+          Icon(Icons.chevron_right_rounded, color: context.appTheme.muted),
         ],
       ),
     );
@@ -2200,10 +2200,10 @@ class _FeeSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w900,
-        color: AppTheme.onSurface,
+        color: context.appTheme.onSurface,
       ),
     );
   }
@@ -2244,10 +2244,10 @@ class _FeeStructureCard extends StatelessWidget {
                   '${bundle.classLabel}\n${bundle.components.length} Components',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     height: 1.25,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2301,10 +2301,10 @@ class _FeeComponentTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   component.frequency,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -2356,9 +2356,9 @@ class _FeeStudentRow extends StatelessWidget {
                   account.rollNumber,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2421,9 +2421,9 @@ class _FeeDueStudentTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   account.rollNumber,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2481,9 +2481,9 @@ class _FeePaymentHistoryTile extends StatelessWidget {
                   '${payment['mode'] ?? 'Payment'}\n${payment['receipt'] ?? ''}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2575,16 +2575,16 @@ class _FeeReportTile extends StatelessWidget {
                   report.subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+          Icon(Icons.chevron_right_rounded, color: context.appTheme.muted),
         ],
       ),
     );
@@ -2607,18 +2607,18 @@ class _FeeInfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = danger
-        ? AppTheme.error
+        ? context.appTheme.error
         : highlighted
-        ? AppTheme.success
-        : AppTheme.onSurface;
+        ? context.appTheme.success
+        : context.appTheme.onSurface;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: highlighted
-            ? AppTheme.successContainer
+            ? context.appTheme.successContainer
             : danger
-            ? AppTheme.errorContainer
-            : AppTheme.surfaceVariant,
+            ? context.appTheme.errorContainer
+            : context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -2628,9 +2628,9 @@ class _FeeInfoTile extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 9.5,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
               fontWeight: FontWeight.w800,
             ),
           ),
@@ -2671,8 +2671,8 @@ class _FeeAmountRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
-                color: AppTheme.muted,
+              style: TextStyle(
+                color: context.appTheme.muted,
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
               ),
@@ -2682,7 +2682,7 @@ class _FeeAmountRow extends StatelessWidget {
             value,
             style: TextStyle(
               fontWeight: FontWeight.w900,
-              color: danger ? AppTheme.error : AppTheme.onSurface,
+              color: danger ? context.appTheme.error : context.appTheme.onSurface,
             ),
           ),
         ],
@@ -2762,7 +2762,7 @@ class _FeeAvatar extends StatelessWidget {
     return CircleAvatar(
       radius: 18,
       backgroundColor: const Color(0xFFE0EAFF),
-      foregroundColor: AppTheme.primary,
+      foregroundColor: context.appTheme.primary,
       backgroundImage: photoUrl.trim().isEmpty ? null : NetworkImage(photoUrl),
       child: photoUrl.trim().isEmpty
           ? Text(
@@ -2784,20 +2784,20 @@ class _FeeInfoBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.infoContainer,
+        color: context.appTheme.infoContainer,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.primary.withAlpha(40)),
+        border: Border.all(color: context.appTheme.primary.withAlpha(40)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: AppTheme.primary),
+          Icon(Icons.info_outline_rounded, color: context.appTheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
-                color: AppTheme.onSurface,
+              style: TextStyle(
+                color: context.appTheme.onSurface,
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w700,
@@ -2832,7 +2832,7 @@ class _FeeEmptyState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
         child: Column(
           children: [
-            Icon(icon, size: 46, color: AppTheme.muted),
+            Icon(icon, size: 46, color: context.appTheme.muted),
             const SizedBox(height: 14),
             Text(
               title,
@@ -2843,8 +2843,8 @@ class _FeeEmptyState extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppTheme.muted,
+              style: TextStyle(
+                color: context.appTheme.muted,
                 fontWeight: FontWeight.w700,
                 height: 1.35,
               ),
@@ -2869,8 +2869,8 @@ class _FeeSuccessCircle extends StatelessWidget {
       child: Container(
         width: 78,
         height: 78,
-        decoration: const BoxDecoration(
-          color: AppTheme.success,
+        decoration: BoxDecoration(
+          color: context.appTheme.success,
           shape: BoxShape.circle,
         ),
         child: const Icon(Icons.check_rounded, color: Colors.white, size: 42),

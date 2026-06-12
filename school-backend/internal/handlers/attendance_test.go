@@ -155,6 +155,39 @@ func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 }
 
+func TestKioskQRScanRecordsStaffFromSubmittedStaffID(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	h := NewAttendanceHandler()
+	now := time.Now().UTC()
+	_, dateText := staffAttendanceDate(now)
+	token := signedStaffQRTokenForTest(t, staffQRPayload{
+		SchoolID:  f.schoolID,
+		Date:      dateText,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(time.Minute).Unix(),
+		Nonce:     "kiosk-token",
+	})
+
+	router := scopedPolicyRouter("Kiosk", "user-policy-kiosk", "", "", "kiosk@policy.test", f.schoolID)
+	router.POST("/attendance/staff/qr-scan", h.ScanStaffQR)
+
+	body, _ := json.Marshal(map[string]string{
+		"token":    token,
+		"staff_id": f.teacherStaffID,
+	})
+	req, _ := http.NewRequest(http.MethodPost, "/attendance/staff/qr-scan", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	assert.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	var count int64
+	assert.NoError(t, database.DB.Model(&models.StaffAttendance{}).
+		Where("staff_id = ?", f.teacherStaffID).
+		Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+}
+
 func TestStaffQRScanRejectsExpiredWrongSchoolAndUnlinkedTeacher(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	h := NewAttendanceHandler()

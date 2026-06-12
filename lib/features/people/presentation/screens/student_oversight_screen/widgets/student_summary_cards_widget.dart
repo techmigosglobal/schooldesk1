@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StudentSummaryCardsWidget extends StatelessWidget {
   final int totalStudents;
@@ -26,7 +27,7 @@ class StudentSummaryCardsWidget extends StatelessWidget {
         final tileWidth =
             (constraints.maxWidth - 24 - ((columns - 1) * 8)) / columns;
         return Container(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           padding: const EdgeInsets.all(12),
           child: GridView.count(
             crossAxisCount: columns,
@@ -37,32 +38,36 @@ class StudentSummaryCardsWidget extends StatelessWidget {
             childAspectRatio: tileWidth / cardHeight,
             children: [
               _buildCard(
+                context,
                 'Total',
                 '$totalStudents',
                 Icons.school_rounded,
-                AppTheme.primary,
-                AppTheme.primaryContainer,
+                context.appTheme.primary,
+                context.appTheme.primaryContainer,
               ),
               _buildCard(
+                context,
                 'Alerts',
                 '$alertStudents',
                 Icons.warning_amber_rounded,
-                AppTheme.error,
-                AppTheme.errorContainer,
+                context.appTheme.error,
+                context.appTheme.errorContainer,
               ),
               _buildCard(
+                context,
                 'Toppers',
                 '$topperStudents',
                 Icons.emoji_events_rounded,
-                AppTheme.secondary,
-                AppTheme.secondaryContainer,
+                context.appTheme.secondary,
+                context.appTheme.secondaryContainer,
               ),
               _buildCard(
+                context,
                 'Defaulters',
                 '$feeDefaulters',
                 Icons.account_balance_wallet_outlined,
-                AppTheme.warning,
-                AppTheme.warningContainer,
+                context.appTheme.warning,
+                context.appTheme.warningContainer,
               ),
             ],
           ),
@@ -72,6 +77,7 @@ class StudentSummaryCardsWidget extends StatelessWidget {
   }
 
   Widget _buildCard(
+    BuildContext context,
     String label,
     String value,
     IconData icon,
@@ -107,7 +113,7 @@ class StudentSummaryCardsWidget extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
             textAlign: TextAlign.center,
             maxLines: 1,

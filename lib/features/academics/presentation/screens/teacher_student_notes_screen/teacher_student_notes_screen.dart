@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherStudentNotesScreen extends StatefulWidget {
   const TeacherStudentNotesScreen({super.key});
@@ -333,11 +333,11 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
   Color _priorityColor(String priority) {
     switch (priority) {
       case 'high':
-        return AppTheme.error;
+        return context.appTheme.error;
       case 'low':
-        return AppTheme.success;
+        return context.appTheme.success;
       default:
-        return AppTheme.warning;
+        return context.appTheme.warning;
     }
   }
 }

@@ -8,9 +8,10 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalDashboardScreen extends StatefulWidget {
   const PrincipalDashboardScreen({super.key});
@@ -831,7 +832,7 @@ class _PrincipalAppHeader extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              border: Border.all(color: Colors.white.withOpacity(0.10)),
+              border: Border.all(color: context.appTheme.surface.withOpacity(0.10)),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x220F172A),
@@ -871,7 +872,7 @@ class _PrincipalAppHeader extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleLarge?.copyWith(
-                                    color: Colors.white,
+                                    color: context.appTheme.surface,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 0,
                                     height: 1.05,
@@ -883,7 +884,7 @@ class _PrincipalAppHeader extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleSmall?.copyWith(
-                                    color: Colors.white.withOpacity(0.90),
+                                    color: context.appTheme.surface.withOpacity(0.90),
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0,
                                     height: 1.05,
@@ -935,9 +936,9 @@ class _SchoolIdentityBanner extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 10 : 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.10),
+        color: context.appTheme.surface.withOpacity(0.10),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withOpacity(0.16)),
+        border: Border.all(color: context.appTheme.surface.withOpacity(0.16)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -954,7 +955,7 @@ class _SchoolIdentityBanner extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
+                    color: context.appTheme.surface,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
                     height: 1.08,
@@ -966,7 +967,7 @@ class _SchoolIdentityBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: Colors.white.withOpacity(0.88),
+                    color: context.appTheme.surface.withOpacity(0.88),
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0,
                   ),
@@ -985,7 +986,7 @@ class _SchoolIdentityBanner extends StatelessWidget {
               child: FilledButton(
                 onPressed: onViewProfile,
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.white,
+                  backgroundColor: context.appTheme.surface,
                   foregroundColor: const Color(0xFF111827),
                   elevation: 0,
                   padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
@@ -1024,9 +1025,9 @@ class _PrincipalHeaderScrim extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.black.withOpacity(0.22),
+            context.appTheme.onSurface.withOpacity(0.22),
             const Color(0xFF102A56).withOpacity(0.16),
-            Colors.black.withOpacity(0.36),
+            context.appTheme.onSurface.withOpacity(0.36),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -1056,7 +1057,7 @@ class _HeaderNotificationButton extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Material(
-            color: Colors.white.withOpacity(0.16),
+            color: context.appTheme.surface.withOpacity(0.16),
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               onTap: onTap,
@@ -1067,7 +1068,7 @@ class _HeaderNotificationButton extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white.withOpacity(0.20)),
+                  border: Border.all(color: context.appTheme.surface.withOpacity(0.20)),
                 ),
                 child: const Icon(
                   Icons.notifications_none_rounded,
@@ -1088,7 +1089,7 @@ class _HeaderNotificationButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white, width: 1.5),
+                  border: Border.all(color: context.appTheme.surface, width: 1.5),
                 ),
                 child: Text(
                   badgeText,
@@ -1119,7 +1120,7 @@ class _HeaderSchoolLogo extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.94),
+        color: context.appTheme.surface.withOpacity(0.94),
         borderRadius: BorderRadius.circular(8),
       ),
       clipBehavior: Clip.antiAlias,
@@ -1230,7 +1231,7 @@ class _DashboardSearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(12),
       elevation: 2,
       shadowColor: const Color(0x140F172A),
@@ -1241,7 +1242,7 @@ class _DashboardSearchBar extends StatelessWidget {
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white),
+            border: Border.all(color: context.appTheme.surface),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -1307,7 +1308,7 @@ class _OperationalGapsPanel extends StatelessWidget {
     final total = gaps.length;
     final visible = gaps.take(4).toList();
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(16),
       elevation: 3,
       shadowColor: const Color(0x160F172A),
@@ -1317,15 +1318,15 @@ class _OperationalGapsPanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: total == 0
-                ? const Color(0xFFD1FAE5)
-                : const Color(0xFFFED7AA),
+                ? Color(0xFFD1FAE5)
+                : Color(0xFFFED7AA),
           ),
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: total == 0
-                ? const [Colors.white, Color(0xFFF0FDF4)]
-                : const [Colors.white, Color(0xFFFFF7ED)],
+                ? [context.appTheme.surface, Color(0xFFF0FDF4)]
+                : [context.appTheme.surface, Color(0xFFFFF7ED)],
           ),
         ),
         child: Column(
@@ -1645,7 +1646,7 @@ class _AcademicModuleTileState extends State<_AcademicModuleTile> {
                                     color: const Color(0xFFEF4444),
                                     borderRadius: BorderRadius.circular(999),
                                     border: Border.all(
-                                      color: Colors.white,
+                                      color: context.appTheme.surface,
                                       width: 2,
                                     ),
                                   ),
@@ -1677,7 +1678,7 @@ class _AcademicModuleTileState extends State<_AcademicModuleTile> {
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
                               style: theme.textTheme.titleSmall?.copyWith(
-                                color: AppTheme.onSurface,
+                                color: context.appTheme.onSurface,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w900,
                                 height: 1.05,
@@ -1778,7 +1779,7 @@ class _SnapshotTile extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white),
+        border: Border.all(color: context.appTheme.surface),
       ),
       child: Row(
         children: [
@@ -1833,7 +1834,7 @@ class _SnapshotTile extends StatelessWidget {
     );
 
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(14),
       elevation: 2,
       shadowColor: const Color(0x120F172A),
@@ -1869,7 +1870,7 @@ class _SetupPreviewPanel extends StatelessWidget {
     final pending = steps.where((step) => !step.isComplete).take(4).toList();
     final visibleSteps = pending.isEmpty ? steps.take(4).toList() : pending;
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(18),
       elevation: 2,
       shadowColor: const Color(0x140F172A),
@@ -1877,10 +1878,10 @@ class _SetupPreviewPanel extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.white, Color(0xFFEFF8FF)],
+            colors: [context.appTheme.surface, Color(0xFFEFF8FF)],
           ),
         ),
         child: Column(

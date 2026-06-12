@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentLeaveRequestFormArgs {
   final List<Map<String, dynamic>> children;
@@ -184,7 +184,7 @@ class _ParentLeaveRequestFormScreenState
     if (widget.args.children.isEmpty) {
       return Text(
         'No linked students are available for this account.',
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       );
     }
     return DropdownButtonFormField<String>(
@@ -224,7 +224,7 @@ class _ParentLeaveRequestFormScreenState
             const SizedBox(width: 10),
             Text(
               'Loading leave types...',
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
             ),
           ],
         ),
@@ -234,7 +234,7 @@ class _ParentLeaveRequestFormScreenState
       return Text(
         _leaveTypeError ??
             'No leave types are configured for this school account.',
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       );
     }
     return DropdownButtonFormField<String>(
@@ -336,7 +336,7 @@ class _ParentLeaveRequestFormScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppTheme.error,
+        backgroundColor: context.appTheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );

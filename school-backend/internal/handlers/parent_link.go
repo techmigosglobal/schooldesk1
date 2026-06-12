@@ -190,13 +190,13 @@ func (h *ParentLinkHandler) GetParentStudents(c *gin.Context) {
 	var links []models.ParentStudentLink
 	if err := database.DB.
 		Where("school_id = ? AND parent_user_id = ?", schoolID, parentUserID).
-		Preload("Student").
+		Preload("Student.CurrentSection.ClassTeacher").
 		Find(&links).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to fetch parent-student links")
 		return
 	}
 
-	result := make([]gin.H, 0, len(links))
+	students := make([]models.Student, 0, len(links))
 	for _, link := range links {
 		if link.Student == nil {
 			continue
@@ -204,15 +204,9 @@ func (h *ParentLinkHandler) GetParentStudents(c *gin.Context) {
 		if strings.EqualFold(strings.TrimSpace(link.Student.Status), "inactive") {
 			continue
 		}
-		result = append(result, gin.H{
-			"student_id":               link.StudentID,
-			"student_admission_number": link.StudentAdmissionNumber,
-			"student_first_name":       link.Student.FirstName,
-			"student_last_name":        link.Student.LastName,
-			"student_status":           link.Student.Status,
-			"linked_at":                link.CreatedAt,
-		})
+		students = append(students, *link.Student)
 	}
+	result := studentResponseRows(database.DB, schoolID, students)
 
 	success(c, http.StatusOK, gin.H{
 		"parent_user_id": parentUserID,
@@ -250,9 +244,14 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		PrimaryGuardianEmail        string  `json:"primary_guardian_email"`
 	}
 
+	dateFunc := "strftime('%Y-%m-%d', MIN(es.exam_date))"
+	if database.DB.Dialector.Name() == "postgres" {
+		dateFunc = "TO_CHAR(MIN(es.exam_date), 'YYYY-MM-DD')"
+	}
+
 	var dbRows []studentRow
 	now := time.Now().UTC()
-	if err := database.DB.Raw(`
+	if err := database.DB.Raw(fmt.Sprintf(`
 		SELECT
 			students.id AS id,
 			students.first_name AS first_name,
@@ -292,17 +291,17 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 				WHERE fi.student_id = students.id AND fi.status != 'paid'
 			), 0) AS fee_pending_invoices,
 			(
-				SELECT strftime('%Y-%m-%d', MIN(es.exam_date))
+				SELECT %s
 				FROM exam_schedules es
 				JOIN exams e ON e.id = es.exam_id
 				WHERE e.school_id = parent_student_links.school_id
 				  AND es.section_id = students.current_section_id
 				  AND es.exam_date >= ?
 			) AS upcoming_exam_date,
-			COALESCE((SELECT g.full_name FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_name,
-			COALESCE((SELECT g.relationship FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_relationship,
-			COALESCE((SELECT g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_phone,
-			COALESCE((SELECT g.email FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = 1 LIMIT 1), '') AS primary_guardian_email
+			COALESCE((SELECT g.full_name FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_name,
+			COALESCE((SELECT g.relationship FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_relationship,
+			COALESCE((SELECT g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_phone,
+			COALESCE((SELECT g.email FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_email
 		FROM parent_student_links
 		JOIN students ON students.id = parent_student_links.student_id
 		LEFT JOIN sections ON sections.id = students.current_section_id
@@ -311,7 +310,7 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		WHERE parent_student_links.school_id = ? 
 		  AND parent_student_links.parent_user_id = ? 
 		  AND students.status != 'inactive'
-	`, now, schoolID, parentUserID).Scan(&dbRows).Error; err != nil {
+	`, dateFunc), now, schoolID, parentUserID).Scan(&dbRows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load linked students")
 		return
 	}
@@ -332,13 +331,13 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		}
 
 		result = append(result, gin.H{
-			"id":               row.ID,
-			"first_name":       row.FirstName,
-			"last_name":        row.LastName,
-			"admission_number": row.AdmissionNumber,
-			"student_code":     row.StudentCode,
+			"id":                 row.ID,
+			"first_name":         row.FirstName,
+			"last_name":          row.LastName,
+			"admission_number":   row.AdmissionNumber,
+			"student_code":       row.StudentCode,
 			"current_section_id": row.CurrentSectionID,
-			"status":           row.Status,
+			"status":             row.Status,
 			"current_section": gin.H{
 				"section_name": row.SectionName,
 				"grade": gin.H{

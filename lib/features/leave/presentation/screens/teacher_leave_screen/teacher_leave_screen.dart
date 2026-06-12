@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/teacher_leave_screen/teacher_leave_request_form_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherLeaveScreen extends StatefulWidget {
   const TeacherLeaveScreen({super.key});
@@ -201,7 +201,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
   Color _statusColor(String status) {
     return switch (status) {
       'approved' => Colors.green,
-      'rejected' => AppTheme.error,
+      'rejected' => context.appTheme.error,
       'pending' => Colors.orange,
       _ => teacherFlowAccent,
     };

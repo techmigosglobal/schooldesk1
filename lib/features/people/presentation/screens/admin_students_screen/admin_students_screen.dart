@@ -3,13 +3,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminStudentsScreen extends StatefulWidget {
   final String ownerRole;
@@ -328,15 +328,15 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   showCheckmark: false,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  selectedColor: AppTheme.primaryContainer,
-                  backgroundColor: AppTheme.surfaceVariant,
+                  selectedColor: context.appTheme.primaryContainer,
+                  backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? AppTheme.primary : AppTheme.outline,
+                    color: selected ? context.appTheme.primary : context.appTheme.outline,
                   ),
                   labelStyle: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: selected ? AppTheme.primary : AppTheme.onSurface,
+                    color: selected ? context.appTheme.primary : context.appTheme.onSurface,
                   ),
                   onSelected: (_) => setState(() => _filterClass = _classes[i]),
                 );
@@ -561,7 +561,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   ? '${s['name']} removed'
                   : '${s['name']} removal submitted for Principal approval',
             ),
-            backgroundColor: _isPrincipal ? AppTheme.error : AppTheme.success,
+            backgroundColor: _isPrincipal ? context.appTheme.error : context.appTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -573,7 +573,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             content: Text(
               _isPrincipal ? 'Removal failed: $e' : 'Removal request failed: $e',
             ),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -728,13 +728,13 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                           : 'Transfer request submitted for ${s['name']}',
                     ),
                     backgroundColor: _isPrincipal
-                        ? AppTheme.warning
-                        : AppTheme.success,
+                        ? context.appTheme.warning
+                        : context.appTheme.success,
                   ),
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.warning),
+            style: ElevatedButton.styleFrom(backgroundColor: context.appTheme.warning),
             child: Text(
               _isPrincipal ? 'Initiate Transfer' : 'Submit Transfer for Approval',
             ),
@@ -770,7 +770,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: AppTheme.success,
+        backgroundColor: context.appTheme.success,
       ),
     );
   }
@@ -809,7 +809,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                           ? 'TC workflow started for ${s['name']}'
                           : 'TC request submitted for ${s['name']}',
                     ),
-                    backgroundColor: AppTheme.success,
+                    backgroundColor: context.appTheme.success,
                   ),
                 );
               }
@@ -1221,7 +1221,7 @@ class _StudentFormPageState extends State<_StudentFormPage> {
                       _errorText!,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.error,
+                        color: context.appTheme.error,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1354,7 +1354,7 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
                       _errorText!,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.error,
+                        color: context.appTheme.error,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1406,16 +1406,16 @@ class _StudentDocumentUploadPage extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppTheme.warningContainer,
+                color: context.appTheme.warningContainer,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning),
+                border: Border.all(color: context.appTheme.warning),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.info_outline_rounded,
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1424,7 +1424,7 @@ class _StudentDocumentUploadPage extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                   ),
@@ -1442,7 +1442,7 @@ class _StudentDocumentUploadPage extends StatelessWidget {
                       uploaded
                           ? Icons.check_circle_rounded
                           : Icons.upload_file_rounded,
-                      color: uploaded ? AppTheme.success : AppTheme.muted,
+                      color: uploaded ? context.appTheme.success : context.appTheme.muted,
                     ),
                     title: Text(
                       document,
@@ -1455,9 +1455,9 @@ class _StudentDocumentUploadPage extends StatelessWidget {
                       style: GoogleFonts.dmSans(fontSize: 12),
                     ),
                     trailing: uploaded
-                        ? const Icon(
+                        ? Icon(
                             Icons.verified_rounded,
-                            color: AppTheme.success,
+                            color: context.appTheme.success,
                           )
                         : FilledButton.icon(
                             onPressed: null,
@@ -1494,15 +1494,15 @@ class _StudentPageHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outline),
+        border: Border.all(color: context.appTheme.outline),
       ),
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: AppTheme.primaryContainer,
-            foregroundColor: AppTheme.primary,
+            backgroundColor: context.appTheme.primaryContainer,
+            foregroundColor: context.appTheme.primary,
             child: Icon(icon),
           ),
           const SizedBox(width: 12),
@@ -1515,7 +1515,7 @@ class _StudentPageHeader extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1523,7 +1523,7 @@ class _StudentPageHeader extends StatelessWidget {
                   subtitle,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1553,9 +1553,9 @@ class _StudentPageActions extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      decoration: const BoxDecoration(
-        color: AppTheme.surface,
-        border: Border(top: BorderSide(color: AppTheme.outline)),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        border: Border(top: BorderSide(color: context.appTheme.outline)),
       ),
       child: Row(
         children: [

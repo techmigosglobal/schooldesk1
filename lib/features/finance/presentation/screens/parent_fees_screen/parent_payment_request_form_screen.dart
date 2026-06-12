@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class ParentPaymentRequestFormArgs {
@@ -165,12 +165,12 @@ class _ParentPaymentRequestFormScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: AppTheme.primaryContainer,
+              color: context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.account_circle_rounded,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
             ),
           ),
           const SizedBox(width: 12),
@@ -183,7 +183,7 @@ class _ParentPaymentRequestFormScreenState
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 if (classLabel.isNotEmpty)
@@ -191,7 +191,7 @@ class _ParentPaymentRequestFormScreenState
                     classLabel,
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
               ],
@@ -207,7 +207,7 @@ class _ParentPaymentRequestFormScreenState
       return _panel(
         child: Text(
           'No pending invoice is available for payment request.',
-          style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+          style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
         ),
       );
     }
@@ -257,7 +257,7 @@ class _ParentPaymentRequestFormScreenState
                 'INR ${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(
                   fontWeight: FontWeight.w800,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
             ],
@@ -339,13 +339,13 @@ class _ParentPaymentRequestFormScreenState
                   ),
                   decoration: BoxDecoration(
                     color: selected
-                        ? AppTheme.primary.withAlpha(16)
-                        : AppTheme.surface,
+                        ? context.appTheme.primary.withAlpha(16)
+                        : context.appTheme.surface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: selected
-                          ? AppTheme.primary
-                          : AppTheme.outlineVariant,
+                          ? context.appTheme.primary
+                          : context.appTheme.outlineVariant,
                     ),
                   ),
                   child: Row(
@@ -353,7 +353,7 @@ class _ParentPaymentRequestFormScreenState
                       Icon(
                         mode.$3,
                         size: 18,
-                        color: selected ? AppTheme.primary : AppTheme.muted,
+                        color: selected ? context.appTheme.primary : context.appTheme.muted,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -366,10 +366,10 @@ class _ParentPaymentRequestFormScreenState
                         ),
                       ),
                       if (selected)
-                        const Icon(
+                        Icon(
                           Icons.check_circle_rounded,
                           size: 18,
-                          color: AppTheme.primary,
+                          color: context.appTheme.primary,
                         ),
                     ],
                   ),
@@ -386,9 +386,9 @@ class _ParentPaymentRequestFormScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: child,
     );
@@ -434,7 +434,7 @@ class _ParentPaymentRequestFormScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error.toString()),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );

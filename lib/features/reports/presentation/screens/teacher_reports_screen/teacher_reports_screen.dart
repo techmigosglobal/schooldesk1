@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherReportsScreen extends StatefulWidget {
   const TeacherReportsScreen({super.key});
@@ -23,12 +23,12 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
   List<Map<String, dynamic>> _incidents = const [];
   List<Map<String, dynamic>> _exports = const [];
 
-  static const _reportTypes = [
+  List<_TeacherReportType> get _reportTypes => [
     _TeacherReportType(
       title: 'Class Attendance Report',
       type: 'attendance',
       icon: Icons.how_to_reg_rounded,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       description: 'Daily and period-wise attendance evidence',
     ),
     _TeacherReportType(
@@ -42,14 +42,14 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       title: 'Student Support Report',
       type: 'support',
       icon: Icons.support_rounded,
-      color: AppTheme.warning,
+      color: context.appTheme.warning,
       description: 'Notes, conduct items, and support actions',
     ),
     _TeacherReportType(
       title: 'Report Cards Export',
       type: 'report_cards',
       icon: Icons.picture_as_pdf_rounded,
-      color: AppTheme.secondary,
+      color: context.appTheme.secondary,
       description: 'Jump into generated academic report cards',
     ),
   ];
@@ -173,7 +173,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 label: 'Attendance',
                 value: '${attendancePercent.toStringAsFixed(0)}%',
                 icon: Icons.how_to_reg_rounded,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
                 tone: const Color(0xFFEAF3FF),
               ),
               TeacherFlowMetric(
@@ -187,14 +187,14 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 label: 'Notes',
                 value: '${_notes.length}',
                 icon: Icons.sticky_note_2_rounded,
-                color: AppTheme.warning,
+                color: context.appTheme.warning,
                 tone: const Color(0xFFFFF7E6),
               ),
               TeacherFlowMetric(
                 label: 'Conduct',
                 value: '${_incidents.length}',
                 icon: Icons.health_and_safety_rounded,
-                color: AppTheme.error,
+                color: context.appTheme.error,
                 tone: const Color(0xFFFFF0F0),
               ),
             ],
@@ -252,7 +252,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       title: report.title,
       subtitle: report.description,
       status: exporting ? 'Exporting' : 'Ready',
-      statusColor: exporting ? AppTheme.warning : report.color,
+      statusColor: exporting ? context.appTheme.warning : report.color,
       body: TeacherFlowActionWrap(
         actions: [
           TeacherFlowAction(

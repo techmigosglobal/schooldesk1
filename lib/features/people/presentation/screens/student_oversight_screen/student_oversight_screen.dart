@@ -14,9 +14,9 @@ import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StudentModel {
   final String id;
@@ -537,7 +537,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Remove'),
           ),
@@ -566,7 +566,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: failures.isEmpty ? AppTheme.success : AppTheme.warning,
+        backgroundColor: failures.isEmpty ? context.appTheme.success : context.appTheme.warning,
       ),
     );
   }
@@ -701,7 +701,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               IconButton(
                 onPressed: _deleteSelectedStudents,
                 icon: const Icon(Icons.delete_outline_rounded, size: 22),
-                color: AppTheme.error,
+                color: context.appTheme.error,
                 tooltip: 'Remove selected',
               ),
             ],
@@ -874,9 +874,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final students = List<StudentModel>.unmodifiable(_filteredStudents);
     if (students.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('No students available for export'),
-          backgroundColor: AppTheme.warning,
+          backgroundColor: context.appTheme.warning,
         ),
       );
       return;
@@ -919,9 +919,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Student directory CSV generated'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
     } catch (error) {
@@ -929,7 +929,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Student directory export failed: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -1262,7 +1262,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Remove'),
           ),
@@ -1309,7 +1309,7 @@ class _StudentDirectoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFE0F8FF) : Colors.white,
+      color: selected ? const Color(0xFFE0F8FF) : context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       shadowColor: const Color(0xFF8AAAC0).withAlpha(55),
@@ -1325,7 +1325,7 @@ class _StudentDirectoryCard extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? const Color(0xFF0887F2)
-                  : Colors.white.withAlpha(180),
+                  : context.appTheme.surface.withAlpha(180),
               width: selected ? 1.4 : 1,
             ),
           ),
@@ -1494,7 +1494,7 @@ class _SearchBox extends StatelessWidget {
     return Container(
       height: 50,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -1548,7 +1548,7 @@ class _DirectoryChip extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE0F8FF) : Colors.white,
+          color: selected ? const Color(0xFFE0F8FF) : context.appTheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected ? const Color(0xFF86C7D9) : const Color(0xFFD8E4EA),
@@ -2128,7 +2128,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             'Use this when the parent account does not exist yet.',
                             style: GoogleFonts.dmSans(
                               fontSize: 11,
-                              color: AppTheme.muted,
+                              color: context.appTheme.muted,
                             ),
                           ),
                         ),
@@ -2295,7 +2295,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                 : 'Uses the current academic year and matching class fee structure.',
                             style: GoogleFonts.dmSans(
                               fontSize: 11,
-                              color: AppTheme.muted,
+                              color: context.appTheme.muted,
                             ),
                           ),
                         ),
@@ -2362,7 +2362,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                       Text(
                         _error!,
                         style: GoogleFonts.dmSans(
-                          color: AppTheme.error,
+                          color: context.appTheme.error,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2487,12 +2487,12 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: _saving
-          ? const SizedBox(
+          ? SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: context.appTheme.surface,
               ),
             )
           : Text(
@@ -2688,7 +2688,7 @@ class _FormCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -2775,7 +2775,7 @@ class _TextInput extends StatelessWidget {
         hintText: hint,
         isDense: true,
         filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF4F7F9),
+        fillColor: enabled ? context.appTheme.surface : const Color(0xFFF4F7F9),
         suffixIcon: suffixIcon == null ? null : Icon(suffixIcon, size: 17),
         suffixIconConstraints: const BoxConstraints(minWidth: 34),
         contentPadding: const EdgeInsets.symmetric(
@@ -2833,7 +2833,7 @@ class _DropdownInput<T> extends StatelessWidget {
       decoration: InputDecoration(
         isDense: true,
         filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF4F7F9),
+        fillColor: enabled ? context.appTheme.surface : const Color(0xFFF4F7F9),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
           vertical: 10,
@@ -3204,7 +3204,7 @@ class _SignalTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w900,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -3215,7 +3215,7 @@ class _SignalTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -3273,7 +3273,7 @@ class _DetailRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           );
           final valueText = Text(
@@ -3286,7 +3286,7 @@ class _DetailRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w900,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           );
 

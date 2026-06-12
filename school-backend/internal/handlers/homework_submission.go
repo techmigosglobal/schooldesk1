@@ -77,6 +77,10 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "student_id is required")
 		return
 	}
+	if !canAccessStudent(c, req.StudentID) {
+		fail(c, http.StatusForbidden, "Student access denied")
+		return
+	}
 	if req.AnswerText == "" && req.AttachmentURL == "" {
 		fail(c, http.StatusBadRequest, "answer_text or attachment_url is required")
 		return

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class SchoolDeskImageCropper {
   SchoolDeskImageCropper._();
@@ -22,7 +23,7 @@ class SchoolDeskImageCropper {
         AndroidUiSettings(
           toolbarTitle: title,
           toolbarColor: const Color(0xFF0F6EA8),
-          toolbarWidgetColor: Colors.white,
+          toolbarWidgetColor: context.appTheme.surface,
           activeControlsWidgetColor: const Color(0xFF0887F2),
           backgroundColor: const Color(0xFFEFF8FD),
           initAspectRatio: CropAspectRatioPreset.square,

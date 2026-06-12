@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminTeachersScreen extends StatefulWidget {
   const AdminTeachersScreen({super.key});
@@ -89,11 +89,11 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       appBar: AppBar(
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         title: Text(
           'Staff',
           style: GoogleFonts.dmSans(fontSize: 16, fontWeight: FontWeight.w700),
@@ -121,7 +121,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
       body: Column(
         children: [
           Container(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             padding: const EdgeInsets.all(12),
             child: TextField(
               onChanged: (v) => setState(() => _search = v),
@@ -177,12 +177,12 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isOnLeave
-                ? AppTheme.warningContainer
-                : AppTheme.outlineVariant,
+                ? context.appTheme.warningContainer
+                : context.appTheme.outlineVariant,
           ),
         ),
         child: Row(
@@ -192,14 +192,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
               child: CircleAvatar(
                 radius: 22,
                 backgroundColor: isOnLeave
-                    ? AppTheme.warningContainer
-                    : AppTheme.primaryContainer,
+                    ? context.appTheme.warningContainer
+                    : context.appTheme.primaryContainer,
                 child: Text(
                   t['name'].toString().split(' ').last.substring(0, 1),
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: isOnLeave ? AppTheme.warning : AppTheme.primary,
+                    color: isOnLeave ? context.appTheme.warning : context.appTheme.primary,
                   ),
                 ),
               ),
@@ -229,8 +229,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                           ),
                           decoration: BoxDecoration(
                             color: isOnLeave
-                                ? AppTheme.warningContainer
-                                : AppTheme.successContainer,
+                                ? context.appTheme.warningContainer
+                                : context.appTheme.successContainer,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -239,8 +239,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: isOnLeave
-                                  ? AppTheme.warning
-                                  : AppTheme.success,
+                                  ? context.appTheme.warning
+                                  : context.appTheme.success,
                             ),
                           ),
                         ),
@@ -251,21 +251,21 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     '${t['subject']} • ${t['dept']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   Text(
                     'Classes: ${t['classes']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   Text(
                     'Leaves taken: ${t['leaves']} • ${t['phone']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -274,10 +274,10 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             Semantics(
               label: 'More actions for ${t['name']}',
               child: PopupMenuButton<String>(
-                icon: const Icon(
+                icon: Icon(
                   Icons.more_vert_rounded,
                   size: 18,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
                 onSelected: (v) => _handleTeacherAction(context, v, t),
                 itemBuilder: (_) => [
@@ -324,9 +324,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           final item = Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,8 +350,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                         ),
                         decoration: BoxDecoration(
                           color: isPending
-                              ? AppTheme.warningContainer
-                              : AppTheme.successContainer,
+                              ? context.appTheme.warningContainer
+                              : context.appTheme.successContainer,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -360,8 +360,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             color: isPending
-                                ? AppTheme.warning
-                                : AppTheme.success,
+                                ? context.appTheme.warning
+                                : context.appTheme.success,
                           ),
                         ),
                       ),
@@ -373,7 +373,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                   '${l['from']} – ${l['to']} • Reason: ${l['reason']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 if (isPending) ...[
@@ -388,8 +388,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                               _decideLeave(l, 'rejected');
                             },
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.error,
-                              side: const BorderSide(color: AppTheme.error),
+                              foregroundColor: context.appTheme.error,
+                              side: BorderSide(color: context.appTheme.error),
                             ),
                             child: const Text(
                               'Reject',
@@ -443,9 +443,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
           final item = Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Row(
               children: [
@@ -464,7 +464,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                         '${t['subject']} • ${t['id']}',
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -478,14 +478,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.success,
+                        color: context.appTheme.success,
                       ),
                     ),
                     Text(
                       'per month',
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -497,7 +497,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text('Salary slip generated for ${t['name']}'),
-                        backgroundColor: AppTheme.success,
+                        backgroundColor: context.appTheme.success,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -570,7 +570,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.success),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
   }
 
@@ -596,7 +596,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.success),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
   }
 
@@ -622,7 +622,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.success),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
   }
 
@@ -649,14 +649,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             status == 'approved' ? 'Leave approved' : 'Leave rejected',
           ),
           backgroundColor: status == 'approved'
-              ? AppTheme.success
-              : AppTheme.error,
+              ? context.appTheme.success
+              : context.appTheme.error,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.error),
+        SnackBar(content: Text('Failed: $e'), backgroundColor: context.appTheme.error),
       );
     }
   }
@@ -736,13 +736,13 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
   Widget build(BuildContext context) {
     final editing = widget.teacher != null;
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           editing ? 'Edit Teacher' : 'Add New Teacher',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         elevation: 0,
       ),
       body: SafeArea(
@@ -795,7 +795,7 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
                       : 'Add',
                 ),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: context.appTheme.primary,
                 ),
               ),
             ],
@@ -860,13 +860,13 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
   Widget build(BuildContext context) {
     final teacherName = widget.teacher['name']?.toString() ?? 'Teacher';
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           'Assign Subject',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         elevation: 0,
       ),
       body: SafeArea(
@@ -906,7 +906,7 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
                     )
                   : const Icon(Icons.assignment_ind_rounded),
               label: Text(_saving ? 'Assigning...' : 'Assign'),
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              style: FilledButton.styleFrom(backgroundColor: context.appTheme.primary),
             ),
           ],
         ),
@@ -925,13 +925,13 @@ class _TeacherInlineError extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.error.withAlpha(18),
+        color: context.appTheme.error.withAlpha(18),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(80)),
+        border: Border.all(color: context.appTheme.error.withAlpha(80)),
       ),
       child: Text(
         message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       ),
     );
   }

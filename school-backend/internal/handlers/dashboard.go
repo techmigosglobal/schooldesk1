@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -820,8 +821,13 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 	}
 	now := time.Now().UTC()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	dateFunc := "strftime('%Y-%m-%d', MIN(es.exam_date))"
+	if database.DB.Dialector.Name() == "postgres" {
+		dateFunc = "TO_CHAR(MIN(es.exam_date), 'YYYY-MM-DD')"
+	}
+
 	var children []parentChildSummary
-	if err := database.DB.Raw(`
+	if err := database.DB.Raw(fmt.Sprintf(`
 		SELECT
 			students.id,
 			students.first_name,
@@ -854,7 +860,7 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 				WHERE s.id = students.current_section_id
 			), '') AS class_teacher_name,
 			(
-				SELECT strftime('%Y-%m-%d', MIN(es.exam_date))
+				SELECT %s
 				FROM exam_schedules es
 				JOIN exams e ON e.id = es.exam_id
 				WHERE e.school_id = parent_student_links.school_id
@@ -867,7 +873,7 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 		WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ? AND students.status != 'inactive'
 		GROUP BY students.id, students.first_name, students.last_name, students.admission_number, students.current_section_id, parent_student_links.school_id
 		ORDER BY students.first_name, students.last_name
-	`, startOfMonth, now, schoolID, userID).Scan(&children).Error; err != nil {
+	`, dateFunc), startOfMonth, now, schoolID, userID).Scan(&children).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load child summaries")
 		return
 	}

@@ -7,6 +7,10 @@ export 'presentation/screens/admin_timetable_screen/admin_timetable_form_screens
 export 'presentation/screens/admin_timetable_screen/admin_timetable_screen.dart';
 export 'presentation/screens/exams_results_screen/exams_results_screen.dart';
 export 'presentation/screens/parent_diary_screen/parent_diary_screen.dart';
+export 'presentation/screens/parent_discipline_screen/parent_discipline_screen.dart';
+export 'presentation/screens/parent_exam_schedule_screen/parent_exam_schedule_screen.dart';
+export 'presentation/screens/parent_report_cards_screen/parent_report_cards_screen.dart';
+export 'presentation/screens/parent_timetable_screen/parent_timetable_screen.dart';
 export 'presentation/screens/principal_classes_screen/principal_classes_screen.dart';
 export 'presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart';
 export 'presentation/screens/principal_subjects_screen/principal_subjects_screen.dart';
@@ -14,6 +18,8 @@ export 'presentation/screens/syllabus_monitoring_screen/syllabus_monitoring_scre
 export 'presentation/screens/teacher_classes_screen/teacher_classes_screen.dart';
 export 'presentation/screens/teacher_diary_screen/teacher_diary_screen.dart';
 export 'presentation/screens/teacher_discipline_screen/teacher_discipline_screen.dart';
+export 'presentation/screens/teacher_mark_entry_screen/teacher_mark_entry_screen.dart';
 export 'presentation/screens/teacher_performance_screen/teacher_performance_screen.dart';
+export 'presentation/screens/teacher_syllabus_screen/teacher_syllabus_screen.dart';
 export 'presentation/screens/teacher_student_notes_screen/teacher_student_notes_screen.dart';
 export 'presentation/screens/timetable_management_screen/timetable_management_screen.dart';

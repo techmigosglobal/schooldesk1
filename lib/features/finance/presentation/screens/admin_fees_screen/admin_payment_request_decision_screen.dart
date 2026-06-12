@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminPaymentRequestDecisionArgs {
   final Map<String, dynamic> request;
@@ -108,9 +108,9 @@ class _AdminPaymentRequestDecisionScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +181,7 @@ class _AdminPaymentRequestDecisionScreenState
             width: 104,
             child: Text(
               label,
-              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
             ),
           ),
           Expanded(
@@ -237,7 +237,7 @@ class _AdminPaymentRequestDecisionScreenState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppTheme.error,
+        backgroundColor: context.appTheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );

@@ -3,11 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentLeaveScreen extends StatefulWidget {
   const ParentLeaveScreen({super.key});
@@ -156,20 +156,20 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withValues(alpha: 0.18)),
+        border: Border.all(color: context.appTheme.error.withValues(alpha: 0.18)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               _error ?? 'Unable to load leave requests',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
@@ -187,20 +187,20 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.outlineVariant),
+          border: Border.all(color: context.appTheme.outlineVariant),
         ),
         child: Row(
           children: [
-            const Icon(Icons.family_restroom_rounded, color: AppTheme.muted),
+            Icon(Icons.family_restroom_rounded, color: context.appTheme.muted),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'No linked students found for this parent account.',
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
-                  color: AppTheme.onSurfaceVariant,
+                  color: context.appTheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -220,14 +220,14 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
               selected: isActive,
               label: Text(_firstName(_studentName(child))),
               selectedColor: _headerColor,
-              backgroundColor: AppTheme.surface,
+              backgroundColor: context.appTheme.surface,
               labelStyle: GoogleFonts.dmSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppTheme.onSurface,
+                color: isActive ? Colors.white : context.appTheme.onSurface,
               ),
               side: BorderSide(
-                color: isActive ? _headerColor : AppTheme.outlineVariant,
+                color: isActive ? _headerColor : context.appTheme.outlineVariant,
               ),
               onSelected: (_) => setState(() => _activeChildIndex = index),
             ),
@@ -242,22 +242,22 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       {
         'label': 'Sick Leave',
         'icon': Icons.sick_rounded,
-        'color': AppTheme.error,
-        'bg': AppTheme.errorContainer,
+        'color': context.appTheme.error,
+        'bg': context.appTheme.errorContainer,
         'desc': 'Illness or medical reasons',
       },
       {
         'label': 'Personal Leave',
         'icon': Icons.person_rounded,
-        'color': AppTheme.primary,
-        'bg': AppTheme.primaryContainer,
+        'color': context.appTheme.primary,
+        'bg': context.appTheme.primaryContainer,
         'desc': 'Family events or personal work',
       },
       {
         'label': 'Early Pickup',
         'icon': Icons.directions_car_rounded,
-        'color': AppTheme.warning,
-        'bg': AppTheme.warningContainer,
+        'color': context.appTheme.warning,
+        'bg': context.appTheme.warningContainer,
         'desc': 'Early dismissal request',
       },
       {
@@ -316,7 +316,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                         type['desc'] as String,
                         style: GoogleFonts.dmSans(
                           fontSize: 10,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -343,8 +343,8 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: const BorderSide(color: AppTheme.primary, width: 1.5),
+          padding: EdgeInsets.symmetric(vertical: 14),
+          side: BorderSide(color: context.appTheme.primary, width: 1.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -357,18 +357,18 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
-          const Icon(Icons.event_available_rounded, color: AppTheme.muted),
+          Icon(Icons.event_available_rounded, color: context.appTheme.muted),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'No leave requests found for the selected student.',
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
             ),
           ),
         ],
@@ -381,15 +381,15 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     final isApproved = status == 'Approved';
     final isPending = status == 'Pending';
     final statusColor = isApproved
-        ? AppTheme.success
+        ? context.appTheme.success
         : isPending
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
     final statusBg = isApproved
-        ? AppTheme.successContainer
+        ? context.appTheme.successContainer
         : isPending
-        ? AppTheme.warningContainer
-        : AppTheme.errorContainer;
+        ? context.appTheme.warningContainer
+        : context.appTheme.errorContainer;
     final leaveType = request['leave_type']?.toString() ?? 'Leave';
     final studentName = _requestStudentName(request);
     final fromDate = _dateLabel(request['from_date']);
@@ -406,9 +406,9 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -444,30 +444,30 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           const SizedBox(height: 6),
           Text(
             'Child: $studentName',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           Text(
             'Date: $fromDate${days > 1 ? ' - $toDate' : ''}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           Text(
             'Days: ${days.toStringAsFixed(days.truncateToDouble() == days ? 0 : 1)}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           Text(
             'Reason: $reason',
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
           if (isApproved && decidedBy.isNotEmpty) ...[
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_rounded,
-                  color: AppTheme.success,
+                  color: context.appTheme.success,
                   size: 14,
                 ),
                 const SizedBox(width: 4),
@@ -476,7 +476,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                     'Approved by $decidedBy',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                     ),
                   ),
                 ),
@@ -487,7 +487,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
             const SizedBox(height: 4),
             Text(
               'Rejected: $rejectionReason',
-              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.error),
+              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.error),
             ),
           ],
           if (isPending)
@@ -495,17 +495,17 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
               padding: const EdgeInsets.only(top: 4),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.pending_actions_rounded,
                     size: 13,
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     'Awaiting teacher/admin approval',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.warning,
+                      color: context.appTheme.warning,
                     ),
                   ),
                 ],
@@ -514,7 +514,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           const SizedBox(height: 4),
           Text(
             'Submitted: $submittedOn',
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
         ],
       ),

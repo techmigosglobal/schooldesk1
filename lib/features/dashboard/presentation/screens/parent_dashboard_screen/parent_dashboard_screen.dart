@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -347,7 +348,7 @@ class _ParentChildPillSelector extends StatelessWidget {
               maxLines: 1,
               minFontSize: 11,
               style: theme.textTheme.labelLarge?.copyWith(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 fontWeight: FontWeight.w800,
               ),
             ),

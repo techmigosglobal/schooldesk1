@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -11,6 +10,7 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admin_user_access_screen/account_access_form_screen.dart';
 import 'package:schooldesk1/features/people/presentation/screens/admin_user_access_screen/account_child_assignment_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminUserAccessScreen extends StatefulWidget {
   final String ownerRole;
@@ -254,7 +254,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
               const SizedBox(height: 12),
               ElevatedButton(onPressed: _loadUsers, child: const Text('Retry')),
@@ -284,7 +284,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   Widget _buildUserFilters() {
     return Container(
       width: double.infinity,
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,14 +327,14 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                 fontWeight: FontWeight.w700,
                 color: selected == options[i]
                     ? Colors.white
-                    : AppTheme.onSurface,
+                    : context.appTheme.onSurface,
               ),
-              selectedColor: AppTheme.primary,
-              backgroundColor: AppTheme.surfaceVariant,
+              selectedColor: context.appTheme.primary,
+              backgroundColor: context.appTheme.surfaceVariant,
               side: BorderSide(
                 color: selected == options[i]
-                    ? AppTheme.primary
-                    : AppTheme.outlineVariant,
+                    ? context.appTheme.primary
+                    : context.appTheme.outlineVariant,
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -360,7 +360,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                   ? Icons.inventory_2_outlined
                   : Icons.people_outline_rounded,
               size: 34,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             const SizedBox(height: 10),
             Text(
@@ -370,7 +370,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
             const SizedBox(height: 4),
@@ -379,7 +379,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                   ? 'Deactivated accounts move to the Inactive filter.'
                   : 'Change the filters to review another account set.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
             ),
           ],
         ),
@@ -393,17 +393,17 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.infoContainer,
+        color: context.appTheme.infoContainer,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.info.withAlpha(90)),
+        border: Border.all(color: context.appTheme.info.withAlpha(90)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
+          Icon(
             Icons.info_outline_rounded,
             size: 18,
-            color: AppTheme.info,
+            color: context.appTheme.info,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -412,7 +412,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 height: 1.35,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -424,18 +424,18 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
   Widget _buildUserCard(Map<String, dynamic> u) {
     final statusColors = {
-      'Active': AppTheme.success,
-      'Inactive': AppTheme.muted,
-      'Locked': AppTheme.error,
+      'Active': context.appTheme.success,
+      'Inactive': context.appTheme.muted,
+      'Locked': context.appTheme.error,
     };
     final roleColors = {
       'Principal': Color(0xFF6C3483),
-      'Admin': AppTheme.primary,
-      'Teacher': AppTheme.success,
-      'Parent': AppTheme.warning,
+      'Admin': context.appTheme.primary,
+      'Teacher': context.appTheme.success,
+      'Parent': context.appTheme.warning,
     };
-    final sc = statusColors[u['status']] ?? AppTheme.muted;
-    final rc = roleColors[u['role']] ?? AppTheme.muted;
+    final sc = statusColors[u['status']] ?? context.appTheme.muted;
+    final rc = roleColors[u['role']] ?? context.appTheme.muted;
     final username = (u['username'] as String?)?.trim() ?? '';
     final email = (u['email'] as String?)?.trim() ?? '';
     final hasLinkedStaff =
@@ -444,12 +444,12 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: u['status'] == 'Locked'
-              ? AppTheme.errorContainer
-              : AppTheme.outlineVariant,
+              ? context.appTheme.errorContainer
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Row(
@@ -518,8 +518,8 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                       _buildInfoPill(
                         icon: Icons.badge_outlined,
                         label: 'Staff profile',
-                        color: AppTheme.primary,
-                        backgroundColor: AppTheme.primaryContainer,
+                        color: context.appTheme.primary,
+                        backgroundColor: context.appTheme.primaryContainer,
                       ),
                     _buildInfoPill(
                       icon: Icons.schedule_rounded,
@@ -531,10 +531,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
             ),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
               size: 16,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             onSelected: (v) => _handleUserAction(context, v, u),
             itemBuilder: (_) => [
@@ -628,11 +628,11 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     Color? color,
     Color? backgroundColor,
   }) {
-    final foreground = color ?? AppTheme.muted;
+    final foreground = color ?? context.appTheme.muted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: backgroundColor ?? AppTheme.surfaceVariant,
+        color: backgroundColor ?? context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -668,17 +668,17 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         final perms = _rolePermissions[role]!;
         final roleColors = {
           'Principal': Color(0xFF6C3483),
-          'Admin': AppTheme.primary,
-          'Teacher': AppTheme.success,
-          'Parent': AppTheme.warning,
+          'Admin': context.appTheme.primary,
+          'Teacher': context.appTheme.success,
+          'Parent': context.appTheme.warning,
         };
-        final c = roleColors[role] ?? AppTheme.muted;
+        final c = roleColors[role] ?? context.appTheme.muted;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,7 +708,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                     '${perms.length} permissions',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -725,16 +725,16 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.surfaceVariant,
+                          color: context.appTheme.surfaceVariant,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.check_rounded,
                               size: 10,
-                              color: AppTheme.success,
+                              color: context.appTheme.success,
                             ),
                             const SizedBox(width: 4),
                             Text(
@@ -763,7 +763,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       return Center(
         child: Text(
           'No user activity yet',
-          style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+          style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
         ),
       );
     }
@@ -776,9 +776,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -786,13 +786,13 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryContainer,
+                  color: context.appTheme.primaryContainer,
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.history_rounded,
                   size: 14,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
               const SizedBox(width: 10),
@@ -804,14 +804,14 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                       a['action']!,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     Text(
                       '${a['user']} • ${a['time']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -885,7 +885,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                       : 'Account created and sent for Principal approval')
                 : 'Account updated',
           ),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
   }
@@ -908,9 +908,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Children assigned to parent account'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
   }
@@ -926,7 +926,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(active ? 'Account activated' : 'Account deactivated'),
-          backgroundColor: active ? AppTheme.success : AppTheme.warning,
+          backgroundColor: active ? context.appTheme.success : context.appTheme.warning,
         ),
       );
     } catch (e) {
@@ -934,7 +934,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Update failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -998,7 +998,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Delete failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }

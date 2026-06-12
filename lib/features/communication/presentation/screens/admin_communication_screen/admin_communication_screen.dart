@@ -1,11 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class AdminCommunicationScreen extends StatefulWidget {
   const AdminCommunicationScreen({super.key});
@@ -19,6 +22,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _searchController = TextEditingController();
+  final _chatInputController = TextEditingController();
 
   bool _loading = true;
   String? _error;
@@ -26,6 +30,12 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
   String _statusFilter = 'All';
 
   List<Map<String, dynamic>> _notices = [];
+  List<UserAccountModel> _chatTargets = [];
+  List<Map<String, dynamic>> _directMessages = [];
+  String? _selectedTargetId;
+  bool _sendingChat = false;
+  Timer? _pollingTimer;
+  UserResponse? _profile;
 
   static const _audienceOptions = [
     'All',
@@ -39,63 +49,86 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
 
   static const _statusOptions = ['All', 'Normal', 'Urgent'];
 
-  final List<Map<String, dynamic>> _templates = [
+  List<Map<String, dynamic>> get _templates => [
     {
       'name': 'Fee Reminder',
       'audience': 'Parents',
       'icon': Icons.account_balance_wallet_rounded,
-      'color': AppTheme.warning,
+      'color': context.appTheme.warning,
     },
     {
       'name': 'Holiday Notice',
       'audience': 'Everyone',
       'icon': Icons.beach_access_rounded,
-      'color': AppTheme.success,
+      'color': context.appTheme.success,
     },
     {
       'name': 'Exam Notice',
       'audience': 'Students',
       'icon': Icons.quiz_rounded,
-      'color': AppTheme.primary,
+      'color': context.appTheme.primary,
     },
     {
       'name': 'Staff Meeting',
       'audience': 'Teachers',
       'icon': Icons.groups_rounded,
-      'color': AppTheme.secondary,
+      'color': context.appTheme.secondary,
     },
     {
       'name': 'Principal Update',
       'audience': 'Principal',
       'icon': Icons.admin_panel_settings_rounded,
-      'color': AppTheme.info,
+      'color': context.appTheme.info,
     },
     {
       'name': 'Emergency Alert',
       'audience': 'Everyone',
       'icon': Icons.warning_rounded,
-      'color': AppTheme.error,
+      'color': context.appTheme.error,
     },
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _searchController.addListener(() => setState(() {}));
     _loadData();
+    _startPolling();
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_sendingChat && !_loading) {
+        _loadData(background: true);
+      }
     });
+  }
+
+  Future<void> _loadData({bool background = false}) async {
+    if (!background) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final stored = await BackendApiClient.instance.getAnnouncements();
+      final api = BackendApiClient.instance;
+      final stored = await api.getAnnouncements();
       stored.sort((a, b) => b.publishedAt.compareTo(a.publishedAt));
+
+      final profile = await api.getProfile();
+      final directMessages = await api.getCommunications();
+      final usersResponse = await api.getUsers(pageSize: 1000);
+      final users = usersResponse.data
+          .where((u) => u.isActive && u.id != profile.id)
+          .toList();
+
       if (!mounted) return;
       setState(() {
+        _profile = profile;
+        _directMessages = directMessages;
+        _chatTargets = users;
         _notices = stored
             .map(
               (notice) => {
@@ -117,7 +150,9 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load communication records: $e';
+        if (!background) {
+          _error = 'Unable to load communication records: $e';
+        }
         _loading = false;
       });
     }
@@ -125,8 +160,10 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _tabController.dispose();
     _searchController.dispose();
+    _chatInputController.dispose();
     super.dispose();
   }
 
@@ -179,6 +216,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
           Tab(text: 'Notices'),
           Tab(text: 'Templates'),
           Tab(text: 'History'),
+          Tab(text: 'Chats'),
         ],
       ),
       body: _buildBody(),
@@ -192,7 +230,12 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     }
     return TabBarView(
       controller: _tabController,
-      children: [_buildNotices(), _buildTemplates(), _buildSentHistory()],
+      children: [
+        _buildNotices(),
+        _buildTemplates(),
+        _buildSentHistory(),
+        _buildChatsTab(),
+      ],
     );
   }
 
@@ -200,7 +243,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     final filtered = _filteredNotices;
     return RefreshIndicator(
       onRefresh: _loadData,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       child: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -281,15 +324,17 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
 
   Widget _noticeCard(Map<String, dynamic> notice) {
     final isUrgent = notice['urgent'] == true;
-    final color = isUrgent ? AppTheme.error : AppTheme.success;
+    final color = isUrgent ? context.appTheme.error : context.appTheme.success;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isUrgent ? AppTheme.errorContainer : AppTheme.outlineVariant,
+          color: isUrgent
+              ? context.appTheme.errorContainer
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -297,7 +342,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
         children: [
           Row(
             children: [
-              if (isUrgent) _pill('URGENT', AppTheme.error),
+              if (isUrgent) _pill('URGENT', context.appTheme.error),
               if (isUrgent) const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -328,7 +373,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
             _text(notice['body']),
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 10),
@@ -339,8 +384,8 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
               icon: const Icon(Icons.delete_outline_rounded, size: 16),
               label: const Text('Delete'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.error,
-                side: const BorderSide(color: AppTheme.error),
+                foregroundColor: context.appTheme.error,
+                side: BorderSide(color: context.appTheme.error),
               ),
             ),
           ),
@@ -402,7 +447,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
                       _text(template['audience']),
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -433,15 +478,15 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.surface,
+                  color: context.appTheme.surface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.outlineVariant),
+                  border: Border.all(color: context.appTheme.outlineVariant),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_rounded,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                       size: 18,
                     ),
                     const SizedBox(width: 10),
@@ -461,7 +506,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
                             '${_text(notice['audienceLabel'])} · ${_text(notice['dateLabel'])}',
                             style: GoogleFonts.dmSans(
                               fontSize: 11,
-                              color: AppTheme.muted,
+                              color: context.appTheme.muted,
                             ),
                           ),
                         ],
@@ -483,9 +528,9 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     await _loadData();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('Notice deleted'),
-        backgroundColor: AppTheme.success,
+        backgroundColor: context.appTheme.success,
       ),
     );
   }
@@ -542,11 +587,14 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: AppTheme.muted),
+        Icon(icon, size: 13, color: context.appTheme.muted),
         const SizedBox(width: 3),
         Text(
           label,
-          style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+          style: GoogleFonts.dmSans(
+            fontSize: 11,
+            color: context.appTheme.muted,
+          ),
         ),
       ],
     );
@@ -563,16 +611,19 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.campaign_outlined,
               size: 44,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             const SizedBox(height: 12),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
             ),
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: 14),
@@ -630,9 +681,610 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
     return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year}';
   }
 
+  Widget _buildChatsTab() {
+    if (_selectedTargetId != null) {
+      return _buildActiveChatView();
+    }
+    return _buildChatThreadsList();
+  }
+
+  Widget _buildActiveChatView() {
+    final counterpartId = _selectedTargetId!;
+    final userById = {for (final u in _chatTargets) u.id: u};
+    final counterpart = userById[counterpartId];
+    if (counterpart == null) {
+      return const Center(child: Text('User not found'));
+    }
+
+    // Find the thread messages
+    final thread = _directThreads.firstWhere(
+      (t) => t.counterpart.id == counterpartId,
+      orElse: () => _AdminDirectThread(
+        counterpart: counterpart,
+        messages: [],
+        currentUserId: _profile?.id ?? '',
+      ),
+    );
+
+    // Mark messages as read
+    for (final message in thread.messages) {
+      final isRead =
+          message['is_read'] == true ||
+          message['is_read'] == 1 ||
+          message['is_read']?.toString().toLowerCase() == 'true';
+      if (message['receiver_id'] == _profile?.id &&
+          !isRead &&
+          message['id'] != null) {
+        BackendApiClient.instance.markCommunicationRead(
+          message['id'].toString(),
+        );
+      }
+    }
+
+    final displayLabel = counterpart.name.isNotEmpty
+        ? counterpart.name
+        : (counterpart.username.isNotEmpty ? counterpart.username : 'User');
+    final roleLabel = counterpart.roleName.isNotEmpty
+        ? counterpart.roleName
+        : (counterpart.linkedType.isNotEmpty ? counterpart.linkedType : 'User');
+
+    return Column(
+      children: [
+        // Chat sub-header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          color: context.appTheme.surface,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => setState(() => _selectedTargetId = null),
+              ),
+              CircleAvatar(
+                backgroundColor: context.appTheme.primary.withAlpha(20),
+                child: Text(
+                  _initials(displayLabel),
+                  style: TextStyle(
+                    color: context.appTheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayLabel,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      roleLabel,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 11,
+                        color: context.appTheme.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        // Chat body
+        Expanded(
+          child: ChatWallpaperBackground(
+            child: thread.messages.isEmpty
+                ? Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.appTheme.surface.withAlpha(200),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'No messages yet. Send a message to start.',
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 13,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    itemCount: thread.messages.length,
+                    itemBuilder: (_, index) {
+                      final message = thread.messages[index];
+                      final isMe = message['sender_id'] == _profile?.id;
+                      final body =
+                          (message['body'] ?? message['message_content'] ?? '')
+                              .toString();
+                      final timeStr = _messageTime(message);
+                      final isRead =
+                          message['is_read'] == true ||
+                          message['is_read'] == 1 ||
+                          message['is_read']?.toString().toLowerCase() ==
+                              'true';
+
+                      // Date separator check
+                      final Widget? dateSep = _getDateSeparatorIfNeeded(
+                        thread.messages,
+                        index,
+                      );
+
+                      final bubble = ChatBubbleWidget(
+                        messageText: body,
+                        time: timeStr,
+                        isMe: isMe,
+                        isRead: isRead,
+                      );
+
+                      if (dateSep != null) {
+                        return Column(children: [dateSep, bubble]);
+                      }
+
+                      return bubble;
+                    },
+                  ),
+          ),
+        ),
+        // Input bar
+        ChatInputBar(
+          controller: _chatInputController,
+          placeholder: 'Message $displayLabel...',
+          isSending: _sendingChat,
+          onSend: () => _sendAdminChatMessage(
+            counterpartId,
+            counterpart.roleName.isNotEmpty
+                ? counterpart.roleName
+                : (counterpart.linkedType.isNotEmpty
+                      ? counterpart.linkedType
+                      : 'parent'),
+          ),
+          onAttach: () => ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Attachments not supported for this chat yet.'),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget? _getDateSeparatorIfNeeded(
+    List<Map<String, dynamic>> messages,
+    int index,
+  ) {
+    final currentMsg = messages[index];
+    final currentSentAt = DateTime.tryParse(
+      currentMsg['sent_at']?.toString() ??
+          currentMsg['created_at']?.toString() ??
+          '',
+    )?.toLocal();
+    if (currentSentAt == null) return null;
+
+    if (index == 0) {
+      return ChatDateSeparator(dateText: _formatDateSeparator(currentSentAt));
+    }
+
+    final prevMsg = messages[index - 1];
+    final prevSentAt = DateTime.tryParse(
+      prevMsg['sent_at']?.toString() ?? prevMsg['created_at']?.toString() ?? '',
+    )?.toLocal();
+    if (prevSentAt == null) {
+      return ChatDateSeparator(dateText: _formatDateSeparator(currentSentAt));
+    }
+
+    final currentDayStr = DateFormat('yyyy-MM-dd').format(currentSentAt);
+    final prevDayStr = DateFormat('yyyy-MM-dd').format(prevSentAt);
+
+    if (currentDayStr != prevDayStr) {
+      return ChatDateSeparator(dateText: _formatDateSeparator(currentSentAt));
+    }
+
+    return null;
+  }
+
+  String _formatDateSeparator(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final checkDate = DateTime(date.year, date.month, date.day);
+    if (checkDate == today) {
+      return 'Today';
+    } else if (checkDate == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMMM dd, yyyy').format(date);
+    }
+  }
+
+  Future<void> _sendAdminChatMessage(
+    String receiverId,
+    String receiverRole,
+  ) async {
+    final text = _chatInputController.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _sendingChat = true);
+    try {
+      await BackendApiClient.instance.sendCommunication(
+        receiverId: receiverId,
+        receiverRole: receiverRole,
+        messageContent: text,
+      );
+      _chatInputController.clear();
+      await _loadData(background: true);
+      if (!mounted) return;
+      setState(() => _sendingChat = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _sendingChat = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send message: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    }
+  }
+
+  String _messageTime(Map<String, dynamic> message) {
+    final timeStr =
+        message['sent_at']?.toString() ??
+        message['created_at']?.toString() ??
+        '';
+    final dt = DateTime.tryParse(timeStr)?.toLocal();
+    if (dt == null) return '';
+    return DateFormat('h:mm a').format(dt);
+  }
+
+  Widget _buildChatThreadsList() {
+    final threads = _directThreads;
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        // Search bar
+        TextField(
+          controller: _searchController,
+          decoration: const InputDecoration(
+            labelText: 'Search chats or start new chat',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (threads.isEmpty)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                'No conversations found.',
+                style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
+              ),
+            ),
+          )
+        else
+          ...threads.map((thread) {
+            final unread = thread.unreadCount;
+            final hasUnread = unread > 0;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(
+                  color: hasUnread
+                      ? context.appTheme.primary.withAlpha(80)
+                      : context.appTheme.outlineVariant,
+                  width: hasUnread ? 1.5 : 1,
+                ),
+              ),
+              child: ListTile(
+                onTap: () =>
+                    setState(() => _selectedTargetId = thread.counterpart.id),
+                leading: CircleAvatar(
+                  backgroundColor: context.appTheme.primary.withAlpha(20),
+                  child: Text(
+                    _initials(thread.label),
+                    style: TextStyle(
+                      color: context.appTheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        thread.label,
+                        style: GoogleFonts.ibmPlexSans(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      _roleLabel(
+                        thread.counterpart.roleName.isNotEmpty
+                            ? thread.counterpart.roleName
+                            : thread.counterpart.linkedType,
+                      ),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _roleColor(
+                          thread.counterpart.roleName.isNotEmpty
+                              ? thread.counterpart.roleName
+                              : thread.counterpart.linkedType,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        thread.subtitle,
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 12,
+                          color: hasUnread
+                              ? context.appTheme.onSurface
+                              : context.appTheme.muted,
+                          fontWeight: hasUnread
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (thread.messages.isNotEmpty)
+                      Text(
+                        _shortDate(
+                          DateTime.tryParse(
+                            thread.messages.last['sent_at']?.toString() ?? '',
+                          ),
+                        ),
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 10,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                  ],
+                ),
+                trailing: unread <= 0
+                    ? null
+                    : Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.appTheme.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '$unread',
+                          style: GoogleFonts.ibmPlexSans(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  List<_AdminDirectThread> get _directThreads {
+    final grouped = <String, _AdminDirectThread>{};
+    final userById = {for (final u in _chatTargets) u.id: u};
+    final myId = _profile?.id ?? '';
+
+    for (final message in _directMessages) {
+      final senderId = message['sender_id']?.toString() ?? '';
+      final receiverId = message['receiver_id']?.toString() ?? '';
+      if (senderId.isEmpty || receiverId.isEmpty) continue;
+
+      final counterpartId = (senderId == myId) ? receiverId : senderId;
+      if (counterpartId == myId) continue;
+
+      final counterpartUser = userById[counterpartId];
+      if (counterpartUser == null) continue;
+
+      final thread = grouped.putIfAbsent(
+        counterpartId,
+        () => _AdminDirectThread(
+          counterpart: counterpartUser,
+          messages: [],
+          currentUserId: myId,
+        ),
+      );
+      thread.messages.add(message);
+    }
+
+    final query = _searchController.text.trim().toLowerCase();
+    for (final user in _chatTargets) {
+      if (grouped.containsKey(user.id)) continue;
+
+      final name = user.name.toLowerCase();
+      final role = user.roleName.isNotEmpty
+          ? user.roleName.toLowerCase()
+          : user.linkedType.toLowerCase();
+      final email = user.email.toLowerCase();
+      if (query.isEmpty ||
+          name.contains(query) ||
+          role.contains(query) ||
+          email.contains(query)) {
+        grouped[user.id] = _AdminDirectThread(
+          counterpart: user,
+          messages: [],
+          currentUserId: myId,
+        );
+      }
+    }
+
+    final threads = grouped.values.toList();
+    for (final thread in threads) {
+      thread.messages.sort((a, b) {
+        final aTime =
+            DateTime.tryParse(a['sent_at']?.toString() ?? '') ?? DateTime(1970);
+        final bTime =
+            DateTime.tryParse(b['sent_at']?.toString() ?? '') ?? DateTime(1970);
+        return aTime.compareTo(bTime);
+      });
+    }
+
+    threads.sort((a, b) {
+      final aHas = a.messages.isNotEmpty;
+      final bHas = b.messages.isNotEmpty;
+      if (aHas != bHas) {
+        return aHas ? -1 : 1;
+      }
+      if (aHas) {
+        final aTime =
+            DateTime.tryParse(a.messages.last['sent_at']?.toString() ?? '') ??
+            DateTime(1970);
+        final bTime =
+            DateTime.tryParse(b.messages.last['sent_at']?.toString() ?? '') ??
+            DateTime(1970);
+        return bTime.compareTo(aTime);
+      }
+      final aName = a.counterpart.name;
+      final bName = b.counterpart.name;
+      return aName.compareTo(bName);
+    });
+
+    if (query.isNotEmpty) {
+      return threads.where((thread) {
+        final name = thread.counterpart.name.toLowerCase();
+        final role = thread.counterpart.roleName.isNotEmpty
+            ? thread.counterpart.roleName.toLowerCase()
+            : thread.counterpart.linkedType.toLowerCase();
+        final email = thread.counterpart.email.toLowerCase();
+        final matches =
+            name.contains(query) ||
+            role.contains(query) ||
+            email.contains(query);
+        if (matches) return true;
+        return thread.messages.any(
+          (msg) =>
+              (msg['body']?.toString() ??
+                      msg['message_content']?.toString() ??
+                      '')
+                  .toLowerCase()
+                  .contains(query),
+        );
+      }).toList();
+    }
+
+    return threads;
+  }
+
+  String _roleLabel(String role) {
+    switch (role.toLowerCase()) {
+      case 'parent':
+        return 'Parent';
+      case 'teacher':
+        return 'Teacher';
+      case 'principal':
+        return 'Principal';
+      case 'admin':
+        return 'Admin';
+      default:
+        return role;
+    }
+  }
+
+  Color _roleColor(String role) {
+    switch (role.toLowerCase()) {
+      case 'parent':
+        return Colors.green;
+      case 'teacher':
+        return Colors.blue;
+      case 'principal':
+        return Colors.orange;
+      case 'admin':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _shortDate(DateTime? value) {
+    if (value == null) return '';
+    final local = value.toLocal();
+    final now = DateTime.now();
+    if (local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day) {
+      return DateFormat('h:mm a').format(local);
+    }
+    return DateFormat('dd MMM').format(local);
+  }
+
+  String _initials(String label) {
+    final parts = label
+        .split(RegExp(r'\s+'))
+        .where((part) => part.trim().isNotEmpty)
+        .take(2)
+        .map((part) => part.trim()[0].toUpperCase())
+        .join();
+    return parts.isEmpty ? 'C' : parts;
+  }
+
   String _text(dynamic value, {String fallback = ''}) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty || text == 'null' ? fallback : text;
+  }
+}
+
+class _AdminDirectThread {
+  final UserAccountModel counterpart;
+  final List<Map<String, dynamic>> messages;
+  final String currentUserId;
+
+  _AdminDirectThread({
+    required this.counterpart,
+    required this.messages,
+    required this.currentUserId,
+  });
+
+  String get label {
+    final name = counterpart.name.trim();
+    if (name.isNotEmpty) return name;
+    final username = counterpart.username.trim();
+    if (username.isNotEmpty) return username;
+    return 'User ${counterpart.id.substring(0, 8)}';
+  }
+
+  String get subtitle => messages.isEmpty
+      ? 'Start conversation'
+      : (messages.last['body'] ?? messages.last['message_content'] ?? '')
+            .toString();
+
+  int get unreadCount {
+    return messages.where((msg) {
+      final isRead =
+          msg['is_read'] == true ||
+          msg['is_read'] == 1 ||
+          msg['is_read']?.toString().toLowerCase() == 'true';
+      return msg['receiver_id'] == currentUserId && !isRead;
+    }).length;
   }
 }
 
@@ -709,9 +1361,9 @@ class _AdminComposeNoticePageState extends State<_AdminComposeNoticePage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Notice published'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
       Navigator.pop(context, true);
@@ -781,8 +1433,8 @@ class _AdminComposeNoticePageState extends State<_AdminComposeNoticePage> {
                 ),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(

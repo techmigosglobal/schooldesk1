@@ -37,38 +37,44 @@ void main() {
     },
   );
 
-  test(
-    'teacher communication is chat-first and scoped to real conversations',
-    () {
-      final source = File(
-        'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
-      ).readAsStringSync();
+  test('teacher communication is chat-first and scoped to real conversations', () {
+    final source = File(
+      'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
+    ).readAsStringSync();
+    final sharedWidgets = File(
+      'lib/features/communication/presentation/widgets/chat_shared_widgets.dart',
+    ).readAsStringSync();
 
-      expect(source, contains("Tab(text: 'Chats')"));
-      expect(source, contains("Tab(text: 'Start Chat')"));
-      expect(source, contains("Tab(text: 'School Notices')"));
-      expect(source, contains("api.getUsers(\n        role: 'Teacher'"));
-      expect(source, contains("api.getUsers(\n        role: 'Parent'"));
-      expect(source, contains("getRawList('/message-conversations')"));
-      expect(source, contains("getRawList('/messages')"));
-      expect(source, contains('RoleAccessService.teacherStaffId'));
-      expect(source, contains("createRaw('/messages'"));
-      expect(source, contains("updateRaw('/messages/\$id'"));
-      expect(source, contains("'conversation_id': conversationId"));
-      expect(source, contains("'sender_role': 'Teacher'"));
-      expect(source, contains('class _ThreadTile'));
-      expect(source, contains('class _ChatBubble'));
-      expect(source, contains('class _ChatTarget'));
-      expect(source, contains("title: 'Class Parents'"));
-      expect(source, contains('_buildThreadPane'));
-      expect(source, contains('Visible to Principal monitoring'));
-      expect(source, contains("IconButton.filled("));
-      expect(source, contains("tooltip: 'Send message'"));
-      expect(source, isNot(contains('showDialog')));
-      expect(source, isNot(contains('Send Notice')));
-      expect(source, isNot(contains('Compose Notice')));
-    },
-  );
+    expect(source, contains("text: 'Chats'"));
+    expect(source, contains("text: 'Start'"));
+    expect(source, contains("text: 'Notices'"));
+    expect(source, contains("api.getStaff(status: 'active'"));
+    expect(source, contains('parentAccounts'));
+    expect(source, contains("getRawList('/message-conversations')"));
+    expect(source, contains("getRawList('/messages')"));
+    expect(source, contains('getCommunications()'));
+    expect(source, contains('RoleAccessService.teacherStaffId'));
+    expect(source, contains("createRaw('/messages'"));
+    expect(source, contains("updateRaw('/messages/\$id'"));
+    expect(source, contains("'conversation_id': conversationId"));
+    expect(source, contains("'sender_role': 'Teacher'"));
+    expect(source, contains('LayoutBuilder('));
+    expect(source, contains('_showMobileConversationList'));
+    expect(source, contains('_showMobileDirectList'));
+    expect(source, contains('class _ChatPanelShell'));
+    expect(source, contains('class _ChatHeader'));
+    expect(source, contains('class _ThreadTile'));
+    expect(source, contains('class _ChatBubble'));
+    expect(source, contains('class _ChatTarget'));
+    expect(source, contains("title: 'Class Parents'"));
+    expect(source, contains('_buildThreadPane'));
+    expect(source, contains('Visible to Principal monitoring'));
+    expect(sharedWidgets, contains("IconButton.filled("));
+    expect(sharedWidgets, contains("tooltip: 'Send message'"));
+    expect(source, isNot(contains('showDialog')));
+    expect(source, isNot(contains('Send Notice')));
+    expect(source, isNot(contains('Compose Notice')));
+  });
 
   test(
     'admin communication filters backend notices without local-only templates',

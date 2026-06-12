@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentCalendarScreen extends StatefulWidget {
   const ParentCalendarScreen({super.key});
@@ -186,13 +186,13 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(40)),
+        border: Border.all(color: context.appTheme.error.withAlpha(40)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -215,9 +215,9 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +247,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
                   '${event['day']} | ${event['time']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 if ((event['venue'] as String).isNotEmpty)
@@ -255,7 +255,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
                     'Venue: ${event['venue']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
               ],
@@ -269,22 +269,22 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   Widget _holidayCard(Map<String, dynamic> holiday) {
     final type = holiday['type'] as String;
     final typeColor = switch (type.toLowerCase()) {
-      'national' => AppTheme.error,
-      'state' => AppTheme.warning,
-      _ => AppTheme.primary,
+      'national' => context.appTheme.error,
+      'state' => context.appTheme.warning,
+      _ => context.appTheme.primary,
     };
     final typeBg = switch (type.toLowerCase()) {
-      'national' => AppTheme.errorContainer,
-      'state' => AppTheme.warningContainer,
-      _ => AppTheme.primaryContainer,
+      'national' => context.appTheme.errorContainer,
+      'state' => context.appTheme.warningContainer,
+      _ => context.appTheme.primaryContainer,
     };
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -313,7 +313,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
                   '${holiday['day']}, ${holiday['date']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -330,9 +330,9 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -340,12 +340,12 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppTheme.infoContainer,
+              color: context.appTheme.infoContainer,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.quiz_rounded,
-              color: AppTheme.info,
+              color: context.appTheme.info,
               size: 22,
             ),
           ),
@@ -365,13 +365,13 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
                   '${exam['date']} | ${exam['time']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ],
             ),
           ),
-          _typeBadge(exam['status'] as String, AppTheme.info),
+          _typeBadge(exam['status'] as String, context.appTheme.info),
         ],
       ),
     );
@@ -545,9 +545,9 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       case 'ptm':
         return const Color(0xFF1B4F72);
       case 'exam':
-        return AppTheme.info;
+        return context.appTheme.info;
       case 'school':
-        return AppTheme.primary;
+        return context.appTheme.primary;
       default:
         return const Color(0xFF1E8449);
     }

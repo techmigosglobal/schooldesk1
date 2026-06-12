@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/services/backend_data_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminHelpdeskScreen extends StatefulWidget {
   const AdminHelpdeskScreen({super.key});
@@ -123,7 +123,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     return Column(
       children: [
         Container(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           padding: const EdgeInsets.all(12),
           child: SizedBox(
             height: 32,
@@ -145,7 +145,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
         Expanded(
           child: RefreshIndicator(
             onRefresh: _loadData,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             child: ListView.separated(
               padding: const EdgeInsets.all(12),
               itemCount: _filtered.length,
@@ -160,14 +160,14 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
 
   Widget _buildTicketCard(Map<String, dynamic> t) {
     final statusColors = {
-      'Open': AppTheme.error,
-      'In Progress': AppTheme.warning,
-      'Resolved': AppTheme.success,
+      'Open': context.appTheme.error,
+      'In Progress': context.appTheme.warning,
+      'Resolved': context.appTheme.success,
     };
     final priorityColors = {
-      'High': AppTheme.error,
-      'Medium': AppTheme.warning,
-      'Low': AppTheme.success,
+      'High': context.appTheme.error,
+      'Medium': context.appTheme.warning,
+      'Low': context.appTheme.success,
     };
     final status = _ticketStatus(t);
     final priority = _ticketText(t, 'priority', fallback: 'Medium');
@@ -179,8 +179,8 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
       'date',
       fallback: _ticketText(t, 'created_at'),
     ).split('T').first;
-    final sc = statusColors[status] ?? AppTheme.muted;
-    final pc = priorityColors[priority] ?? AppTheme.muted;
+    final sc = statusColors[status] ?? context.appTheme.muted;
+    final pc = priorityColors[priority] ?? context.appTheme.muted;
     final parentName = _ticketText(
       t,
       'parentName',
@@ -196,12 +196,12 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: status == 'Open'
-              ? AppTheme.errorContainer
-              : AppTheme.outlineVariant,
+              ? context.appTheme.errorContainer
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -213,7 +213,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
                 ticketId,
                 style: GoogleFonts.dmSans(
                   fontSize: 10,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -261,21 +261,21 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
           ),
           Text(
             '$parentName (Parent of $studentName) • $category • $date',
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
           if (response.isNotEmpty) ...[
             const SizedBox(height: 6),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceVariant,
+                color: context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 'Response: $response',
                 style: GoogleFonts.dmSans(
                   fontSize: 11,
-                  color: AppTheme.onSurfaceVariant,
+                  color: context.appTheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -306,7 +306,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Ticket $ticketId resolved'),
-                            backgroundColor: AppTheme.success,
+                            backgroundColor: context.appTheme.success,
                           ),
                         );
                       }
@@ -341,8 +341,8 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
                     horizontal: 10,
                     vertical: 6,
                   ),
-                  foregroundColor: AppTheme.error,
-                  side: const BorderSide(color: AppTheme.error),
+                  foregroundColor: context.appTheme.error,
+                  side: BorderSide(color: context.appTheme.error),
                 ),
                 child: Text(
                   'Escalate',
@@ -384,18 +384,18 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildStatCard('Open', open, AppTheme.error)),
+              Expanded(child: _buildStatCard('Open', open, context.appTheme.error)),
               const SizedBox(width: 10),
               Expanded(
                 child: _buildStatCard(
                   'In Progress',
                   inProgress,
-                  AppTheme.warning,
+                  context.appTheme.warning,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildStatCard('Resolved', resolved, AppTheme.success),
+                child: _buildStatCard('Resolved', resolved, context.appTheme.success),
               ),
             ],
           ),
@@ -413,9 +413,9 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.surface,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.outlineVariant),
+                border: Border.all(color: context.appTheme.outlineVariant),
               ),
               child: Row(
                 children: [
@@ -434,7 +434,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryContainer,
+                      color: context.appTheme.primaryContainer,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -442,7 +442,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.primary,
+                        color: context.appTheme.primary,
                       ),
                     ),
                   ),
@@ -497,7 +497,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.success),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
   }
 
@@ -516,7 +516,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.success),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
   }
 }
@@ -573,13 +573,13 @@ class _HelpdeskResponsePageState extends State<_HelpdeskResponsePage> {
     final subject = widget.ticket['subject']?.toString() ?? 'Support ticket';
 
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           'Respond to $ticketId',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         elevation: 0,
       ),
       body: SafeArea(
@@ -627,7 +627,7 @@ class _HelpdeskResponsePageState extends State<_HelpdeskResponsePage> {
                     : const Icon(Icons.send_rounded),
                 label: Text(_saving ? 'Sending...' : 'Send Response'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: context.appTheme.primary,
                 ),
               ),
             ],
@@ -704,13 +704,13 @@ class _HelpdeskTicketFormPageState extends State<_HelpdeskTicketFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       appBar: AppBar(
         title: Text(
           'New Support Ticket',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
-        backgroundColor: AppTheme.surface,
+        backgroundColor: context.appTheme.surface,
         elevation: 0,
       ),
       body: SafeArea(
@@ -786,7 +786,7 @@ class _HelpdeskTicketFormPageState extends State<_HelpdeskTicketFormPage> {
                     : const Icon(Icons.add_rounded),
                 label: Text(_saving ? 'Creating...' : 'Create Ticket'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: context.appTheme.primary,
                 ),
               ),
             ],
@@ -807,13 +807,13 @@ class _HelpdeskInlineError extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.error.withAlpha(18),
+        color: context.appTheme.error.withAlpha(18),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(80)),
+        border: Border.all(color: context.appTheme.error.withAlpha(80)),
       ),
       child: Text(
         message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       ),
     );
   }

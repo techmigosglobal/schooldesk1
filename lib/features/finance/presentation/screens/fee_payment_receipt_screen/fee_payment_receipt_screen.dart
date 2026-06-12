@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class FeePaymentReceiptScreen extends StatefulWidget {
   const FeePaymentReceiptScreen({super.key});
@@ -179,9 +180,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white60,
+          indicatorColor: context.appTheme.surface,
+          labelColor: context.appTheme.surface,
+          unselectedLabelColor: context.appTheme.surface60,
           labelStyle: GoogleFonts.dmSans(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -228,10 +229,10 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                   horizontal: 12,
                 ),
                 decoration: BoxDecoration(
-                  color: isActive ? _headerColor : Colors.white,
+                  color: isActive ? _headerColor : context.appTheme.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: isActive ? _headerColor : Colors.grey.shade300,
+                    color: isActive ? _headerColor : context.appTheme.muted,
                   ),
                 ),
                 child: Row(
@@ -239,7 +240,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                     CircleAvatar(
                       radius: 14,
                       backgroundColor: isActive
-                          ? Colors.white.withAlpha(50)
+                          ? context.appTheme.surface.withAlpha(50)
                           : _headerColor.withAlpha(30),
                       child: Text(
                         _studentName(e.value).isEmpty
@@ -274,7 +275,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                               fontSize: 10,
                               color: isActive
                                   ? Colors.white70
-                                  : Colors.grey.shade600,
+                                  : context.appTheme.muted,
                             ),
                           ),
                         ],
@@ -304,9 +305,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.appTheme.muted),
               ),
               child: Row(
                 children: [
@@ -347,7 +348,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                           'Class ${_studentClass(child)} · Roll No. ${_studentRoll(child)}',
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
-                            color: Colors.grey.shade600,
+                            color: context.appTheme.muted,
                           ),
                         ),
                       ],
@@ -392,9 +393,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.appTheme.muted),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,7 +405,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -424,12 +425,12 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? _headerColor
-                                : Colors.grey.shade100,
+                                : context.appTheme.muted,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
                               color: isSelected
                                   ? _headerColor
-                                  : Colors.grey.shade300,
+                                  : context.appTheme.muted,
                             ),
                           ),
                           child: Text(
@@ -439,7 +440,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                               fontWeight: FontWeight.w600,
                               color: isSelected
                                   ? Colors.white
-                                  : Colors.grey.shade700,
+                                  : context.appTheme.muted,
                             ),
                           ),
                         ),
@@ -455,9 +456,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.appTheme.muted),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,7 +468,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -496,11 +497,11 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                       hintText: '0.00',
                       hintStyle: GoogleFonts.dmSans(
                         fontSize: 22,
-                        color: Colors.grey.shade300,
+                        color: context.appTheme.muted,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: context.appTheme.muted),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -562,9 +563,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.appTheme.muted),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,7 +575,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
+                      color: context.appTheme.muted,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -591,12 +592,12 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                         decoration: BoxDecoration(
                           color: isSelected
                               ? _headerColor.withAlpha(15)
-                              : Colors.grey.shade50,
+                              : context.appTheme.muted,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                             color: isSelected
                                 ? _headerColor
-                                : Colors.grey.shade200,
+                                : context.appTheme.muted,
                             width: isSelected ? 1.5 : 1,
                           ),
                         ),
@@ -607,7 +608,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                               size: 20,
                               color: isSelected
                                   ? _headerColor
-                                  : Colors.grey.shade500,
+                                  : context.appTheme.muted,
                             ),
                             const SizedBox(width: 12),
                             Text(
@@ -653,12 +654,12 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                   elevation: 0,
                 ),
                 child: _processing
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 22,
                         height: 22,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.appTheme.surface,
                         ),
                       )
                     : Text(
@@ -691,14 +692,14 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             Icon(
               Icons.receipt_long_outlined,
               size: 56,
-              color: Colors.grey.shade300,
+              color: context.appTheme.muted,
             ),
             const SizedBox(height: 12),
             Text(
               'No receipts yet',
               style: GoogleFonts.dmSans(
                 fontSize: 15,
-                color: Colors.grey.shade500,
+                color: context.appTheme.muted,
               ),
             ),
           ],
@@ -722,12 +723,12 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.appTheme.muted),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(6),
+            color: context.appTheme.onSurface.withAlpha(6),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -773,7 +774,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                       '${receipt['receiptNo']} · ${_formatDate(date)}',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: Colors.grey.shade500,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -822,25 +823,25 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
               Icon(
                 Icons.payment_rounded,
                 size: 14,
-                color: Colors.grey.shade400,
+                color: context.appTheme.muted,
               ),
               const SizedBox(width: 6),
               Text(
                 receipt['paymentMethod'] as String,
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
-                  color: Colors.grey.shade600,
+                  color: context.appTheme.muted,
                 ),
               ),
               const SizedBox(width: 12),
-              Icon(Icons.tag_rounded, size: 14, color: Colors.grey.shade400),
+              Icon(Icons.tag_rounded, size: 14, color: context.appTheme.muted),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   receipt['transactionId'] as String? ?? '—',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: context.appTheme.muted,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1026,7 +1027,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
               '₹${_formatAmount((receipt['amount'] as num).toDouble())} submitted via ${receipt['paymentMethod']} for school verification',
               style: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: Colors.grey.shade600,
+                color: context.appTheme.muted,
               ),
               textAlign: TextAlign.center,
             ),
@@ -1049,7 +1050,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                       _tabController.animateTo(1);
                     },
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
+                      side: BorderSide(color: context.appTheme.muted),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherPerformanceScreen extends StatefulWidget {
   const TeacherPerformanceScreen({super.key});
@@ -150,21 +150,21 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
                 label: 'Students',
                 value: '${_students.length}',
                 icon: Icons.groups_rounded,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
                 tone: const Color(0xFFEAF3FF),
               ),
               TeacherFlowMetric(
                 label: 'Strong',
                 value: '$strong',
                 icon: Icons.trending_up_rounded,
-                color: AppTheme.success,
+                color: context.appTheme.success,
                 tone: const Color(0xFFEAFBF5),
               ),
               TeacherFlowMetric(
                 label: 'Needs support',
                 value: '$needsSupport',
                 icon: Icons.support_rounded,
-                color: AppTheme.warning,
+                color: context.appTheme.warning,
                 tone: const Color(0xFFFFF7E6),
               ),
             ],
@@ -286,11 +286,11 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
   Color _statusColor(String status) {
     switch (status) {
       case 'strong':
-        return AppTheme.success;
+        return context.appTheme.success;
       case 'steady':
-        return AppTheme.primary;
+        return context.appTheme.primary;
       case 'support':
-        return AppTheme.warning;
+        return context.appTheme.warning;
       default:
         return teacherFlowMuted;
     }

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentNoticesScreen extends StatefulWidget {
   const ParentNoticesScreen({super.key});
@@ -158,7 +158,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                 ? Center(
                     child: Text(
                       'No notices found',
-                      style: GoogleFonts.dmSans(color: AppTheme.muted),
+                      style: GoogleFonts.dmSans(color: context.appTheme.muted),
                     ),
                   )
                 : RefreshIndicator(
@@ -178,7 +178,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
 
   Widget _buildFilterBar() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -194,7 +194,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: isSelected ? _headerColor : AppTheme.surfaceVariant,
+                  color: isSelected ? _headerColor : context.appTheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -202,7 +202,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : AppTheme.onSurface,
+                    color: isSelected ? Colors.white : context.appTheme.onSurface,
                   ),
                 ),
               ),
@@ -226,7 +226,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
       'Finance': const Color(0xFFD4850A),
       'Holidays': const Color(0xFF6C3483),
       'Exams': const Color(0xFF1565C0),
-      'Urgent': AppTheme.error,
+      'Urgent': context.appTheme.error,
     };
     final typeIcons = {
       'Events': Icons.emoji_events_rounded,
@@ -235,18 +235,18 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
       'Exams': Icons.quiz_rounded,
       'Meeting': Icons.people_rounded,
     };
-    final color = typeColors[type] ?? AppTheme.primary;
+    final color = typeColors[type] ?? context.appTheme.primary;
     final icon = typeIcons[type] ?? Icons.notifications_rounded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isUrgent
-              ? AppTheme.error.withAlpha(80)
-              : AppTheme.outlineVariant,
+              ? context.appTheme.error.withAlpha(80)
+              : context.appTheme.outlineVariant,
           width: isUrgent ? 1.5 : 1,
         ),
       ),
@@ -272,7 +272,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.errorContainer,
+                    color: context.appTheme.errorContainer,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -280,7 +280,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 8,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.error,
+                      color: context.appTheme.error,
                     ),
                   ),
                 ),
@@ -298,7 +298,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
           ),
           subtitle: Text(
             '$type • $date',
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
           children: [
             Padding(
@@ -311,7 +311,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                     body,
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
-                      color: AppTheme.onSurfaceVariant,
+                      color: context.appTheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -335,9 +335,9 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                                       .toIso8601String(),
                                 });
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
+                              SnackBar(
                                 content: Text('Notice acknowledged'),
-                                backgroundColor: AppTheme.success,
+                                backgroundColor: context.appTheme.success,
                                 behavior: SnackBarBehavior.floating,
                               ),
                             );
@@ -356,9 +356,9 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                   else
                     Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.check_circle_rounded,
-                          color: AppTheme.success,
+                          color: context.appTheme.success,
                           size: 16,
                         ),
                         const SizedBox(width: 6),
@@ -366,7 +366,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
                           'Acknowledged',
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
-                            color: AppTheme.success,
+                            color: context.appTheme.success,
                           ),
                         ),
                       ],

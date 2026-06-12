@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class StaffFormArgs {
@@ -183,14 +183,14 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.infoContainer,
+        color: context.appTheme.infoContainer,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.info.withAlpha(90)),
+        border: Border.all(color: context.appTheme.info.withAlpha(90)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: AppTheme.info),
+          Icon(Icons.info_outline_rounded, color: context.appTheme.info),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -199,7 +199,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
@@ -212,9 +212,9 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(children: children),
     );
@@ -392,14 +392,14 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.error.withAlpha(90)),
+        border: Border.all(color: context.appTheme.error.withAlpha(90)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -408,7 +408,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),

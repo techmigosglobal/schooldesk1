@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentAttendanceScreen extends StatefulWidget {
   const ParentAttendanceScreen({super.key});
@@ -198,10 +198,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             margin: const EdgeInsets.only(right: 8),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: isActive ? _headerColor : AppTheme.surface,
+              color: isActive ? _headerColor : context.appTheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isActive ? _headerColor : AppTheme.outlineVariant,
+                color: isActive ? _headerColor : context.appTheme.outlineVariant,
               ),
             ),
             child: Text(
@@ -209,7 +209,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : AppTheme.onSurface,
+                color: isActive ? Colors.white : context.appTheme.onSurface,
               ),
             ),
           ),
@@ -234,8 +234,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             'Present',
             present,
             Icons.check_circle_rounded,
-            AppTheme.success,
-            AppTheme.successContainer,
+            context.appTheme.success,
+            context.appTheme.successContainer,
           ),
         ),
         const SizedBox(width: 8),
@@ -244,8 +244,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             'Absent',
             absent,
             Icons.cancel_rounded,
-            AppTheme.error,
-            AppTheme.errorContainer,
+            context.appTheme.error,
+            context.appTheme.errorContainer,
           ),
         ),
         const SizedBox(width: 8),
@@ -254,8 +254,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             'Late',
             late,
             Icons.schedule_rounded,
-            AppTheme.warning,
-            AppTheme.warningContainer,
+            context.appTheme.warning,
+            context.appTheme.warningContainer,
           ),
         ),
         const SizedBox(width: 8),
@@ -264,8 +264,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             'Rate',
             rate,
             Icons.bar_chart_rounded,
-            AppTheme.primary,
-            AppTheme.primaryContainer,
+            context.appTheme.primary,
+            context.appTheme.primaryContainer,
           ),
         ),
       ],
@@ -299,7 +299,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ),
           Text(
             label,
-            style: GoogleFonts.dmSans(fontSize: 10, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 10, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -312,9 +312,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -336,7 +336,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 )
@@ -348,7 +348,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             const SizedBox(height: 10),
             Text(
               'Day-wise attendance will appear after the school publishes it.',
-              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
             ),
           ],
         ],
@@ -371,19 +371,19 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         final day = i + 1;
         final status = _attendanceDayStatus[day];
         Color bg = Colors.transparent;
-        Color textColor = AppTheme.onSurface;
+        Color textColor = context.appTheme.onSurface;
         if (status == 'P') {
-          bg = AppTheme.successContainer;
-          textColor = AppTheme.success;
+          bg = context.appTheme.successContainer;
+          textColor = context.appTheme.success;
         } else if (status == 'A') {
-          bg = AppTheme.errorContainer;
-          textColor = AppTheme.error;
+          bg = context.appTheme.errorContainer;
+          textColor = context.appTheme.error;
         } else if (status == 'L') {
-          bg = AppTheme.warningContainer;
-          textColor = AppTheme.warning;
+          bg = context.appTheme.warningContainer;
+          textColor = context.appTheme.warning;
         } else if (status == 'H') {
-          bg = AppTheme.infoContainer;
-          textColor = AppTheme.info;
+          bg = context.appTheme.infoContainer;
+          textColor = context.appTheme.info;
         }
         return Container(
           decoration: BoxDecoration(
@@ -416,9 +416,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             children: _attendanceHistory.isEmpty
@@ -429,7 +429,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                         'Attendance history will appear after the school publishes it.',
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ),
@@ -455,19 +455,19 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     IconData statusIcon;
     switch (rec['status']) {
       case 'Present':
-        statusColor = AppTheme.success;
+        statusColor = context.appTheme.success;
         statusIcon = Icons.check_circle_rounded;
         break;
       case 'Absent':
-        statusColor = AppTheme.error;
+        statusColor = context.appTheme.error;
         statusIcon = Icons.cancel_rounded;
         break;
       case 'Late':
-        statusColor = AppTheme.warning;
+        statusColor = context.appTheme.warning;
         statusIcon = Icons.schedule_rounded;
         break;
       default:
-        statusColor = AppTheme.info;
+        statusColor = context.appTheme.info;
         statusIcon = Icons.timelapse_rounded;
     }
     return Padding(
@@ -487,7 +487,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ),
           Text(
             rec['time'],
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           const SizedBox(width: 10),
           Container(
@@ -543,9 +543,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -554,13 +554,13 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             height: 40,
             decoration: BoxDecoration(
               color: isApproved
-                  ? AppTheme.successContainer
-                  : AppTheme.warningContainer,
+                  ? context.appTheme.successContainer
+                  : context.appTheme.warningContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               isApproved ? Icons.check_circle_rounded : Icons.pending_rounded,
-              color: isApproved ? AppTheme.success : AppTheme.warning,
+              color: isApproved ? context.appTheme.success : context.appTheme.warning,
               size: 20,
             ),
           ),
@@ -580,7 +580,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                   '${lr['date']} — ${lr['reason']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 if (isApproved)
@@ -588,7 +588,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                     'Approved by ${lr['approvedBy']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                     ),
                   ),
               ],
@@ -598,8 +598,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: isApproved
-                  ? AppTheme.successContainer
-                  : AppTheme.warningContainer,
+                  ? context.appTheme.successContainer
+                  : context.appTheme.warningContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -607,7 +607,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isApproved ? AppTheme.success : AppTheme.warning,
+                color: isApproved ? context.appTheme.success : context.appTheme.warning,
               ),
             ),
           ),
@@ -619,11 +619,11 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Future<void> _showLeaveRequestDialog(BuildContext context) async {
     if (_activeChildIndex >= _childIds.length) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             'Select a backend-linked student before requesting leave.',
           ),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return;
@@ -885,12 +885,12 @@ class _InputErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       ),
     );
   }

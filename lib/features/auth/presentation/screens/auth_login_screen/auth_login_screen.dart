@@ -11,8 +11,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AuthLoginScreen extends StatefulWidget {
   const AuthLoginScreen({super.key});
@@ -162,7 +162,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
             fontSize: expanded ? 44 : 34,
             height: 1.05,
             fontWeight: FontWeight.w800,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         const SizedBox(height: 12),
@@ -171,7 +171,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           style: GoogleFonts.dmSans(
             fontSize: 16,
             height: 1.5,
-            color: AppTheme.onSurfaceVariant,
+            color: context.appTheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 18),
@@ -193,12 +193,12 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
+            color: context.appTheme.onSurface.withAlpha(12),
             blurRadius: 22,
             offset: const Offset(0, 12),
           ),
@@ -215,7 +215,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               style: GoogleFonts.dmSans(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
             const SizedBox(height: 6),
@@ -224,7 +224,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 height: 1.4,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ),
             const SizedBox(height: 24),
@@ -274,14 +274,14 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.errorContainer,
+                  color: context.appTheme.errorContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   _error!,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ),
               ),
@@ -292,12 +292,12 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               child: ElevatedButton.icon(
                 onPressed: _loading ? null : _login,
                 icon: _loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.appTheme.surface,
                         ),
                       )
                     : const Icon(Icons.login_rounded, size: 18),
@@ -335,21 +335,21 @@ class _RoleChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: AppTheme.primaryContainer,
+        color: context.appTheme.primaryContainer,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 15, color: AppTheme.primary),
+          Icon(icon, size: 15, color: context.appTheme.primary),
           const SizedBox(width: 6),
           Text(
             label,
             style: GoogleFonts.dmSans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
             ),
           ),
         ],

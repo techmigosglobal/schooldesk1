@@ -5,7 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class LandingPageScreen extends StatefulWidget {
   const LandingPageScreen({super.key});
@@ -299,7 +299,7 @@ class _TopBar extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
@@ -313,7 +313,7 @@ class _TopBar extends StatelessWidget {
             onPressed: () =>
                 Navigator.pushNamed(context, AppRoutes.principalLogin),
             style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.primary,
+              backgroundColor: context.appTheme.primary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               shape: RoundedRectangleBorder(
@@ -410,7 +410,7 @@ class _SlideCopy extends StatelessWidget {
             fontSize: wide ? 42 : 31,
             height: 1.08,
             fontWeight: FontWeight.w800,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         const SizedBox(height: 16),
@@ -419,7 +419,7 @@ class _SlideCopy extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: wide ? 16 : 14,
             height: 1.55,
-            color: AppTheme.onSurfaceVariant,
+            color: context.appTheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 22),
@@ -487,7 +487,7 @@ class _SchoolShowcase extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: [
                     slide.color,
-                    Color.lerp(slide.supportColor, Colors.black, 0.14)!,
+                    Color.lerp(slide.supportColor, context.appTheme.onSurface, 0.14)!,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -503,7 +503,7 @@ class _SchoolShowcase extends StatelessWidget {
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: _CampusPatternPainter(color: slide.supportColor),
+                      painter: _CampusPatternPainter(color: slide.supportColor, context: context),
                     ),
                   ),
                   Positioned.fill(
@@ -511,7 +511,7 @@ class _SchoolShowcase extends StatelessWidget {
                       padding: const EdgeInsets.all(18),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white.withAlpha(34)),
+                          border: Border.all(color: context.appTheme.surface.withAlpha(34)),
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -562,11 +562,11 @@ class _SchoolShowcase extends StatelessWidget {
                       height: centerSize,
                       padding: EdgeInsets.all(centerPadding),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(242),
+                        color: context.appTheme.surface.withAlpha(242),
                         borderRadius: BorderRadius.circular(8),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withAlpha(35),
+                            color: context.appTheme.onSurface.withAlpha(35),
                             blurRadius: 30,
                             offset: const Offset(0, 18),
                           ),
@@ -595,7 +595,7 @@ class _SchoolShowcase extends StatelessWidget {
                                   fontSize: 16,
                                   height: 1.15,
                                   fontWeight: FontWeight.w800,
-                                  color: AppTheme.onSurface,
+                                  color: context.appTheme.onSurface,
                                 ),
                               ),
                               const SizedBox(height: 6),
@@ -608,7 +608,7 @@ class _SchoolShowcase extends StatelessWidget {
                                   fontSize: 10,
                                   height: 1.25,
                                   fontWeight: FontWeight.w700,
-                                  color: AppTheme.muted,
+                                  color: context.appTheme.muted,
                                 ),
                               ),
                             ],
@@ -663,9 +663,9 @@ class _FloatingIcon extends StatelessWidget {
         width: 46,
         height: 46,
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(42),
+          color: context.appTheme.surface.withAlpha(42),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withAlpha(72)),
+          border: Border.all(color: context.appTheme.surface.withAlpha(72)),
         ),
         child: Icon(icon, color: Colors.white, size: 24),
       ),
@@ -715,7 +715,7 @@ class _BottomControls extends StatelessWidget {
                       width: selected ? 28 : 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: selected ? AppTheme.primary : AppTheme.outline,
+                        color: selected ? context.appTheme.primary : context.appTheme.outline,
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
@@ -774,7 +774,7 @@ class _PointPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         border: Border.all(color: color.withAlpha(80)),
         borderRadius: BorderRadius.circular(8),
       ),
@@ -785,7 +785,7 @@ class _PointPill extends StatelessWidget {
           style: GoogleFonts.dmSans(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
       ),
@@ -802,7 +802,7 @@ class _ShowcaseFeatureTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(234),
+        color: context.appTheme.surface.withAlpha(234),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Padding(
@@ -810,7 +810,7 @@ class _ShowcaseFeatureTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(card.icon, size: 18, color: AppTheme.primary),
+            Icon(card.icon, size: 18, color: context.appTheme.primary),
             const SizedBox(height: 5),
             Text(
               card.title,
@@ -819,7 +819,7 @@ class _ShowcaseFeatureTile extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
             const SizedBox(height: 2),
@@ -830,7 +830,7 @@ class _ShowcaseFeatureTile extends StatelessWidget {
               style: GoogleFonts.dmSans(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ),
           ],
@@ -852,9 +852,9 @@ class _LogoMark extends StatelessWidget {
       height: size,
       padding: EdgeInsets.all(size * 0.18),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: SvgPicture.asset(
         'assets/images/img_app_logo.svg',
@@ -865,14 +865,15 @@ class _LogoMark extends StatelessWidget {
 }
 
 class _CampusPatternPainter extends CustomPainter {
-  const _CampusPatternPainter({required this.color});
+  const _CampusPatternPainter({required this.color, required this.context});
 
   final Color color;
+  final BuildContext context;
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withAlpha(28)
+      ..color = context.appTheme.surface.withAlpha(28)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
 

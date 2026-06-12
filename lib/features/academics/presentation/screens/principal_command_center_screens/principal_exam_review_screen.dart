@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _PrincipalExamView {
   home,
@@ -249,7 +249,7 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
         body: SafeArea(
           child: RefreshIndicator(
             onRefresh: _loadData,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             child: _buildContent(),
           ),
         ),
@@ -676,9 +676,9 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
                       const SizedBox(height: 4),
                       Text(
                         'Duration: ${_durationDays(exam)} Days',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -997,9 +997,9 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
                         const SizedBox(height: 4),
                         Text(
                           '${_int(row['marks_recorded'])} marks recorded',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10.5,
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1016,9 +1016,9 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
                       const SizedBox(height: 4),
                       Text(
                         _text(row['analysis_status'], fallback: 'Live'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -1080,9 +1080,9 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _studentClass(student),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -1899,7 +1899,7 @@ class _PrincipalExamReviewScreenState extends State<PrincipalExamReviewScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? AppTheme.success : AppTheme.error,
+        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
       ),
     );
   }
@@ -1958,10 +1958,10 @@ class _ExamHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
-                  color: AppTheme.onSurface,
+                  color: context.appTheme.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1969,10 +1969,10 @@ class _ExamHeader extends StatelessWidget {
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
             ],
@@ -1997,15 +1997,15 @@ class _ExamCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: selected ? AppTheme.primary : const Color(0xFFE2E8F0),
+          color: selected ? context.appTheme.primary : const Color(0xFFE2E8F0),
           width: selected ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: context.appTheme.onSurface.withAlpha(8),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -2071,10 +2071,10 @@ class _ExamMetricTile extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
               ),
               const SizedBox(height: 4),
@@ -2085,9 +2085,9 @@ class _ExamMetricTile extends StatelessWidget {
                   child: Text(
                     value,
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      color: AppTheme.onSurface,
+                      color: context.appTheme.onSurface,
                     ),
                   ),
                 ),
@@ -2158,11 +2158,11 @@ class _ExamMiniMetric extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 8.5,
               height: 1.05,
               fontWeight: FontWeight.w800,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
         ],
@@ -2210,16 +2210,16 @@ class _ExamActionRow extends StatelessWidget {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+          Icon(Icons.chevron_right_rounded, color: context.appTheme.muted),
         ],
       ),
     );
@@ -2273,12 +2273,12 @@ class _ExamFilterChips extends StatelessWidget {
             labelStyle: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w900,
-              color: selected ? Colors.white : AppTheme.onSurface,
+              color: selected ? Colors.white : context.appTheme.onSurface,
             ),
-            selectedColor: AppTheme.primary,
-            backgroundColor: Colors.white,
+            selectedColor: context.appTheme.primary,
+            backgroundColor: context.appTheme.surface,
             side: BorderSide(
-              color: selected ? AppTheme.primary : const Color(0xFFE2E8F0),
+              color: selected ? context.appTheme.primary : const Color(0xFFE2E8F0),
             ),
           );
         },
@@ -2296,10 +2296,10 @@ class _ExamSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w900,
-        color: AppTheme.onSurface,
+        color: context.appTheme.onSurface,
       ),
     );
   }
@@ -2368,9 +2368,9 @@ class _ExamListCard extends StatelessWidget {
                   ].where((part) => part.isNotEmpty).join(' - '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2447,9 +2447,9 @@ class _ExamResultCard extends StatelessWidget {
                   ].where((part) => part.isNotEmpty).join(' - '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2507,9 +2507,9 @@ class _ExamScheduleTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   _text(schedule['class_name'], fallback: 'Class'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2518,9 +2518,9 @@ class _ExamScheduleTile extends StatelessWidget {
                   _text(schedule['syllabus'], fallback: 'Syllabus pending'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2652,9 +2652,9 @@ class _ExamStudentResultTile extends StatelessWidget {
                   _studentClassStatic(row),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2869,16 +2869,16 @@ class _ExamReportOptionTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   'Generate ${_text(row['format'], fallback: 'pdf').toUpperCase()} report',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+          Icon(Icons.chevron_right_rounded, color: context.appTheme.muted),
         ],
       ),
     );
@@ -2942,9 +2942,9 @@ class _ExamKeyValueRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -2979,15 +2979,15 @@ class _ExamInfoBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 18, color: AppTheme.primary),
+          Icon(icon, size: 18, color: context.appTheme.primary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 height: 1.35,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -3021,26 +3021,26 @@ class _ExamEmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _ExamIconBadge(icon: icon, color: AppTheme.primary),
+            _ExamIconBadge(icon: icon, color: context.appTheme.primary),
             const SizedBox(height: 14),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w900,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ),
             if (actionLabel != null && onAction != null) ...[
@@ -3167,7 +3167,7 @@ class _ExamTinyChip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: AppTheme.muted),
+        Icon(icon, size: 12, color: context.appTheme.muted),
         const SizedBox(width: 4),
         ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 150),
@@ -3175,10 +3175,10 @@ class _ExamTinyChip extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
         ),
@@ -3221,9 +3221,9 @@ class _ExamTableHeader extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 9.5,
-        color: AppTheme.muted,
+        color: context.appTheme.muted,
         fontWeight: FontWeight.w900,
       ),
     );

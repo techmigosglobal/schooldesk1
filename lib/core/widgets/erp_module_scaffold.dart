@@ -292,6 +292,8 @@ class _ModuleToolbar extends StatelessWidget {
         ? 96.0
         : 280.0;
     final inlineActionWidth = compactActions ? 132.0 : 320.0;
+    final canPop = ModalRoute.of(context)?.canPop ?? false;
+
     return Container(
       constraints: BoxConstraints(minHeight: tokens.sizing.toolbarHeight),
       padding: EdgeInsets.symmetric(
@@ -304,14 +306,24 @@ class _ModuleToolbar extends StatelessWidget {
       child: showMenu
           ? Row(
               children: [
-                SizedBox(
-                  width: tokens.sizing.buttonHeight,
-                  child: IconButton(
-                    tooltip: 'Open navigation',
-                    onPressed: onMenuPressed,
-                    icon: const Icon(Icons.menu_rounded),
+                if (canPop)
+                  SizedBox(
+                    width: tokens.sizing.buttonHeight,
+                    child: IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: tokens.sizing.buttonHeight,
+                    child: IconButton(
+                      tooltip: 'Open navigation',
+                      onPressed: onMenuPressed,
+                      icon: const Icon(Icons.menu_rounded),
+                    ),
                   ),
-                ),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -355,6 +367,17 @@ class _ModuleToolbar extends StatelessWidget {
             )
           : Row(
               children: [
+                if (canPop) ...[
+                  SizedBox(
+                    width: tokens.sizing.buttonHeight,
+                    child: IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                    ),
+                  ),
+                  SizedBox(width: tokens.spacing.sm),
+                ],
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

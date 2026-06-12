@@ -139,6 +139,10 @@ type MessageConversation struct {
 	LastMessageTime time.Time `json:"last_message_time"`
 }
 
+func (MessageConversation) TableName() string {
+	return "message_conversations"
+}
+
 type Message struct {
 	BaseModel
 	ConversationID string    `gorm:"type:text;not null" json:"conversation_id"`

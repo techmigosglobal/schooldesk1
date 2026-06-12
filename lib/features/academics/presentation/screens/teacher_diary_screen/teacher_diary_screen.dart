@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherDiaryScreen extends StatefulWidget {
   const TeacherDiaryScreen({super.key});
@@ -201,7 +201,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 label: 'Entries',
                 value: '${_entries.length}',
                 icon: Icons.menu_book_rounded,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
                 tone: const Color(0xFFEAF3FF),
               ),
               TeacherFlowMetric(
@@ -328,9 +328,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   Color _typeColor(String type) {
     switch (type) {
       case 'test':
-        return AppTheme.error;
+        return context.appTheme.error;
       case 'activity':
-        return AppTheme.secondary;
+        return context.appTheme.secondary;
       case 'revision':
         return teacherFlowWarm;
       default:

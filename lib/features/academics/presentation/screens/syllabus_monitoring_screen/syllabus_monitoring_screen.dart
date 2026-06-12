@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class SyllabusMonitoringScreen extends StatefulWidget {
   const SyllabusMonitoringScreen({super.key});
@@ -164,15 +164,15 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
   Widget _buildClassFilterBar() {
     final classes = _classFilters;
     return Material(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       elevation: 1,
-      shadowColor: AppTheme.outlineVariant.withAlpha(80),
+      shadowColor: context.appTheme.outlineVariant.withAlpha(80),
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(color: AppTheme.outlineVariant, width: 1),
+            bottom: BorderSide(color: context.appTheme.outlineVariant, width: 1),
           ),
         ),
         child: SizedBox(
@@ -194,17 +194,17 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
       label: Text(classValue),
       selected: selected,
       showCheckmark: selected,
-      checkmarkColor: AppTheme.onPrimary,
-      selectedColor: AppTheme.primary,
-      backgroundColor: AppTheme.surface,
+      checkmarkColor: context.appTheme.onPrimary,
+      selectedColor: context.appTheme.primary,
+      backgroundColor: context.appTheme.surface,
       side: BorderSide(
-        color: selected ? AppTheme.primary : AppTheme.outlineVariant,
+        color: selected ? context.appTheme.primary : context.appTheme.outlineVariant,
         width: 1.2,
       ),
       labelStyle: GoogleFonts.dmSans(
         fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: selected ? AppTheme.onPrimary : AppTheme.onSurfaceVariant,
+        color: selected ? context.appTheme.onPrimary : context.appTheme.onSurfaceVariant,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -252,15 +252,15 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
     final status = _statusValue(d);
     switch (status) {
       case 'on_track':
-        statusColor = AppTheme.success;
+        statusColor = context.appTheme.success;
         statusLabel = 'On Track';
         break;
       case 'delayed':
-        statusColor = AppTheme.warning;
+        statusColor = context.appTheme.warning;
         statusLabel = 'Delayed';
         break;
       default:
-        statusColor = AppTheme.error;
+        statusColor = context.appTheme.error;
         statusLabel = 'Critical';
     }
 
@@ -281,12 +281,12 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: d['status'] == 'critical'
-                ? AppTheme.error.withAlpha(80)
-                : AppTheme.outlineVariant,
+                ? context.appTheme.error.withAlpha(80)
+                : context.appTheme.outlineVariant,
           ),
         ),
         child: Column(
@@ -304,14 +304,14 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.onSurface,
+                          color: context.appTheme.onSurface,
                         ),
                       ),
                       Text(
                         teacher,
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -343,18 +343,18 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
               child: LinearProgressIndicator(
                 value: completion,
                 minHeight: 8,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(statusColor),
               ),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                _buildTopicChip('Done: $completed', AppTheme.success),
+                _buildTopicChip('Done: $completed', context.appTheme.success),
                 const SizedBox(width: 8),
-                _buildTopicChip('Active: $inProgress', AppTheme.info),
+                _buildTopicChip('Active: $inProgress', context.appTheme.info),
                 const SizedBox(width: 8),
-                _buildTopicChip('Pending: $pending', AppTheme.warning),
+                _buildTopicChip('Pending: $pending', context.appTheme.warning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -363,7 +363,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
                       fontSize: 10,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ),
@@ -431,7 +431,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
         content: Text(
           'Reminder sent to ${_textValue(d['teacher'], fallback: 'the assigned teacher')} for ${_subjectLabel(d)} — Class ${_textValue(d['class'], fallback: 'Unassigned')}',
         ),
-        backgroundColor: AppTheme.warning,
+        backgroundColor: context.appTheme.warning,
       ),
     );
   }
@@ -472,36 +472,36 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
         if (critical.isNotEmpty) ...[
           _buildAlertHeader(
             '🔴 Critical — Immediate Action Required',
-            AppTheme.error,
+            context.appTheme.error,
           ),
           const SizedBox(height: 8),
           ...critical.asMap().entries.map(
             (e) => _buildAlertItem(
               e.value,
-              AppTheme.error,
-              AppTheme.errorContainer,
+              context.appTheme.error,
+              context.appTheme.errorContainer,
             ),
           ),
           const SizedBox(height: 16),
         ],
         if (delayed.isNotEmpty) ...[
-          _buildAlertHeader('🟡 Delayed — Needs Attention', AppTheme.warning),
+          _buildAlertHeader('🟡 Delayed — Needs Attention', context.appTheme.warning),
           const SizedBox(height: 8),
           ...delayed.asMap().entries.map(
             (e) => _buildAlertItem(
               e.value,
-              AppTheme.warning,
-              AppTheme.warningContainer,
+              context.appTheme.warning,
+              context.appTheme.warningContainer,
             ),
           ),
           const SizedBox(height: 16),
         ],
         if (onTrack.isNotEmpty) ...[
-          _buildAlertHeader('On Track', AppTheme.success),
+          _buildAlertHeader('On Track', context.appTheme.success),
           const SizedBox(height: 8),
           ...onTrack.map(
             (d) =>
-                _buildAlertItem(d, AppTheme.success, AppTheme.successContainer),
+                _buildAlertItem(d, context.appTheme.success, context.appTheme.successContainer),
           ),
         ],
       ],
@@ -549,7 +549,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                   '${_textValue(d['teacher'], fallback: 'Teacher not assigned')} · $completion% done · Target: ${_dateLabel(d['targetDate'] ?? d['target_date'] ?? d['updated_at'])}',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -648,9 +648,9 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             children: [
@@ -666,7 +666,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                   ),
                 ],
@@ -677,9 +677,9 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                 child: LinearProgressIndicator(
                   value: avg / 100,
                   minHeight: 12,
-                  backgroundColor: AppTheme.surfaceVariant,
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppTheme.primary,
+                  backgroundColor: context.appTheme.surfaceVariant,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    context.appTheme.primary,
                   ),
                 ),
               ),
@@ -687,9 +687,9 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem('On Track', '$onTrack', AppTheme.success),
-                  _buildStatItem('Delayed', '$delayed', AppTheme.warning),
-                  _buildStatItem('Critical', '$critical', AppTheme.error),
+                  _buildStatItem('On Track', '$onTrack', context.appTheme.success),
+                  _buildStatItem('Delayed', '$delayed', context.appTheme.warning),
+                  _buildStatItem('Critical', '$critical', context.appTheme.error),
                 ],
               ),
             ],
@@ -736,7 +736,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Syllabus report export failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -749,16 +749,16 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
     String classes,
   ) {
     Color color = percent >= 80
-        ? AppTheme.success
+        ? context.appTheme.success
         : percent >= 60
-        ? AppTheme.warning
-        : AppTheme.error;
+        ? context.appTheme.warning
+        : context.appTheme.error;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -796,7 +796,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                   '$subject · $classes',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -809,7 +809,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
               child: LinearProgressIndicator(
                 value: percent / 100,
                 minHeight: 6,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
             ),
@@ -832,7 +832,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
         ),
         Text(
           label,
-          style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+          style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
         ),
       ],
     );
@@ -858,7 +858,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                     width: 36,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppTheme.outline,
+                      color: context.appTheme.outline,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -875,7 +875,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                   _textValue(d['teacher'], fallback: 'Teacher not assigned'),
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -936,15 +936,15 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
     IconData icon;
     switch (t['status']) {
       case 'completed':
-        color = AppTheme.success;
+        color = context.appTheme.success;
         icon = Icons.check_circle_rounded;
         break;
       case 'in_progress':
-        color = AppTheme.info;
+        color = context.appTheme.info;
         icon = Icons.pending_rounded;
         break;
       default:
-        color = AppTheme.muted;
+        color = context.appTheme.muted;
         icon = Icons.radio_button_unchecked_rounded;
     }
 
@@ -999,13 +999,13 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
               _textValue(t['name'], fallback: 'Untitled topic'),
               style: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),
           Text(
             _textValue(t['date'], fallback: ''),
-            style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -1030,12 +1030,12 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                 width: compact ? 44 : 56,
                 height: compact ? 44 : 56,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryContainer,
+                  color: context.appTheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                   size: compact ? 22 : 28,
                 ),
               ),
@@ -1046,7 +1046,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: compact ? 13 : 16,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.onSurface,
+                  color: context.appTheme.onSurface,
                 ),
               ),
               const SizedBox(height: 6),
@@ -1055,7 +1055,7 @@ class _SyllabusMonitoringScreenState extends State<SyllabusMonitoringScreen>
                 textAlign: TextAlign.center,
                 style: GoogleFonts.dmSans(
                   fontSize: compact ? 11 : 13,
-                  color: AppTheme.onSurfaceVariant,
+                  color: context.appTheme.onSurfaceVariant,
                   height: 1.35,
                 ),
               ),

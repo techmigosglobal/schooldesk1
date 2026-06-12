@@ -4,10 +4,10 @@ import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentDocumentsScreen extends StatefulWidget {
   const ParentDocumentsScreen({super.key});
@@ -73,7 +73,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                 'name': row['doc_type'] ?? 'Document',
                 'type': row['doc_type'] ?? 'Document',
                 'icon': Icons.description_rounded,
-                'color': AppTheme.primary,
+                'color': context.appTheme.primary,
                 'available': true,
                 'size': '',
                 'docType': row['doc_type'] ?? 'document',
@@ -127,7 +127,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('${doc['name']} downloaded successfully!'),
-              backgroundColor: AppTheme.success,
+              backgroundColor: context.appTheme.success,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -138,7 +138,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to generate document. Please try again.'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -307,7 +307,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
             const SizedBox(height: 8),
             Text(
               message,
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               textAlign: TextAlign.center,
             ),
           ],
@@ -318,7 +318,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
 
   Widget _buildChildSelector() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: List.generate(_children.length, (i) {
@@ -329,7 +329,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surfaceVariant,
+                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -339,7 +339,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -371,9 +371,9 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -406,7 +406,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                       '${doc['type']} • ${doc['size']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                     if (canGenerate)
@@ -414,7 +414,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                         isReportCard ? 'PDF will be generated' : 'PDF receipt',
                         style: GoogleFonts.dmSans(
                           fontSize: 10,
-                          color: AppTheme.primary,
+                          color: context.appTheme.primary,
                         ),
                       ),
                   ],
@@ -486,7 +486,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
           if (_certificateRequests.isEmpty)
             Text(
               'No certificate requests yet.',
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
             )
           else
             ..._certificateRequests.map((r) => _certRequestCard(r)),
@@ -568,7 +568,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                         ct['desc'] as String,
                         style: GoogleFonts.dmSans(
                           fontSize: 10,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -589,9 +589,9 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -624,14 +624,14 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                   'Purpose: ${r['purpose']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
                 Text(
                   'Requested: ${r['requestedOn']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -662,7 +662,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.warningContainer,
+                    color: context.appTheme.warningContainer,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -670,7 +670,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.warning,
+                      color: context.appTheme.warning,
                     ),
                   ),
                 ),
@@ -686,11 +686,11 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
     final studentId = _activeStudentId;
     if (studentId == null || studentId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
             'Select a backend-linked student before requesting a certificate.',
           ),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return;
@@ -738,7 +738,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Document is not available from backend: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -816,7 +816,7 @@ class _CertificateRequestPageState extends State<_CertificateRequestPage> {
             children: [
               Text(
                 'For: ${widget.childName}',
-                style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               ),
               const SizedBox(height: 16),
               if (_error != null) ...[
@@ -862,12 +862,12 @@ class _InputErrorBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.error),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
       ),
     );
   }

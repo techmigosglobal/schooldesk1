@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentDisciplineScreen extends StatefulWidget {
   const ParentDisciplineScreen({super.key});
@@ -63,7 +63,7 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -80,12 +80,12 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
   Color _severityColor(String severity) {
     switch (severity.toLowerCase()) {
       case 'high':
-        return AppTheme.error;
+        return context.appTheme.error;
       case 'medium':
-        return AppTheme.warning;
+        return context.appTheme.warning;
       case 'low':
       default:
-        return AppTheme.info;
+        return context.appTheme.info;
     }
   }
 
@@ -157,10 +157,10 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surface,
+                color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : AppTheme.outlineVariant,
+                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -168,7 +168,7 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -183,20 +183,20 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.shield_rounded, size: 48, color: AppTheme.success.withAlpha(120)),
+          Icon(Icons.shield_rounded, size: 48, color: context.appTheme.success.withAlpha(120)),
           const SizedBox(height: 12),
           Text(
             'No discipline records found',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Child has a clean conduct sheet.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -221,9 +221,9 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,7 +249,7 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceVariant,
+                      color: context.appTheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -257,7 +257,7 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.onSurfaceVariant,
+                        color: context.appTheme.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -266,7 +266,7 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                     date,
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -276,22 +276,22 @@ class _ParentDisciplineScreenState extends State<ParentDisciplineScreen> {
                 desc,
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
-                  color: AppTheme.onSurface,
+                  color: context.appTheme.onSurface,
                   height: 1.4,
                 ),
               ),
               const SizedBox(height: 12),
-              Divider(color: AppTheme.outlineVariant),
+              Divider(color: context.appTheme.outlineVariant),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(Icons.person_pin_rounded, size: 14, color: AppTheme.muted),
+                  Icon(Icons.person_pin_rounded, size: 14, color: context.appTheme.muted),
                   const SizedBox(width: 4),
                   Text(
                     'Reported by: $reporter',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],

@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 enum _PrincipalCommunicationView {
   home,
@@ -57,26 +59,39 @@ class _PrincipalChatCommunicationsScreenState
   _ParentChatThread? _selectedParentThread;
   _TeacherDirectThread? _selectedTeacherThread;
   UserAccountModel? _selectedTeacher;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_sending && !_loading) {
+        _loadData(background: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _messageController.dispose();
     _announcementTitleController.dispose();
     _announcementBodyController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadData({bool background = false}) async {
+    if (!background) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
 
     try {
       final api = BackendApiClient.instance;
@@ -190,7 +205,9 @@ class _PrincipalChatCommunicationsScreenState
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error.toString();
+        if (!background) {
+          _error = error.toString();
+        }
       });
     }
   }
@@ -387,15 +404,46 @@ class _PrincipalChatCommunicationsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_showMessageComposer) {
+      return Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: const Color(0xFFF6FAFE),
+        drawer: PrincipalDrawer(selectedIndex: 18, onDestinationSelected: (_) {}),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(), // Pinned header
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? _buildErrorState()
+                        : ChatWallpaperBackground(
+                            child: _buildActiveView(), // Wraps parentThread or teacherDirect view
+                          ),
+              ),
+              ChatInputBar(
+                controller: _messageController,
+                isSending: _sending,
+                onSend: _sendActiveMessage,
+                onAttach: () => _showSnackBar(
+                  'Attachments are not available for this backend chat yet.',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF6FAFE),
       drawer: PrincipalDrawer(selectedIndex: 18, onDestinationSelected: (_) {}),
-      bottomNavigationBar: Column(
+      bottomNavigationBar: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_showMessageComposer) _buildMessageComposer(),
-          const PrincipalShellBottomBar(),
+          PrincipalShellBottomBar(),
         ],
       ),
       body: SafeArea(
@@ -419,12 +467,7 @@ class _PrincipalChatCommunicationsScreenState
                 )
               else
                 SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    8,
-                    16,
-                    _showMessageComposer ? 18 : 92,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 92),
                   sliver: SliverToBoxAdapter(child: _buildActiveView()),
                 ),
             ],
@@ -773,12 +816,15 @@ class _PrincipalChatCommunicationsScreenState
     if (thread == null) {
       return _emptyPanel('Conversation not selected', Icons.forum_outlined);
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       children: [
         if (thread.isGroup)
           Container(
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             padding: const EdgeInsets.all(12),
             decoration: _softDecoration(color: const Color(0xFFFFF8E1)),
             child: Row(
@@ -800,19 +846,37 @@ class _PrincipalChatCommunicationsScreenState
         if (thread.messages.isEmpty)
           _emptyPanel('No messages in this conversation', Icons.chat_outlined)
         else
-          for (final message in thread.messages)
-            _MessageBubble(
-              title: message.senderLabel,
-              body: message.body,
-              timeLabel: _timeLabel(message.sentAt),
-              mine: _role(message.senderRole) == 'principal',
-              unread: !message.isRead,
-              onMarkRead: !message.isRead && message.id.isNotEmpty
-                  ? () => _markParentMessageRead(message)
-                  : null,
-            ),
+          ..._buildParentThreadMessages(thread),
       ],
     );
+  }
+
+  List<Widget> _buildParentThreadMessages(_ParentChatThread thread) {
+    final widgets = <Widget>[];
+    String? lastDateString;
+    for (final message in thread.messages) {
+      if (message.sentAt != null) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(message.sentAt!.toLocal());
+        if (dateStr != lastDateString) {
+          final displayDate = _formatDateSeparator(message.sentAt!.toLocal());
+          widgets.add(ChatDateSeparator(dateText: displayDate));
+          lastDateString = dateStr;
+        }
+      }
+      widgets.add(
+        ChatBubbleWidget(
+          messageText: message.body,
+          time: _timeLabel(message.sentAt),
+          isMe: _role(message.senderRole) == 'principal',
+          isRead: message.isRead,
+        ),
+      );
+      // Mark read if incoming and unread
+      if (!message.isRead && _role(message.senderRole) != 'principal' && message.id.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _markParentMessageRead(message));
+      }
+    }
+    return widgets;
   }
 
   Widget _buildTeacherDirectView() {
@@ -823,66 +887,101 @@ class _PrincipalChatCommunicationsScreenState
         Icons.person_pin_outlined,
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
       children: [
-        _softPanel(
-          child: Row(
-            children: [
-              _avatar(_initials(thread.teacherLabel)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      thread.teacherLabel,
-                      style: _textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: _softPanel(
+            child: Row(
+              children: [
+                _avatar(_initials(thread.teacherLabel)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        thread.teacherLabel,
+                        style: _textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      thread.teacher.email.isEmpty
-                          ? 'Teacher account'
-                          : thread.teacher.email,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _textTheme.labelSmall?.copyWith(
-                        color: const Color(0xFF667789),
-                        fontWeight: FontWeight.w700,
+                      const SizedBox(height: 4),
+                      Text(
+                        thread.teacher.email.isEmpty
+                            ? 'Teacher account'
+                            : thread.teacher.email,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: _textTheme.labelSmall?.copyWith(
+                          color: const Color(0xFF667789),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              _StatusPill(
-                label: '${thread.messages.length} messages',
-                color: const Color(0xFF0B72F0),
-              ),
-            ],
+                _StatusPill(
+                  label: '${thread.messages.length} messages',
+                  color: const Color(0xFF0B72F0),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 6),
         if (thread.messages.isEmpty)
           _emptyPanel('No internal messages yet', Icons.mail_outline_rounded)
         else
-          for (final message in thread.messages)
-            _MessageBubble(
-              title: message.senderLabel,
-              body: message.body,
-              timeLabel: _timeLabel(message.sentAt),
-              mine: !message.isIncomingToPrincipal,
-              unread: message.isIncomingToPrincipal && !message.isRead,
-              onMarkRead:
-                  message.isIncomingToPrincipal &&
-                      !message.isRead &&
-                      message.id.isNotEmpty
-                  ? () => _markDirectMessageRead(message)
-                  : null,
-            ),
+          ..._buildTeacherDirectMessages(thread),
       ],
     );
+  }
+
+  List<Widget> _buildTeacherDirectMessages(_TeacherDirectThread thread) {
+    final widgets = <Widget>[];
+    String? lastDateString;
+    for (final message in thread.messages) {
+      if (message.sentAt != null) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(message.sentAt!.toLocal());
+        if (dateStr != lastDateString) {
+          final displayDate = _formatDateSeparator(message.sentAt!.toLocal());
+          widgets.add(ChatDateSeparator(dateText: displayDate));
+          lastDateString = dateStr;
+        }
+      }
+      widgets.add(
+        ChatBubbleWidget(
+          messageText: message.body,
+          time: _timeLabel(message.sentAt),
+          isMe: !message.isIncomingToPrincipal,
+          isRead: message.isRead,
+        ),
+      );
+      // Mark read if incoming and unread
+      if (message.isIncomingToPrincipal && !message.isRead && message.id.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _markDirectMessageRead(message));
+      }
+    }
+    return widgets;
+  }
+
+  String _formatDateSeparator(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final checkDate = DateTime(date.year, date.month, date.day);
+    if (checkDate == today) {
+      return 'Today';
+    } else if (checkDate == yesterday) {
+      return 'Yesterday';
+    } else {
+      return DateFormat('MMMM dd, yyyy').format(date);
+    }
   }
 
   Widget _buildAnnouncementsView() {
@@ -1135,57 +1234,6 @@ class _PrincipalChatCommunicationsScreenState
     );
   }
 
-  Widget _buildMessageComposer() {
-    return SafeArea(
-      top: false,
-      bottom: false,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFDDE7F0))),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                minLines: 1,
-                maxLines: 4,
-                enabled: !_sending,
-                decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  isDense: true,
-                  suffixIcon: IconButton(
-                    tooltip: 'Attach',
-                    onPressed: _sending
-                        ? null
-                        : () => _showSnackBar(
-                            'Attachments are not available for this backend chat yet.',
-                          ),
-                    icon: const Icon(Icons.attach_file_rounded, size: 18),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              tooltip: 'Send message',
-              onPressed: _sending ? null : _sendActiveMessage,
-              icon: _sending
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_rounded, size: 20),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildConversationFilterChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -1212,7 +1260,7 @@ class _PrincipalChatCommunicationsScreenState
         showCheckmark: false,
         selectedColor: const Color(0xFF0B72F0),
         labelStyle: _textTheme.labelSmall?.copyWith(
-          color: selected ? Colors.white : const Color(0xFF334155),
+          color: selected ? context.appTheme.surface : const Color(0xFF334155),
           fontWeight: FontWeight.w900,
         ),
         side: BorderSide(
@@ -1237,7 +1285,7 @@ class _PrincipalChatCommunicationsScreenState
                 showCheckmark: false,
                 selectedColor: const Color(0xFF0B72F0),
                 labelStyle: _textTheme.labelSmall?.copyWith(
-                  color: i == 0 ? Colors.white : const Color(0xFF334155),
+                  color: i == 0 ? context.appTheme.surface : const Color(0xFF334155),
                   fontWeight: FontWeight.w900,
                 ),
                 side: BorderSide(
@@ -1272,10 +1320,10 @@ class _PrincipalChatCommunicationsScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.cloud_off_rounded,
                 size: 44,
-                color: AppTheme.error,
+                color: context.appTheme.error,
               ),
               const SizedBox(height: 12),
               Text(
@@ -1704,7 +1752,7 @@ class _MetricCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDDE7F0)),
         boxShadow: [
@@ -1787,7 +1835,7 @@ class _QuickActionTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFDDE7F0)),
             ),
@@ -1869,7 +1917,7 @@ class _ConversationTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFDDE7F0)),
             ),
@@ -1901,7 +1949,7 @@ class _ConversationTile extends StatelessWidget {
                         width: 17,
                         height: 17,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: context.appTheme.surface,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Icon(
@@ -2013,7 +2061,7 @@ class _TeacherMonitorTile extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFFDDE7F0)),
             ),
@@ -2110,7 +2158,7 @@ class _AnnouncementTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDDE7F0)),
       ),
@@ -2134,7 +2182,7 @@ class _AnnouncementTile extends StatelessWidget {
                     ? 'Important'
                     : _titleCase(announcement.targetAudience),
                 color: announcement.isUrgent
-                    ? AppTheme.error
+                    ? context.appTheme.error
                     : const Color(0xFF16A34A),
               ),
             ],
@@ -2163,102 +2211,6 @@ class _AnnouncementTile extends StatelessWidget {
     );
   }
 }
-
-class _MessageBubble extends StatelessWidget {
-  final String title;
-  final String body;
-  final String timeLabel;
-  final bool mine;
-  final bool unread;
-  final VoidCallback? onMarkRead;
-
-  const _MessageBubble({
-    required this.title,
-    required this.body,
-    required this.timeLabel,
-    required this.mine,
-    required this.unread,
-    this.onMarkRead,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = mine ? const Color(0xFFDDF8E8) : const Color(0xFFF1F5F9);
-    return Padding(
-      padding: EdgeInsets.only(
-        left: mine ? 46 : 0,
-        right: mine ? 0 : 46,
-        bottom: 12,
-      ),
-      child: Align(
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFDDE7F0)),
-          ),
-          child: Column(
-            crossAxisAlignment: mine
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFF0F2133),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                body,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF172B3A),
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    timeLabel,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: const Color(0xFF667789),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (mine) ...[
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.done_all_rounded,
-                      size: 14,
-                      color: Color(0xFF16A34A),
-                    ),
-                  ],
-                ],
-              ),
-              if (unread && onMarkRead != null) ...[
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: onMarkRead,
-                  icon: const Icon(Icons.done_all_rounded, size: 16),
-                  label: const Text('Mark read'),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _StatusPill extends StatelessWidget {
   final String label;
   final Color color;

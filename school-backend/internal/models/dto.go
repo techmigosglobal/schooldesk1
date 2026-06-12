@@ -153,13 +153,14 @@ type CreateEnrollmentRequest struct {
 }
 
 type CreateFeeStructureRequest struct {
-	SchoolID       string  `json:"school_id"`
-	AcademicYearID string  `json:"academic_year_id" binding:"required"`
-	GradeID        string  `json:"grade_id" binding:"required"`
-	FeeCategoryID  string  `json:"fee_category_id" binding:"required"`
-	Amount         float64 `json:"amount" binding:"required"`
-	DueDay         int     `json:"due_day"`
-	LateFinePerDay float64 `json:"late_fine_per_day"`
+	SchoolID         string  `json:"school_id"`
+	AcademicYearID   string  `json:"academic_year_id" binding:"required"`
+	GradeID          string  `json:"grade_id" binding:"required"`
+	FeeCategoryID    string  `json:"fee_category_id" binding:"required"`
+	Amount           float64 `json:"amount" binding:"required"`
+	DueDay           int     `json:"due_day"`
+	LateFinePerDay   float64 `json:"late_fine_per_day"`
+	InstallmentCount int     `json:"installment_count"`
 }
 
 type CreateLeaveApplicationRequest struct {

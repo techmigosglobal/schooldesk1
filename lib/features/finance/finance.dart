@@ -6,3 +6,7 @@ export 'presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart';
 export 'presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart';
 export 'presentation/screens/parent_fees_screen/parent_fees_screen.dart';
 export 'presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart';
+export 'presentation/screens/parent_payment_screens/parent_payment_selection_screen.dart';
+export 'presentation/screens/parent_payment_screens/parent_payment_processing_screen.dart';
+export 'presentation/screens/parent_payment_screens/parent_payment_success_screen.dart';
+export 'presentation/screens/parent_payment_screens/receipt_view_screen.dart';

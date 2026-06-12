@@ -7,9 +7,9 @@ import 'package:schooldesk1/core/services/backup_restore_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:intl/intl.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AppSettingsScreen extends StatefulWidget {
   final String role;
@@ -46,15 +46,15 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     final themeProvider = context.watch<ThemeProvider>();
     _settingsProvider = context.watch<AppSettingsProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : AppTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : AppTheme.surface;
+    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
+    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
-        : AppTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : AppTheme.muted;
+        : context.appTheme.onSurface;
+    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
-        : AppTheme.outlineVariant;
+        : context.appTheme.outlineVariant;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -95,7 +95,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildDropdownTile(
                       icon: Icons.text_fields_rounded,
-                      iconColor: AppTheme.primary,
+                      iconColor: context.appTheme.primary,
                       title: 'App Text Size',
                       subtitle:
                           'Uses SchoolDesk sizing, not the phone display size',
@@ -115,7 +115,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildSwitchTile(
                       icon: Icons.view_compact_rounded,
-                      iconColor: AppTheme.secondary,
+                      iconColor: context.appTheme.secondary,
                       title: 'Compact View',
                       subtitle: 'Show more content with reduced spacing',
                       value:
@@ -142,7 +142,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   [
                     _buildSwitchTile(
                       icon: Icons.pending_actions_rounded,
-                      iconColor: AppTheme.warning,
+                      iconColor: context.appTheme.warning,
                       title: 'Pending Approvals',
                       subtitle: 'Alerts for leave and document requests',
                       value:
@@ -160,7 +160,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildSwitchTile(
                       icon: Icons.account_balance_wallet_rounded,
-                      iconColor: AppTheme.error,
+                      iconColor: context.appTheme.error,
                       title: 'Fee Reminders',
                       subtitle: 'Alerts for due and overdue fees',
                       value: _notifService?.getSetting('fee_reminders') ?? true,
@@ -173,7 +173,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildSwitchTile(
                       icon: Icons.quiz_rounded,
-                      iconColor: AppTheme.primary,
+                      iconColor: context.appTheme.primary,
                       title: 'Exam Reminders',
                       subtitle: 'Alerts for upcoming exams and results',
                       value:
@@ -187,7 +187,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildSwitchTile(
                       icon: Icons.how_to_reg_rounded,
-                      iconColor: AppTheme.success,
+                      iconColor: context.appTheme.success,
                       title: 'Attendance Alerts',
                       subtitle: 'Alerts for low attendance warnings',
                       value:
@@ -217,7 +217,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   [
                     _buildActionTile(
                       icon: Icons.backup_rounded,
-                      iconColor: AppTheme.success,
+                      iconColor: context.appTheme.success,
                       title: 'Create Backup',
                       subtitle: _backupMeta != null
                           ? 'Last backup: ${_formatDate(_backupMeta!['lastBackup'] as String?)}'
@@ -238,7 +238,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildActionTile(
                       icon: Icons.restore_rounded,
-                      iconColor: AppTheme.primary,
+                      iconColor: context.appTheme.primary,
                       title: 'Restore Backup',
                       subtitle: 'Restore data from a previous backup',
                       onSurfaceColor: onSurfaceColor,
@@ -251,7 +251,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildActionTile(
                       icon: Icons.delete_sweep_rounded,
-                      iconColor: AppTheme.error,
+                      iconColor: context.appTheme.error,
                       title: 'Clear All Data',
                       subtitle: 'Reset app to factory defaults',
                       onSurfaceColor: onSurfaceColor,
@@ -273,7 +273,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   [
                     _buildActionTile(
                       icon: Icons.person_outline_rounded,
-                      iconColor: AppTheme.primary,
+                      iconColor: context.appTheme.primary,
                       title: 'My Profile',
                       subtitle: 'View and edit your profile',
                       onSurfaceColor: onSurfaceColor,
@@ -290,7 +290,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildActionTile(
                       icon: Icons.lock_outline_rounded,
-                      iconColor: AppTheme.secondary,
+                      iconColor: context.appTheme.secondary,
                       title: 'Change Password',
                       subtitle: 'Update your login password',
                       onSurfaceColor: onSurfaceColor,
@@ -303,7 +303,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     ),
                     _buildActionTile(
                       icon: Icons.logout_rounded,
-                      iconColor: AppTheme.error,
+                      iconColor: context.appTheme.error,
                       title: 'Sign Out',
                       subtitle: 'Log out from your account',
                       onSurfaceColor: onSurfaceColor,
@@ -328,7 +328,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   ),
                   _buildInfoTile(
                     icon: Icons.school_rounded,
-                    iconColor: AppTheme.primary,
+                    iconColor: context.appTheme.primary,
                     title: 'Application',
                     value: 'Public School',
                     onSurfaceColor: onSurfaceColor,
@@ -429,7 +429,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       trailing: Switch(
         value: value,
         onChanged: onChanged,
-        activeThumbColor: AppTheme.primary,
+        activeThumbColor: context.appTheme.primary,
       ),
     );
   }
@@ -470,7 +470,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       trailing: DropdownButton<String>(
         value: value,
         underline: const SizedBox(),
-        style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.primary),
+        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.primary),
         items: options
             .map(
               (o) => DropdownMenuItem(
@@ -574,7 +574,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               'Backup created successfully (${(sizeBytes / 1024).toStringAsFixed(1)} KB)',
               style: GoogleFonts.dmSans(),
             ),
-            backgroundColor: AppTheme.success,
+            backgroundColor: context.appTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -588,7 +588,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
               'Backup failed. Please try again.',
               style: GoogleFonts.dmSans(),
             ),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -616,7 +616,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               'Cancel',
-              style: GoogleFonts.dmSans(color: AppTheme.muted),
+              style: GoogleFonts.dmSans(color: context.appTheme.muted),
             ),
           ),
           if (hasBackup)
@@ -637,8 +637,8 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                           style: GoogleFonts.dmSans(),
                         ),
                         backgroundColor: success
-                            ? AppTheme.success
-                            : AppTheme.error,
+                            ? context.appTheme.success
+                            : context.appTheme.error,
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
@@ -651,14 +651,14 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                           'Restore failed. Please try again.',
                           style: GoogleFonts.dmSans(),
                         ),
-                        backgroundColor: AppTheme.error,
+                        backgroundColor: context.appTheme.error,
                         behavior: SnackBarBehavior.floating,
                       ),
                     );
                   }
                 }
               },
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+              style: FilledButton.styleFrom(backgroundColor: context.appTheme.primary),
               child: Text('Restore', style: GoogleFonts.dmSans()),
             ),
         ],
@@ -683,7 +683,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             onPressed: () => Navigator.pop(ctx),
             child: Text(
               'Cancel',
-              style: GoogleFonts.dmSans(color: AppTheme.muted),
+              style: GoogleFonts.dmSans(color: context.appTheme.muted),
             ),
           ),
           FilledButton(
@@ -698,7 +698,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                         'All data cleared successfully.',
                         style: GoogleFonts.dmSans(),
                       ),
-                      backgroundColor: AppTheme.success,
+                      backgroundColor: context.appTheme.success,
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -716,14 +716,14 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                         'Failed to clear data.',
                         style: GoogleFonts.dmSans(),
                       ),
-                      backgroundColor: AppTheme.error,
+                      backgroundColor: context.appTheme.error,
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
                 }
               }
             },
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             child: Text('Clear', style: GoogleFonts.dmSans()),
           ),
         ],
@@ -816,8 +816,8 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : AppTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : AppTheme.surface;
+    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
+    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -889,7 +889,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                 const SizedBox(height: 16),
                 _InlineStateMessage(
                   message: _errorText!,
-                  color: AppTheme.error,
+                  color: context.appTheme.error,
                   icon: Icons.error_outline_rounded,
                 ),
               ],
@@ -897,7 +897,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                 const SizedBox(height: 16),
                 _InlineStateMessage(
                   message: _successText!,
-                  color: AppTheme.success,
+                  color: context.appTheme.success,
                   icon: Icons.check_circle_outline_rounded,
                 ),
               ],
@@ -913,7 +913,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                     : const Icon(Icons.save_rounded),
                 label: Text(_submitting ? 'Checking...' : 'Update Password'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: context.appTheme.primary,
                 ),
               ),
             ],
@@ -976,21 +976,21 @@ class _BackendGapBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.warningContainer,
+        color: context.appTheme.warningContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.warning.withAlpha(80)),
+        border: Border.all(color: context.appTheme.warning.withAlpha(80)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppTheme.warning, size: 20),
+          Icon(icon, color: context.appTheme.warning, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
               style: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: AppTheme.onSurface,
+                color: context.appTheme.onSurface,
               ),
             ),
           ),

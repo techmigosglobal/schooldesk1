@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:8080/api}"
+API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:8080/api/v1}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/health}"
 READY_URL="${READY_URL:-${HEALTH_URL%/health}/ready}"
 METRICS_URL="${METRICS_URL:-${HEALTH_URL%/health}/metrics}"

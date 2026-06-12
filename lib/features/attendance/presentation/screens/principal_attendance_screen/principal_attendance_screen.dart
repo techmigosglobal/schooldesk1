@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _AttendanceView { classes, sessions, students, reports }
 
@@ -174,14 +174,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       label: 'Sessions Today',
       value: '${_sessions.length}',
       icon: Icons.fact_check_outlined,
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       tone: const Color(0xFFEFF6FF),
     ),
     PrincipalDirectoryMetric(
       label: 'Marked Students',
       value: '$_markedStudents',
       icon: Icons.groups_outlined,
-      color: AppTheme.success,
+      color: context.appTheme.success,
       tone: const Color(0xFFECFDF3),
     ),
     PrincipalDirectoryMetric(
@@ -196,7 +196,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       label: 'Exceptions',
       value: '${_exceptions.length}',
       icon: Icons.warning_amber_rounded,
-      color: _exceptions.isEmpty ? AppTheme.success : AppTheme.warning,
+      color: _exceptions.isEmpty ? context.appTheme.success : context.appTheme.warning,
       tone: const Color(0xFFFFF7ED),
     ),
   ];
@@ -334,10 +334,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ? 'Review'
         : 'Marked';
     final statusColor = total <= 0
-        ? AppTheme.warning
+        ? context.appTheme.warning
         : percent < 75
-        ? AppTheme.warning
-        : AppTheme.success;
+        ? context.appTheme.warning
+        : context.appTheme.success;
     return PrincipalDirectoryCard(
       icon: Icons.apartment_outlined,
       title: section.label,
@@ -379,7 +379,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       subtitle:
           'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present',
       status: 'Review',
-      statusColor: AppTheme.warning,
+      statusColor: context.appTheme.warning,
       chips: [
         PrincipalInfoPill(
           icon: Icons.event_available_outlined,
@@ -406,7 +406,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       subtitle:
           'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present | ${_dateOnly(session.date)}',
       status: marked ? 'Marked' : 'Pending',
-      statusColor: marked ? AppTheme.success : AppTheme.warning,
+      statusColor: marked ? context.appTheme.success : context.appTheme.warning,
       chips: [
         PrincipalInfoPill(
           icon: Icons.percent_rounded,
@@ -432,7 +432,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       title: student.fullName.isEmpty ? student.id : student.fullName,
       subtitle: 'Admission ${student.admissionNumber} | ${student.status}',
       status: selected ? 'Selected' : student.status,
-      statusColor: selected ? AppTheme.primary : AppTheme.success,
+      statusColor: selected ? context.appTheme.primary : context.appTheme.success,
       chips: [
         PrincipalInfoPill(
           icon: Icons.apartment_rounded,
@@ -465,7 +465,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       subtitle:
           'View class-wise attendance for ${_sectionLabel(_selectedSectionId)}',
       status: 'View',
-      statusColor: AppTheme.primary,
+      statusColor: context.appTheme.primary,
       chips: [
         PrincipalInfoPill(
           icon: Icons.calendar_today_outlined,
@@ -491,7 +491,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       title: title,
       subtitle: subtitle,
       status: 'Loading',
-      statusColor: AppTheme.primary,
+      statusColor: context.appTheme.primary,
     );
   }
 
@@ -506,8 +506,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               trailing: PrincipalStatusPill(
                 label: session.totalStudents > 0 ? 'Marked' : 'Pending',
                 color: session.totalStudents > 0
-                    ? AppTheme.success
-                    : AppTheme.warning,
+                    ? context.appTheme.success
+                    : context.appTheme.warning,
               ),
               children: [
                 PrincipalDetailRow(
@@ -551,7 +551,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               title: 'Student Summary',
               trailing: PrincipalStatusPill(
                 label: student.status,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
               ),
               children: [
                 PrincipalDetailRow(
@@ -692,7 +692,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? AppTheme.success : AppTheme.error,
+        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
       ),
     );
   }

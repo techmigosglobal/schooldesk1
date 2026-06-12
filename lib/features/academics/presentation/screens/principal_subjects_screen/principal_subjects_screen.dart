@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalSubjectsScreen extends StatefulWidget {
   const PrincipalSubjectsScreen({super.key});
@@ -481,8 +481,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       subtitle: coverage.sectionSummary,
       status: coverage.subjects.isEmpty ? 'Needs mapping' : 'Mapped',
       statusColor: coverage.subjects.isEmpty
-          ? AppTheme.warning
-          : AppTheme.success,
+          ? context.appTheme.warning
+          : context.appTheme.success,
       chips: [
         PrincipalInfoPill(
           icon: Icons.menu_book_outlined,
@@ -508,7 +508,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       title: load.teacherName,
       subtitle: load.designation.isEmpty ? 'Teacher load' : load.designation,
       status: '${load.subjectCount} subjects',
-      statusColor: load.subjectCount == 0 ? AppTheme.warning : AppTheme.primary,
+      statusColor: load.subjectCount == 0 ? context.appTheme.warning : context.appTheme.primary,
       chips: [
         PrincipalInfoPill(
           icon: Icons.apartment_rounded,
@@ -633,8 +633,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
               trailing: PrincipalStatusPill(
                 label: coverage.subjects.isEmpty ? 'Needs mapping' : 'Mapped',
                 color: coverage.subjects.isEmpty
-                    ? AppTheme.warning
-                    : AppTheme.success,
+                    ? context.appTheme.warning
+                    : context.appTheme.success,
               ),
               children: [
                 PrincipalDetailRow(
@@ -700,8 +700,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
               trailing: PrincipalStatusPill(
                 label: '${load.subjectCount} subjects',
                 color: load.subjectCount == 0
-                    ? AppTheme.warning
-                    : AppTheme.primary,
+                    ? context.appTheme.warning
+                    : context.appTheme.primary,
               ),
               children: [
                 PrincipalDetailRow(
@@ -985,11 +985,11 @@ class _SubjectsDirectoryHeader extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withAlpha(14),
+                  color: context.appTheme.onSurface.withAlpha(14),
                   blurRadius: 14,
                   offset: const Offset(0, 5),
                 ),
@@ -1028,12 +1028,12 @@ class _SubjectMetricCard extends StatelessWidget {
       height: 82,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE3EAF5)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: context.appTheme.onSurface.withAlpha(10),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1114,12 +1114,12 @@ class _SubjectDirectoryTile extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 80),
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFFE3EAF5)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(10),
+              color: context.appTheme.onSurface.withAlpha(10),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -1274,7 +1274,7 @@ class _SubjectTeacherAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFE8F0FF),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: context.appTheme.surface, width: 2),
       ),
       child: Center(
         child: Text(
@@ -1326,7 +1326,7 @@ class _SubjectDetailScreen extends StatelessWidget {
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(18),
-              decoration: _subjectPanelDecoration(),
+              decoration: _subjectPanelDecoration(context),
               child: Row(
                 children: [
                   _SubjectGlyph(label: subjectName),
@@ -1377,7 +1377,7 @@ class _SubjectDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Container(
-              decoration: _subjectPanelDecoration(),
+              decoration: _subjectPanelDecoration(context),
               child: Column(
                 children: [
                   _SubjectInfoRow(label: 'Subject Name', value: subjectName),
@@ -1551,8 +1551,8 @@ class _SubjectViewSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Column(
@@ -1577,14 +1577,14 @@ class _SubjectViewSheet extends StatelessWidget {
   }
 }
 
-BoxDecoration _subjectPanelDecoration() {
+BoxDecoration _subjectPanelDecoration(BuildContext context) {
   return BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(8),
     border: Border.all(color: const Color(0xFFE3EAF5)),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withAlpha(10),
+        color: context.appTheme.onSurface.withAlpha(10),
         blurRadius: 10,
         offset: const Offset(0, 4),
       ),
@@ -1810,7 +1810,7 @@ class SubjectCommandCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE0E8F0)),
         boxShadow: const [
@@ -1835,9 +1835,9 @@ class SubjectCommandCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFFBBD4FF)),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.menu_book_rounded,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1865,7 +1865,7 @@ class SubjectCommandCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1921,7 +1921,7 @@ class SubjectCommandCard extends StatelessWidget {
                     value:
                         '${_num(data['average_student_score']).toStringAsFixed(0)}%',
                     tone: const Color(0xFFEFF6FF),
-                    color: AppTheme.primary,
+                    color: context.appTheme.primary,
                   ),
                   _MetricTile(
                     width: width,
@@ -1930,7 +1930,7 @@ class SubjectCommandCard extends StatelessWidget {
                     value:
                         '${_num(data['pending_syllabus_percent']).toStringAsFixed(0)}%',
                     tone: const Color(0xFFFFF7ED),
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                   _MetricTile(
                     width: width,
@@ -1939,7 +1939,7 @@ class SubjectCommandCard extends StatelessWidget {
                     value:
                         '${_num(data['homework_consistency']).toStringAsFixed(0)}%',
                     tone: const Color(0xFFECFDF3),
-                    color: AppTheme.success,
+                    color: context.appTheme.success,
                   ),
                   _MetricTile(
                     width: width,
@@ -1947,7 +1947,7 @@ class SubjectCommandCard extends StatelessWidget {
                     label: 'Weak Signals',
                     value: '${_int(data['weak_student_count'])}',
                     tone: const Color(0xFFFEEFEE),
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                 ],
               );
@@ -2006,7 +2006,7 @@ class _InlineInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppTheme.primary),
+        Icon(icon, size: 18, color: context.appTheme.primary),
         const SizedBox(width: 8),
         Text(
           '$label: ',
@@ -2022,7 +2022,7 @@ class _InlineInfo extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.dmSans(
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           ),
         ),
@@ -2051,7 +2051,7 @@ class _TeacherClassCoverageList extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.hub_outlined, size: 18, color: AppTheme.primary),
+              Icon(Icons.hub_outlined, size: 18, color: context.appTheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -2080,13 +2080,13 @@ class _TeacherClassCoverageList extends StatelessWidget {
                     height: 28,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: AppTheme.primary.withAlpha(18),
+                      color: context.appTheme.primary.withAlpha(18),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${_int(row['class_count'])}',
                       style: GoogleFonts.dmSans(
-                        color: AppTheme.primary,
+                        color: context.appTheme.primary,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -2113,7 +2113,7 @@ class _TeacherClassCoverageList extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.dmSans(
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             height: 1.25,
@@ -2182,7 +2182,7 @@ class _MetricTile extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -2209,7 +2209,7 @@ class _ActionButton extends StatelessWidget {
       icon: Icon(icon, size: 18),
       label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppTheme.primary,
+        foregroundColor: context.appTheme.primary,
         side: const BorderSide(color: Color(0xFF99B8FF)),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -2242,7 +2242,7 @@ class _AnalyticsListCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE0E8F0)),
       ),
@@ -2251,7 +2251,7 @@ class _AnalyticsListCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppTheme.primary, size: 20),
+              Icon(icon, color: context.appTheme.primary, size: 20),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -2271,7 +2271,7 @@ class _AnalyticsListCard extends StatelessWidget {
             Text(
               empty,
               style: GoogleFonts.dmSans(
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 fontWeight: FontWeight.w700,
               ),
             )
@@ -2303,7 +2303,7 @@ class _AnalyticsListCard extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.dmSans(
                                   fontSize: 12,
-                                  color: AppTheme.muted,
+                                  color: context.appTheme.muted,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -2422,7 +2422,7 @@ class SubjectActionSheetState extends State<SubjectActionSheet> {
               const SizedBox(height: 16),
               Row(
                 children: [
-                  const Icon(Icons.task_alt_rounded, color: AppTheme.primary),
+                  Icon(Icons.task_alt_rounded, color: context.appTheme.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -2441,7 +2441,7 @@ class SubjectActionSheetState extends State<SubjectActionSheet> {
               Text(
                 _text(widget.subject['subject_name'], fallback: 'Subject'),
                 style: GoogleFonts.dmSans(
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -2520,7 +2520,7 @@ class SubjectActionSheetState extends State<SubjectActionSheet> {
                 Text(
                   _error!,
                   style: GoogleFonts.dmSans(
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

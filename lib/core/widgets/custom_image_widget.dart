@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:schooldesk1/core/app_export.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 extension ImageTypeExtension on String {
   ImageType get imageType {
@@ -146,8 +147,8 @@ class CustomImageWidget extends StatelessWidget {
               height: 30,
               width: 30,
               child: LinearProgressIndicator(
-                color: Colors.grey.shade200,
-                backgroundColor: Colors.grey.shade100,
+                color: context.appTheme.muted,
+                backgroundColor: context.appTheme.muted,
               ),
             ),
             errorWidget: (context, url, error) =>

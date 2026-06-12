@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ApprovalAuditLogWidget extends StatelessWidget {
   const ApprovalAuditLogWidget({super.key});
@@ -11,9 +12,9 @@ class ApprovalAuditLogWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant, width: 1),
+        border: Border.all(color: context.appTheme.outlineVariant, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -22,9 +23,9 @@ class ApprovalAuditLogWidget extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.history_rounded,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
@@ -33,7 +34,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 const Spacer(),
@@ -41,7 +42,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
                   'Recent actions by you',
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -52,7 +53,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
             _auditLog.length,
             (i) => Column(
               children: [
-                _buildLogItem(_auditLog[i]),
+                _buildLogItem(context, _auditLog[i]),
                 if (i < _auditLog.length - 1)
                   const Divider(height: 1, indent: 56, endIndent: 16),
               ],
@@ -64,7 +65,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildLogItem(Map<String, dynamic> log) {
+  Widget _buildLogItem(BuildContext context, Map<String, dynamic> log) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
@@ -103,7 +104,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 13,
                           fontWeight: FontWeight.w400,
-                          color: AppTheme.onSurface,
+                          color: context.appTheme.onSurface,
                         ),
                       ),
                     ],
@@ -116,7 +117,7 @@ class ApprovalAuditLogWidget extends StatelessWidget {
                   log['time'] as String,
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: Colors.grey,
                   ),
                 ),
               ],

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ComplaintManagementScreen extends StatefulWidget {
   const ComplaintManagementScreen({super.key});
@@ -85,7 +85,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Complaint save failed: $e'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -249,7 +249,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
       'Other',
     ];
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -271,13 +271,13 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     ),
                     decoration: BoxDecoration(
                       color: selected
-                          ? AppTheme.primary
-                          : AppTheme.surfaceVariant,
+                          ? context.appTheme.primary
+                          : context.appTheme.surfaceVariant,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: selected
-                            ? AppTheme.primary
-                            : AppTheme.outlineVariant,
+                            ? context.appTheme.primary
+                            : context.appTheme.outlineVariant,
                       ),
                     ),
                     child: Text(
@@ -285,7 +285,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: selected ? Colors.white : AppTheme.onSurface,
+                        color: selected ? Colors.white : context.appTheme.onSurface,
                       ),
                     ),
                   ),
@@ -300,27 +300,27 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
 
   Widget _buildComplaintCard(Map<String, dynamic> c) {
     final statusColors = {
-      'open': AppTheme.warning,
-      'in_progress': AppTheme.info,
-      'resolved': AppTheme.success,
+      'open': context.appTheme.warning,
+      'in_progress': context.appTheme.info,
+      'resolved': context.appTheme.success,
     };
     final priorityColors = {
-      'high': AppTheme.error,
-      'medium': AppTheme.warning,
-      'low': AppTheme.success,
+      'high': context.appTheme.error,
+      'medium': context.appTheme.warning,
+      'low': context.appTheme.success,
     };
-    final statusColor = statusColors[c['status']] ?? AppTheme.muted;
-    final priorityColor = priorityColors[c['priority']] ?? AppTheme.muted;
+    final statusColor = statusColors[c['status']] ?? context.appTheme.muted;
+    final priorityColor = priorityColors[c['priority']] ?? context.appTheme.muted;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: statusColor.withAlpha(40)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: context.appTheme.onSurface.withAlpha(8),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -339,7 +339,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceVariant,
+                    color: context.appTheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -347,7 +347,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ),
@@ -404,7 +404,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
               c['description'] as String? ?? '',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: AppTheme.onSurfaceVariant,
+                color: context.appTheme.onSurfaceVariant,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -412,10 +412,10 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.person_outline_rounded,
                   size: 12,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -423,23 +423,23 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     c['submittedBy'] as String? ?? '',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
-                const Icon(
+                Icon(
                   Icons.calendar_today_rounded,
                   size: 12,
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   c['date'] as String? ?? '',
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -448,17 +448,17 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.assignment_ind_rounded,
                     size: 12,
-                    color: AppTheme.info,
+                    color: context.appTheme.info,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     'Assigned to: ${c['assignedTo']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: AppTheme.info,
+                      color: context.appTheme.info,
                     ),
                   ),
                 ],
@@ -483,7 +483,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     child: ElevatedButton(
                       onPressed: () => _resolveComplaint(c),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.success,
+                        backgroundColor: context.appTheme.success,
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         textStyle: GoogleFonts.dmSans(fontSize: 12),
                       ),
@@ -495,14 +495,14 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppTheme.success.withAlpha(15),
+                        color: context.appTheme.success.withAlpha(15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'Resolution: ${c['resolution']}',
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          color: AppTheme.success,
+                          color: context.appTheme.success,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -625,9 +625,9 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
     if (!mounted) return;
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Ticket resolved'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -653,7 +653,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
             children: [
               Text(
                 title,
-                style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -668,8 +668,8 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -743,9 +743,9 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
     if (!mounted) return;
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Ticket updated'),
-          backgroundColor: AppTheme.info,
+          backgroundColor: context.appTheme.info,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -793,8 +793,8 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -886,9 +886,9 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
     if (!mounted) return;
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Ticket created'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -965,8 +965,8 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(

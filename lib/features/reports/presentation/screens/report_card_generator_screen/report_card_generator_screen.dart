@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:printing/printing.dart';
 import 'dart:typed_data';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ReportCardGeneratorScreen extends StatefulWidget {
   const ReportCardGeneratorScreen({super.key});
@@ -153,7 +153,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
   Widget build(BuildContext context) {
     final isTablet = MediaQuery.of(context).size.width >= 840;
     return Scaffold(
-      backgroundColor: AppTheme.background,
+      backgroundColor: context.appTheme.background,
       body: isTablet ? _buildTabletLayout(context) : _buildPhoneLayout(context),
     );
   }
@@ -163,7 +163,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
       headerSliverBuilder: (ctx, inner) => [
         SliverAppBar(
           pinned: true,
-          backgroundColor: AppTheme.surface,
+          backgroundColor: context.appTheme.surface,
           title: Text(
             'Report Card Generator',
             style: GoogleFonts.dmSans(
@@ -207,7 +207,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
         SliverAppBar(
           pinned: true,
           automaticallyImplyLeading: false,
-          backgroundColor: AppTheme.surface,
+          backgroundColor: context.appTheme.surface,
           title: Text(
             'Report Card Generator',
             style: GoogleFonts.dmSans(
@@ -257,17 +257,17 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.search_off_rounded,
                         size: 48,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'No students found',
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -286,7 +286,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
 
   Widget _buildFilters() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
@@ -297,19 +297,19 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
               hintText: 'Search student name or roll number...',
               hintStyle: GoogleFonts.dmSans(
                 fontSize: 13,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
               prefixIcon: const Icon(Icons.search_rounded, size: 20),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: AppTheme.outlineVariant),
+                borderSide: BorderSide(color: context.appTheme.outlineVariant),
               ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 12,
                 vertical: 10,
               ),
               filled: true,
-              fillColor: AppTheme.surfaceVariant,
+              fillColor: context.appTheme.surfaceVariant,
             ),
           ),
           const SizedBox(height: 10),
@@ -367,7 +367,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                     '${_selectedStudents.length} selected',
                     style: GoogleFonts.dmSans(
                       fontSize: 12,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -388,15 +388,15 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: context.appTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.onSurface),
+          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.onSurface),
           items: items
               .map(
                 (e) => DropdownMenuItem(
@@ -424,10 +424,10 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isSelected ? AppTheme.primary : AppTheme.outlineVariant,
+          color: isSelected ? context.appTheme.primary : context.appTheme.outlineVariant,
           width: isSelected ? 1.5 : 1,
         ),
       ),
@@ -449,12 +449,12 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.primary : Colors.transparent,
+                  color: isSelected ? context.appTheme.primary : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isSelected
-                        ? AppTheme.primary
-                        : AppTheme.outlineVariant,
+                        ? context.appTheme.primary
+                        : context.appTheme.outlineVariant,
                     width: 1.5,
                   ),
                 ),
@@ -472,7 +472,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryContainer,
+                  color: context.appTheme.primaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
@@ -481,7 +481,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                   ),
                 ),
@@ -503,7 +503,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                       '${student['classSection']} • Roll: ${student['rollNumber']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -512,7 +512,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                         _miniStat(
                           '${attendance.toStringAsFixed(0)}%',
                           'Attend.',
-                          attendance >= 75 ? AppTheme.success : AppTheme.error,
+                          attendance >= 75 ? context.appTheme.success : context.appTheme.error,
                         ),
                         const SizedBox(width: 8),
                         if (hasResults) ...[
@@ -522,9 +522,9 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                             _colorForPct(double.tryParse(pct) ?? 0),
                           ),
                           const SizedBox(width: 8),
-                          _miniStat(grade, 'Grade', AppTheme.primary),
+                          _miniStat(grade, 'Grade', context.appTheme.primary),
                         ] else
-                          _miniStat('N/A', 'No Results', AppTheme.muted),
+                          _miniStat('N/A', 'No Results', context.appTheme.muted),
                       ],
                     ),
                   ],
@@ -541,8 +541,8 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                       ),
                       decoration: BoxDecoration(
                         color: result == 'PASS'
-                            ? AppTheme.successContainer
-                            : AppTheme.errorContainer,
+                            ? context.appTheme.successContainer
+                            : context.appTheme.errorContainer,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -551,8 +551,8 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           color: result == 'PASS'
-                              ? AppTheme.success
-                              : AppTheme.error,
+                              ? context.appTheme.success
+                              : context.appTheme.error,
                         ),
                       ),
                     ),
@@ -570,8 +570,8 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                           icon: Icon(
                             Icons.picture_as_pdf_rounded,
                             color: hasResults
-                                ? AppTheme.primary
-                                : AppTheme.muted,
+                                ? context.appTheme.primary
+                                : context.appTheme.muted,
                             size: 22,
                           ),
                           tooltip: hasResults
@@ -613,9 +613,9 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
   }
 
   Color _colorForPct(double pct) {
-    if (pct >= 75) return AppTheme.success;
-    if (pct >= 50) return AppTheme.warning;
-    return AppTheme.error;
+    if (pct >= 75) return context.appTheme.success;
+    if (pct >= 50) return context.appTheme.warning;
+    return context.appTheme.error;
   }
 
   Widget _buildPreviewTab() {
@@ -657,7 +657,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppTheme.primary, AppTheme.primary.withAlpha(200)],
+          colors: [context.appTheme.primary, context.appTheme.primary.withAlpha(200)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -676,7 +676,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
               _statCard(
                 '${studentsWithResults.length}',
                 'Students',
-                Colors.white,
+                context.appTheme.surface,
               ),
               const SizedBox(width: 12),
               _statCard('$passCount', 'Passed', Colors.greenAccent),
@@ -704,7 +704,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(20),
+          color: context.appTheme.surface.withAlpha(20),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -739,9 +739,9 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -749,7 +749,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppTheme.primaryContainer,
+              color: context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
@@ -758,7 +758,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
             ),
@@ -780,7 +780,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                   '${student['classSection']} • ${student['rollNumber']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 10,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -795,7 +795,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                     borderRadius: BorderRadius.circular(3),
                     child: LinearProgressIndicator(
                       value: pct / 100,
-                      backgroundColor: AppTheme.outlineVariant,
+                      backgroundColor: context.appTheme.outlineVariant,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         _colorForPct(pct),
                       ),
@@ -807,7 +807,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                     '${pct.toStringAsFixed(1)}% • $grade',
                     style: GoogleFonts.dmSans(
                       fontSize: 10,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ],
@@ -819,7 +819,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: attendance >= 75 ? AppTheme.success : AppTheme.error,
+                color: attendance >= 75 ? context.appTheme.success : context.appTheme.error,
               ),
             ),
             const SizedBox(width: 8),
@@ -831,10 +831,10 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
                   )
                 : IconButton(
                     onPressed: () => _generateSingleReportCard(student),
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.picture_as_pdf_rounded,
                       size: 18,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                     ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -842,7 +842,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
           ] else
             Text(
               'No Results',
-              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
             ),
         ],
       ),
@@ -865,7 +865,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to generate report card: $e'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -902,7 +902,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to request report-card export: $e'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -929,7 +929,7 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Generated $successCount report card(s) successfully'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );

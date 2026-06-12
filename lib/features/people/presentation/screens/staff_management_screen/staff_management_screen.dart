@@ -10,9 +10,9 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StaffModel {
   final String id;
@@ -656,7 +656,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
@@ -690,7 +690,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           : _isAdminOwner
           ? '$removed submitted, ${failures.length} failed'
           : '$removed removed, ${failures.length} failed',
-      failures.isEmpty ? AppTheme.success : AppTheme.warning,
+      failures.isEmpty ? context.appTheme.success : context.appTheme.warning,
     );
   }
 
@@ -829,7 +829,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               IconButton(
                 onPressed: _deleteSelectedStaff,
                 icon: const Icon(Icons.delete_outline_rounded, size: 22),
-                color: AppTheme.error,
+                color: context.appTheme.error,
                 tooltip: _isAdminOwner
                     ? 'Submit removal requests'
                     : 'Remove selected',
@@ -1404,7 +1404,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
@@ -1423,12 +1423,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         _isAdminOwner
             ? '${staff.name} removal submitted for Principal approval'
             : '${staff.name} removed',
-        AppTheme.success,
+        context.appTheme.success,
       );
       await _loadStaffFromBackend();
     } catch (error) {
       if (!mounted) return;
-      _showStaffMessage(error.toString(), AppTheme.error);
+      _showStaffMessage(error.toString(), context.appTheme.error);
     }
   }
 
@@ -1457,7 +1457,7 @@ class _TeacherDirectoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? const Color(0xFFE0F8FF) : Colors.white,
+      color: selected ? const Color(0xFFE0F8FF) : context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       elevation: 2,
       shadowColor: const Color(0xFF8AAAC0).withAlpha(55),
@@ -1639,7 +1639,7 @@ class _SearchBox extends StatelessWidget {
     return Container(
       height: 50,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -1693,7 +1693,7 @@ class _DirectoryChip extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFE0F8FF) : Colors.white,
+          color: selected ? const Color(0xFFE0F8FF) : context.appTheme.surface,
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: selected ? const Color(0xFF86C7D9) : const Color(0xFFD8E4EA),
@@ -2155,7 +2155,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                       Text(
                         _error!,
                         style: GoogleFonts.dmSans(
-                          color: AppTheme.error,
+                          color: context.appTheme.error,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -2665,12 +2665,12 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: _saving
-          ? const SizedBox(
+          ? SizedBox(
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Colors.white,
+                color: context.appTheme.surface,
               ),
             )
           : Text(
@@ -3120,7 +3120,7 @@ class _FormCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -3215,7 +3215,7 @@ class _TextInput extends StatelessWidget {
         hintText: hint,
         isDense: true,
         filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF4F7F9),
+        fillColor: enabled ? context.appTheme.surface : const Color(0xFFF4F7F9),
         suffixIcon: suffixIcon == null
             ? null
             : onSuffixTap == null
@@ -3290,7 +3290,7 @@ class _DropdownInput<T> extends StatelessWidget {
       decoration: InputDecoration(
         isDense: true,
         filled: true,
-        fillColor: enabled ? Colors.white : const Color(0xFFF4F7F9),
+        fillColor: enabled ? context.appTheme.surface : const Color(0xFFF4F7F9),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 10,
           vertical: 10,
@@ -3515,7 +3515,7 @@ class _DetailChipSection extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           )
         else
@@ -3526,8 +3526,8 @@ class _DetailChipSection extends StatelessWidget {
                 .map(
                   (value) => Chip(
                     label: Text(value, overflow: TextOverflow.ellipsis),
-                    backgroundColor: AppTheme.primaryContainer.withAlpha(90),
-                    side: BorderSide(color: AppTheme.primary.withAlpha(50)),
+                    backgroundColor: context.appTheme.primaryContainer.withAlpha(90),
+                    side: BorderSide(color: context.appTheme.primary.withAlpha(50)),
                   ),
                 )
                 .toList(),
@@ -3556,7 +3556,7 @@ class _DetailRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
           );
           final valueText = Text(
@@ -3569,7 +3569,7 @@ class _DetailRow extends StatelessWidget {
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w900,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           );
 

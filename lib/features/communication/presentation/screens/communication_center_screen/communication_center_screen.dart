@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class CommunicationCenterScreen extends StatefulWidget {
   const CommunicationCenterScreen({super.key});
@@ -224,30 +224,30 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
     Color typeColor;
     switch (c['type']) {
       case 'Urgent Alert':
-        typeColor = AppTheme.error;
+        typeColor = context.appTheme.error;
         break;
       case 'Academic':
-        typeColor = AppTheme.info;
+        typeColor = context.appTheme.info;
         break;
       case 'Meeting':
-        typeColor = AppTheme.secondary;
+        typeColor = context.appTheme.secondary;
         break;
       case 'Finance':
-        typeColor = AppTheme.warning;
+        typeColor = context.appTheme.warning;
         break;
       default:
-        typeColor = AppTheme.muted;
+        typeColor = context.appTheme.muted;
     }
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isUrgent ? AppTheme.errorContainer : AppTheme.surface,
+        color: isUrgent ? context.appTheme.errorContainer : context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isUrgent
-              ? AppTheme.error.withAlpha(100)
-              : AppTheme.outlineVariant,
+              ? context.appTheme.error.withAlpha(100)
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -278,7 +278,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceVariant,
+                    color: context.appTheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -286,14 +286,14 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ),
               const Spacer(),
               Text(
                 c['date'],
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ],
           ),
@@ -303,20 +303,20 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             style: GoogleFonts.dmSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: isUrgent ? AppTheme.error : AppTheme.onSurface,
+              color: isUrgent ? context.appTheme.error : context.appTheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'To: ${c['audience']}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           const SizedBox(height: 8),
           Text(
             c['content'],
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -339,23 +339,23 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                   icon: const Icon(Icons.send_rounded, size: 14),
                   label: const Text('Publish'),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.success,
+                    foregroundColor: context.appTheme.success,
                   ),
                 )
               else
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle_rounded,
                       size: 14,
-                      color: AppTheme.success,
+                      color: context.appTheme.success,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       'Published',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.success,
+                        color: context.appTheme.success,
                       ),
                     ),
                   ],
@@ -364,7 +364,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
               IconButton(
                 onPressed: () => _showCircularDetail(c),
                 icon: const Icon(Icons.open_in_new_rounded, size: 16),
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -400,7 +400,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         if (_notices.isEmpty)
           Text(
             'No notices available from backend.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           )
         else
           ..._notices.asMap().entries.map(
@@ -415,28 +415,28 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
     Color typeColor;
     switch (noticeType) {
       case 'Holiday':
-        typeColor = AppTheme.secondary;
+        typeColor = context.appTheme.secondary;
         break;
       case 'Academic':
-        typeColor = AppTheme.info;
+        typeColor = context.appTheme.info;
         break;
       case 'Health':
-        typeColor = AppTheme.success;
+        typeColor = context.appTheme.success;
         break;
       case 'Discipline':
-        typeColor = AppTheme.error;
+        typeColor = context.appTheme.error;
         break;
       default:
-        typeColor = AppTheme.muted;
+        typeColor = context.appTheme.muted;
     }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -486,7 +486,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                       _noticeDate(n),
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -495,10 +495,10 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             ),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
               size: 16,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             onSelected: (v) {
               if (v == 'delete') {
@@ -537,7 +537,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         if (_alerts.isEmpty)
           Text(
             'Backend notification records will appear here.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           )
         else
           ..._alerts.map(
@@ -550,7 +550,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                     .split('T')
                     .first,
                 Icons.notifications_active_outlined,
-                alert['is_urgent'] == true ? AppTheme.error : AppTheme.info,
+                alert['is_urgent'] == true ? context.appTheme.error : context.appTheme.info,
               ),
             ),
           ),
@@ -563,18 +563,18 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppTheme.errorContainer,
+            color: context.appTheme.errorContainer,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.error.withAlpha(60)),
+            border: Border.all(color: context.appTheme.error.withAlpha(60)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.warning_amber_rounded,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -583,7 +583,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.error,
+                      color: context.appTheme.error,
                     ),
                   ),
                 ],
@@ -591,7 +591,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
               const SizedBox(height: 8),
               Text(
                 'Use this to send an immediate alert to all parents and staff.',
-                style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -601,7 +601,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                   icon: const Icon(Icons.send_rounded, size: 16),
                   label: const Text('Send Urgent Alert'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.error,
+                    backgroundColor: context.appTheme.error,
                   ),
                 ),
               ),
@@ -640,13 +640,13 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
         if (_messageRecipients.isEmpty)
           Text(
             'No active Teacher or Parent user accounts are available for one-to-one messages.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         const SizedBox(height: 12),
         if (_messages.isEmpty)
           Text(
             'No direct messages available from backend.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           )
         else
           ..._messages.map(
@@ -671,10 +671,10 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: unread ? AppTheme.infoContainer : AppTheme.surface,
+        color: unread ? context.appTheme.infoContainer : context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: unread ? AppTheme.info.withAlpha(70) : AppTheme.outlineVariant,
+          color: unread ? context.appTheme.info.withAlpha(70) : context.appTheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -687,7 +687,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                     ? Icons.call_received_rounded
                     : Icons.call_made_rounded,
                 size: 16,
-                color: incoming ? AppTheme.info : AppTheme.success,
+                color: incoming ? context.appTheme.info : context.appTheme.success,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -696,14 +696,14 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 role,
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ],
           ),
@@ -712,7 +712,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             content.isEmpty ? 'Message' : content,
             style: GoogleFonts.dmSans(
               fontSize: 12,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 10),
@@ -720,7 +720,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             children: [
               Text(
                 _messageDate(message),
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
               const Spacer(),
               if (unread)
@@ -871,7 +871,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Notice save failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return false;
@@ -893,7 +893,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Notice remove failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -909,9 +909,9 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -940,7 +940,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                   desc,
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -951,12 +951,12 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
             children: [
               Text(
                 date,
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
-              const Icon(
+              Icon(
                 Icons.schedule_rounded,
                 size: 14,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
               ),
             ],
           ),
@@ -983,7 +983,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.outline,
+                    color: context.appTheme.outline,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -991,7 +991,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
               const SizedBox(height: 16),
               Text(
                 c['type'],
-                style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
               ),
               Text(
                 c['title'],
@@ -1003,14 +1003,14 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
               const SizedBox(height: 4),
               Text(
                 'To: ${c['audience']} · ${c['date']}',
-                style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               ),
               const SizedBox(height: 16),
               Text(
                 c['content'],
                 style: GoogleFonts.dmSans(
                   fontSize: 14,
-                  color: AppTheme.onSurfaceVariant,
+                  color: context.appTheme.onSurfaceVariant,
                   height: 1.6,
                 ),
               ),
@@ -1061,7 +1061,7 @@ class _CommunicationCenterScreenState extends State<CommunicationCenterScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Urgent alert failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
       return false;
@@ -1150,8 +1150,8 @@ class _NoticeEditorPageState extends State<_NoticeEditorPage> {
                     : (value) => setState(() => _type = value ?? _type),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -1320,8 +1320,8 @@ class _CircularEditorPageState extends State<_CircularEditorPage> {
                 ),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -1456,8 +1456,8 @@ class _PrincipalMessagePageState extends State<_PrincipalMessagePage> {
                     : null,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
@@ -1534,7 +1534,7 @@ class _UrgentAlertPageState extends State<_UrgentAlertPage> {
             children: [
               Text(
                 'This will send an immediate notification to all parents and staff.',
-                style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -1550,12 +1550,12 @@ class _UrgentAlertPageState extends State<_UrgentAlertPage> {
                     : null,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 16),
-                Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                SizedBox(height: 16),
+                Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+                style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
                 onPressed: _saving ? null : _submit,
                 icon: _saving
                     ? const SizedBox(

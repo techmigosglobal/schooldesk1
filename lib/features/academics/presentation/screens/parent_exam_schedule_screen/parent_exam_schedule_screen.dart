@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentExamScheduleScreen extends StatefulWidget {
   const ParentExamScheduleScreen({super.key});
@@ -82,7 +82,7 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -175,10 +175,10 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surface,
+                color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : AppTheme.outlineVariant,
+                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -186,7 +186,7 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -201,20 +201,20 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.assignment_turned_in_rounded, size: 48, color: AppTheme.muted),
+          Icon(Icons.assignment_turned_in_rounded, size: 48, color: context.appTheme.muted),
           const SizedBox(height: 12),
           Text(
             'No published exams found',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Keep checking here for future schedules.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -232,9 +232,9 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -289,7 +289,7 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     subtitle: Column(
@@ -298,22 +298,22 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.calendar_month_rounded, size: 12, color: AppTheme.muted),
+                            Icon(Icons.calendar_month_rounded, size: 12, color: context.appTheme.muted),
                             const SizedBox(width: 4),
                             Text(
                               formattedDate,
-                              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
                             ),
                           ],
                         ),
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            Icon(Icons.schedule_rounded, size: 12, color: AppTheme.muted),
+                            Icon(Icons.schedule_rounded, size: 12, color: context.appTheme.muted),
                             const SizedBox(width: 4),
                             Text(
                               '$startTime - $endTime',
-                              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
                             ),
                             const SizedBox(width: 12),
                             Icon(Icons.room_rounded, size: 12, color: _headerColor),
@@ -335,7 +335,7 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.onSurfaceVariant,
+                        color: context.appTheme.onSurfaceVariant,
                       ),
                     ),
                     children: [
@@ -345,9 +345,9 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppTheme.surfaceVariant.withAlpha(40),
+                            color: context.appTheme.surfaceVariant.withAlpha(40),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppTheme.outlineVariant),
+                            border: Border.all(color: context.appTheme.outlineVariant),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,7 +365,7 @@ class _ParentExamScheduleScreenState extends State<ParentExamScheduleScreen> {
                                 syllabus.isEmpty ? 'Syllabus details not published yet.' : syllabus,
                                 style: GoogleFonts.dmSans(
                                   fontSize: 12,
-                                  color: AppTheme.onSurfaceVariant,
+                                  color: context.appTheme.onSurfaceVariant,
                                   height: 1.4,
                                 ),
                               ),

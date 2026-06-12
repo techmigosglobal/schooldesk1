@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalAnalyticsScreen extends StatefulWidget {
   const PrincipalAnalyticsScreen({super.key});
@@ -147,7 +147,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   'Avg Attendance',
                   '${attendanceAverage.toStringAsFixed(1)}%',
                   Icons.people_rounded,
-                  AppTheme.primary,
+                  context.appTheme.primary,
                   null,
                 ),
               ),
@@ -203,7 +203,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
               children: [
                 Row(
                   children: [
-                    _legendDot(AppTheme.primary, 'Students'),
+                    _legendDot(context.appTheme.primary, 'Students'),
                     const SizedBox(width: 16),
                     _legendDot(const Color(0xFF1A6B4A), 'Staff'),
                   ],
@@ -228,7 +228,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  _bar(studentPct, 100, AppTheme.primary, 14),
+                                  _bar(studentPct, 100, context.appTheme.primary, 14),
                                   const SizedBox(width: 3),
                                   _bar(
                                     staffPct,
@@ -243,7 +243,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                 label,
                                 style: GoogleFonts.dmSans(
                                   fontSize: 10,
-                                  color: AppTheme.muted,
+                                  color: context.appTheme.muted,
                                 ),
                               ),
                             ],
@@ -276,7 +276,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                       'Backend class attendance records will appear here.',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   )
@@ -289,10 +289,10 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                           (d['students'] as num?)?.toDouble() ??
                           0;
                       final color = pct >= 90
-                          ? AppTheme.success
+                          ? context.appTheme.success
                           : pct >= 85
-                          ? AppTheme.warning
-                          : AppTheme.error;
+                          ? context.appTheme.warning
+                          : context.appTheme.error;
                       return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16,
@@ -303,7 +303,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                               ? null
                               : Border(
                                   bottom: BorderSide(
-                                    color: Colors.grey.shade100,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                         ),
@@ -343,7 +343,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                               '${d['present'] ?? 0}/${d['total'] ?? 0}',
                               style: GoogleFonts.dmSans(
                                 fontSize: 12,
-                                color: Colors.grey.shade600,
+                                color: context.appTheme.muted,
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -517,7 +517,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   'Collection Rate',
                   '${collectionRate.toStringAsFixed(1)}%',
                   Icons.trending_up_rounded,
-                  AppTheme.primary,
+                  context.appTheme.primary,
                   null,
                 ),
               ),
@@ -547,10 +547,10 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                       final isLast = e.key == periodRows.length - 1;
                       final pct = d['pct'] as double;
                       final color = pct >= 90
-                          ? AppTheme.success
+                          ? context.appTheme.success
                           : pct >= 70
-                          ? AppTheme.warning
-                          : AppTheme.error;
+                          ? context.appTheme.warning
+                          : context.appTheme.error;
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -558,7 +558,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                               ? null
                               : Border(
                                   bottom: BorderSide(
-                                    color: Colors.grey.shade100,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                         ),
@@ -605,14 +605,14 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                   'Collected: ₹${_formatLakh(d['collected'] as double)}',
                                   style: GoogleFonts.dmSans(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                                 Text(
                                   'Total: ₹${_formatLakh(d['total'] as double)}',
                                   style: GoogleFonts.dmSans(
                                     fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                               ],
@@ -662,7 +662,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                               ? null
                               : Border(
                                   bottom: BorderSide(
-                                    color: Colors.grey.shade100,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                         ),
@@ -684,7 +684,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                   Container(
                                     height: 10,
                                     decoration: BoxDecoration(
-                                      color: AppTheme.error.withAlpha(30),
+                                      color: context.appTheme.error.withAlpha(30),
                                       borderRadius: BorderRadius.circular(5),
                                     ),
                                   ),
@@ -693,7 +693,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                     child: Container(
                                       height: 10,
                                       decoration: BoxDecoration(
-                                        color: AppTheme.success,
+                                        color: context.appTheme.success,
                                         borderRadius: BorderRadius.circular(5),
                                       ),
                                     ),
@@ -710,14 +710,14 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                   style: GoogleFonts.dmSans(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: AppTheme.success,
+                                    color: context.appTheme.success,
                                   ),
                                 ),
                                 Text(
                                   '₹${_formatLakh(d['pending'] as double)} due',
                                   style: GoogleFonts.dmSans(
                                     fontSize: 10,
-                                    color: AppTheme.error,
+                                    color: context.appTheme.error,
                                   ),
                                 ),
                               ],
@@ -778,7 +778,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   'Total Staff',
                   '${staffData.length}',
                   Icons.people_rounded,
-                  AppTheme.primary,
+                  context.appTheme.primary,
                   null,
                 ),
               ),
@@ -798,7 +798,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   'Need Review',
                   '0',
                   Icons.warning_rounded,
-                  AppTheme.error,
+                  context.appTheme.error,
                   null,
                 ),
               ),
@@ -834,12 +834,12 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
         : staff['name'] as String;
     final status = (staff['status'] as String).trim();
     final statusColor = status.toLowerCase() == 'excellent'
-        ? AppTheme.success
+        ? context.appTheme.success
         : status.toLowerCase() == 'good'
-        ? AppTheme.primary
+        ? context.appTheme.primary
         : status.toLowerCase() == 'active'
-        ? AppTheme.success
-        : AppTheme.warning;
+        ? context.appTheme.success
+        : context.appTheme.warning;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -878,7 +878,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                       staff['subject'] as String,
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: Colors.grey.shade600,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -911,7 +911,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 child: _metricBar(
                   'Attendance',
                   staff['attendance'] as double?,
-                  AppTheme.primary,
+                  context.appTheme.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -943,7 +943,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                       'Parent Feedback',
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: Colors.grey.shade500,
+                        color: context.appTheme.muted,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -1005,7 +1005,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
               label,
               style: GoogleFonts.dmSans(
                 fontSize: 10,
-                color: Colors.grey.shade500,
+                color: context.appTheme.muted,
               ),
             ),
             Text(
@@ -1070,7 +1070,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 child: _alertSummaryChip(
                   'Critical',
                   criticalAlerts.length,
-                  AppTheme.error,
+                  context.appTheme.error,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1078,7 +1078,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 child: _alertSummaryChip(
                   'Warnings',
                   warningAlerts.length,
-                  AppTheme.warning,
+                  context.appTheme.warning,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1086,7 +1086,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 child: _alertSummaryChip(
                   'Info',
                   infoAlerts.length,
-                  AppTheme.primary,
+                  context.appTheme.primary,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1094,7 +1094,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 child: _alertSummaryChip(
                   'Resolved',
                   successAlerts.length,
-                  AppTheme.success,
+                  context.appTheme.success,
                 ),
               ),
             ],
@@ -1102,28 +1102,28 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
           const SizedBox(height: 20),
 
           if (criticalAlerts.isNotEmpty) ...[
-            _alertSectionHeader('🚨 Critical Alerts', AppTheme.error),
+            _alertSectionHeader('🚨 Critical Alerts', context.appTheme.error),
             const SizedBox(height: 8),
             ...criticalAlerts.map((a) => _alertCard(a)),
             const SizedBox(height: 16),
           ],
 
           if (warningAlerts.isNotEmpty) ...[
-            _alertSectionHeader('⚠️ Warnings', AppTheme.warning),
+            _alertSectionHeader('⚠️ Warnings', context.appTheme.warning),
             const SizedBox(height: 8),
             ...warningAlerts.map((a) => _alertCard(a)),
             const SizedBox(height: 16),
           ],
 
           if (infoAlerts.isNotEmpty) ...[
-            _alertSectionHeader('ℹ️ Information', AppTheme.primary),
+            _alertSectionHeader('ℹ️ Information', context.appTheme.primary),
             const SizedBox(height: 8),
             ...infoAlerts.map((a) => _alertCard(a)),
             const SizedBox(height: 16),
           ],
 
           if (successAlerts.isNotEmpty) ...[
-            _alertSectionHeader('✅ Achievements', AppTheme.success),
+            _alertSectionHeader('✅ Achievements', context.appTheme.success),
             const SizedBox(height: 8),
             ...successAlerts.map((a) => _alertCard(a)),
           ],
@@ -1151,23 +1151,23 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
   Widget _alertCard(Map<String, dynamic> alert) {
     final type = alert['type'] as String;
     final color = type == 'critical'
-        ? AppTheme.error
+        ? context.appTheme.error
         : type == 'warning'
-        ? AppTheme.warning
+        ? context.appTheme.warning
         : type == 'success'
-        ? AppTheme.success
-        : AppTheme.primary;
+        ? context.appTheme.success
+        : context.appTheme.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withAlpha(60)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(5),
+            color: context.appTheme.onSurface.withAlpha(5),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -1206,7 +1206,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                       alert['time'] as String,
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: Colors.grey.shade400,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -1216,7 +1216,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   alert['desc'] as String,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: context.appTheme.muted,
                     height: 1.4,
                   ),
                 ),
@@ -1263,9 +1263,9 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: context.appTheme.muted),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1292,7 +1292,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
             label,
             style: GoogleFonts.dmSans(
               fontSize: 10,
-              color: Colors.grey.shade500,
+              color: context.appTheme.muted,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1305,8 +1305,8 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: change.startsWith('+')
-                    ? AppTheme.success
-                    : AppTheme.error,
+                    ? context.appTheme.success
+                    : context.appTheme.error,
               ),
             ),
           ],
@@ -1354,7 +1354,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: context.appTheme.muted,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -1367,12 +1367,12 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.white : Colors.transparent,
+                color: isSelected ? context.appTheme.surface : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                          color: Colors.black.withAlpha(15),
+                          color: context.appTheme.onSurface.withAlpha(15),
                           blurRadius: 4,
                         ),
                       ]
@@ -1385,7 +1385,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
                   color: isSelected
                       ? const Color(0xFF1A1A2E)
-                      : Colors.grey.shade500,
+                      : context.appTheme.muted,
                 ),
               ),
             ),
@@ -1410,7 +1410,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
         const SizedBox(width: 6),
         Text(
           label,
-          style: GoogleFonts.dmSans(fontSize: 11, color: Colors.grey.shade600),
+          style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
         ),
       ],
     );
@@ -1444,12 +1444,12 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
 
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: Colors.grey.shade200),
+      border: Border.all(color: context.appTheme.muted),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withAlpha(5),
+          color: context.appTheme.onSurface.withAlpha(5),
           blurRadius: 8,
           offset: const Offset(0, 2),
         ),

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 const Color principalDirectoryBackground = Color(0xFFEFF8FD);
 const Color principalDirectoryAccent = Color(0xFF0887F2);
@@ -211,11 +212,11 @@ class PrincipalDirectorySearchBox extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(12),
+            color: context.appTheme.onSurface.withAlpha(12),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -232,7 +233,7 @@ class PrincipalDirectorySearchBox extends StatelessWidget {
             borderSide: BorderSide.none,
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: context.appTheme.surface,
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 16,
             vertical: 14,
@@ -259,8 +260,8 @@ class PrincipalDirectoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = selected ? principalDirectoryAccent : Colors.white;
-    final foreground = selected ? Colors.white : principalDirectoryText;
+    final background = selected ? principalDirectoryAccent : context.appTheme.surface;
+    final foreground = selected ? context.appTheme.surface : principalDirectoryText;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
@@ -354,7 +355,7 @@ class PrincipalDirectoryMetric {
     required this.value,
     required this.icon,
     required this.color,
-    this.tone = const Color(0xFFFFFFFF),
+    this.tone = Colors.white,
   });
 }
 
@@ -369,7 +370,7 @@ class _MetricTile extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 86),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: metric.tone == Colors.white ? Colors.white : metric.tone,
+        color: metric.tone == context.appTheme.surface ? context.appTheme.surface : metric.tone,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: metric.color.withAlpha(55)),
       ),
@@ -379,7 +380,7 @@ class _MetricTile extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(210),
+              color: context.appTheme.surface.withAlpha(210),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(metric.icon, color: metric.color, size: 22),
@@ -410,7 +411,7 @@ class _MetricTile extends StatelessWidget {
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -465,7 +466,7 @@ class PrincipalDirectoryCard extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: borderColor, width: selected ? 2 : 1),
             boxShadow: [
@@ -685,7 +686,7 @@ class PrincipalDetailCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(

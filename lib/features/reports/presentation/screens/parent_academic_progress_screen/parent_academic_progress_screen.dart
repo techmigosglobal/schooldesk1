@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentAcademicProgressScreen extends StatefulWidget {
   const ParentAcademicProgressScreen({super.key});
@@ -81,7 +81,7 @@ class _ParentAcademicProgressScreenState
             'max': maxMarks,
             'grade': m['grade_label'] ?? '',
             'teacher': m['teacher_name'] ?? schedule['teacher_name'] ?? '',
-            'color': AppTheme.primary,
+            'color': context.appTheme.primary,
             'exam': schedule['exam_id'] ?? '',
           };
         }).toList();
@@ -205,7 +205,7 @@ class _ParentAcademicProgressScreenState
             const SizedBox(height: 8),
             Text(
               message,
-              style: GoogleFonts.dmSans(fontSize: 13, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
               textAlign: TextAlign.center,
             ),
           ],
@@ -216,15 +216,15 @@ class _ParentAcademicProgressScreenState
 
   Widget _buildChildSelector() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          const Icon(Icons.child_care_rounded, size: 16, color: AppTheme.muted),
+          Icon(Icons.child_care_rounded, size: 16, color: context.appTheme.muted),
           const SizedBox(width: 8),
           Text(
             'Viewing:',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
           const SizedBox(width: 8),
           ...List.generate(_children.length, (i) {
@@ -238,7 +238,7 @@ class _ParentAcademicProgressScreenState
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: isActive ? _headerColor : AppTheme.surfaceVariant,
+                  color: isActive ? _headerColor : context.appTheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -248,7 +248,7 @@ class _ParentAcademicProgressScreenState
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isActive ? Colors.white : AppTheme.onSurface,
+                    color: isActive ? Colors.white : context.appTheme.onSurface,
                   ),
                 ),
               ),
@@ -379,7 +379,7 @@ class _ParentAcademicProgressScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(25),
+        color: context.appTheme.surface.withAlpha(25),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -416,9 +416,9 @@ class _ParentAcademicProgressScreenState
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         children: [
@@ -459,7 +459,7 @@ class _ParentAcademicProgressScreenState
                         'Teacher: $teacher',
                         style: GoogleFonts.dmSans(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                   ],
@@ -504,7 +504,7 @@ class _ParentAcademicProgressScreenState
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: pct,
-              backgroundColor: AppTheme.outlineVariant,
+              backgroundColor: context.appTheme.outlineVariant,
               valueColor: AlwaysStoppedAnimation<Color>(s['color'] as Color),
               minHeight: 6,
             ),
@@ -550,9 +550,9 @@ class _ParentAcademicProgressScreenState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -561,13 +561,13 @@ class _ParentAcademicProgressScreenState
             height: 48,
             decoration: BoxDecoration(
               color: isPublished
-                  ? AppTheme.successContainer
-                  : AppTheme.surfaceVariant,
+                  ? context.appTheme.successContainer
+                  : context.appTheme.surfaceVariant,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               isPublished ? Icons.description_rounded : Icons.schedule_rounded,
-              color: isPublished ? AppTheme.success : AppTheme.muted,
+              color: isPublished ? context.appTheme.success : context.appTheme.muted,
               size: 24,
             ),
           ),
@@ -593,7 +593,7 @@ class _ParentAcademicProgressScreenState
                         'Score: $percentage',
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     if (rank.isNotEmpty && rank != '-')
@@ -601,7 +601,7 @@ class _ParentAcademicProgressScreenState
                         'Rank: $rank',
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                   ],
@@ -631,12 +631,12 @@ class _ParentAcademicProgressScreenState
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceVariant,
+                color: context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 'Upcoming',
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ),
         ],
@@ -669,7 +669,7 @@ class _ParentAcademicProgressScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Report card export is not available: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -695,12 +695,12 @@ class _ParentAcademicProgressScreenState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: r['positive'] == true
-              ? AppTheme.success.withAlpha(80)
-              : AppTheme.warning.withAlpha(80),
+              ? context.appTheme.success.withAlpha(80)
+              : context.appTheme.warning.withAlpha(80),
         ),
       ),
       child: Column(
@@ -713,8 +713,8 @@ class _ParentAcademicProgressScreenState
                     ? Icons.thumb_up_rounded
                     : Icons.info_rounded,
                 color: r['positive'] == true
-                    ? AppTheme.success
-                    : AppTheme.warning,
+                    ? context.appTheme.success
+                    : context.appTheme.warning,
                 size: 16,
               ),
               const SizedBox(width: 8),
@@ -728,7 +728,7 @@ class _ParentAcademicProgressScreenState
               const Spacer(),
               Text(
                 r['date'],
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
             ],
           ),
@@ -737,7 +737,7 @@ class _ParentAcademicProgressScreenState
             r['remark'],
             style: GoogleFonts.dmSans(
               fontSize: 13,
-              color: AppTheme.onSurfaceVariant,
+              color: context.appTheme.onSurfaceVariant,
             ),
           ),
           if (teacher.isNotEmpty) ...[
@@ -746,7 +746,7 @@ class _ParentAcademicProgressScreenState
               '— $teacher',
               style: GoogleFonts.dmSans(
                 fontSize: 11,
-                color: AppTheme.muted,
+                color: context.appTheme.muted,
                 fontStyle: FontStyle.italic,
               ),
             ),

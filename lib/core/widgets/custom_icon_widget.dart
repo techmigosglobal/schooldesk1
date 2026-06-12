@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class CustomIconWidget extends StatelessWidget {
   final String iconName;
@@ -9024,7 +9025,7 @@ class CustomIconWidget extends StatelessWidget {
       return Icon(
         Icons.help_outline,
         size: size,
-        color: Colors.grey,
+        color: context.appTheme.muted,
         semanticLabel: iconName,
       );
     }

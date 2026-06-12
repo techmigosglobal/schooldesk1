@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum BadgeStatus {
   active,
@@ -31,7 +31,7 @@ class StatusBadgeWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final config = _getConfig();
+    final config = _getConfig(context);
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     return Container(
@@ -55,77 +55,77 @@ class StatusBadgeWidget extends StatelessWidget {
     );
   }
 
-  _BadgeConfig _getConfig() {
+  _BadgeConfig _getConfig(BuildContext context) {
     switch (_normalizeStatus(status, label)) {
       case BadgeStatus.active:
         return _BadgeConfig(
           label: 'Active',
-          background: AppTheme.successContainer,
-          border: AppTheme.success.withAlpha(77),
-          textColor: AppTheme.success,
+          background: context.appTheme.successContainer,
+          border: context.appTheme.success.withAlpha(77),
+          textColor: context.appTheme.success,
         );
       case BadgeStatus.inactive:
         return _BadgeConfig(
           label: 'Inactive',
-          background: AppTheme.surfaceVariant,
-          border: AppTheme.outline,
-          textColor: AppTheme.muted,
+          background: context.appTheme.surfaceVariant,
+          border: context.appTheme.outline,
+          textColor: context.appTheme.muted,
         );
       case BadgeStatus.pending:
         return _BadgeConfig(
           label: 'Pending',
-          background: AppTheme.warningContainer,
-          border: AppTheme.warning.withAlpha(77),
-          textColor: AppTheme.warning,
+          background: context.appTheme.warningContainer,
+          border: context.appTheme.warning.withAlpha(77),
+          textColor: context.appTheme.warning,
         );
       case BadgeStatus.approved:
         return _BadgeConfig(
           label: 'Approved',
-          background: AppTheme.successContainer,
-          border: AppTheme.success.withAlpha(77),
-          textColor: AppTheme.success,
+          background: context.appTheme.successContainer,
+          border: context.appTheme.success.withAlpha(77),
+          textColor: context.appTheme.success,
         );
       case BadgeStatus.rejected:
         return _BadgeConfig(
           label: 'Rejected',
-          background: AppTheme.errorContainer,
-          border: AppTheme.error.withAlpha(77),
-          textColor: AppTheme.error,
+          background: context.appTheme.errorContainer,
+          border: context.appTheme.error.withAlpha(77),
+          textColor: context.appTheme.error,
         );
       case BadgeStatus.warning:
         return _BadgeConfig(
           label: 'Warning',
-          background: AppTheme.warningContainer,
-          border: AppTheme.warning.withAlpha(77),
-          textColor: AppTheme.warning,
+          background: context.appTheme.warningContainer,
+          border: context.appTheme.warning.withAlpha(77),
+          textColor: context.appTheme.warning,
         );
       case BadgeStatus.onLeave:
         return _BadgeConfig(
           label: 'On Leave',
-          background: AppTheme.infoContainer,
-          border: AppTheme.info.withAlpha(77),
-          textColor: AppTheme.info,
+          background: context.appTheme.infoContainer,
+          border: context.appTheme.info.withAlpha(77),
+          textColor: context.appTheme.info,
         );
       case BadgeStatus.defaulter:
         return _BadgeConfig(
           label: 'Defaulter',
-          background: AppTheme.errorContainer,
-          border: AppTheme.error.withAlpha(77),
-          textColor: AppTheme.error,
+          background: context.appTheme.errorContainer,
+          border: context.appTheme.error.withAlpha(77),
+          textColor: context.appTheme.error,
         );
       case BadgeStatus.excellent:
         return _BadgeConfig(
           label: 'Excellent',
-          background: AppTheme.secondaryContainer,
-          border: AppTheme.secondary.withAlpha(77),
-          textColor: AppTheme.secondary,
+          background: context.appTheme.secondaryContainer,
+          border: context.appTheme.secondary.withAlpha(77),
+          textColor: context.appTheme.secondary,
         );
       case BadgeStatus.absent:
         return _BadgeConfig(
           label: 'Absent',
-          background: AppTheme.errorContainer,
-          border: AppTheme.error.withAlpha(77),
-          textColor: AppTheme.error,
+          background: context.appTheme.errorContainer,
+          border: context.appTheme.error.withAlpha(77),
+          textColor: context.appTheme.error,
         );
     }
   }

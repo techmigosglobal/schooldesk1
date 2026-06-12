@@ -155,7 +155,7 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(parentFees, contains('AppRoutes.parentPaymentRequestForm'));
+    expect(parentFees, contains('AppRoutes.parentPaymentSelection'));
     expect(parentFees, isNot(contains('_showPaymentDialog')));
     expect(parentFees, isNot(contains('showDialog(')));
     expect(paymentForm, contains('class ParentPaymentRequestFormScreen'));
@@ -163,9 +163,13 @@ void main() {
     expect(paymentForm, contains('PaymentRequest('));
     expect(paymentForm, isNot(contains('showDialog(')));
     expect(routes, contains('parentPaymentRequestForm'));
+    expect(routes, contains('parentPaymentSelection'));
+    expect(routes, contains('parentPaymentProcessing'));
     expect(routes, contains('ParentPaymentRequestFormScreen'));
     expect(guard, contains('AppRoutes.parentPaymentRequestForm: {\'parent\'}'));
     expect(registry, contains('/parent-fees-screen/payment'));
+    expect(registry, contains('/parent-fees-screen/payment-selection'));
+    expect(registry, contains('/parent-fees-screen/payment-processing'));
   });
 
   test('admin timetable mutations persist through backend slot APIs', () {

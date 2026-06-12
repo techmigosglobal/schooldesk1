@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class TeacherCommunicationScreen extends StatefulWidget {
   const TeacherCommunicationScreen({super.key});
@@ -22,31 +24,47 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   String _selectedConversationId = '';
   String _selectedDirectCounterpartId = '';
   String _teacherUserId = '';
+  bool _showMobileConversationList = true;
+  bool _showMobileDirectList = true;
   List<Map<String, dynamic>> _conversations = const [];
   List<Map<String, dynamic>> _messages = const [];
   List<Map<String, dynamic>> _directMessages = const [];
   List<_ChatTarget> _chatTargets = const [];
   List<AnnouncementModel> _notices = const [];
 
+  Timer? _pollingTimer;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadCommunication();
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !_loading) {
+        _loadCommunication(background: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _tabController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCommunication() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadCommunication({bool background = false}) async {
+    if (!background) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
@@ -55,16 +73,9 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
       final conversations = await api.getRawList('/message-conversations');
       final messages = await api.getRawList('/messages');
       final directMessages = await api.getCommunications();
-      final teachers = await api.getUsers(
-        role: 'Teacher',
-        status: 'active',
-        pageSize: 1000,
-      );
-      final parents = await api.getUsers(
-        role: 'Parent',
-        status: 'active',
-        pageSize: 1000,
-      );
+      // Use /staff (accessible to all roles) instead of /users (Admin/Principal only).
+      final staffList = await api.getStaff(status: 'active', pageSize: 1000);
+      // Derive class students; parents are extracted from student parentAccounts.
       final classStudents = RoleAccessService.teacherClassId.isEmpty
           ? <StudentModel>[]
           : (await api.getStudents(
@@ -77,8 +88,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
       );
       final staffId = RoleAccessService.teacherStaffId;
       final chatTargets = _buildChatTargets(
-        teachers: teachers.data,
-        parents: parents.data,
+        staffList: staffList.data,
         students: classStudents,
         profile: profile,
       );
@@ -155,36 +165,69 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
       loading: _loading,
       error: _error,
       onRefresh: _loadCommunication,
-      child: TeacherFlowScrollView(
-        children: [
-          TeacherCurrentClassCard(
-            greeting: 'Communication center',
-            classLabel: RoleAccessService.teacherClassName,
-            subject: '${_conversations.length} conversations',
-            timeLabel: '${_directMessages.length} direct messages',
-          ),
-          const SizedBox(height: 18),
-          TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Chats'),
-              Tab(text: 'Direct'),
-              Tab(text: 'Start Chat'),
-              Tab(text: 'School Notices'),
-            ],
-          ),
-          SizedBox(
-            height: 620,
-            child: TabBarView(
-              controller: _tabController,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final horizontal = width >= 840 ? 28.0 : 12.0;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 12),
+            child: Column(
               children: [
-                _buildChats(),
-                _buildPrincipalMessages(),
-                _buildStartChat(),
-                _buildNotices(),
+                if (width >= 700) ...[
+                  TeacherCurrentClassCard(
+                    greeting: 'Communication center',
+                    classLabel: RoleAccessService.teacherClassName,
+                    subject: '${_conversations.length} conversations',
+                    timeLabel: '${_directMessages.length} direct messages',
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _buildSegmentedTabs(),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildChats(),
+                      _buildPrincipalMessages(),
+                      _buildStartChat(),
+                      _buildNotices(),
+                    ],
+                  ),
+                ),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSegmentedTabs() {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelColor: Colors.white,
+        unselectedLabelColor: context.appTheme.muted,
+        indicator: BoxDecoration(
+          color: teacherFlowAccent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        tabs: const [
+          Tab(icon: Icon(Icons.forum_rounded, size: 18), text: 'Chats'),
+          Tab(
+            icon: Icon(Icons.mark_email_unread_outlined, size: 18),
+            text: 'Direct',
           ),
+          Tab(icon: Icon(Icons.add_comment_rounded, size: 18), text: 'Start'),
+          Tab(icon: Icon(Icons.campaign_rounded, size: 18), text: 'Notices'),
         ],
       ),
     );
@@ -213,11 +256,13 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 680;
+        final wide = constraints.maxWidth >= 720;
         final conversationList = _buildConversationRail();
         final chatPane = _buildThreadPane(
           title: _conversationLabel(_selectedConversation),
           subtitle: 'Visible to Principal monitoring',
+          showBack: !wide,
+          onBack: () => setState(() => _showMobileConversationList = true),
           messages: [
             for (final message in visibleMessages)
               _ChatBubble(
@@ -236,23 +281,17 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           ],
           onSend: _sendMessage,
         );
-        return wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 250, child: conversationList),
-                  const SizedBox(width: 14),
-                  Expanded(child: chatPane),
-                ],
-              )
-            : ListView(
-                padding: const EdgeInsets.only(top: 14, bottom: 24),
-                children: [
-                  conversationList,
-                  const SizedBox(height: 12),
-                  chatPane,
-                ],
-              );
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 310, child: conversationList),
+              const SizedBox(width: 12),
+              Expanded(child: chatPane),
+            ],
+          );
+        }
+        return _showMobileConversationList ? conversationList : chatPane;
       },
     );
   }
@@ -278,7 +317,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
                 subtitle: notice.content,
                 status: notice.isUrgent ? 'Urgent' : 'Notice',
                 statusColor: notice.isUrgent
-                    ? AppTheme.error
+                    ? context.appTheme.error
                     : teacherFlowAccent,
               ),
             ),
@@ -311,7 +350,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 680;
+        final wide = constraints.maxWidth >= 720;
         final rail = ListView(
           padding: const EdgeInsets.only(top: 14, bottom: 24),
           children: [
@@ -323,9 +362,10 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
                   subtitle: row.lastMessage,
                   selected: row.counterpartId == thread.counterpartId,
                   unread: row.unreadCount,
-                  onTap: () => setState(
-                    () => _selectedDirectCounterpartId = row.counterpartId,
-                  ),
+                  onTap: () => setState(() {
+                    _selectedDirectCounterpartId = row.counterpartId;
+                    _showMobileDirectList = false;
+                  }),
                 ),
               ),
           ],
@@ -333,6 +373,8 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         final pane = _buildThreadPane(
           title: thread.label,
           subtitle: 'Direct school communication',
+          showBack: !wide,
+          onBack: () => setState(() => _showMobileDirectList = true),
           messages: [
             for (final message in thread.messages)
               _ChatBubble(
@@ -360,22 +402,17 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           ],
           onSend: () => _sendDirectMessage(thread),
         );
-        return wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 250, child: rail),
-                  const SizedBox(width: 14),
-                  Expanded(child: pane),
-                ],
-              )
-            : ListView(
-                padding: const EdgeInsets.only(top: 14, bottom: 24),
-                children: [
-                  SizedBox(height: 190, child: rail),
-                  pane,
-                ],
-              );
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 310, child: rail),
+              const SizedBox(width: 12),
+              Expanded(child: pane),
+            ],
+          );
+        }
+        return _showMobileDirectList ? rail : pane;
       },
     );
   }
@@ -462,7 +499,10 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
 
   Future<void> _openTargetChat(_ChatTarget target) async {
     if (target.role == 'teacher') {
-      setState(() => _selectedDirectCounterpartId = target.id);
+      setState(() {
+        _selectedDirectCounterpartId = target.id;
+        _showMobileDirectList = false;
+      });
       _tabController.animateTo(1);
       return;
     }
@@ -471,9 +511,10 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           teacherFlowText(row['student_id']) == target.studentId;
     });
     if (existing.isNotEmpty) {
-      setState(
-        () => _selectedConversationId = teacherFlowText(existing.first['id']),
-      );
+      setState(() {
+        _selectedConversationId = teacherFlowText(existing.first['id']);
+        _showMobileConversationList = false;
+      });
       _tabController.animateTo(0);
       return;
     }
@@ -489,6 +530,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           'last_message_time': DateTime.now().toUtc().toIso8601String(),
         });
     _selectedConversationId = teacherFlowText(saved['id']);
+    _showMobileConversationList = false;
     await _loadCommunication();
     _tabController.animateTo(0);
   }
@@ -537,29 +579,30 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   }
 
   Widget _buildConversationRail() {
-    return ListView(
-      padding: const EdgeInsets.only(top: 14, bottom: 24),
-      children: [
-        for (final conversation in _conversations)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _ThreadTile(
-              title: _conversationLabel(conversation),
-              subtitle: _conversationSubtitle(conversation),
-              selected:
-                  teacherFlowText(conversation['id']) ==
-                  _selectedConversationId,
-              unread: _unreadConversationCount(
-                teacherFlowText(conversation['id']),
-              ),
-              onTap: () => setState(
-                () => _selectedConversationId = teacherFlowText(
-                  conversation['id'],
+    return _ChatPanelShell(
+      child: ListView(
+        padding: const EdgeInsets.all(10),
+        children: [
+          for (final conversation in _conversations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _ThreadTile(
+                title: _conversationLabel(conversation),
+                subtitle: _conversationSubtitle(conversation),
+                selected:
+                    teacherFlowText(conversation['id']) ==
+                    _selectedConversationId,
+                unread: _unreadConversationCount(
+                  teacherFlowText(conversation['id']),
                 ),
+                onTap: () => setState(() {
+                  _selectedConversationId = teacherFlowText(conversation['id']);
+                  _showMobileConversationList = false;
+                }),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -568,58 +611,49 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     required String subtitle,
     required List<Widget> messages,
     required VoidCallback onSend,
+    bool showBack = false,
+    VoidCallback? onBack,
   }) {
-    return TeacherFlowCard(
-      icon: Icons.chat_bubble_outline_rounded,
-      title: title.isEmpty ? 'Conversation' : title,
-      subtitle: subtitle,
-      body: Column(
+    return _ChatPanelShell(
+      child: Column(
         children: [
-          Container(
-            height: 430,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: messages.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No messages yet',
-                      style: TextStyle(
-                        color: teacherFlowMuted,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  )
-                : ListView(
-                    reverse: false,
-                    children: [
-                      for (final message in messages)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: message,
-                        ),
-                    ],
-                  ),
+          _ChatHeader(
+            title: title.isEmpty ? 'Conversation' : title,
+            subtitle: subtitle,
+            showBack: showBack,
+            onBack: onBack,
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _messageController,
-                  minLines: 1,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Message',
-                    prefixIcon: Icon(Icons.message_rounded),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton.filled(
-                tooltip: 'Send message',
-                onPressed: onSend,
-                icon: const Icon(Icons.send_rounded),
-              ),
-            ],
+          Expanded(
+            child: ChatWallpaperBackground(
+              child: messages.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No messages yet',
+                        style: TextStyle(
+                          color: teacherFlowMuted,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      children: [
+                        for (final message in messages)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: message,
+                          ),
+                      ],
+                    ),
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: ChatInputBar(
+              controller: _messageController,
+              onSend: onSend,
+              placeholder: 'Type your message...',
+            ),
           ),
         ],
       ),
@@ -708,27 +742,25 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   }
 
   List<_ChatTarget> _buildChatTargets({
-    required List<UserAccountModel> teachers,
-    required List<UserAccountModel> parents,
+    required List<StaffModel> staffList,
     required List<StudentModel> students,
     required UserResponse profile,
   }) {
     final targets = <_ChatTarget>[];
-    for (final teacher in teachers) {
-      if (teacher.id == profile.id ||
-          teacher.linkedId == RoleAccessService.teacherStaffId) {
-        continue;
-      }
+    // Colleague teachers from /staff (accessible to all roles).
+    for (final staff in staffList) {
+      // Skip self (match by staffId or by the linked_id on the profile).
+      if (staff.id == RoleAccessService.teacherStaffId) continue;
       targets.add(
         _ChatTarget(
-          id: teacher.id,
+          id: staff.id,
           role: 'teacher',
-          label: _userLabel(teacher),
-          subtitle: teacher.email.isEmpty ? 'Teacher account' : teacher.email,
+          label: staff.fullName.isEmpty ? staff.staffCode : staff.fullName,
+          subtitle: staff.designation ?? 'Teacher',
         ),
       );
     }
-    final parentById = {for (final parent in parents) parent.id: parent};
+    // Parents derived from class students' parentAccounts.
     final seenParents = <String>{};
     for (final student in students) {
       for (final account in student.parentAccounts) {
@@ -736,17 +768,15 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         if (parentId.isEmpty || !seenParents.add('$parentId:${student.id}')) {
           continue;
         }
-        final parent = parentById[parentId];
+        final parentName = teacherFlowText(
+          account['name'] ?? account['username'],
+          fallback: 'Parent',
+        );
         targets.add(
           _ChatTarget(
             id: parentId,
             role: 'parent',
-            label: parent == null
-                ? teacherFlowText(
-                    account['name'] ?? account['username'],
-                    fallback: 'Parent',
-                  )
-                : _userLabel(parent),
+            label: parentName,
             subtitle: 'Parent of ${student.fullName}',
             studentId: student.id,
             studentName: student.fullName,
@@ -756,15 +786,6 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     }
     targets.sort((a, b) => a.label.compareTo(b.label));
     return targets;
-  }
-
-  String _userLabel(UserAccountModel user) {
-    final name = user.name.trim();
-    if (name.isNotEmpty) return name;
-    final username = user.username.trim();
-    if (username.isNotEmpty) return username;
-    final email = user.email.trim();
-    return email.isEmpty ? 'User' : email;
   }
 }
 
@@ -848,7 +869,9 @@ class _ThreadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? teacherFlowAccent.withAlpha(22) : Colors.white,
+      color: selected
+          ? teacherFlowAccent.withAlpha(22)
+          : context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       child: ListTile(
         onTap: onTap,
@@ -873,7 +896,110 @@ class _ThreadTile extends StatelessWidget {
         ),
         trailing: unread <= 0
             ? null
-            : TeacherStatusPill(label: '$unread', color: AppTheme.error),
+            : TeacherStatusPill(
+                label: '$unread',
+                color: context.appTheme.error,
+              ),
+      ),
+    );
+  }
+}
+
+class _ChatPanelShell extends StatelessWidget {
+  final Widget child;
+
+  const _ChatPanelShell({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.appTheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(10),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _ChatHeader extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final bool showBack;
+  final VoidCallback? onBack;
+
+  const _ChatHeader({
+    required this.title,
+    required this.subtitle,
+    required this.showBack,
+    this.onBack,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        border: Border(
+          bottom: BorderSide(color: context.appTheme.outlineVariant),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (showBack)
+            IconButton(
+              tooltip: 'Back to chats',
+              icon: const Icon(Icons.arrow_back_rounded),
+              onPressed: onBack,
+            ),
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: teacherFlowAccent.withAlpha(28),
+            child: const Icon(
+              Icons.person_outline_rounded,
+              color: teacherFlowAccent,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: context.appTheme.muted,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -898,71 +1024,14 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = mine ? teacherFlowAccent : const Color(0xFFF2F7F8);
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 430),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(8),
-            border: mine ? null : Border.all(color: const Color(0xFFDDECEF)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 9, 12, 8),
-            child: Column(
-              crossAxisAlignment: mine
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: mine ? Colors.white70 : teacherFlowMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  text,
-                  style: TextStyle(
-                    color: mine ? Colors.white : teacherFlowInk,
-                    fontWeight: FontWeight.w700,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      time,
-                      style: TextStyle(
-                        color: mine ? Colors.white70 : teacherFlowMuted,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (unread) ...[
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: onMarkRead,
-                        child: const Icon(
-                          Icons.done_all_rounded,
-                          size: 15,
-                          color: AppTheme.error,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+    if (unread) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => onMarkRead());
+    }
+    return ChatBubbleWidget(
+      messageText: text,
+      time: time,
+      isMe: mine,
+      isRead: !unread,
     );
   }
 }

@@ -12,7 +12,20 @@ void main() {
             .toList()
           ..sort();
 
-    expect(markdownFiles, ['README.md', 'docs/PRD.md', 'docs/SPEC.md']);
+    expect(markdownFiles, [
+      'README.md',
+      'docs/FINANCE_MODULE_DOCS.md',
+      'docs/PARENT_ROLE_WORKFLOW_AUDIT.md',
+      'docs/PRD.md',
+      'docs/PRINCIPAL_ROLE_WORKFLOW_AUDIT.md',
+      'docs/RAZORPAY_INTEGRATION_COMPLETE.md',
+      'docs/ROLE_INTERCONNECTION_AUDIT.md',
+      'docs/SINGLE_SCHOOL_HOME_PARENT_TEACHER_AUDIT.md',
+      'docs/SPEC.md',
+      'docs/TEACHER_PARENT_BACKEND_INTEGRATION_AUDIT.md',
+      'docs/TEACHER_ROLE_MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md',
+      'docs/TEACHER_ROLE_WORKFLOW_AUDIT.md',
+    ]);
   });
 
   test('historical artifacts and inactive preview screens are removed', () {

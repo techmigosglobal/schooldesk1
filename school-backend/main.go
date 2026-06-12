@@ -12,6 +12,7 @@ import (
 	"school-backend/internal/config"
 	"school-backend/internal/database"
 	"school-backend/internal/middleware"
+	"school-backend/internal/payments"
 	"school-backend/internal/platform"
 	"school-backend/internal/routes"
 	"school-backend/internal/services"
@@ -44,6 +45,13 @@ func main() {
 
 	if err := database.Initialize(cfg); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// Razorpay is optional – only initialized when keys are present in the environment.
+	if err := payments.InitRazorpayClient(); err != nil {
+		log.Printf("Razorpay not configured (online payments disabled): %v", err)
+	} else {
+		log.Println("Razorpay client initialized")
 	}
 	if cfg.EnableFCMPush && cfg.AppMode == "worker" {
 		push, err := services.NewFirebasePushSender(context.Background(), cfg.FirebaseProjectID)

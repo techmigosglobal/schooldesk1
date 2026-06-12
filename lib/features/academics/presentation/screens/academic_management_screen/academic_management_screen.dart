@@ -5,8 +5,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 const _academicBg = Color(0xFFF3F8FF);
 const _academicInk = Color(0xFF08142F);
@@ -193,8 +193,8 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
 
   Widget _buildContent() {
     return _loading
-        ? const Center(
-            child: CircularProgressIndicator(color: AppTheme.primary),
+        ? Center(
+            child: CircularProgressIndicator(color: context.appTheme.primary),
           )
         : TabBarView(
             controller: _tabController,
@@ -434,7 +434,7 @@ class _AcademicTabStrip extends StatelessWidget {
     ];
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _academicBorder),
         boxShadow: [
@@ -544,7 +544,7 @@ class _AcademicBottomBar extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
@@ -672,11 +672,11 @@ class _AcademicActionSheet extends StatelessWidget {
         margin: const EdgeInsets.all(14),
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(30),
+              color: context.appTheme.onSurface.withAlpha(30),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -936,7 +936,7 @@ class _AcademicYearCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
@@ -1029,7 +1029,7 @@ class _AcademicYearCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: _academicBorder),
             ),
@@ -1285,7 +1285,7 @@ class _BookBlock extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: context.appTheme.surface, width: 2),
       ),
       child: Align(
         alignment: Alignment.centerLeft,
@@ -1449,7 +1449,7 @@ class _SubjectsTabState extends State<_SubjectsTab> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             child: const Text('Remove'),
           ),
         ],
@@ -1832,9 +1832,9 @@ class _CurriculumCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1857,7 +1857,7 @@ class _CurriculumCard extends StatelessWidget {
                       item['term'] as String? ?? '',
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -1872,8 +1872,8 @@ class _CurriculumCard extends StatelessWidget {
                   ),
                   decoration: BoxDecoration(
                     color: isPublished
-                        ? AppTheme.successContainer
-                        : AppTheme.surfaceVariant,
+                        ? context.appTheme.successContainer
+                        : context.appTheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
@@ -1884,7 +1884,7 @@ class _CurriculumCard extends StatelessWidget {
                             ? Icons.visibility_rounded
                             : Icons.visibility_off_outlined,
                         size: 14,
-                        color: isPublished ? AppTheme.success : AppTheme.muted,
+                        color: isPublished ? context.appTheme.success : context.appTheme.muted,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1893,8 +1893,8 @@ class _CurriculumCard extends StatelessWidget {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: isPublished
-                              ? AppTheme.success
-                              : AppTheme.muted,
+                              ? context.appTheme.success
+                              : context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -1906,7 +1906,7 @@ class _CurriculumCard extends StatelessWidget {
                   onPressed: onEdit,
                   tooltip: 'Edit curriculum',
                   icon: const Icon(Icons.edit_outlined, size: 18),
-                  color: AppTheme.muted,
+                  color: context.appTheme.muted,
                   visualDensity: VisualDensity.compact,
                 ),
               if (onDelete != null)
@@ -1914,7 +1914,7 @@ class _CurriculumCard extends StatelessWidget {
                   onPressed: onDelete,
                   tooltip: 'Delete curriculum',
                   icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  color: AppTheme.error,
+                  color: context.appTheme.error,
                   visualDensity: VisualDensity.compact,
                 ),
             ],
@@ -1931,7 +1931,7 @@ class _CurriculumCard extends StatelessWidget {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryContainer,
+                      color: context.appTheme.primaryContainer,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -1939,7 +1939,7 @@ class _CurriculumCard extends StatelessWidget {
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
-                        color: AppTheme.primary,
+                        color: context.appTheme.primary,
                       ),
                     ),
                   ),
@@ -2242,7 +2242,7 @@ class _AcademicSubjectCard extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.all(compact ? 14 : 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _academicBorder),
             boxShadow: [
@@ -2433,7 +2433,7 @@ class _AcademicClassCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
@@ -2524,7 +2524,7 @@ class _AcademicClassCard extends StatelessWidget {
           Container(
             padding: EdgeInsets.all(compact ? 12 : 14),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: _academicBorder),
             ),
@@ -2711,7 +2711,7 @@ class _AcademicClassActionButton extends StatelessWidget {
             vertical: compact ? 10 : 12,
           ),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _academicBorder),
             boxShadow: [
@@ -2777,7 +2777,7 @@ class _AcademicYearSelector extends StatelessWidget {
       height: 54,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _academicBorder),
         boxShadow: [
@@ -2998,7 +2998,7 @@ class _AcademicEmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
@@ -3181,7 +3181,7 @@ Future<bool?> _confirmAcademicDelete(
         ),
         FilledButton.icon(
           onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+          style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
           icon: const Icon(Icons.delete_outline_rounded, size: 18),
           label: const Text('Delete'),
         ),
@@ -3202,10 +3202,10 @@ void _showAcademicSnack(
       content: Text(message, style: GoogleFonts.dmSans(fontSize: 13)),
       behavior: SnackBarBehavior.floating,
       backgroundColor: isError
-          ? AppTheme.error
+          ? context.appTheme.error
           : isWarning
-          ? AppTheme.warning
-          : AppTheme.success,
+          ? context.appTheme.warning
+          : context.appTheme.success,
     ),
   );
 }

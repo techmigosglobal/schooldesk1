@@ -112,6 +112,31 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	if structure.Amount != 3200 || structure.DueDay != 12 || structure.LateFinePerDay != 30 {
 		t.Fatalf("structure not updated: %+v", structure)
 	}
+	if structure.InstallmentCount != 3 {
+		t.Fatalf("omitted installment_count should default to 3, got %d", structure.InstallmentCount)
+	}
+
+	customInstallments := httptest.NewRecorder()
+	router.ServeHTTP(
+		customInstallments,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/fees/structures",
+			strings.NewReader(`{"academic_year_id":"year-fees","grade_id":"grade-fees","fee_category_id":"cat-fees","amount":9000,"due_day":10,"late_fine_per_day":25,"installment_count":4}`),
+		),
+	)
+	if customInstallments.Code != http.StatusCreated {
+		t.Fatalf("custom installment create status=%d body=%s", customInstallments.Code, customInstallments.Body.String())
+	}
+	var customBody struct {
+		Data models.FeeStructure `json:"data"`
+	}
+	if err := json.Unmarshal(customInstallments.Body.Bytes(), &customBody); err != nil {
+		t.Fatalf("decode custom installment response: %v", err)
+	}
+	if customBody.Data.InstallmentCount != 4 {
+		t.Fatalf("selected installment_count should be preserved, got %d", customBody.Data.InstallmentCount)
+	}
 
 	deleteResp := httptest.NewRecorder()
 	router.ServeHTTP(deleteResp, httptest.NewRequest(http.MethodDelete, "/fees/structures/"+structure.ID, nil))
@@ -135,6 +160,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	if err := db.AutoMigrate(
 		&models.School{},
 		&models.AcademicYear{},
+		&models.Term{},
 		&models.Grade{},
 		&models.Section{},
 		&models.Student{},
@@ -151,11 +177,12 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 
 	school := models.School{BaseModel: models.BaseModel{ID: "school-generate-fees"}, Name: "Fee School", SchoolType: "cbse"}
 	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-generate-fees"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true}
+	term := models.Term{BaseModel: models.BaseModel{ID: "term-generate-fees"}, AcademicYearID: year.ID, TermNumber: 1, TermName: "Term 1", StartDate: year.StartDate, EndDate: year.StartDate.AddDate(0, 3, 0), IsCurrent: true}
 	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-generate-fees"}, SchoolID: school.ID, GradeName: "Class 5", GradeNumber: 5}
 	otherGrade := models.Grade{BaseModel: models.BaseModel{ID: "grade-other-fees"}, SchoolID: school.ID, GradeName: "Class 6", GradeNumber: 6}
 	section := models.Section{BaseModel: models.BaseModel{ID: "section-generate-fees"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
 	otherSection := models.Section{BaseModel: models.BaseModel{ID: "section-other-fees"}, GradeID: otherGrade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
-	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-generate-fees"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "monthly"}
+	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-generate-fees"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "term"}
 	activityCategory := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-activity-fees"}, SchoolID: school.ID, CategoryName: "Activity", Frequency: "term"}
 	structures := []models.FeeStructure{
 		{BaseModel: models.BaseModel{ID: "structure-tuition"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, FeeCategoryID: category.ID, Amount: 2500, DueDay: 10},
@@ -166,7 +193,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 		{BaseModel: models.BaseModel{ID: "student-fee-two"}, SchoolID: school.ID, StudentCode: "S-002", AdmissionNumber: "ADM-002", FirstName: "Bala", LastName: "Two", DateOfBirth: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC), AdmissionDate: time.Now(), CurrentSectionID: &section.ID, Status: "active"},
 		{BaseModel: models.BaseModel{ID: "student-other-grade"}, SchoolID: school.ID, StudentCode: "S-003", AdmissionNumber: "ADM-003", FirstName: "Chitra", LastName: "Three", DateOfBirth: time.Date(2014, 1, 1, 0, 0, 0, 0, time.UTC), AdmissionDate: time.Now(), CurrentSectionID: &otherSection.ID, Status: "active"},
 	}
-	for _, seed := range []any{&school, &year, &grade, &otherGrade, &section, &otherSection, &category, &activityCategory} {
+	for _, seed := range []any{&school, &year, &term, &grade, &otherGrade, &section, &otherSection, &category, &activityCategory} {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
@@ -192,7 +219,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	handler := NewFeeHandler()
 	router.POST("/fees/invoices/generate", handler.GenerateInvoices)
 
-	payload := `{"academic_year_id":"year-generate-fees","grade_id":"grade-generate-fees","invoice_label":"Term 1","due_date":"2026-05-10"}`
+	payload := `{"academic_year_id":"year-generate-fees","grade_id":"grade-generate-fees","term_id":"term-generate-fees","invoice_label":"Term 1","due_date":"2026-05-10"}`
 	create := httptest.NewRecorder()
 	router.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/fees/invoices/generate", strings.NewReader(payload)))
 	if create.Code != http.StatusCreated {
@@ -217,6 +244,13 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	if invoiceCount != 2 || itemCount != 4 {
 		t.Fatalf("invoice/item counts mismatch invoices=%d items=%d", invoiceCount, itemCount)
 	}
+	var tuitionItem models.FeeInvoiceItem
+	if err := db.First(&tuitionItem, "fee_category_id = ?", category.ID).Error; err != nil {
+		t.Fatalf("load tuition item: %v", err)
+	}
+	if tuitionItem.Amount != 833.33 {
+		t.Fatalf("term-wise tuition should default to 3 installments, got %.2f", tuitionItem.Amount)
+	}
 
 	duplicate := httptest.NewRecorder()
 	router.ServeHTTP(duplicate, httptest.NewRequest(http.MethodPost, "/fees/invoices/generate", strings.NewReader(payload)))
@@ -236,7 +270,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 		httptest.NewRequest(
 			http.MethodPost,
 			"/fees/invoices/generate",
-			strings.NewReader(`{"academic_year_id":"year-generate-fees","grade_id":"grade-generate-fees","student_id":"student-fee-one","invoice_label":"Term 2","due_date":"2026-08-10"}`),
+			strings.NewReader(`{"academic_year_id":"year-generate-fees","grade_id":"grade-generate-fees","student_id":"student-fee-one","term_id":"term-generate-fees","installment_count":5,"invoice_label":"Term 2","due_date":"2026-08-10"}`),
 		),
 	)
 	if studentOnly.Code != http.StatusCreated {
@@ -247,6 +281,15 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	}
 	if response.Data.Created != 1 {
 		t.Fatalf("expected one student-scoped invoice, got %+v", response.Data)
+	}
+	var termTwoItem models.FeeInvoiceItem
+	if err := db.
+		Joins("JOIN fee_invoices ON fee_invoices.id = fee_invoice_items.invoice_id").
+		First(&termTwoItem, "fee_invoice_items.fee_category_id = ? AND fee_invoices.invoice_number LIKE ?", category.ID, "%TERM-2%").Error; err != nil {
+		t.Fatalf("load selected installment item: %v", err)
+	}
+	if termTwoItem.Amount != 500 {
+		t.Fatalf("selected installment_count should split term tuition into 5 parts, got %.2f", termTwoItem.Amount)
 	}
 }
 

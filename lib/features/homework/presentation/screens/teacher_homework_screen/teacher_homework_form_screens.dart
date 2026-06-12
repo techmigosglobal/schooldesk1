@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class TeacherHomeworkFormArgs {
@@ -300,8 +300,8 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                   validator: (value) => _required(value, 'Enter instructions.'),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: AppTheme.error)),
+                  SizedBox(height: 12),
+                  Text(_error!, style: TextStyle(color: context.appTheme.error)),
                 ],
                 const SizedBox(height: 18),
                 FilledButton.icon(

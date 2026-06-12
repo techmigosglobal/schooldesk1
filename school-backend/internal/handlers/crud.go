@@ -178,7 +178,7 @@ func (h *CRUDHandler[T]) Delete(c *gin.Context) {
 func (h *CRUDHandler[T]) scopedQuery(c *gin.Context) *gorm.DB {
 	query := database.DB
 	if h.SchoolScoped {
-		query = query.Where("school_id = ?", scopedSchoolID(c))
+		query = query.Where(h.actualTableName()+".school_id = ?", scopedSchoolID(c))
 	}
 	query = h.applyRoleRelationshipScope(c, query)
 	return query
@@ -344,13 +344,13 @@ func (h *CRUDHandler[T]) applyRoleRelationshipScope(c *gin.Context, query *gorm.
 	case "message_conversations":
 		switch role {
 		case "parent":
-			return query.Where("parent_id = ? AND (student_id = '' OR student_id IN (?))", currentUserID(c), linkedStudentSubquery(c))
+			return query.Where("message_conversations.parent_id = ? AND (message_conversations.student_id = '' OR message_conversations.student_id IN (?))", currentUserID(c), linkedStudentSubquery(c))
 		case "teacher":
 			staffID := currentStaffID(c)
 			if staffID == "" {
 				return query.Where("1 = 0")
 			}
-			return query.Where("teacher_id = ?", staffID)
+			return query.Where("message_conversations.teacher_id = ?", staffID)
 		}
 	case "messages":
 		query = query.Joins("JOIN message_conversations ON message_conversations.id = messages.conversation_id").

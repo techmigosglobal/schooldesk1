@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class AdminFeeStructureFormArgs {
@@ -112,6 +112,7 @@ class _AdminFeeStructureFormScreenState
   late String _selectedYearId;
   late String _selectedGradeId;
   late String _selectedCategoryId;
+  late int _selectedInstallmentCount;
   bool _saving = false;
 
   bool get _hasReferenceData =>
@@ -135,6 +136,7 @@ class _AdminFeeStructureFormScreenState
       '${fee['fee_category_id'] ?? ''}',
       widget.args.feeCategories.map((category) => '${category['id']}'),
     );
+    _selectedInstallmentCount = (fee['installment_count'] as num?)?.toInt() ?? 3;
     _amountController = TextEditingController(
       text: _controllerNumber(fee['amount'] ?? fee['total'] ?? fee['tuition']),
     );
@@ -211,21 +213,21 @@ class _AdminFeeStructureFormScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.primary.withAlpha(18),
+              color: context.appTheme.primary.withAlpha(18),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.playlist_add_check_rounded,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
             ),
           ),
           const SizedBox(width: 12),
@@ -246,7 +248,7 @@ class _AdminFeeStructureFormScreenState
                 Text(
                   'Select the class, fee category, due day, and amount.',
                   style: GoogleFonts.dmSans(
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontSize: 12,
                   ),
                 ),
@@ -363,6 +365,22 @@ class _AdminFeeStructureFormScreenState
             return fine < 0 ? 'Late fine cannot be negative.' : null;
           },
         ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<int>(
+          value: _selectedInstallmentCount,
+          decoration: const InputDecoration(labelText: 'Installments (per academic year)'),
+          items: List.generate(12, (index) => index + 1)
+              .map(
+                (count) => DropdownMenuItem(
+                  value: count,
+                  child: Text('$count ${count == 1 ? 'Installment' : 'Installments'}'),
+                ),
+              )
+              .toList(),
+          onChanged: _saving
+              ? null
+              : (value) => setState(() => _selectedInstallmentCount = value ?? 3),
+        ),
       ],
     );
   }
@@ -378,6 +396,7 @@ class _AdminFeeStructureFormScreenState
         'amount': double.parse(_amountController.text),
         'due_day': int.parse(_dueDayController.text),
         'late_fine_per_day': double.tryParse(_lateFineController.text) ?? 0,
+        'installment_count': _selectedInstallmentCount,
       };
       final id = '${widget.args.feeStructure?['id'] ?? ''}'.trim();
       if (widget.args.isEditing) {
@@ -432,6 +451,7 @@ class _AdminInvoiceGenerationFormScreenState
   bool _includeOneTime = false;
   bool _includeYearly = false;
   bool _generating = false;
+  int _selectedInstallmentCount = 3;
 
   bool get _hasReferenceData =>
       widget.args.academicYears.isNotEmpty &&
@@ -448,7 +468,7 @@ class _AdminInvoiceGenerationFormScreenState
         final amount = _numValue(fee['amount']);
         final frequency = _feeFrequency(fee);
         if (frequency == 'term') {
-          final count = _terms.isEmpty ? 1 : _terms.length;
+          final count = _selectedInstallmentCount;
           return sum + (amount / count);
         }
         if (frequency == 'one_time') {
@@ -722,6 +742,22 @@ class _AdminInvoiceGenerationFormScreenState
           validator: _dateValidator,
         ),
         const SizedBox(height: 12),
+        DropdownButtonFormField<int>(
+          value: _selectedInstallmentCount,
+          decoration: const InputDecoration(labelText: 'Installment count (splits annual amount)'),
+          items: List.generate(12, (index) => index + 1)
+              .map(
+                (count) => DropdownMenuItem(
+                  value: count,
+                  child: Text('$count ${count == 1 ? 'Installment' : 'Installments'}'),
+                ),
+              )
+              .toList(),
+          onChanged: _generating
+              ? null
+              : (value) => setState(() => _selectedInstallmentCount = value ?? 3),
+        ),
+        const SizedBox(height: 12),
         SwitchListTile.adaptive(
           value: _includeOneTime,
           onChanged: _generating
@@ -751,18 +787,18 @@ class _AdminInvoiceGenerationFormScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
-          const Icon(Icons.calculate_rounded, color: AppTheme.primary),
+          Icon(Icons.calculate_rounded, color: context.appTheme.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'Estimated invoice is INR ${_estimatedTotal.toStringAsFixed(0)} per student for $_selectedTermLabel and the $scopeLabel.',
-              style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
             ),
           ),
         ],
@@ -785,6 +821,7 @@ class _AdminInvoiceGenerationFormScreenState
             if (_scope == 'section') 'section_id': _selectedSectionId,
             if (_scope == 'student') 'student_id': _selectedStudentId,
             'term_id': _selectedTermId,
+            'installment_count': _selectedInstallmentCount,
             'include_one_time': _includeOneTime,
             'include_yearly': _includeYearly,
             'invoice_label': _labelController.text.trim(),
@@ -1080,9 +1117,9 @@ class _AdminPaymentRecordFormScreenState
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1124,7 +1161,7 @@ class _AdminPaymentRecordFormScreenState
         children: [
           Text(
             label,
-            style: GoogleFonts.dmSans(color: AppTheme.muted, fontSize: 12),
+            style: GoogleFonts.dmSans(color: context.appTheme.muted, fontSize: 12),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1291,6 +1328,6 @@ String _studentLabel(StudentModel student) {
 
 void _showErrorSnack(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+    SnackBar(content: Text(message), backgroundColor: context.appTheme.error),
   );
 }

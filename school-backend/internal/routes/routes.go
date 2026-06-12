@@ -281,7 +281,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			attendance.GET("/summary", attendanceHandler.GetStudentAttendanceSummary)
 			attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.ListStaffAttendance)
 			attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.GetStaffQRToken)
-			attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ScanStaffQR)
+			attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher", "Kiosk"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ScanStaffQR)
 			attendance.GET("/staff/me/today", middleware.RBACMiddleware("Teacher"), attendanceHandler.GetMyStaffAttendanceToday)
 			attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStaffAttendance)
 			attendance.GET("/reports/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.List("attendance_reports"))
@@ -339,6 +339,9 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateParentPaymentRequest)
 			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
 			fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
+			fees.POST("/razorpay/order", middleware.RBACMiddleware("Parent"), feeHandler.CreateRazorpayOrder)
+			fees.POST("/razorpay/verify", middleware.RBACMiddleware("Parent"), feeHandler.VerifyRazorpayPayment)
+			fees.GET("/payment-config", middleware.RBACMiddleware("Parent"), feeHandler.GetPaymentConfig)
 			feeConcessions := handlers.NewFrontendRecordHandler("fees/concessions")
 			fees.GET("/concessions", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeConcessions.List)
 			fees.POST("/concessions", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeConcessions.Create)
@@ -705,4 +708,5 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		api.POST("/documents/requests/:id/prints", middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Admin", "Principal"), handlers.NewFrontendRecordHandler("documents/requests/prints").Create)
 	}
 
+	api.POST("/webhooks/razorpay", feeHandler.RazorpayWebhook)
 }

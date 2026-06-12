@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/services/messaging_service.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class HomeworkMessagingScreen extends StatefulWidget {
   final String role; // 'teacher' or 'parent'
@@ -151,9 +152,9 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                 margin: const EdgeInsets.only(left: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(50),
+                  color: context.appTheme.surface.withAlpha(50),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withAlpha(80)),
+                  border: Border.all(color: context.appTheme.surface.withAlpha(80)),
                 ),
                 child: Text(
                   '$_totalUnread unread',
@@ -222,14 +223,14 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
         ? 'teacherUnread'
         : 'parentUnread';
     return Container(
-      color: Colors.white,
+      color: context.appTheme.surface,
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             decoration: BoxDecoration(
               color: _primaryColor.withAlpha(15),
-              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              border: Border(bottom: BorderSide(color: context.appTheme.muted)),
             ),
             child: Row(
               children: [
@@ -291,7 +292,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                 : ListView.separated(
                     itemCount: _conversations.length,
                     separatorBuilder: (_, __) =>
-                        Divider(height: 1, color: Colors.grey.shade100),
+                        Divider(height: 1, color: context.appTheme.muted),
                     itemBuilder: (context, i) {
                       final conv = _conversations[i];
                       final unread = conv[unreadKey] as int? ?? 0;
@@ -313,7 +314,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
       onTap: () => _openConversation(conv['id'] as String),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        color: isActive ? _primaryColor.withAlpha(15) : Colors.white,
+        color: isActive ? _primaryColor.withAlpha(15) : context.appTheme.surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,7 +350,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       decoration: BoxDecoration(
                         color: Colors.red.shade600,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
+                        border: Border.all(color: context.appTheme.surface, width: 1.5),
                       ),
                       child: Center(
                         child: Text(
@@ -392,7 +393,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                           fontSize: 11,
                           color: unread > 0
                               ? Colors.red.shade600
-                              : Colors.grey.shade500,
+                              : context.appTheme.muted,
                           fontWeight: unread > 0
                               ? FontWeight.w600
                               : FontWeight.w400,
@@ -433,7 +434,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                             fontSize: 12,
                             color: unread > 0
                                 ? const Color(0xFF1A1A2E)
-                                : Colors.grey.shade600,
+                                : context.appTheme.muted,
                             fontWeight: unread > 0
                                 ? FontWeight.w500
                                 : FontWeight.w400,
@@ -451,7 +452,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                         : '👩‍🏫 ${conv['teacherName']}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      color: Colors.grey.shade500,
+                      color: context.appTheme.muted,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -484,7 +485,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       Icon(
                         Icons.chat_bubble_outline,
                         size: 48,
-                        color: Colors.grey.shade300,
+                        color: context.appTheme.muted,
                       ),
                       const SizedBox(height: 12),
                       Text(
@@ -492,7 +493,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                         textAlign: TextAlign.center,
                         style: GoogleFonts.dmSans(
                           fontSize: 14,
-                          color: Colors.grey.shade500,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     ],
@@ -553,26 +554,26 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          Expanded(child: Divider(color: Colors.grey.shade200)),
+          Expanded(child: Divider(color: context.appTheme.muted)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: context.appTheme.muted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 label,
                 style: GoogleFonts.dmSans(
                   fontSize: 11,
-                  color: Colors.grey.shade500,
+                  color: context.appTheme.muted,
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ),
-          Expanded(child: Divider(color: Colors.grey.shade200)),
+          Expanded(child: Divider(color: context.appTheme.muted)),
         ],
       ),
     );
@@ -582,11 +583,11 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: context.appTheme.surface,
+        border: Border(bottom: BorderSide(color: context.appTheme.muted)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(8),
+            color: context.appTheme.onSurface.withAlpha(8),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -635,7 +636,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       : '${conv['teacherName']} · ${conv['subject']}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: context.appTheme.muted,
                   ),
                 ),
               ],
@@ -704,7 +705,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade600,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ),
@@ -714,7 +715,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: isMe ? _primaryColor : Colors.white,
+                    color: isMe ? _primaryColor : context.appTheme.surface,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(16),
                       topRight: const Radius.circular(16),
@@ -723,7 +724,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(10),
+                        color: context.appTheme.onSurface.withAlpha(10),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -746,7 +747,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       time,
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
-                        color: Colors.grey.shade500,
+                        color: context.appTheme.muted,
                       ),
                     ),
                     if (isMe) ...[
@@ -754,7 +755,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       Icon(
                         isRead ? Icons.done_all : Icons.done,
                         size: 12,
-                        color: isRead ? _primaryColor : Colors.grey.shade400,
+                        color: isRead ? _primaryColor : context.appTheme.muted,
                       ),
                     ],
                   ],
@@ -772,8 +773,8 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: context.appTheme.surface,
+        border: Border(top: BorderSide(color: context.appTheme.muted)),
       ),
       child: Row(
         children: [
@@ -782,7 +783,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFFF5F6FA),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(color: context.appTheme.muted),
               ),
               child: TextField(
                 controller: _msgCtrl,
@@ -794,7 +795,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                   hintText: 'Type your message…',
                   hintStyle: GoogleFonts.dmSans(
                     fontSize: 14,
-                    color: Colors.grey.shade400,
+                    color: context.appTheme.muted,
                   ),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
@@ -814,17 +815,17 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: _sending ? Colors.grey.shade300 : _primaryColor,
+                color: _sending ? context.appTheme.muted : _primaryColor,
                 shape: BoxShape.circle,
               ),
               child: _sending
-                  ? const Center(
+                  ? Center(
                       child: SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.appTheme.surface,
                         ),
                       ),
                     )
@@ -869,7 +870,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 13,
-              color: Colors.grey.shade500,
+              color: context.appTheme.muted,
             ),
           ),
         ],
@@ -885,7 +886,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
           Icon(
             Icons.chat_bubble_outline,
             size: 48,
-            color: Colors.grey.shade300,
+            color: context.appTheme.muted,
           ),
           const SizedBox(height: 12),
           Text(
@@ -895,7 +896,7 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(
               fontSize: 14,
-              color: Colors.grey.shade500,
+              color: context.appTheme.muted,
             ),
           ),
         ],
@@ -1126,7 +1127,7 @@ class _NewFeedbackThreadInputPageState
       decoration: InputDecoration(
         labelText: label,
         labelStyle: GoogleFonts.dmSans(fontSize: 13),
-        prefixIcon: Icon(icon, size: 18, color: Colors.grey.shade500),
+        prefixIcon: Icon(icon, size: 18, color: context.appTheme.muted),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 12,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -256,6 +257,10 @@ func autoMigrate() error {
 		&models.FeeInvoiceItem{},
 		&models.Payment{},
 		&models.ParentPaymentRequest{},
+		&models.PaymentOrder{},
+		&models.PaymentWebhookEvent{},
+		&models.PaymentTransaction{},
+		&models.FeeReceipt{},
 		&models.BookCategory{},
 		&models.Book{},
 		&models.BookIssue{},
@@ -540,7 +545,7 @@ func seedData() error {
 		TermNumber:     1,
 		TermName:       "First Term",
 		StartDate:      time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2025, 9, 30, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2025, 7, 31, 0, 0, 0, 0, time.UTC),
 		IsCurrent:      true,
 	}
 	DB.Create(&term1)
@@ -551,11 +556,23 @@ func seedData() error {
 		AcademicYearID: yearID,
 		TermNumber:     2,
 		TermName:       "Second Term",
-		StartDate:      time.Date(2025, 10, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+		StartDate:      time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2025, 11, 30, 0, 0, 0, 0, time.UTC),
 		IsCurrent:      false,
 	}
 	DB.Create(&term2)
+
+	term3ID := "770e8400-e29b-41d4-a716-446655440003"
+	term3 := models.Term{
+		BaseModel:      models.BaseModel{ID: term3ID},
+		AcademicYearID: yearID,
+		TermNumber:     3,
+		TermName:       "Third Term",
+		StartDate:      time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC),
+		IsCurrent:      false,
+	}
+	DB.Create(&term3)
 
 	deptID := "880e8400-e29b-41d4-a716-446655440000"
 	dept := models.Department{
@@ -752,7 +769,20 @@ func seedData() error {
 	}
 	DB.Create(&rolePrincipal)
 
+	roleKioskID := "110e8400-e29b-41d4-a716-446655440005"
+	roleKiosk := models.Role{
+		BaseModel:    models.BaseModel{ID: roleKioskID},
+		SchoolID:     schoolID,
+		RoleName:     "Kiosk",
+		Description:  "Attendance scanning kiosk",
+		IsSystemRole: true,
+	}
+	DB.Create(&roleKiosk)
+
 	seedRolePermissions(roleAdminID, rolePrincipalID, roleTeacherID, roleParentID)
+	if err := ensureDefaultKioskUser(schoolID, roleKioskID); err != nil {
+		return err
+	}
 
 	feeCatID := "130e8400-e29b-41d4-a716-446655440001"
 	feeCat := models.FeeCategory{
@@ -861,6 +891,9 @@ func inList(value string, items ...string) bool {
 // roles. It is exported so bootstrap utilities can run it after creating roles.
 func EnsureDefaultRolePermissions() error {
 	var roles []models.Role
+	if err := ensureKioskRolesAndUsers(); err != nil {
+		return err
+	}
 	if err := DB.Where("LOWER(role_name) IN ?", []string{"admin", "principal", "teacher", "parent"}).Find(&roles).Error; err != nil {
 		return err
 	}
@@ -877,6 +910,65 @@ func EnsureDefaultRolePermissions() error {
 	}
 	seedRolePermissions(adminRoleID, principalRoleID, teacherRoleID, parentRoleID)
 	return removeDuplicatePermissions()
+}
+
+func ensureKioskRolesAndUsers() error {
+	var schools []models.School
+	if err := DB.Find(&schools).Error; err != nil {
+		return err
+	}
+	for _, school := range schools {
+		role := models.Role{}
+		values := models.Role{
+			SchoolID:     school.ID,
+			RoleName:     "Kiosk",
+			Description:  "Attendance scanning kiosk",
+			IsSystemRole: true,
+		}
+		if err := DB.Where("school_id = ? AND LOWER(role_name) = ?", school.ID, "kiosk").
+			Assign(values).
+			FirstOrCreate(&role).Error; err != nil {
+			return err
+		}
+		if err := ensureDefaultKioskUser(school.ID, role.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureDefaultKioskUser(schoolID, roleID string) error {
+	password := strings.TrimSpace(os.Getenv("SCHOOLDESK_KIOSK_PASSWORD"))
+	if password == "" {
+		password = "Kiosk@12345"
+	}
+	hash, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	user := models.User{}
+	values := models.User{
+		SchoolID:     schoolID,
+		Name:         "Attendance Kiosk",
+		Username:     "kiosk",
+		Email:        "kiosk+" + schoolID + "@schooldesk.local",
+		RoleSlug:     "kiosk",
+		RoleID:       roleID,
+		PasswordHash: hash,
+		LinkedType:   "",
+		LinkedID:     nil,
+		IsActive:     true,
+		IsVerified:   true,
+	}
+	return DB.Where("school_id = ? AND username = ?", schoolID, "kiosk").
+		Attrs(values).
+		Assign(map[string]interface{}{
+			"role_id":     roleID,
+			"role":        "kiosk",
+			"is_active":   true,
+			"is_verified": true,
+		}).
+		FirstOrCreate(&user).Error
 }
 
 func removeDuplicatePermissions() error {

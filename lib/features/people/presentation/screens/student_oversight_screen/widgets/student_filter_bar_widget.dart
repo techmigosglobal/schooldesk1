@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class StudentFilterBarWidget extends StatelessWidget {
   final String searchQuery;
@@ -28,7 +28,7 @@ class StudentFilterBarWidget extends StatelessWidget {
     final filterRowHeight = (34.0 * textScale).clamp(38.0, 56.0).toDouble();
 
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       child: Column(
         children: [
@@ -60,19 +60,19 @@ class StudentFilterBarWidget extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.white : AppTheme.onSurface,
+                      color: selected ? Colors.white : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                   selected: selected,
-                  selectedColor: AppTheme.primary,
-                  checkmarkColor: Colors.white,
+                  selectedColor: context.appTheme.primary,
+                  checkmarkColor: context.appTheme.surface,
                   showCheckmark: false,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  backgroundColor: AppTheme.surfaceVariant,
+                  backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? AppTheme.primary : AppTheme.outline,
+                    color: selected ? context.appTheme.primary : context.appTheme.outline,
                   ),
                   onSelected: (_) => onClassChanged(classOptions[i]),
                 );
@@ -94,19 +94,19 @@ class StudentFilterBarWidget extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.white : AppTheme.onSurface,
+                      color: selected ? Colors.white : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
                   selected: selected,
-                  selectedColor: AppTheme.primary,
-                  checkmarkColor: Colors.white,
+                  selectedColor: context.appTheme.primary,
+                  checkmarkColor: context.appTheme.surface,
                   showCheckmark: false,
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  backgroundColor: AppTheme.surfaceVariant,
+                  backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? AppTheme.primary : AppTheme.outline,
+                    color: selected ? context.appTheme.primary : context.appTheme.outline,
                   ),
                   onSelected: (_) => onFeeStatusChanged(feeStatuses[i]),
                 );

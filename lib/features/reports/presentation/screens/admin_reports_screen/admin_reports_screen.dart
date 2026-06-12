@@ -3,10 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminReportsScreen extends StatefulWidget {
   const AdminReportsScreen({super.key});
@@ -19,11 +19,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final List<Map<String, dynamic>> _reportCategories = [
+  List<Map<String, dynamic>> get _reportCategories => [
     {
       'category': 'Admission Reports',
       'icon': Icons.person_add_rounded,
-      'color': AppTheme.primary,
+      'color': context.appTheme.primary,
       'reports': [
         {
           'name': 'New Admissions This Term',
@@ -42,7 +42,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
     {
       'category': 'Fee Reports',
       'icon': Icons.account_balance_wallet_rounded,
-      'color': AppTheme.success,
+      'color': context.appTheme.success,
       'reports': [
         {
           'name': 'Term 3 Collection Report',
@@ -62,7 +62,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
     {
       'category': 'Attendance Reports',
       'icon': Icons.how_to_reg_rounded,
-      'color': AppTheme.warning,
+      'color': context.appTheme.warning,
       'reports': [
         {
           'name': 'Daily Attendance Summary',
@@ -157,7 +157,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [AppTheme.primary, AppTheme.primary.withAlpha(200)],
+                  colors: [context.appTheme.primary, context.appTheme.primary.withAlpha(200)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -168,7 +168,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(30),
+                      color: context.appTheme.surface.withAlpha(30),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -215,9 +215,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
         final c = cat['color'] as Color;
         return Container(
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -247,7 +247,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                       '${reports.length} reports',
                       style: GoogleFonts.dmSans(
                         fontSize: 11,
-                        color: AppTheme.muted,
+                        color: context.appTheme.muted,
                       ),
                     ),
                   ],
@@ -280,7 +280,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                                   r['desc'] as String,
                                   style: GoogleFonts.dmSans(
                                     fontSize: 11,
-                                    color: AppTheme.muted,
+                                    color: context.appTheme.muted,
                                   ),
                                 ),
                               ],
@@ -329,12 +329,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
         decoration: BoxDecoration(
           color: label == 'PDF'
               ? color.withAlpha(20)
-              : AppTheme.successContainer,
+              : context.appTheme.successContainer,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: label == 'PDF'
                 ? color.withAlpha(60)
-                : AppTheme.success.withAlpha(60),
+                : context.appTheme.success.withAlpha(60),
           ),
         ),
         child: Text(
@@ -342,7 +342,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
           style: GoogleFonts.dmSans(
             fontSize: 10,
             fontWeight: FontWeight.w700,
-            color: label == 'PDF' ? color : AppTheme.success,
+            color: label == 'PDF' ? color : context.appTheme.success,
           ),
         ),
       ),
@@ -389,19 +389,19 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       itemBuilder: (_, i) {
         final c = complianceItems[i];
         final statusColors = {
-          'Pending': AppTheme.warning,
-          'In Progress': AppTheme.info,
-          'Completed': AppTheme.success,
-          'Not Started': AppTheme.muted,
+          'Pending': context.appTheme.warning,
+          'In Progress': context.appTheme.info,
+          'Completed': context.appTheme.success,
+          'Not Started': context.appTheme.muted,
         };
-        final sc = statusColors[c['status']] ?? AppTheme.muted;
+        final sc = statusColors[c['status']] ?? context.appTheme.muted;
         final progress = c['progress'] as double;
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -440,7 +440,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
               const SizedBox(height: 4),
               Text(
                 'Deadline: ${c['deadline']}',
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
               const SizedBox(height: 8),
               Row(
@@ -450,7 +450,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: progress,
-                        backgroundColor: AppTheme.outlineVariant,
+                        backgroundColor: context.appTheme.outlineVariant,
                         valueColor: AlwaysStoppedAnimation<Color>(sc),
                         minHeight: 6,
                       ),
@@ -493,7 +493,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
                               content: Text(
                                 '${c['title']} shared with Principal',
                               ),
-                              backgroundColor: AppTheme.success,
+                              backgroundColor: context.appTheme.success,
                             ),
                           ),
                       style: ElevatedButton.styleFrom(
@@ -538,7 +538,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
           content: Text(
             '$name export $status${download.toString().isEmpty ? '' : ' · $download'}',
           ),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -547,7 +547,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Report export failed: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );

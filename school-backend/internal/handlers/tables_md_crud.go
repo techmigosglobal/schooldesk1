@@ -285,8 +285,22 @@ func (h *TablesMDCRUDHandler) Update(c *gin.Context) {
 
 func (h *TablesMDCRUDHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	query := h.scopedQuery(c).Where(quoteHandlerIdentifier(h.resource.PrimaryKey)+" = ?", id)
-	result := query.Delete(map[string]interface{}{})
+	// Build the WHERE clause. When the table has an auto-UUID "id" column in
+	// addition to the Tables.md primary key (e.g. homework has both "id" and
+	// "homework_id"), a record may have been created via the GORM model path
+	// and only have the standard "id" populated. We try the custom PK first;
+	// if nothing is affected we fall back to the plain "id" column.
+	pk := quoteHandlerIdentifier(h.resource.PrimaryKey)
+	baseQuery := h.scopedQuery(c)
+	var result *gorm.DB
+	if h.columnSet["id"] && h.resource.PrimaryKey != "id" {
+		// Table has both a domain PK and a generic id column – match either.
+		result = baseQuery.
+			Where(pk+" = ? OR \"id\" = ?", id, id).
+			Delete(map[string]interface{}{})
+	} else {
+		result = baseQuery.Where(pk+" = ?", id).Delete(map[string]interface{}{})
+	}
 	if result.Error != nil {
 		fail(c, http.StatusInternalServerError, "Failed to delete "+h.resource.Module)
 		return
@@ -847,9 +861,13 @@ func directCommunicationAllowed(senderRole string, receiverRole string) bool {
 	receiverRole = normalizeCommunicationRole(receiverRole)
 	switch senderRole {
 	case "principal":
-		return receiverRole == "teacher" || receiverRole == "parent"
-	case "teacher", "parent":
-		return receiverRole == "principal"
+		return receiverRole == "teacher" || receiverRole == "parent" || receiverRole == "admin"
+	case "teacher":
+		// Teachers can message principals, other teachers, and parents.
+		return receiverRole == "principal" || receiverRole == "teacher" || receiverRole == "parent"
+	case "parent":
+		// Parents can message principals and teachers.
+		return receiverRole == "principal" || receiverRole == "teacher"
 	case "admin":
 		return receiverRole == "principal" || receiverRole == "teacher" || receiverRole == "parent"
 	default:

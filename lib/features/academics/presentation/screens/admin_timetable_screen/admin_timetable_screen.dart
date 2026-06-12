@@ -6,12 +6,12 @@ import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _AdminTimetableHomeMode { classes, teachers, rooms }
 
@@ -349,7 +349,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           constraints: const BoxConstraints(minHeight: 50),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF0877D8) : Colors.white,
+            color: selected ? const Color(0xFF0877D8) : context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
@@ -368,7 +368,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: selected ? Colors.white : const Color(0xFF172B3A),
+                  color: selected ? context.appTheme.surface : const Color(0xFF172B3A),
                 ),
               ),
             ],
@@ -396,7 +396,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             borderSide: BorderSide.none,
           ),
           filled: true,
-          fillColor: Colors.white,
+          fillColor: context.appTheme.surface,
         ),
       ),
     );
@@ -420,8 +420,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                   '${_int(row['slot_count'])} Periods / Week - Class teacher: ${_text(row['class_teacher'], fallback: 'Pending')}',
               status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
               statusColor: _int(row['slot_count']) > 0
-                  ? AppTheme.success
-                  : AppTheme.warning,
+                  ? context.appTheme.success
+                  : context.appTheme.warning,
               chips: [
                 _MiniPill(
                   icon: Icons.co_present_outlined,
@@ -462,7 +462,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 fallback: 'Department not assigned',
               ),
               status: '${_int(row['periods'])} / Week',
-              statusColor: AppTheme.primary,
+              statusColor: context.appTheme.primary,
               chips: [
                 _MiniPill(
                   icon: Icons.groups_2_outlined,
@@ -499,8 +499,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               subtitle: _capacityLabel(row),
               status: _int(row['conflicts']) == 0 ? 'Clear' : 'Conflict',
               statusColor: _int(row['conflicts']) == 0
-                  ? AppTheme.success
-                  : AppTheme.warning,
+                  ? context.appTheme.success
+                  : context.appTheme.warning,
               chips: [
                 _MiniPill(
                   icon: Icons.event_note_outlined,
@@ -720,8 +720,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           subtitle: _capacityLabel(row),
           status: _int(row['conflicts']) == 0 ? 'Clear' : 'Conflict',
           statusColor: _int(row['conflicts']) == 0
-              ? AppTheme.success
-              : AppTheme.warning,
+              ? context.appTheme.success
+              : context.appTheme.warning,
           chips: [
             _MiniPill(
               icon: Icons.event_note_outlined,
@@ -753,8 +753,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       subtitle: _text(row['class_teacher'], fallback: 'Class Teacher pending'),
       status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
       statusColor: _int(row['slot_count']) > 0
-          ? AppTheme.success
-          : AppTheme.warning,
+          ? context.appTheme.success
+          : context.appTheme.warning,
       chips: [
         _MiniPill(
           icon: Icons.person_pin_outlined,
@@ -779,12 +779,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: AppTheme.successContainer,
+              color: context.appTheme.successContainer,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.calendar_today_rounded,
-              color: AppTheme.success,
+              color: context.appTheme.success,
             ),
           ),
           const SizedBox(width: 12),
@@ -810,7 +810,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               ],
             ),
           ),
-          const _StatusPill(label: 'Active', color: AppTheme.success),
+          _StatusPill(label: 'Active', color: context.appTheme.success),
         ],
       ),
     );
@@ -983,10 +983,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isBreak
-            ? AppTheme.warningContainer.withAlpha(120)
+            ? context.appTheme.warningContainer.withAlpha(120)
             : isFree
-            ? AppTheme.successContainer.withAlpha(120)
-            : Colors.white,
+            ? context.appTheme.successContainer.withAlpha(120)
+            : context.appTheme.surface,
         border: const Border(top: BorderSide(color: Color(0xFFE7EEF6))),
       ),
       child: Row(
@@ -1077,7 +1077,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         color: header
             ? const Color(0xFFF8FBFF)
             : empty
-            ? Colors.white
+            ? context.appTheme.surface
             : _subjectTone(label),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2EAF2)),
@@ -1118,9 +1118,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
         color: isBreak
-            ? AppTheme.warningContainer
+            ? context.appTheme.warningContainer
             : isFree
-            ? AppTheme.successContainer
+            ? context.appTheme.successContainer
             : _subjectTone(label),
         borderRadius: BorderRadius.circular(7),
       ),
@@ -1131,10 +1131,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           fontWeight: FontWeight.w900,
           color: isBreak
-              ? AppTheme.warning
+              ? context.appTheme.warning
               : isFree
-              ? AppTheme.success
-              : AppTheme.primary,
+              ? context.appTheme.success
+              : context.appTheme.primary,
         ),
       ),
     );
@@ -1678,7 +1678,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: AppTheme.success,
+        backgroundColor: context.appTheme.success,
       ),
     );
   }
@@ -1691,9 +1691,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       await _loadBackendTimetable();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Timetable period deleted'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
     } catch (error) {
@@ -1701,7 +1701,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to delete timetable period: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -2407,12 +2407,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Color _statusColor(String status) {
     final lower = status.toLowerCase();
     if (lower.contains('excess') || lower.contains('conflict')) {
-      return AppTheme.warning;
+      return context.appTheme.warning;
     }
     if (lower.contains('pending') || lower.contains('no period')) {
-      return AppTheme.warning;
+      return context.appTheme.warning;
     }
-    return AppTheme.success;
+    return context.appTheme.success;
   }
 
   Color _subjectTone(String label) {
@@ -2424,7 +2424,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     if (key.contains('ART')) return const Color(0xFFFFE7F0);
     if (key.contains('PE')) return const Color(0xFFE0FBF4);
     if (key.contains('BREAK') || key.contains('LUNCH')) {
-      return AppTheme.warningContainer;
+      return context.appTheme.warningContainer;
     }
     return const Color(0xFFF2F6FA);
   }
@@ -2465,7 +2465,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   BoxDecoration _softDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       border: Border.all(color: const Color(0xFFDDE7F0)),
       boxShadow: [
@@ -2529,7 +2529,7 @@ class _TimetableCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFDDE7F0)),
             boxShadow: [
@@ -2682,8 +2682,8 @@ class _ChoiceChipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = selected ? const Color(0xFF0877D8) : Colors.white;
-    final foreground = selected ? Colors.white : const Color(0xFF172B3A);
+    final background = selected ? const Color(0xFF0877D8) : context.appTheme.surface;
+    final foreground = selected ? context.appTheme.surface : const Color(0xFF172B3A);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),

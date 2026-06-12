@@ -22,14 +22,6 @@ import 'package:schooldesk1/core/widgets/blank_role_module_screen.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/parent_timetable_screen/parent_timetable_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/parent_exam_schedule_screen/parent_exam_schedule_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/parent_report_cards_screen/parent_report_cards_screen.dart';
-import 'package:schooldesk1/features/communication/presentation/screens/parent_ptm_booking_screen/parent_ptm_booking_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/parent_discipline_screen/parent_discipline_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/teacher_mark_entry_screen/teacher_mark_entry_screen.dart';
-import 'package:schooldesk1/features/communication/presentation/screens/teacher_ptm_screen/teacher_ptm_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/teacher_syllabus_screen/teacher_syllabus_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -128,6 +120,10 @@ class AppRoutes {
   static const String parentTeacherChat = '/parent-teacher-chat-screen';
   static const String parentFees = '/parent-fees-screen';
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
+  static const String parentPaymentSelection =
+      '/parent-fees-screen/payment-selection';
+  static const String parentPaymentProcessing =
+      '/parent-fees-screen/payment-processing';
   static const String parentLeave = '/parent-leave-screen';
   static const String parentLeaveRequestForm = '/parent-leave-screen/request';
   static const String parentCalendar = '/parent-calendar-screen';
@@ -326,6 +322,21 @@ class AppRoutes {
     parentFees: (context) => const ParentFeesScreen(),
     parentPaymentRequestForm: (context) =>
         ParentPaymentRequestFormScreen(args: _parentPaymentFormArgs(context)),
+    parentPaymentSelection: (context) {
+      final args = _parentPaymentSelectionArgs(context);
+      return ParentPaymentSelectionScreen(
+        fees: args.fees,
+        student: args.student,
+      );
+    },
+    parentPaymentProcessing: (context) {
+      final args = _parentPaymentProcessingArgs(context);
+      return ParentPaymentProcessingScreen(
+        selectedInvoiceIds: args.selectedInvoiceIds,
+        totalAmount: args.totalAmount,
+        student: args.student,
+      );
+    },
     parentLeave: (context) => const ParentLeaveScreen(),
     parentLeaveRequestForm: (context) =>
         ParentLeaveRequestFormScreen(args: _parentLeaveFormArgs(context)),
@@ -450,6 +461,8 @@ class AppRoutes {
     parentTeacherChat,
     parentFees,
     parentPaymentRequestForm,
+    parentPaymentSelection,
+    parentPaymentProcessing,
     feePaymentReceipt,
     parentLeave,
     parentLeaveRequestForm,
@@ -745,4 +758,59 @@ class AppRoutes {
       subjects: [],
     );
   }
+
+  static ParentPaymentSelectionArgs _parentPaymentSelectionArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is ParentPaymentSelectionArgs) return args;
+    if (args is Map<String, dynamic>) {
+      return ParentPaymentSelectionArgs(
+        fees:
+            (args['fees'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            [],
+        student: args['student'] as Map<String, dynamic>?,
+      );
+    }
+    return const ParentPaymentSelectionArgs(fees: []);
+  }
+
+  static ParentPaymentProcessingArgs _parentPaymentProcessingArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is ParentPaymentProcessingArgs) return args;
+    if (args is Map<String, dynamic>) {
+      return ParentPaymentProcessingArgs(
+        selectedInvoiceIds: List<String>.from(args['selectedInvoiceIds'] ?? []),
+        totalAmount: (args['totalAmount'] as num?)?.toDouble() ?? 0.0,
+        student: args['student'] as Map<String, dynamic>?,
+      );
+    }
+    return const ParentPaymentProcessingArgs(
+      selectedInvoiceIds: [],
+      totalAmount: 0.0,
+    );
+  }
+}
+
+class ParentPaymentSelectionArgs {
+  final List<Map<String, dynamic>> fees;
+  final Map<String, dynamic>? student;
+
+  const ParentPaymentSelectionArgs({required this.fees, this.student});
+}
+
+class ParentPaymentProcessingArgs {
+  final List<String> selectedInvoiceIds;
+  final double totalAmount;
+  final Map<String, dynamic>? student;
+
+  const ParentPaymentProcessingArgs({
+    required this.selectedInvoiceIds,
+    required this.totalAmount,
+    this.student,
+  });
 }

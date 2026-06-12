@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _EventFilter {
   month,
@@ -252,7 +253,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Remove'),
           ),
@@ -281,7 +282,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to remove event: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -308,7 +309,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to update event: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -668,12 +669,12 @@ class _EventCalendarMonth extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDDE8F4)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(10),
+            color: context.appTheme.onSurface.withAlpha(10),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),
@@ -1421,7 +1422,7 @@ class _EventFormPageState extends State<_EventFormPage> {
               Text(
                 _error!,
                 style: GoogleFonts.dmSans(
-                  color: AppTheme.error,
+                  color: context.appTheme.error,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1690,7 +1691,7 @@ class _PrincipalEvent {
     return switch (status) {
       'approved' || 'scheduled' => Colors.green,
       'completed' => Colors.indigo,
-      'cancelled' => AppTheme.error,
+      'cancelled' => Colors.red,
       'pending' || 'pending_approval' || 'draft' => Colors.orange,
       _ => principalDirectoryAccent,
     };

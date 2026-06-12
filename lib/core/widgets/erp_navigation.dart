@@ -4,6 +4,7 @@ import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class SchoolDeskNavigationSection {
@@ -186,7 +187,7 @@ class _NavigationHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
     final roleColor = tokens.roleColor(role);
-    final onRoleColor = _bestTextColor(roleColor);
+    final onRoleColor = _bestTextColor(context, roleColor);
 
     return Container(
       width: double.infinity,
@@ -261,9 +262,9 @@ class _NavigationHeader extends StatelessWidget {
           Container(
             padding: EdgeInsets.all(tokens.spacing.sm),
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(tokens.isDark ? 22 : 34),
+              color: context.appTheme.surface.withAlpha(tokens.isDark ? 22 : 34),
               borderRadius: BorderRadius.circular(tokens.radius.card),
-              border: Border.all(color: Colors.white.withAlpha(46)),
+              border: Border.all(color: context.appTheme.surface.withAlpha(46)),
             ),
             child: Row(
               children: [
@@ -328,11 +329,11 @@ class _HeaderIcon extends StatelessWidget {
       height: tokens.sizing.iconContainer,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(tokens.isDark ? 32 : 42),
+        color: context.appTheme.surface.withAlpha(tokens.isDark ? 32 : 42),
         borderRadius: BorderRadius.circular(tokens.radius.control),
-        border: Border.all(color: Colors.white.withAlpha(52)),
+        border: Border.all(color: context.appTheme.surface.withAlpha(52)),
       ),
-      child: child ?? Icon(icon, color: _bestTextColor(roleColor), size: 24),
+      child: child ?? Icon(icon, color: _bestTextColor(context, roleColor), size: 24),
     );
   }
 }
@@ -708,6 +709,6 @@ String _initials(String initials, String fallbackName) {
   return generated.isEmpty ? 'U' : generated;
 }
 
-Color _bestTextColor(Color background) {
-  return background.computeLuminance() > 0.45 ? Colors.black : Colors.white;
+Color _bestTextColor(BuildContext context, Color background) {
+  return background.computeLuminance() > 0.45 ? context.appTheme.onSurface : Colors.white;
 }

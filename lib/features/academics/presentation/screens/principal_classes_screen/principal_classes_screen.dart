@@ -4,9 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class PrincipalClassesScreen extends StatefulWidget {
   const PrincipalClassesScreen({super.key});
@@ -145,9 +145,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       final row = _classRowForRoute(sectionId: sectionId, gradeId: gradeId);
       if (row == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Open a class first to continue this setup.'),
-            backgroundColor: AppTheme.warning,
+            backgroundColor: context.appTheme.warning,
           ),
         );
         return;
@@ -504,9 +504,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Class created'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: context.appTheme.success,
           ),
         );
       }
@@ -517,7 +517,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Unable to create class: $error'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -556,9 +556,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Class updated'),
-            backgroundColor: AppTheme.success,
+            backgroundColor: context.appTheme.success,
           ),
         );
       }
@@ -568,7 +568,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Unable to update class: $error'),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
       }
@@ -594,7 +594,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: AppTheme.error),
+            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
             child: const Text('Remove'),
           ),
         ],
@@ -609,7 +609,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$className removed'),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
       await _load();
@@ -618,7 +618,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to remove $className: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -1122,7 +1122,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
       constraints: BoxConstraints(minHeight: compact ? 48 : 52),
       padding: EdgeInsets.symmetric(vertical: compact ? 4 : 5),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFD5E2F1)),
         boxShadow: [
@@ -1287,7 +1287,7 @@ class _ClassesMetricTile extends StatelessWidget {
         compact ? 9 : 12,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withAlpha(35)),
         boxShadow: [
@@ -1425,7 +1425,7 @@ class _ClassesTodayCard extends StatelessWidget {
         return Container(
           padding: EdgeInsets.fromLTRB(14, 12, compact ? 12 : 14, 12),
           decoration: BoxDecoration(
-            color: Colors.white.withAlpha(225),
+            color: context.appTheme.surface.withAlpha(225),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: const Color(0xFFD5E5F7)),
           ),
@@ -1515,13 +1515,13 @@ class _SetupProgressChip extends StatelessWidget {
         ? _CreateClassSetupPageState._primary
         : const Color(0xFFE6EDF5);
     final textColor = complete || active
-        ? Colors.white
+        ? context.appTheme.surface
         : _CreateClassSetupPageState._ink;
     return Container(
       width: 118,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: active
@@ -1601,7 +1601,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
     final dueFees = _classNum(row['fees_due_amount']);
     final compact = _classesCompact(context);
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onTap,
@@ -1713,7 +1713,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
               Container(
                 padding: EdgeInsets.symmetric(vertical: compact ? 11 : 13),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: context.appTheme.surface,
                   borderRadius: BorderRadius.circular(13),
                   border: Border.all(color: const Color(0xFFDDE8F6)),
                 ),
@@ -2102,7 +2102,7 @@ class _ClassesQuickActionTile extends StatelessWidget {
             vertical: compact ? 8 : 10,
           ),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withAlpha(38)),
             boxShadow: [
@@ -2177,7 +2177,7 @@ class _ClassesDirectoryErrorCard extends StatelessWidget {
       decoration: _classesPanelDecoration(radius: 8),
       child: Column(
         children: [
-          const Icon(Icons.cloud_off_rounded, color: AppTheme.error, size: 30),
+          Icon(Icons.cloud_off_rounded, color: context.appTheme.error, size: 30),
           const SizedBox(height: 10),
           Text(
             message,
@@ -2261,7 +2261,7 @@ class _ClassesDirectoryBottomBar extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
@@ -2392,11 +2392,11 @@ class _ClassesDirectoryActionSheet extends StatelessWidget {
         margin: const EdgeInsets.all(14),
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withAlpha(30),
+              color: context.appTheme.onSurface.withAlpha(30),
               blurRadius: 14,
               offset: const Offset(0, 6),
             ),
@@ -2672,7 +2672,7 @@ class _ClassDetailPage extends StatelessWidget {
                   icon: Icons.delete_outline_rounded,
                   title: 'Remove class',
                   subtitle: 'Blocked automatically if linked records exist',
-                  color: AppTheme.error,
+                  color: context.appTheme.error,
                   onTap: () => Navigator.pop(context, 'delete'),
                 ),
               ],
@@ -2820,7 +2820,7 @@ class _ClassDetailCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(phone ? 12 : 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -3441,7 +3441,7 @@ class _ClassSetupHeader extends StatelessWidget {
               width: phone ? 40 : 44,
               height: phone ? 40 : 44,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
@@ -3475,7 +3475,7 @@ class _ClassSetupCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(phone ? 14 : 18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(phone ? 10 : 12),
         boxShadow: [
           BoxShadow(
@@ -3887,11 +3887,11 @@ class _ClassSetupActionButton extends StatelessWidget {
           ),
         ),
         icon: saving
-            ? const SizedBox.square(
+            ? SizedBox.square(
                 dimension: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: context.appTheme.surface,
                 ),
               )
             : const Icon(Icons.save_rounded, size: 21),
@@ -4182,7 +4182,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to save teacher assignment: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
@@ -4220,7 +4220,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to remove subject: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {
@@ -4563,7 +4563,7 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(_generationMessage(result)),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
     } catch (error) {
@@ -5398,7 +5398,7 @@ class _TimetableSetupHint extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _CreateClassSetupPageState._line),
       ),
@@ -5651,7 +5651,7 @@ class _SmartTimetableResultPanel extends StatelessWidget {
                 generated
                     ? Icons.check_circle_outline_rounded
                     : Icons.visibility_outlined,
-                color: generated ? AppTheme.success : AppTheme.info,
+                color: generated ? context.appTheme.success : context.appTheme.info,
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -5686,7 +5686,7 @@ class _SmartTimetableResultPanel extends StatelessWidget {
           ),
           if (suggestions.isNotEmpty) ...[
             const SizedBox(height: 12),
-            ...suggestions.take(5).map(_suggestionPreviewRow),
+            ...suggestions.take(5).map((row) => _suggestionPreviewRow(context, row)),
           ],
           if (conflicts.isNotEmpty || logs.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -5721,7 +5721,7 @@ class _SmartTimetableResultPanel extends StatelessWidget {
     );
   }
 
-  Widget _suggestionPreviewRow(Map<String, dynamic> row) {
+  Widget _suggestionPreviewRow(BuildContext context, Map<String, dynamic> row) {
     final blocking = row['blocking'] == true;
     final status = _classText(row['status']).toLowerCase();
     final reservedBreak = status == 'reserved_break';
@@ -5747,7 +5747,7 @@ class _SmartTimetableResultPanel extends StatelessWidget {
                 : blocking
                 ? Icons.warning_amber_rounded
                 : Icons.check_rounded,
-            color: blocking ? AppTheme.warning : AppTheme.success,
+            color: blocking ? context.appTheme.warning : context.appTheme.success,
             size: 18,
           ),
           const SizedBox(width: 8),
@@ -5779,7 +5779,7 @@ class _TimetableResultChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: _CreateClassSetupPageState._line),
       ),
@@ -5811,7 +5811,7 @@ class _TimetableIssueLine extends StatelessWidget {
         children: [
           Icon(
             warning ? Icons.info_outline_rounded : Icons.error_outline_rounded,
-            color: warning ? AppTheme.warning : AppTheme.error,
+            color: warning ? context.appTheme.warning : context.appTheme.error,
             size: 16,
           ),
           const SizedBox(width: 7),
@@ -5932,7 +5932,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             content: const Text(
               'No existing fee structure found for this class.',
             ),
-            backgroundColor: AppTheme.error,
+            backgroundColor: context.appTheme.error,
           ),
         );
         return;
@@ -6038,7 +6038,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
 
   void _showFeeError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+      SnackBar(content: Text(message), backgroundColor: context.appTheme.error),
     );
   }
 
@@ -6460,7 +6460,7 @@ class _AddSelectSubjectSetupPageState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Unable to add subject: $error'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }
@@ -7140,7 +7140,7 @@ class _FeeChoiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -7156,7 +7156,7 @@ class _FeeChoiceCard extends StatelessWidget {
                   : _CreateClassSetupPageState._line,
               width: selected ? 1.4 : 1,
             ),
-            color: selected ? const Color(0xFFF4F8FF) : Colors.white,
+            color: selected ? const Color(0xFFF4F8FF) : context.appTheme.surface,
           ),
           child: Row(
             children: [
@@ -7303,7 +7303,7 @@ class _FeeComponentEditRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: _CreateClassSetupPageState._line),
       ),
@@ -7332,7 +7332,7 @@ class _FeeComponentEditRow extends StatelessWidget {
                 tooltip: 'Remove component',
                 onPressed: enabled ? onDelete : null,
                 icon: const Icon(Icons.delete_outline_rounded),
-                color: AppTheme.error,
+                color: context.appTheme.error,
               ),
             ],
           );
@@ -8144,8 +8144,8 @@ class _BottomSheetPanel extends StatelessWidget {
         16,
         MediaQuery.viewInsetsOf(context).bottom + 16,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: SingleChildScrollView(
@@ -8250,7 +8250,7 @@ class _SetupFlowHeader extends StatelessWidget {
               width: phone ? 40 : 44,
               height: phone ? 40 : 44,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: context.appTheme.surface,
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
@@ -8285,7 +8285,7 @@ class _SetupPanel extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(phone ? 12 : 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
@@ -8501,7 +8501,7 @@ class _AssignedSubjectTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: _CreateClassSetupPageState._line),
       ),
@@ -8578,7 +8578,7 @@ class _TeacherAssignmentDropdown extends StatelessWidget {
       height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(9),
         border: Border.all(color: _CreateClassSetupPageState._line),
       ),
@@ -9054,7 +9054,7 @@ class _SubjectFilterButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: context.appTheme.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: _CreateClassSetupPageState._line),
         ),
@@ -9107,11 +9107,11 @@ class _SetupPrimaryButton extends StatelessWidget {
       child: FilledButton.icon(
         onPressed: onPressed,
         icon: saving
-            ? const SizedBox.square(
+            ? SizedBox.square(
                 dimension: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: context.appTheme.surface,
                 ),
               )
             : Icon(icon, size: 21),
@@ -9179,7 +9179,7 @@ class _SetupErrorBox extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

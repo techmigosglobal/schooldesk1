@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
@@ -12,6 +11,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
   final String role;
@@ -63,12 +63,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       return _buildParentNotificationCenter(context);
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : AppTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : AppTheme.surface;
+    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
+    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
-        : AppTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : AppTheme.muted;
+        : context.appTheme.onSurface;
+    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
 
     return SchoolDeskModuleScaffold(
       title: 'Notifications',
@@ -92,9 +92,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
           fontWeight: FontWeight.w600,
         ),
         unselectedLabelStyle: GoogleFonts.dmSans(fontSize: 12),
-        labelColor: AppTheme.primary,
+        labelColor: context.appTheme.primary,
         unselectedLabelColor: mutedColor,
-        indicatorColor: AppTheme.primary,
+        indicatorColor: context.appTheme.primary,
         tabs: const [
           Tab(text: 'All'),
           Tab(text: 'Approvals'),
@@ -370,10 +370,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final unreadBg = isDark
         ? const Color(0xFF1A3A5C)
-        : AppTheme.primaryContainer;
+        : context.appTheme.primaryContainer;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
-        : AppTheme.outlineVariant;
+        : context.appTheme.outlineVariant;
 
     return GestureDetector(
       onTap: () async {
@@ -398,7 +398,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
           border: Border.all(
             color: notif.isRead
                 ? outlineColor
-                : AppTheme.primaryLight.withAlpha(80),
+                : context.appTheme.primaryLight.withAlpha(80),
           ),
         ),
         child: Row(
@@ -480,10 +480,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         ? 'Medium'
         : 'Low';
     final color = priority == NotificationPriority.high
-        ? AppTheme.error
+        ? context.appTheme.error
         : priority == NotificationPriority.medium
-        ? AppTheme.warning
-        : AppTheme.success;
+        ? context.appTheme.warning
+        : context.appTheme.success;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -517,13 +517,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   Color _getCategoryColor(String category) {
     switch (category) {
       case NotificationCategory.pendingApproval:
-        return AppTheme.warning;
+        return context.appTheme.warning;
       case NotificationCategory.feeDue:
-        return AppTheme.error;
+        return context.appTheme.error;
       case NotificationCategory.examReminder:
-        return AppTheme.primary;
+        return context.appTheme.primary;
       default:
-        return AppTheme.muted;
+        return context.appTheme.muted;
     }
   }
 

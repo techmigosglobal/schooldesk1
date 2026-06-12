@@ -591,7 +591,8 @@ func (h *AttendanceHandler) GetStaffQRToken(c *gin.Context) {
 
 func (h *AttendanceHandler) ScanStaffQR(c *gin.Context) {
 	var req struct {
-		Token string `json:"token" binding:"required"`
+		Token   string `json:"token" binding:"required"`
+		StaffID string `json:"staff_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -613,6 +614,13 @@ func (h *AttendanceHandler) ScanStaffQR(c *gin.Context) {
 		return
 	}
 	staffID := currentStaffID(c)
+	if currentRole(c) == "kiosk" {
+		staffID = strings.TrimSpace(req.StaffID)
+		if staffID == "" {
+			fail(c, http.StatusBadRequest, "staff_id is required for kiosk QR scans")
+			return
+		}
+	}
 	if staffID == "" {
 		fail(c, http.StatusForbidden, "teacher account is not linked to a staff profile")
 		return

@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentFeesScreen extends StatefulWidget {
   const ParentFeesScreen({super.key});
@@ -30,16 +29,19 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   bool _loading = true;
   String? _error;
 
-  double get _totalAmount => _feeStructure.fold(
-    0,
-    (sum, f) => sum + ((f['totalAmount'] as num?)?.toDouble() ?? 0),
-  );
+  // Returns the earliest unpaid invoice (null if none pending).
+  Map<String, dynamic>? get _nextPendingFee {
+    final pending = _feeStructure
+        .where((f) => ((f['amount'] as num?)?.toDouble() ?? 0) > 0)
+        .toList();
+    if (pending.isEmpty) return null;
+    // Sort by due date ascending to find the most imminent invoice.
+    pending.sort((a, b) =>
+        (_text(a['dueDate'])).compareTo(_text(b['dueDate'])));
+    return pending.first;
+  }
 
-  double get _paidAmount => _feeStructure.fold(
-    0,
-    (sum, f) => sum + ((f['paidAmount'] as num?)?.toDouble() ?? 0),
-  );
-
+  // Total pending across all invoices (used for bottom bar label).
   double get _pendingAmount => _feeStructure.fold(
     0,
     (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0),
@@ -250,7 +252,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   Widget _buildChildSelector() {
     return Container(
-      color: AppTheme.surface,
+      color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: List.generate(_childrenData.length, (i) {
@@ -267,15 +269,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surfaceVariant,
+                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 _studentName(_childrenData[i]).split(' ').first,
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -289,11 +291,11 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(14),
+            color: context.appTheme.onSurface.withAlpha(14),
             blurRadius: 14,
             offset: const Offset(0, 5),
           ),
@@ -305,12 +307,12 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: AppTheme.primaryContainer,
+              color: context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.account_circle_rounded,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
               size: 34,
             ),
           ),
@@ -325,10 +327,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       : _studentName(child),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.ibmPlexSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 Text(
@@ -339,9 +341,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   ].where((part) => part.trim().isNotEmpty).join(' | '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.ibmPlexSans(
                     fontSize: 12,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -349,40 +351,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             ),
           ),
           if (_childrenData.length > 1)
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryAmountRow(String label, String amount, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Row(
-        children: [
-          Icon(Icons.circle, color: color, size: 8),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: AppTheme.muted,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Text(
-            amount,
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: AppTheme.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
         ],
       ),
     );
@@ -396,7 +368,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         Expanded(
           child: Text(
             message,
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.ibmPlexSans(
               fontSize: 14,
               color: color,
               fontWeight: FontWeight.w600,
@@ -420,7 +392,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           const SizedBox(height: 16),
           Text(
             'Fee Installments',
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.ibmPlexSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
             ),
@@ -430,14 +402,14 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: AppTheme.surface,
+                color: context.appTheme.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.outlineVariant),
+                border: Border.all(color: context.appTheme.outlineVariant),
               ),
               child: _emptyRow(
                 Icons.receipt_long_rounded,
                 'No fee invoices published yet.',
-                AppTheme.muted,
+                context.appTheme.muted,
               ),
             )
           else ...[
@@ -451,7 +423,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   icon: const Icon(Icons.payment_rounded, size: 18),
                   label: Text(
                     'Pay Now — ${_money(_pendingAmount)}',
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -474,122 +446,140 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   }
 
   Widget _buildDueSummaryCard() {
-    final paid = _paidAmount;
-    final total = _totalAmount;
     final pending = _pendingAmount;
     final hasInvoices = _feeStructure.isNotEmpty;
+    if (!hasInvoices) return const SizedBox.shrink();
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.outlineVariant),
+        color: context.appTheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.appTheme.primary.withAlpha(40)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
-                width: 112,
-                height: 112,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 96,
-                      height: 96,
-                      child: CircularProgressIndicator(
-                        value: total > 0 ? paid / total : 0,
-                        strokeWidth: 13,
-                        backgroundColor: AppTheme.surfaceVariant,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          total > 0
-                              ? '${((paid / total) * 100).toStringAsFixed(0)}%'
-                              : '0%',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.onSurface,
-                          ),
-                        ),
-                        Text(
-                          'Paid',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            color: AppTheme.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Fee Overview',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.onSurface,
+                      'Tuition & Fees',
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: context.appTheme.primary,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    _summaryAmountRow(
-                      'Total Fees',
-                      hasInvoices ? _money(total) : '—',
-                      AppTheme.primary,
-                    ),
-                    _summaryAmountRow(
-                      'Paid Fees',
-                      hasInvoices ? _money(paid) : '—',
-                      AppTheme.success,
-                    ),
-                    _summaryAmountRow(
-                      'Pending Fees',
-                      hasInvoices ? _money(pending) : '—',
-                      AppTheme.error,
+                    const SizedBox(height: 6),
+                    Text(
+                      pending > 0
+                          ? 'Your next scheduled installment is approaching.'
+                          : 'Your account is fully paid for the current term.',
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: context.appTheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: context.appTheme.surface,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: context.appTheme.primary.withAlpha(20),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: context.appTheme.primary,
+                  size: 24,
                 ),
               ),
             ],
           ),
           if (pending > 0) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.error.withAlpha(18),
-                borderRadius: BorderRadius.circular(8),
+                color: context.appTheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.appTheme.outlineVariant),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${_money(pending)} is due on ${_nextDueDateLabel()}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.error,
-                      ),
+                  Text(
+                    'Next Installment Due',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.appTheme.onSurfaceVariant,
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => _openPaymentRequestForm(),
-                    child: const Text('Pay Now'),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _money((_nextPendingFee?['amount'] as num?)?.toDouble() ?? pending),
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: context.appTheme.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'Due by ${_nextDueDateLabel()}',
+                          style: GoogleFonts.ibmPlexSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: context.appTheme.error,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _openPaymentRequestForm(
+                        singleFee: _nextPendingFee,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: context.appTheme.primary,
+                        foregroundColor: context.appTheme.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Pay Now',
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -608,20 +598,20 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       if (_text(fee['dueDate']).isNotEmpty) 'Due: ${_text(fee['dueDate'])}',
     ].where((part) => part.isNotEmpty).join(' • ');
     final statusColor = isPaid
-        ? AppTheme.success
+        ? context.appTheme.success
         : isPending
-        ? AppTheme.warning
-        : AppTheme.muted;
+        ? context.appTheme.warning
+        : context.appTheme.muted;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isPending
-              ? AppTheme.warning.withAlpha(80)
-              : AppTheme.outlineVariant,
+              ? context.appTheme.warning.withAlpha(80)
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Row(
@@ -650,7 +640,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               children: [
                 Text(
                   _text(fee['component'], fallback: 'Invoice'),
-                  style: GoogleFonts.dmSans(
+                  style: GoogleFonts.ibmPlexSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -658,9 +648,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 if (meta.isNotEmpty)
                   Text(
                     meta,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
               ],
@@ -671,7 +661,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             children: [
               Text(
                 _money((fee['amount'] as num?)?.toDouble() ?? 0),
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: statusColor,
@@ -688,7 +678,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   ),
                   child: Text(
                     'Pay Now',
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: _headerColor,
@@ -707,7 +697,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   ),
                   child: Text(
                     status,
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: statusColor,
@@ -727,15 +717,18 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.receipt_long_rounded,
               size: 48,
-              color: AppTheme.muted,
+              color: context.appTheme.muted,
             ),
             const SizedBox(height: 12),
             Text(
               'No payment history yet',
-              style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 14,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),
@@ -756,9 +749,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -767,15 +760,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 height: 40,
                 decoration: BoxDecoration(
                   color: isPaid
-                      ? AppTheme.successContainer
-                      : AppTheme.warningContainer,
+                      ? context.appTheme.successContainer
+                      : context.appTheme.warningContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
                   isPaid
                       ? Icons.receipt_long_rounded
                       : Icons.pending_actions_rounded,
-                  color: isPaid ? AppTheme.success : AppTheme.warning,
+                  color: isPaid ? context.appTheme.success : context.appTheme.warning,
                   size: 20,
                 ),
               ),
@@ -786,7 +779,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   children: [
                     Text(
                       _text(p['component'], fallback: 'Payment record'),
-                      style: GoogleFonts.dmSans(
+                      style: GoogleFonts.ibmPlexSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -794,24 +787,24 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     if (meta.isNotEmpty)
                       Text(
                         meta,
-                        style: GoogleFonts.dmSans(
+                        style: GoogleFonts.ibmPlexSans(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     if (receiptNo.isNotEmpty)
                       Text(
                         'Receipt: $receiptNo',
-                        style: GoogleFonts.dmSans(
+                        style: GoogleFonts.ibmPlexSans(
                           fontSize: 11,
-                          color: AppTheme.muted,
+                          color: context.appTheme.muted,
                         ),
                       ),
                     Text(
                       '${p['status']}',
-                      style: GoogleFonts.dmSans(
+                      style: GoogleFonts.ibmPlexSans(
                         fontSize: 11,
-                        color: isPaid ? AppTheme.success : AppTheme.warning,
+                        color: isPaid ? context.appTheme.success : context.appTheme.warning,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -823,10 +816,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 children: [
                   Text(
                     '₹${p['amount']}',
-                    style: GoogleFonts.dmSans(
+                    style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: isPaid ? AppTheme.success : AppTheme.warning,
+                      color: isPaid ? context.appTheme.success : context.appTheme.warning,
                     ),
                   ),
                   if (isPaid)
@@ -849,7 +842,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                           const SizedBox(width: 2),
                           Text(
                             'Receipt',
-                            style: GoogleFonts.dmSans(
+                            style: GoogleFonts.ibmPlexSans(
                               fontSize: 11,
                               color: _headerColor,
                             ),
@@ -881,7 +874,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           child: Text(
             'Fee structure will appear after invoices are published.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.dmSans(fontSize: 14, color: AppTheme.muted),
+            style: GoogleFonts.ibmPlexSans(fontSize: 14, color: context.appTheme.muted),
           ),
         ),
       );
@@ -892,7 +885,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.primaryContainer,
+            color: context.appTheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -902,18 +895,18 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 className.isEmpty
                     ? 'Fee Types'
                     : 'Fee Types — Class $className',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 'Values are sourced from generated invoice items.',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 11,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
             ],
@@ -925,14 +918,14 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceVariant,
+            color: context.appTheme.surfaceVariant,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
               Text(
                 'Total Fee Types:',
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -940,10 +933,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               const Spacer(),
               Text(
                 _money(totalAnnual),
-                style: GoogleFonts.dmSans(
+                style: GoogleFonts.ibmPlexSans(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.primary,
+                  color: context.appTheme.primary,
                 ),
               ),
             ],
@@ -958,9 +951,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: [
@@ -968,12 +961,12 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppTheme.primary.withAlpha(18),
+              color: context.appTheme.primary.withAlpha(18),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.local_offer_outlined,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
               size: 20,
             ),
           ),
@@ -983,7 +976,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               _text(row['name'], fallback: 'Fee type'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.dmSans(
+              style: GoogleFonts.ibmPlexSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -991,10 +984,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           ),
           Text(
             _money((row['amount'] as num?)?.toDouble() ?? 0),
-            style: GoogleFonts.dmSans(
+            style: GoogleFonts.ibmPlexSans(
               fontSize: 14,
               fontWeight: FontWeight.w800,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
             ),
           ),
         ],
@@ -1045,29 +1038,14 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.parentPaymentRequestForm,
-      arguments: ParentPaymentRequestFormArgs(
+      AppRoutes.parentPaymentSelection,
+      arguments: ParentPaymentSelectionArgs(
         fees: pendingFees.map((fee) => Map<String, dynamic>.from(fee)).toList(),
         student: student,
       ),
     );
     if (!mounted) return;
-    if (result is ParentPaymentRequestFormResult) {
-      await _loadData();
-      final reference = result.references.isEmpty
-          ? ''
-          : ': ${result.references.first}';
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${result.submittedCount} payment request(s) submitted$reference',
-          ),
-          backgroundColor: AppTheme.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } else if (result == true) {
+    if (result != null) {
       await _loadData();
     }
   }
@@ -1086,6 +1064,13 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';
 
   String _installmentLabel(Map<String, dynamic> invoice) {
+    final term = invoice['term'];
+    if (term is Map) {
+      final termName = term['term_name'] ?? term['name'] ?? '';
+      if (termName.toString().isNotEmpty) {
+        return termName.toString();
+      }
+    }
     final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
     final invoiceNumber = _text(invoice['invoice_number']);
     if (dueDate == null) {

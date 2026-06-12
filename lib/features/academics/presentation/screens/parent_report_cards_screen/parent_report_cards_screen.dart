@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentReportCardsScreen extends StatefulWidget {
   const ParentReportCardsScreen({super.key});
@@ -120,7 +120,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -132,7 +132,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -193,7 +193,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -232,10 +232,10 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : AppTheme.surface,
+                color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: isActive ? _headerColor : AppTheme.outlineVariant,
+                  color: isActive ? _headerColor : context.appTheme.outlineVariant,
                 ),
               ),
               child: Text(
@@ -243,7 +243,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 style: GoogleFonts.dmSans(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : AppTheme.onSurface,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
                 ),
               ),
             ),
@@ -258,20 +258,20 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.contact_page_rounded, size: 48, color: AppTheme.muted),
+          Icon(Icons.contact_page_rounded, size: 48, color: context.appTheme.muted),
           const SizedBox(height: 12),
           Text(
             'No report cards found',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: AppTheme.onSurface,
+              color: context.appTheme.onSurface,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             'Report cards will appear here once published by teachers.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
           ),
         ],
       ),
@@ -296,9 +296,9 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -306,12 +306,12 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: published ? _headerColor.withAlpha(20) : AppTheme.surfaceVariant,
+                  color: published ? _headerColor.withAlpha(20) : context.appTheme.surfaceVariant,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   published ? Icons.analytics_rounded : Icons.pending_actions_rounded,
-                  color: published ? _headerColor : AppTheme.muted,
+                  color: published ? _headerColor : context.appTheme.muted,
                 ),
               ),
               const SizedBox(width: 16),
@@ -324,7 +324,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.onSurface,
+                        color: context.appTheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -332,27 +332,27 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                       children: [
                         Text(
                           'Score: ',
-                          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+                          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
                         ),
                         Text(
                           percentage,
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                         const SizedBox(width: 16),
                         Text(
                           'Class Rank: ',
-                          style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+                          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
                         ),
                         Text(
                           rankStr,
                           style: GoogleFonts.dmSans(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                       ],
@@ -373,7 +373,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceVariant,
+                    color: context.appTheme.surfaceVariant,
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -381,7 +381,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.muted,
+                      color: context.appTheme.muted,
                     ),
                   ),
                 ),
@@ -407,13 +407,13 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
           Color statusColor;
           IconData statusIcon;
           if (status == 'COMPLETED') {
-            statusColor = AppTheme.success;
+            statusColor = context.appTheme.success;
             statusIcon = Icons.check_circle_rounded;
           } else if (status == 'FAILED') {
-            statusColor = AppTheme.error;
+            statusColor = context.appTheme.error;
             statusIcon = Icons.error_rounded;
           } else {
-            statusColor = AppTheme.warning;
+            statusColor = context.appTheme.warning;
             statusIcon = Icons.hourglass_empty_rounded;
           }
 
@@ -422,9 +422,9 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
             margin: const EdgeInsets.only(right: 12),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -436,7 +436,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -481,7 +481,7 @@ class _ParentReportCardsScreenState extends State<ParentReportCardsScreen> {
                 else
                   Text(
                     'Format: ${exp['format'] ?? 'PDF'}',
-                    style: GoogleFonts.dmSans(fontSize: 10, color: AppTheme.muted),
+                    style: GoogleFonts.dmSans(fontSize: 10, color: context.appTheme.muted),
                   ),
               ],
             ),

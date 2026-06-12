@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class GlobalSearchScreen extends StatefulWidget {
   const GlobalSearchScreen({super.key});
@@ -115,7 +115,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
               subtitle:
                   'Class ${s['className'] ?? ''} • Roll ${s['rollNo'] ?? ''}',
               icon: Icons.school_rounded,
-              color: AppTheme.primary,
+              color: context.appTheme.primary,
               data: s,
             ),
           )
@@ -155,7 +155,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
               title: n['title'] as String? ?? 'Notice',
               subtitle: n['category'] as String? ?? 'General',
               icon: Icons.campaign_rounded,
-              color: AppTheme.secondary,
+              color: context.appTheme.secondary,
               data: n,
             ),
           )
@@ -171,15 +171,15 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : AppTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : AppTheme.surface;
+    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
+    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
-        : AppTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : AppTheme.muted;
+        : context.appTheme.onSurface;
+    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
-        : AppTheme.outlineVariant;
+        : context.appTheme.outlineVariant;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -218,9 +218,9 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
             fontWeight: FontWeight.w600,
           ),
           unselectedLabelStyle: GoogleFonts.dmSans(fontSize: 12),
-          labelColor: AppTheme.primary,
+          labelColor: context.appTheme.primary,
           unselectedLabelColor: mutedColor,
-          indicatorColor: AppTheme.primary,
+          indicatorColor: context.appTheme.primary,
           tabs: [
             Tab(text: 'All${_totalResults > 0 ? ' ($_totalResults)' : ''}'),
             Tab(
@@ -327,14 +327,14 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.primaryContainer,
+          color: context.appTheme.primaryContainer,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           label,
           style: GoogleFonts.dmSans(
             fontSize: 12,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -514,7 +514,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.primaryContainer,
+              color: context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -522,7 +522,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: AppTheme.primary,
+                color: context.appTheme.primary,
               ),
             ),
           ),
@@ -547,7 +547,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
           'View all $total $type →',
           style: GoogleFonts.dmSans(
             fontSize: 12,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             fontWeight: FontWeight.w500,
           ),
         ),

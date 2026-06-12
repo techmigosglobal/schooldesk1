@@ -3,12 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminPaymentRequestsScreen extends StatefulWidget {
   const AdminPaymentRequestsScreen({super.key});
@@ -115,13 +115,13 @@ class _AdminPaymentRequestsScreenState
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.errorContainer,
+        color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withAlpha(40)),
+        border: Border.all(color: context.appTheme.error.withAlpha(40)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: AppTheme.error),
+          Icon(Icons.error_outline_rounded, color: context.appTheme.error),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -151,21 +151,21 @@ class _AdminPaymentRequestsScreenState
           value: '$pending',
           subtitle: 'Needs review',
           icon: Icons.pending_actions_rounded,
-          color: AppTheme.warning,
+          color: context.appTheme.warning,
         ),
         SchoolDeskKpiCard(
           title: 'Approved',
           value: '$approved',
           subtitle: 'Recorded as payments',
           icon: Icons.check_circle_rounded,
-          color: AppTheme.success,
+          color: context.appTheme.success,
         ),
         SchoolDeskKpiCard(
           title: 'Rejected',
           value: '$rejected',
           subtitle: 'Declined requests',
           icon: Icons.cancel_rounded,
-          color: AppTheme.error,
+          color: context.appTheme.error,
         ),
       ],
     );
@@ -199,14 +199,14 @@ class _AdminPaymentRequestsScreenState
   Widget _requestCard(Map<String, dynamic> request) {
     final status = _text(request['status'], fallback: 'pending').toLowerCase();
     final statusColor = switch (status) {
-      'approved' => AppTheme.success,
-      'rejected' => AppTheme.error,
-      _ => AppTheme.warning,
+      'approved' => context.appTheme.success,
+      'rejected' => context.appTheme.error,
+      _ => context.appTheme.warning,
     };
     final statusBg = switch (status) {
-      'approved' => AppTheme.successContainer,
-      'rejected' => AppTheme.errorContainer,
-      _ => AppTheme.warningContainer,
+      'approved' => context.appTheme.successContainer,
+      'rejected' => context.appTheme.errorContainer,
+      _ => context.appTheme.warningContainer,
     };
     final invoice = _map(request['invoice']);
     final student = _map(request['student']);
@@ -216,9 +216,9 @@ class _AdminPaymentRequestsScreenState
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.outlineVariant),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,7 +308,7 @@ class _AdminPaymentRequestsScreenState
             width: 92,
             child: Text(
               label,
-              style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
             ),
           ),
           Expanded(

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AdminAttendanceScreen extends StatefulWidget {
   const AdminAttendanceScreen({super.key});
@@ -217,21 +217,21 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                     value: '$present',
                     subtitle: 'Marked present',
                     icon: Icons.check_circle_rounded,
-                    color: AppTheme.success,
+                    color: context.appTheme.success,
                   ),
                   SchoolDeskKpiCard(
                     title: 'Absent',
                     value: '$absent',
                     subtitle: 'Needs attention',
                     icon: Icons.cancel_rounded,
-                    color: AppTheme.error,
+                    color: context.appTheme.error,
                   ),
                   SchoolDeskKpiCard(
                     title: 'Late',
                     value: '$late',
                     subtitle: 'Late arrivals',
                     icon: Icons.schedule_rounded,
-                    color: AppTheme.warning,
+                    color: context.appTheme.warning,
                   ),
                 ],
               ),
@@ -340,12 +340,12 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isOpen
-                  ? AppTheme.warningContainer
-                  : AppTheme.outlineVariant,
+                  ? context.appTheme.warningContainer
+                  : context.appTheme.outlineVariant,
             ),
           ),
           child: Column(
@@ -368,8 +368,8 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                     ),
                     decoration: BoxDecoration(
                       color: isOpen
-                          ? AppTheme.warningContainer
-                          : AppTheme.successContainer,
+                          ? context.appTheme.warningContainer
+                          : context.appTheme.successContainer,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -377,7 +377,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: isOpen ? AppTheme.warning : AppTheme.success,
+                        color: isOpen ? context.appTheme.warning : context.appTheme.success,
                       ),
                     ),
                   ),
@@ -386,13 +386,13 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
               const SizedBox(height: 4),
               Text(
                 '${e['class']} • ${e['date']}',
-                style: GoogleFonts.dmSans(fontSize: 11, color: AppTheme.muted),
+                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
               ),
               Text(
                 e['issue'] as String,
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
-                  color: AppTheme.onSurface,
+                  color: context.appTheme.onSurface,
                 ),
               ),
               if (isOpen) ...[
@@ -404,9 +404,9 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                         onPressed: () {
                           setState(() => e['status'] = 'Resolved');
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text('Exception resolved'),
-                              backgroundColor: AppTheme.success,
+                              backgroundColor: context.appTheme.success,
                             ),
                           );
                         },
@@ -452,27 +452,27 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       {
         'label': 'Daily Attendance Report',
         'icon': Icons.today_rounded,
-        'color': AppTheme.primary,
+        'color': context.appTheme.primary,
       },
       {
         'label': 'Weekly Summary',
         'icon': Icons.date_range_rounded,
-        'color': AppTheme.success,
+        'color': context.appTheme.success,
       },
       {
         'label': 'Monthly Report',
         'icon': Icons.calendar_month_rounded,
-        'color': AppTheme.warning,
+        'color': context.appTheme.warning,
       },
       {
         'label': 'Class-wise Report',
         'icon': Icons.class_rounded,
-        'color': AppTheme.info,
+        'color': context.appTheme.info,
       },
       {
         'label': 'Absentee Report',
         'icon': Icons.person_off_rounded,
-        'color': AppTheme.error,
+        'color': context.appTheme.error,
       },
       {
         'label': 'Late Arrivals Report',
@@ -489,9 +489,9 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
         return Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
           child: Row(
             children: [
@@ -572,7 +572,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                 ? '$report export ${export['status'] ?? 'requested'}'
                 : '$report export ready: ${export['download_url']}',
           ),
-          backgroundColor: AppTheme.success,
+          backgroundColor: context.appTheme.success,
         ),
       );
     } catch (e) {
@@ -580,7 +580,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Attendance export failed: $e'),
-          backgroundColor: AppTheme.error,
+          backgroundColor: context.appTheme.error,
         ),
       );
     }

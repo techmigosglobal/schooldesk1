@@ -3,12 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
+
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class AdminTimetableGenerationFormArgs {
@@ -135,7 +136,7 @@ class _AdminTimetableGenerationFormScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _contextHeader(widget.args.classLabel, widget.args.dayLabel),
+                  _contextHeader(context, widget.args.classLabel, widget.args.dayLabel),
                   const SizedBox(height: 14),
                   Row(
                     children: [
@@ -237,7 +238,7 @@ class _AdminTimetableGenerationFormScreenState
     }
     final preview = _preview;
     if (preview == null) {
-      return _softPanel('Preview backend-generated periods before applying.');
+      return _softPanel(context, 'Preview backend-generated periods before applying.');
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,8 +249,8 @@ class _AdminTimetableGenerationFormScreenState
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: preview.blockedPeriods == 0
-                ? AppTheme.success
-                : AppTheme.warning,
+                ? context.appTheme.success
+                : context.appTheme.warning,
           ),
         ),
         const SizedBox(height: 8),
@@ -259,14 +260,14 @@ class _AdminTimetableGenerationFormScreenState
   }
 
   Widget _suggestionRow(TimetableSuggestionModel suggestion) {
-    final color = suggestion.blocking ? AppTheme.warning : AppTheme.success;
+    final color = suggestion.blocking ? context.appTheme.warning : context.appTheme.success;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: suggestion.blocking
-            ? AppTheme.warningContainer
-            : AppTheme.successContainer,
+            ? context.appTheme.warningContainer
+            : context.appTheme.successContainer,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withAlpha(80)),
       ),
@@ -302,7 +303,7 @@ class _AdminTimetableGenerationFormScreenState
                   ].join(' - '),
                   style: GoogleFonts.dmSans(
                     fontSize: 11,
-                    color: AppTheme.onSurfaceVariant,
+                    color: context.appTheme.onSurfaceVariant,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -311,7 +312,7 @@ class _AdminTimetableGenerationFormScreenState
                     suggestion.warnings.join(' '),
                     style: GoogleFonts.dmSans(
                       fontSize: 10,
-                      color: AppTheme.warning,
+                      color: context.appTheme.warning,
                     ),
                   ),
               ],
@@ -454,7 +455,7 @@ class _AdminTimetablePeriodFormScreenState
               key: _formKey,
               child: Column(
                 children: [
-                  _contextHeader(widget.args.classLabel, widget.args.dayLabel),
+                  _contextHeader(context, widget.args.classLabel, widget.args.dayLabel),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _periodController,
@@ -854,9 +855,9 @@ class _TimetableFormScaffold extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.surface,
+              color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.outlineVariant),
+              border: Border.all(color: context.appTheme.outlineVariant),
             ),
             child: child,
           ),
@@ -878,10 +879,10 @@ class _TimetableFormScaffold extends StatelessWidget {
   }
 }
 
-Widget _contextHeader(String classLabel, String dayLabel) {
+Widget _contextHeader(BuildContext context, String classLabel, String dayLabel) {
   return Row(
     children: [
-      const Icon(Icons.calendar_view_week_rounded, color: AppTheme.primary),
+      Icon(Icons.calendar_view_week_rounded, color: context.appTheme.primary),
       const SizedBox(width: 10),
       Expanded(
         child: Column(
@@ -897,7 +898,7 @@ Widget _contextHeader(String classLabel, String dayLabel) {
             ),
             Text(
               dayLabel,
-              style: GoogleFonts.dmSans(color: AppTheme.muted, fontSize: 12),
+              style: GoogleFonts.dmSans(color: context.appTheme.muted, fontSize: 12),
             ),
           ],
         ),
@@ -906,17 +907,17 @@ Widget _contextHeader(String classLabel, String dayLabel) {
   );
 }
 
-Widget _softPanel(String message) {
+Widget _softPanel(BuildContext context, String message) {
   return Container(
     width: double.infinity,
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: AppTheme.surfaceVariant,
+      color: context.appTheme.surfaceVariant,
       borderRadius: BorderRadius.circular(8),
     ),
     child: Text(
       message,
-      style: GoogleFonts.dmSans(fontSize: 12, color: AppTheme.muted),
+      style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
     ),
   );
 }
@@ -1006,7 +1007,7 @@ String _dateInput(DateTime date) =>
 
 void _showError(BuildContext context, String message) {
   ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), backgroundColor: AppTheme.error),
+    SnackBar(content: Text(message), backgroundColor: context.appTheme.error),
   );
 }
 

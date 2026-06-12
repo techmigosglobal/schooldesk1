@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/theme/app_theme.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_audit_log_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum ApprovalType {
   account,
@@ -562,7 +562,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${approval.requesterName}\'s request approved'),
-        backgroundColor: AppTheme.success,
+        backgroundColor: context.appTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -666,7 +666,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${approval.requesterName}\'s request rejected'),
-        backgroundColor: AppTheme.error,
+        backgroundColor: context.appTheme.error,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -852,7 +852,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       onRefresh: () async {
         await _loadData();
       },
-      color: AppTheme.primary,
+      color: context.appTheme.primary,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -880,7 +880,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             _buildSectionHeader(
               'Pending Action',
               pending.length,
-              AppTheme.warning,
+              context.appTheme.warning,
             ),
             const SizedBox(height: 8),
             ...pending.map(
@@ -898,7 +898,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             const SizedBox(height: 16),
           ],
           if (resolved.isNotEmpty) ...[
-            _buildSectionHeader('Resolved', resolved.length, AppTheme.muted),
+            _buildSectionHeader('Resolved', resolved.length, context.appTheme.muted),
             const SizedBox(height: 8),
             ...resolved.map(
               (a) => Padding(
@@ -930,7 +930,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           style: GoogleFonts.ibmPlexSans(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppTheme.onSurface,
+            color: context.appTheme.onSurface,
           ),
         ),
         const SizedBox(width: 8),
@@ -970,11 +970,11 @@ class _PendingApprovalBadge extends StatelessWidget {
           visualDensity: VisualDensity.compact,
           avatar: const Icon(Icons.pending_actions_rounded, size: 16),
           label: Text(compact ? '$pendingCount' : '$pendingCount pending'),
-          backgroundColor: AppTheme.warningContainer,
+          backgroundColor: context.appTheme.warningContainer,
           labelStyle: GoogleFonts.ibmPlexSans(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: AppTheme.warning,
+            color: context.appTheme.warning,
           ),
         ),
       ),
@@ -1016,31 +1016,31 @@ class _ApprovalQueueToolbar extends StatelessWidget {
           _ApprovalMetricChip(
             label: 'Pending',
             value: pending,
-            color: AppTheme.warning,
+            color: context.appTheme.warning,
             icon: Icons.hourglass_top_rounded,
           ),
           _ApprovalMetricChip(
             label: 'Approved',
             value: approved,
-            color: AppTheme.success,
+            color: context.appTheme.success,
             icon: Icons.check_circle_rounded,
           ),
           _ApprovalMetricChip(
             label: 'Rejected',
             value: rejected,
-            color: AppTheme.error,
+            color: context.appTheme.error,
             icon: Icons.cancel_rounded,
           ),
           _ApprovalMetricChip(
             label: 'Changes',
             value: changesRequested,
-            color: AppTheme.warning,
+            color: context.appTheme.warning,
             icon: Icons.edit_note_rounded,
           ),
           _ApprovalMetricChip(
             label: 'Showing',
             value: visibleCount,
-            color: AppTheme.primary,
+            color: context.appTheme.primary,
             icon: Icons.filter_alt_rounded,
           ),
         ];
@@ -1049,12 +1049,12 @@ class _ApprovalQueueToolbar extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.all(compact ? 14 : 16),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.outlineVariant),
+            border: Border.all(color: context.appTheme.outlineVariant),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(10),
+                color: context.appTheme.onSurface.withAlpha(10),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -1070,12 +1070,12 @@ class _ApprovalQueueToolbar extends StatelessWidget {
                     width: 42,
                     height: 42,
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryContainer,
+                      color: context.appTheme.primaryContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.fact_check_rounded,
-                      color: AppTheme.primary,
+                      color: context.appTheme.primary,
                       size: 22,
                     ),
                   ),
@@ -1089,7 +1089,7 @@ class _ApprovalQueueToolbar extends StatelessWidget {
                           style: GoogleFonts.ibmPlexSans(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
-                            color: AppTheme.onSurface,
+                            color: context.appTheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1099,7 +1099,7 @@ class _ApprovalQueueToolbar extends StatelessWidget {
                               : '$pending request${pending == 1 ? '' : 's'} need a decision.',
                           style: GoogleFonts.ibmPlexSans(
                             fontSize: 12,
-                            color: AppTheme.muted,
+                            color: context.appTheme.muted,
                             height: 1.35,
                           ),
                         ),
@@ -1129,7 +1129,7 @@ class _ApprovalQueueToolbar extends StatelessWidget {
                         ),
                   hintText: 'Search requester, class, summary, or details',
                   filled: true,
-                  fillColor: AppTheme.surfaceVariant,
+                  fillColor: context.appTheme.surfaceVariant,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -1231,14 +1231,14 @@ class _ApprovalMetricChip extends StatelessWidget {
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: AppTheme.onSurface,
+                    color: context.appTheme.onSurface,
                   ),
                 ),
                 Text(
                   label,
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 11,
-                    color: AppTheme.muted,
+                    color: context.appTheme.muted,
                     fontWeight: FontWeight.w600,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1274,17 +1274,17 @@ class _ApprovalStatusFilterChip extends StatelessWidget {
       selected: selected,
       label: Text(count == null ? label : '$label ($count)'),
       onSelected: (_) => onChanged(value),
-      selectedColor: AppTheme.primaryContainer,
-      backgroundColor: AppTheme.surfaceVariant,
+      selectedColor: context.appTheme.primaryContainer,
+      backgroundColor: context.appTheme.surfaceVariant,
       labelStyle: GoogleFonts.ibmPlexSans(
         fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: selected ? AppTheme.primary : AppTheme.onSurfaceVariant,
+        color: selected ? context.appTheme.primary : context.appTheme.onSurfaceVariant,
       ),
       side: BorderSide(
         color: selected
-            ? AppTheme.primary.withAlpha(120)
-            : AppTheme.outlineVariant,
+            ? context.appTheme.primary.withAlpha(120)
+            : context.appTheme.outlineVariant,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
     );
