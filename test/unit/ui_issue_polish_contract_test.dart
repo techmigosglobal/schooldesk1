@@ -58,6 +58,41 @@ void main() {
     expect(pdfService, contains('Printing.sharePdf'));
   });
 
+  test('parent quick actions and fee payment controls stay readable', () {
+    final parentDashboard = File(
+      'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+    ).readAsStringSync();
+    final receipt = File(
+      'lib/features/finance/presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
+    ).readAsStringSync();
+
+    expect(parentDashboard, contains("label: 'Academic Progress'"));
+    expect(parentDashboard, contains("label: 'Leave Request'"));
+    expect(parentDashboard, isNot(contains("label: 'Academic\\nProgress'")));
+    expect(parentDashboard, isNot(contains("label: 'Leave\\nRequest'")));
+    expect(parentDashboard, contains('mainAxisExtent:'));
+    expect(
+      parentDashboard,
+      contains('crossAxisAlignment: CrossAxisAlignment.center'),
+    );
+    expect(parentDashboard, contains('overflow: TextOverflow.visible'));
+
+    expect(receipt, contains('leading: IconButton('));
+    expect(receipt, contains('Navigator.maybePop(context)'));
+    expect(receipt, contains('Tab(text: \'Make Payment\')'));
+    expect(receipt, contains('Tab(text: \'Receipt History\')'));
+    expect(receipt, contains('final chipBackground'));
+    expect(receipt, contains('final chipTextColor'));
+    expect(
+      receipt,
+      isNot(
+        contains(
+          'color: isSelected\n                                  ? Colors.white\n                                  : context.appTheme.muted',
+        ),
+      ),
+    );
+  });
+
   test('source-only documentation contract is enforced', () {
     for (final path in [
       '.github/workflows/local-docker-ci.yml',

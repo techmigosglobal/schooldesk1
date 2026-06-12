@@ -808,7 +808,7 @@ class _ParentQuickActionGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = [
       _ParentQuickAction(
-        label: 'Academic\nProgress',
+        label: 'Academic Progress',
         icon: Icons.trending_up_rounded,
         color: parentColor,
         route: AppRoutes.parentAcademicProgress,
@@ -826,7 +826,7 @@ class _ParentQuickActionGrid extends StatelessWidget {
         route: AppRoutes.parentDocuments,
       ),
       _ParentQuickAction(
-        label: 'Leave\nRequest',
+        label: 'Leave Request',
         icon: Icons.event_busy_rounded,
         color: const Color(0xFFDC2626),
         route: AppRoutes.parentLeave,
@@ -835,17 +835,18 @@ class _ParentQuickActionGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 360;
-        return GridView.count(
-          crossAxisCount: compact ? 2 : 4,
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: compact ? 2 : 4,
+            mainAxisSpacing: 14,
+            crossAxisSpacing: 14,
+            mainAxisExtent: compact ? 118 : 124,
+          ),
+          itemCount: actions.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: compact ? 1.15 : 0.78,
-          children: [
-            for (final action in actions)
-              _ParentQuickActionTile(action: action),
-          ],
+          itemBuilder: (context, index) =>
+              _ParentQuickActionTile(action: actions[index]),
         );
       },
     );
@@ -891,6 +892,7 @@ class _ParentQuickActionTile extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
               width: 42,
@@ -906,7 +908,8 @@ class _ParentQuickActionTile extends StatelessWidget {
               action.label,
               maxLines: 2,
               textAlign: TextAlign.center,
-              minFontSize: 9,
+              minFontSize: 8.5,
+              overflow: TextOverflow.visible,
               style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.w800,
                 height: 1.2,

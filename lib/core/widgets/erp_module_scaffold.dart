@@ -289,7 +289,7 @@ class _ModuleToolbar extends StatelessWidget {
     final menuActionWidth = trailingActions.isEmpty
         ? tokens.sizing.buttonHeight
         : compactActions
-        ? 96.0
+        ? 112.0
         : 280.0;
     final inlineActionWidth = compactActions ? 132.0 : 320.0;
     final canPop = ModalRoute.of(context)?.canPop ?? false;
@@ -451,14 +451,17 @@ class _ModuleActionTray extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var index = 0; index < actions.length; index++) ...[
-              if (index > 0) SizedBox(width: tokens.spacing.xs),
-              actions[index],
+        child: Padding(
+          padding: EdgeInsets.only(right: tokens.spacing.xs),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var index = 0; index < actions.length; index++) ...[
+                if (index > 0) SizedBox(width: tokens.spacing.xs),
+                actions[index],
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -15,6 +15,7 @@ analyzer:
     - integration_test/**
     - build/**
     - Parent_Module_UI/**
+    - third_party/**
     - '**/__MACOSX/**'
   errors:
     # Keep release builds focused on production runtime issues.

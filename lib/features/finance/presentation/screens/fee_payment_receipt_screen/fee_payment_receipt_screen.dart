@@ -146,14 +146,14 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        appBar: _buildAppBar(context),
+        body: const Center(child: CircularProgressIndicator()),
+      );
     }
     if (_children.isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          backgroundColor: _headerColor,
-          title: const Text('Fee Payment & Receipts'),
-        ),
+        appBar: _buildAppBar(context),
         body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
@@ -167,32 +167,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
     }
     return Scaffold(
       backgroundColor: const Color(0xFFF5F6FA),
-      appBar: AppBar(
-        backgroundColor: _headerColor,
-        elevation: 0,
-        title: Text(
-          'Fee Payment & Receipts',
-          style: GoogleFonts.dmSans(
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: context.appTheme.surface,
-          labelColor: context.appTheme.surface,
-          unselectedLabelColor: context.appTheme.surface60,
-          labelStyle: GoogleFonts.dmSans(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-          tabs: const [
-            Tab(text: 'Make Payment'),
-            Tab(text: 'Receipt History'),
-          ],
-        ),
-      ),
+      appBar: _buildAppBar(context, bottom: _buildPaymentTabs(context)),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
@@ -208,6 +183,46 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
           ),
         ],
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context, {
+    PreferredSizeWidget? bottom,
+  }) {
+    return AppBar(
+      backgroundColor: _headerColor,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      leading: IconButton(
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back_rounded),
+        onPressed: () => Navigator.maybePop(context),
+      ),
+      titleSpacing: 0,
+      title: Text(
+        'Fee Payment & Receipts',
+        style: GoogleFonts.dmSans(
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+      bottom: bottom,
+    );
+  }
+
+  PreferredSizeWidget _buildPaymentTabs(BuildContext context) {
+    return TabBar(
+      controller: _tabController,
+      indicatorColor: context.appTheme.surface,
+      labelColor: context.appTheme.surface,
+      unselectedLabelColor: context.appTheme.surface60,
+      labelStyle: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w600),
+      tabs: const [
+        Tab(text: 'Make Payment'),
+        Tab(text: 'Receipt History'),
+      ],
     );
   }
 
@@ -414,33 +429,43 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                     runSpacing: 8,
                     children: _feeTypes.map((type) {
                       final isSelected = _selectedFeeType == type;
-                      return GestureDetector(
-                        onTap: () => setState(() => _selectedFeeType = type),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? _headerColor
-                                : context.appTheme.muted,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isSelected
-                                  ? _headerColor
-                                  : context.appTheme.muted,
+                      final chipBackground = isSelected
+                          ? _headerColor
+                          : const Color(0xFFF1F5F3);
+                      final chipBorderColor = isSelected
+                          ? _headerColor
+                          : const Color(0xFFC9D7D0);
+                      final chipTextColor = isSelected
+                          ? Colors.white
+                          : const Color(0xFF23352E);
+                      return Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => setState(() => _selectedFeeType = type),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            constraints: const BoxConstraints(minHeight: 42),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
                             ),
-                          ),
-                          child: Text(
-                            type,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: isSelected
-                                  ? Colors.white
-                                  : context.appTheme.muted,
+                            decoration: BoxDecoration(
+                              color: chipBackground,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: chipBorderColor),
+                            ),
+                            child: Text(
+                              type,
+                              maxLines: 2,
+                              overflow: TextOverflow.visible,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.dmSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: chipTextColor,
+                                height: 1.15,
+                              ),
                             ),
                           ),
                         ),
