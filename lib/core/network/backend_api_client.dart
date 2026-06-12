@@ -169,4 +169,46 @@ class BackendApiClient {
     }
     return '';
   }
+
+  Future<Map<String, dynamic>> bulkImport({
+    required String importType,
+    required String filePath,
+    bool dryRun = true,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'import_type': importType,
+        'dry_run': dryRun.toString(),
+        'file': await MultipartFile.fromFile(filePath, filename: 'import.csv'),
+      });
+      final response = await _dio.post('/admin/bulk-import', data: formData);
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(message: data['error'] ?? 'Bulk import failed');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> getBulkImportHistory({
+    String? importType,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/admin/bulk-import/history',
+        queryParameters: {
+          if (importType != null) 'import_type': importType,
+          'limit': limit,
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to fetch import history',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

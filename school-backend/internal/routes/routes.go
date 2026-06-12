@@ -46,6 +46,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	aliasHandler := handlers.NewOperationalAliasHandler()
 	parentSelfHandler := handlers.NewParentSelfHandler()
 	teacherSelfHandler := handlers.NewTeacherSelfHandler()
+	bulkImportHandler := handlers.NewBulkImportHandler()
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
 		resource, ok := handlers.TablesMDResourceFor(table)
 		if !ok {
@@ -105,6 +106,14 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			assistant.DELETE("/sessions/:id", assistantWorkflowHandler.CancelSession)
 			assistant.GET("/templates/:workflow_type", assistantWorkflowHandler.ExportTemplate)
 			assistant.POST("/sessions/:id/import-preview", assistantWorkflowHandler.ImportPreview)
+		}
+
+		admin := api.Group("/admin")
+		admin.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Principal"))
+		{
+			admin.POST("/bulk-import", middleware.RateLimitMiddleware("bulk_import", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), bulkImportHandler.BulkImport)
+			admin.GET("/bulk-import/template", bulkImportHandler.GetImportTemplate)
+			admin.GET("/bulk-import/history", bulkImportHandler.GetImportHistory)
 		}
 
 		schools := api.Group("/schools")
