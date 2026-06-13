@@ -409,7 +409,7 @@ func (h *ParentFeeHandler) GetReceipt(c *gin.Context) {
 	var receipt models.FeeReceipt
 	if err := database.DB.
 		Preload("Student").
-		Where("id = ?", receiptID).
+		Where("id = ? AND parent_id = ?", receiptID, userID).
 		First(&receipt).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "receipt not found"})

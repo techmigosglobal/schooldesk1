@@ -357,8 +357,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateParentPaymentRequest)
 			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
 			fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
-			fees.POST("/razorpay/order", middleware.RBACMiddleware("Parent"), feeHandler.CreateRazorpayOrder)
-			fees.POST("/razorpay/verify", middleware.RBACMiddleware("Parent"), feeHandler.VerifyRazorpayPayment)
 			fees.GET("/payment-config", middleware.RBACMiddleware("Parent"), feeHandler.GetPaymentConfig)
 			feeConcessions := handlers.NewFrontendRecordHandler("fees/concessions")
 			fees.GET("/concessions", middleware.RBACMiddleware("Admin", "Principal", "Parent"), feeConcessions.List)

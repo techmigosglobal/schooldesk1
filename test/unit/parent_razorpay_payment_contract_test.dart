@@ -17,11 +17,18 @@ void main() {
       final source = File(
         'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
       ).readAsStringSync();
+      final routes = File(
+        'school-backend/internal/routes/routes.go',
+      ).readAsStringSync();
 
       expect(source, contains('/parents/fees/payment-orders'));
       expect(source, contains('/parents/fees/verify-payment'));
       expect(source, contains('/parents/fees/payments'));
       expect(source, contains('/parents/fees/receipts/'));
+      expect(source, isNot(contains('/fees/razorpay/order')));
+      expect(source, isNot(contains('/fees/razorpay/verify')));
+      expect(routes, isNot(contains('fees.POST("/razorpay/order"')));
+      expect(routes, isNot(contains('fees.POST("/razorpay/verify"')));
     });
 
     test('parent payment history and receipt screens are backend-driven', () {

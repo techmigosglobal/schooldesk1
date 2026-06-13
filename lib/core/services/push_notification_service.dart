@@ -49,7 +49,25 @@ class PushNotificationService {
   bool _initialized = false;
   bool _firebaseAvailable = false;
   bool _localNotificationsReady = false;
+  bool _deviceRegistrationAttempted = false;
+  bool _deviceRegistrationSucceeded = false;
   String? _currentToken;
+  String? _permissionStatus;
+  String? _lastRegistrationError;
+
+  PushNotificationRuntimeStatus get runtimeStatus =>
+      PushNotificationRuntimeStatus(
+        initialized: _initialized,
+        firebaseAvailable: _firebaseAvailable,
+        localNotificationsReady: _localNotificationsReady || kIsWeb,
+        hasDeviceToken: (_currentToken ?? '').isNotEmpty,
+        deviceRegistrationAttempted: _deviceRegistrationAttempted,
+        deviceRegistrationSucceeded: _deviceRegistrationSucceeded,
+        permissionStatus: _permissionStatus ?? 'unknown',
+        lastRegistrationError: _lastRegistrationError ?? '',
+      );
+
+  String get lastRegistrationError => _lastRegistrationError ?? '';
 
   static Future<bool> ensureFirebaseInitialized() async {
     if (Firebase.apps.isNotEmpty) return true;
@@ -100,15 +118,24 @@ class PushNotificationService {
 
   Future<void> registerDeviceTokenIfPossible() async {
     if (!_firebaseAvailable || !BackendApiClient.instance.isAuthenticated) {
+      _deviceRegistrationSucceeded = false;
+      _lastRegistrationError = !_firebaseAvailable
+          ? 'Firebase is not initialized on this device.'
+          : 'Sign in before registering this device for push notifications.';
       return;
     }
     if (_currentToken == null || _currentToken!.isEmpty) {
       await _refreshToken();
     }
     final token = _currentToken;
-    if (token == null || token.isEmpty) return;
+    if (token == null || token.isEmpty) {
+      _deviceRegistrationSucceeded = false;
+      _lastRegistrationError = 'Firebase did not return a device token.';
+      return;
+    }
 
     try {
+      _deviceRegistrationAttempted = true;
       final info = await PackageInfo.fromPlatform().timeout(
         _deviceRegistrationTimeout,
       );
@@ -120,7 +147,11 @@ class PushNotificationService {
             appVersion: '${info.version}+${info.buildNumber}',
           )
           .timeout(_deviceRegistrationTimeout);
-    } catch (_) {
+      _deviceRegistrationSucceeded = true;
+      _lastRegistrationError = null;
+    } catch (error) {
+      _deviceRegistrationSucceeded = false;
+      _lastRegistrationError = error.toString();
       // Push registration is best-effort and should never block app startup/login.
     }
   }
@@ -152,7 +183,7 @@ class PushNotificationService {
     final messaging = _messaging;
     if (messaging == null) return;
     try {
-      await messaging
+      final settings = await messaging
           .requestPermission(
             alert: true,
             badge: true,
@@ -160,6 +191,7 @@ class PushNotificationService {
             provisional: false,
           )
           .timeout(_firebaseOperationTimeout);
+      _permissionStatus = settings.authorizationStatus.name;
       if (!kIsWeb) {
         await messaging
             .setForegroundNotificationPresentationOptions(
@@ -169,7 +201,9 @@ class PushNotificationService {
             )
             .timeout(_firebaseOperationTimeout);
       }
-    } catch (_) {
+    } catch (error) {
+      _permissionStatus = 'unavailable';
+      _lastRegistrationError = error.toString();
       // Keep the app usable if the platform cannot show a permission prompt.
     }
   }
@@ -220,8 +254,12 @@ class PushNotificationService {
                 : null,
           )
           .timeout(_firebaseOperationTimeout);
-    } catch (_) {
+      if ((_currentToken ?? '').isNotEmpty) {
+        _lastRegistrationError = null;
+      }
+    } catch (error) {
       _currentToken = null;
+      _lastRegistrationError = error.toString();
     }
   }
 
@@ -300,4 +338,32 @@ class PushNotificationService {
     await _onOpenedSub?.cancel();
     await _onTokenRefreshSub?.cancel();
   }
+}
+
+class PushNotificationRuntimeStatus {
+  const PushNotificationRuntimeStatus({
+    required this.initialized,
+    required this.firebaseAvailable,
+    required this.localNotificationsReady,
+    required this.hasDeviceToken,
+    required this.deviceRegistrationAttempted,
+    required this.deviceRegistrationSucceeded,
+    required this.permissionStatus,
+    required this.lastRegistrationError,
+  });
+
+  final bool initialized;
+  final bool firebaseAvailable;
+  final bool localNotificationsReady;
+  final bool hasDeviceToken;
+  final bool deviceRegistrationAttempted;
+  final bool deviceRegistrationSucceeded;
+  final String permissionStatus;
+  final String lastRegistrationError;
+
+  bool get readyForPush =>
+      firebaseAvailable &&
+      localNotificationsReady &&
+      hasDeviceToken &&
+      deviceRegistrationSucceeded;
 }
