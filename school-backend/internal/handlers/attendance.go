@@ -710,13 +710,16 @@ func (h *AttendanceHandler) ScanStaffQR(c *gin.Context) {
 		fail(c, http.StatusForbidden, "QR code is not valid for this school")
 		return
 	}
-	staffID := currentStaffID(c)
-	if currentRole(c) == "kiosk" {
+	var staffID string
+	switch currentRole(c) {
+	case "kiosk":
 		staffID = strings.TrimSpace(req.StaffID)
 		if staffID == "" {
 			fail(c, http.StatusBadRequest, "staff_id is required for kiosk QR scans")
 			return
 		}
+	default:
+		staffID = currentStaffID(c)
 	}
 	if staffID == "" {
 		fail(c, http.StatusForbidden, "teacher account is not linked to a staff profile")

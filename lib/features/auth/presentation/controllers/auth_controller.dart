@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
@@ -57,7 +58,8 @@ class AuthController extends ChangeNotifier {
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
       _setLoading(false);
-      return '/$actualRole-dashboard-screen';
+      return RouteAccessGuard.dashboardForRole(actualRole) ??
+          '/$actualRole-dashboard-screen';
     } catch (e) {
       _setError('Login failed. Please try again. $e');
       _setLoading(false);

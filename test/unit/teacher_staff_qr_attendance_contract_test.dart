@@ -47,10 +47,10 @@ void main() {
 
     expect(nav, contains('label: \'Today\''));
     expect(nav, contains('AppRoutes.teacherMyAttendance'));
-    expect(nav, contains('Student Attendance'));
+    expect(nav, contains('My Staff Attendance'));
     expect(dashboard, contains('AppRoutes.teacherMyAttendance'));
     expect(dashboard, contains('Scan QR'));
-    expect(dashboard, contains('Student Attendance'));
+    expect(dashboard, contains('Attendance'));
 
     expect(myAttendance, contains('MobileScanner('));
     expect(myAttendance, contains('MobileScannerController'));
@@ -80,5 +80,56 @@ void main() {
     expect(handler, contains('currentStaffID(c)'));
     expect(handler, contains('payload.SchoolID != schoolID'));
     expect(handler, contains('staffQRRefreshSeconds = 60'));
+  });
+
+  test('staff QR display uses separate kiosk login and teacher scan identity', () {
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
+    final landing = File(
+      'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
+    ).readAsStringSync();
+    final authLogin = File(
+      'lib/features/auth/presentation/screens/auth_login_screen/auth_login_screen.dart',
+    ).readAsStringSync();
+    final attendanceExport = File(
+      'lib/features/attendance/attendance.dart',
+    ).readAsStringSync();
+    final main = readBackendRouteSources();
+    final handler = File(
+      'school-backend/internal/handlers/attendance.go',
+    ).readAsStringSync();
+
+    expect(routes, contains('kioskLogin'));
+    expect(routes, contains('kioskQrAttendance'));
+    expect(routes, contains('KioskQrAttendanceScreen'));
+    expect(authLogin, contains('case \'kiosk\':'));
+    expect(routes, contains('kioskQrAttendance: (context)'));
+    expect(guard, contains('\'kiosk\''));
+    expect(guard, contains('AppRoutes.kioskQrAttendance: {\'kiosk\'}'));
+    expect(landing, contains('QR Display'));
+    expect(attendanceExport, contains('kiosk_qr_attendance_screen'));
+
+    expect(
+      main,
+      contains(
+        'attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal", "Kiosk")',
+      ),
+    );
+    expect(
+      main,
+      contains(
+        'attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal", "Kiosk")',
+      ),
+    );
+    expect(
+      main,
+      contains(
+        'attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher", "Kiosk")',
+      ),
+    );
+    expect(handler, contains('case "kiosk":'));
+    expect(handler, contains('staffID = strings.TrimSpace(req.StaffID)'));
+    expect(handler, contains('staffID = currentStaffID(c)'));
+    expect(handler, contains('attendanceStringPtr(currentUserID(c))'));
   });
 }

@@ -387,6 +387,12 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.add_business_rounded),
           ),
           const SizedBox(width: 8),
+          IconButton.outlined(
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.kioskLogin),
+            tooltip: 'QR Display',
+            icon: const Icon(Icons.qr_code_2_rounded),
+          ),
+          const SizedBox(width: 8),
           FilledButton.icon(
             onPressed: () =>
                 Navigator.pushNamed(context, AppRoutes.principalLogin),

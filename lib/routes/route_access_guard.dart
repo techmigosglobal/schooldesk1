@@ -8,6 +8,7 @@ class RouteAccessGuard {
     'admin',
     'teacher',
     'parent',
+    'kiosk',
   };
 
   static const Set<String> publicRoutes = {
@@ -18,6 +19,7 @@ class RouteAccessGuard {
     AppRoutes.adminLogin,
     AppRoutes.teacherLogin,
     AppRoutes.parentLogin,
+    AppRoutes.kioskLogin,
   };
 
   static const Set<String> sharedProtectedRoutes = {
@@ -116,6 +118,7 @@ class RouteAccessGuard {
     AppRoutes.teacherDiary: {'teacher'},
     AppRoutes.teacherMarkEntry: {'teacher'},
     AppRoutes.teacherSyllabus: {'teacher'},
+    AppRoutes.kioskQrAttendance: {'kiosk'},
     AppRoutes.parentDashboard: {'parent'},
     AppRoutes.parentAcademicProgress: {'parent'},
     AppRoutes.parentAttendance: {'parent'},
@@ -224,6 +227,8 @@ class RouteAccessGuard {
         return AppRoutes.teacherDashboard;
       case 'parent':
         return AppRoutes.parentDashboard;
+      case 'kiosk':
+        return AppRoutes.kioskQrAttendance;
       default:
         return null;
     }

@@ -94,6 +94,8 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         return AppRoutes.teacherDashboard;
       case AppConstants.roleParent:
         return AppRoutes.parentDashboard;
+      case 'kiosk':
+        return AppRoutes.kioskQrAttendance;
       default:
         throw StateError('Unsupported role returned by backend: $roleName');
     }

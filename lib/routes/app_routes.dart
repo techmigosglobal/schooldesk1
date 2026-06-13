@@ -116,6 +116,8 @@ class AppRoutes {
   static const String teacherReports = '/teacher-reports-screen';
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
+  static const String kioskLogin = '/kiosk-login-screen';
+  static const String kioskQrAttendance = '/kiosk-qr-attendance-screen';
   static const String parentDashboard = '/parent-dashboard-screen';
   static const String parentAcademicProgress =
       '/parent-academic-progress-screen';
@@ -322,6 +324,8 @@ class AppRoutes {
     teacherReports: (context) => const TeacherReportsScreen(),
     // Parent Module,
     parentLogin: (context) => const AuthLoginScreen(),
+    kioskLogin: (context) => const AuthLoginScreen(),
+    kioskQrAttendance: (context) => const KioskQrAttendanceScreen(),
     parentDashboard: (context) => const ParentDashboardScreen(),
     parentAcademicProgress: (context) => const ParentAcademicProgressScreen(),
     parentAttendance: (context) => const ParentAttendanceScreen(),
@@ -465,6 +469,7 @@ class AppRoutes {
     eventsCalendar,
     principalAcademicInfo,
     parentDashboard,
+    kioskQrAttendance,
     parentAcademicProgress,
     parentAttendance,
     parentHomework,
