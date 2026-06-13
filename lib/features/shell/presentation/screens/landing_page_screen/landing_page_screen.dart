@@ -16,10 +16,15 @@ class LandingPageScreen extends StatefulWidget {
 
 class _LandingPageScreenState extends State<LandingPageScreen> {
   static const String _schoolName = 'Public School';
+  static const Duration _autoSlideInterval = Duration(seconds: 7);
+  static const Duration _slideAnimationDuration = Duration(milliseconds: 520);
   late final PageController _controller;
   late final List<_LandingSlide> _slides;
   Timer? _autoSlideTimer;
   int _activeSlide = 0;
+  bool _autoSlidePausedByUser = false;
+  bool _autoSlidePausedByTouch = false;
+  bool _reduceMotion = false;
 
   @override
   void initState() {
@@ -211,24 +216,80 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
         ],
       ),
     ];
-    _autoSlideTimer = Timer.periodic(const Duration(seconds: 7), (_) {
-      if (!mounted) return;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (_reduceMotion == reduceMotion && _autoSlideTimer != null) return;
+    _reduceMotion = reduceMotion;
+    if (_reduceMotion) {
+      _stopAutoSlideTimer();
+    } else {
+      _restartAutoSlideTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopAutoSlideTimer();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _stopAutoSlideTimer() {
+    _autoSlideTimer?.cancel();
+    _autoSlideTimer = null;
+  }
+
+  void _restartAutoSlideTimer() {
+    _stopAutoSlideTimer();
+    if (_reduceMotion || _autoSlidePausedByUser || _autoSlidePausedByTouch) {
+      return;
+    }
+    _autoSlideTimer = Timer.periodic(_autoSlideInterval, (_) {
+      if (!mounted || !_controller.hasClients) return;
       final next = (_activeSlide + 1) % _slides.length;
       _goToSlide(next);
     });
   }
 
-  @override
-  void dispose() {
-    _autoSlideTimer?.cancel();
-    _controller.dispose();
-    super.dispose();
+  void _pauseAutoSlide({bool fromUser = false}) {
+    if (fromUser) {
+      setState(() => _autoSlidePausedByUser = true);
+    } else {
+      _autoSlidePausedByTouch = true;
+    }
+    _stopAutoSlideTimer();
   }
 
-  void _goToSlide(int index) {
+  void _resumeAutoSlide({bool fromUser = false}) {
+    if (fromUser) {
+      setState(() => _autoSlidePausedByUser = false);
+    } else {
+      _autoSlidePausedByTouch = false;
+    }
+    _restartAutoSlideTimer();
+  }
+
+  void _toggleAutoSlide() {
+    if (_autoSlidePausedByUser) {
+      _resumeAutoSlide(fromUser: true);
+    } else {
+      _pauseAutoSlide(fromUser: true);
+    }
+  }
+
+  void _goToSlide(int index, {bool manual = false}) {
+    if (!_controller.hasClients || index == _activeSlide) {
+      if (manual) _restartAutoSlideTimer();
+      return;
+    }
+    if (manual) _restartAutoSlideTimer();
     _controller.animateToPage(
       index,
-      duration: const Duration(milliseconds: 420),
+      duration: _reduceMotion ? Duration.zero : _slideAnimationDuration,
       curve: Curves.easeOutCubic,
     );
   }
@@ -245,31 +306,48 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
           children: [
             _TopBar(schoolName: _schoolName),
             Expanded(
-              child: PageView.builder(
-                controller: _controller,
-                onPageChanged: (index) => setState(() => _activeSlide = index),
-                itemCount: _slides.length,
-                itemBuilder: (context, index) {
-                  return _SlideView(
-                    slide: _slides[index],
-                    schoolName: _schoolName,
-                    wide: wide,
-                    onLogin: () =>
-                        Navigator.pushNamed(context, AppRoutes.principalLogin),
-                    onSetup: () =>
-                        Navigator.pushNamed(context, AppRoutes.onboarding),
-                  );
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification is ScrollStartNotification) {
+                    _pauseAutoSlide();
+                  } else if (notification is ScrollEndNotification) {
+                    _resumeAutoSlide();
+                  }
+                  return false;
                 },
+                child: PageView.builder(
+                  controller: _controller,
+                  onPageChanged: (index) =>
+                      setState(() => _activeSlide = index),
+                  itemCount: _slides.length,
+                  itemBuilder: (context, index) {
+                    return _SlideView(
+                      slide: _slides[index],
+                      schoolName: _schoolName,
+                      wide: wide,
+                      onLogin: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.principalLogin,
+                      ),
+                      onSetup: () =>
+                          Navigator.pushNamed(context, AppRoutes.onboarding),
+                    );
+                  },
+                ),
               ),
             ),
             _BottomControls(
               activeIndex: _activeSlide,
               itemCount: _slides.length,
+              isAutoSlidePaused: _reduceMotion || _autoSlidePausedByUser,
               onPrevious: () => _goToSlide(
                 (_activeSlide - 1 + _slides.length) % _slides.length,
+                manual: true,
               ),
-              onNext: () => _goToSlide((_activeSlide + 1) % _slides.length),
-              onDotTap: _goToSlide,
+              onNext: () =>
+                  _goToSlide((_activeSlide + 1) % _slides.length, manual: true),
+              onDotTap: (index) => _goToSlide(index, manual: true),
+              onToggleAutoSlide: _reduceMotion ? null : _toggleAutoSlide,
             ),
           ],
         ),
@@ -487,7 +565,11 @@ class _SchoolShowcase extends StatelessWidget {
                   end: Alignment.bottomRight,
                   colors: [
                     slide.color,
-                    Color.lerp(slide.supportColor, context.appTheme.onSurface, 0.14)!,
+                    Color.lerp(
+                      slide.supportColor,
+                      context.appTheme.onSurface,
+                      0.14,
+                    )!,
                   ],
                 ),
                 borderRadius: BorderRadius.circular(8),
@@ -503,7 +585,10 @@ class _SchoolShowcase extends StatelessWidget {
                 children: [
                   Positioned.fill(
                     child: CustomPaint(
-                      painter: _CampusPatternPainter(color: slide.supportColor, context: context),
+                      painter: _CampusPatternPainter(
+                        color: slide.supportColor,
+                        context: context,
+                      ),
                     ),
                   ),
                   Positioned.fill(
@@ -511,7 +596,9 @@ class _SchoolShowcase extends StatelessWidget {
                       padding: const EdgeInsets.all(18),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          border: Border.all(color: context.appTheme.surface.withAlpha(34)),
+                          border: Border.all(
+                            color: context.appTheme.surface.withAlpha(34),
+                          ),
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -677,19 +764,24 @@ class _BottomControls extends StatelessWidget {
   const _BottomControls({
     required this.activeIndex,
     required this.itemCount,
+    required this.isAutoSlidePaused,
     required this.onPrevious,
     required this.onNext,
     required this.onDotTap,
+    required this.onToggleAutoSlide,
   });
 
   final int activeIndex;
   final int itemCount;
+  final bool isAutoSlidePaused;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final ValueChanged<int> onDotTap;
+  final VoidCallback? onToggleAutoSlide;
 
   @override
   Widget build(BuildContext context) {
+    final progress = itemCount <= 1 ? 1.0 : (activeIndex + 1) / itemCount;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
       child: Row(
@@ -701,27 +793,76 @@ class _BottomControls extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(itemCount, (index) {
-                final selected = activeIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => onDotTap(index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 240),
-                      width: selected ? 28 : 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: selected ? context.appTheme.primary : context.appTheme.outline,
-                        borderRadius: BorderRadius.circular(8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: context.appTheme.surface,
+                border: Border.all(color: context.appTheme.outlineVariant),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: List.generate(itemCount, (index) {
+                        final selected = activeIndex == index;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: index == itemCount - 1 ? 0 : 8,
+                            ),
+                            child: Tooltip(
+                              message: 'Slide ${index + 1} of $itemCount',
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: () => onDotTap(index),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 240),
+                                  height: selected ? 8 : 6,
+                                  decoration: BoxDecoration(
+                                    color: selected
+                                        ? context.appTheme.primary
+                                        : context.appTheme.outlineVariant,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        value: progress,
+                        backgroundColor: context.appTheme.outlineVariant,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          isAutoSlidePaused
+                              ? context.appTheme.muted
+                              : context.appTheme.primary,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton.outlined(
+            tooltip: isAutoSlidePaused ? 'Resume carousel' : 'Pause carousel',
+            onPressed: onToggleAutoSlide,
+            icon: Icon(
+              isAutoSlidePaused
+                  ? Icons.play_arrow_rounded
+                  : Icons.pause_rounded,
             ),
           ),
           const SizedBox(width: 10),
