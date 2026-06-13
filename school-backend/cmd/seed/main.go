@@ -30,10 +30,21 @@ func main() {
 		log.Fatalf("seed principal failed: %v", err)
 	}
 	log.Printf("principal ready: email=%s password=%s", credentials.Email, credentials.Password)
+	kioskCredentials, err := seedKioskAttendanceUser()
+	if err != nil {
+		log.Fatalf("seed kiosk attendance user failed: %v", err)
+	}
+	log.Printf("Kiosk ready: username=%s password=%s", kioskCredentials.Username, kioskCredentials.Password)
+	log.Printf("Staff QR secret env: STAFF_QR_SECRET=%s", envStatus("STAFF_QR_SECRET"))
 }
 
 type principalCredentials struct {
 	Email    string
+	Password string
+}
+
+type kioskCredentials struct {
+	Username string
 	Password string
 }
 
@@ -223,6 +234,20 @@ func seedAcademicFixtures(schoolID, yearID string) error {
 	return database.DB.Where("id = ?", section.ID).FirstOrCreate(&section).Error
 }
 
+func seedKioskAttendanceUser() (kioskCredentials, error) {
+	password := envOr("SCHOOLDESK_KIOSK_PASSWORD", "Kiosk@12345")
+	if err := database.EnsureDefaultRolePermissions(); err != nil {
+		return kioskCredentials{}, err
+	}
+	var user models.User
+	if err := database.DB.
+		Where("username = ? AND LOWER(role) = ?", "kiosk", "kiosk").
+		First(&user).Error; err != nil {
+		return kioskCredentials{}, err
+	}
+	return kioskCredentials{Username: "kiosk", Password: password}, nil
+}
+
 func envOr(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -240,6 +265,13 @@ func envBool(key string, fallback bool) bool {
 		return fallback
 	}
 	return parsed
+}
+
+func envStatus(key string) string {
+	if strings.TrimSpace(os.Getenv(key)) == "" {
+		return "unset"
+	}
+	return "set"
 }
 
 func seedRoles(schoolID string, principalRoleID string) (map[string]models.Role, error) {
@@ -279,6 +311,13 @@ func seedRoles(schoolID string, principalRoleID string) (map[string]models.Role,
 			Description:  "Parent or guardian account",
 			IsSystemRole: true,
 		},
+		{
+			BaseModel:    models.BaseModel{ID: "role-kiosk-default"},
+			SchoolID:     schoolID,
+			RoleName:     "Kiosk",
+			Description:  "Attendance scanning kiosk",
+			IsSystemRole: true,
+		},
 	}
 	roles := make(map[string]models.Role, len(roleSeeds))
 	for _, seed := range roleSeeds {
@@ -303,6 +342,8 @@ func lower(value string) string {
 		return "student"
 	case "Parent":
 		return "parent"
+	case "Kiosk":
+		return "kiosk"
 	default:
 		return value
 	}
