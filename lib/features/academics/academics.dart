@@ -22,4 +22,7 @@ export 'presentation/screens/teacher_mark_entry_screen/teacher_mark_entry_screen
 export 'presentation/screens/teacher_performance_screen/teacher_performance_screen.dart';
 export 'presentation/screens/teacher_syllabus_screen/teacher_syllabus_screen.dart';
 export 'presentation/screens/teacher_student_notes_screen/teacher_student_notes_screen.dart';
+export 'presentation/screens/teacher_study_materials_screen/teacher_study_material_form_screen.dart';
+export 'presentation/screens/teacher_study_materials_screen/teacher_study_materials_screen.dart';
+export 'presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart';
 export 'presentation/screens/timetable_management_screen/timetable_management_screen.dart';

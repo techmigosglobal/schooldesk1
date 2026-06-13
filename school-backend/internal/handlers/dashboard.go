@@ -29,9 +29,10 @@ type feeSummary struct {
 }
 
 type teacherClassSummary struct {
-	ID          string `json:"id"`
-	SectionName string `json:"section_name"`
-	GradeName   string `json:"grade_name"`
+	ID             string `json:"id"`
+	SectionName    string `json:"section_name"`
+	GradeName      string `json:"grade_name"`
+	IsClassTeacher bool   `json:"is_class_teacher"`
 }
 
 type parentChildSummary struct {
@@ -747,7 +748,7 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 		return
 	}
 	var classes []teacherClassSummary
-	if err := database.DB.Raw(teacherAssignedClassesSQL(), schoolID, staffID, staffID).Scan(&classes).Error; err != nil {
+	if err := database.DB.Raw(teacherAssignedClassesSQL(), staffID, schoolID, staffID, staffID).Scan(&classes).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load assigned classes")
 		return
 	}
@@ -769,13 +770,14 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 
 func teacherAssignedClassesSQL() string {
 	return `
-		SELECT id, section_name, grade_name
+		SELECT id, section_name, grade_name, is_class_teacher
 		FROM (
 			SELECT DISTINCT
 				sections.id,
 				sections.section_name,
 				grades.grade_name,
-				grades.grade_number
+				grades.grade_number,
+				(CASE WHEN sections.class_teacher_id = ? THEN true ELSE false END) AS is_class_teacher
 			FROM sections
 			JOIN grades ON grades.id = sections.grade_id
 			LEFT JOIN timetable_slots ON timetable_slots.section_id = sections.id

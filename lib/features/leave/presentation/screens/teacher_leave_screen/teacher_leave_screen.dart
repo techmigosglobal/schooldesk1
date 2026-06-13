@@ -171,7 +171,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: TeacherFlowCard(
                   icon: Icons.event_busy_rounded,
-                  title: app.leaveTypeId,
+                  title: _leaveTypeLabel(app.leaveTypeId),
                   subtitle:
                       '${app.fromDate.split('T').first} to ${app.toDate.split('T').first} · ${app.reason ?? ''}',
                   status: teacherFlowTitleCase(app.status),
@@ -205,5 +205,32 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
       'pending' => Colors.orange,
       _ => teacherFlowAccent,
     };
+  }
+
+  String _leaveTypeLabel(String leaveTypeId) {
+    final normalizedId = leaveTypeId.trim();
+    for (final type in _leaveTypes) {
+      final id = teacherFlowText(type['id'] ?? type['leave_type_id']);
+      if (id == normalizedId) {
+        final label = teacherFlowText(
+          type['leave_name'] ??
+              type['name'] ??
+              type['type_name'] ??
+              type['label'] ??
+              type['code'],
+        );
+        if (label.isNotEmpty) return label;
+      }
+    }
+    if (normalizedId.isEmpty || _looksLikeRawId(normalizedId)) {
+      return 'Leave request';
+    }
+    return teacherFlowTitleCase(normalizedId.replaceAll('_', ' '));
+  }
+
+  bool _looksLikeRawId(String value) {
+    final compact = value.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '');
+    if (compact.length >= 16) return true;
+    return RegExp(r'^[a-fA-F0-9]{2,}([ -]?[a-fA-F0-9]{2,})+$').hasMatch(value);
   }
 }

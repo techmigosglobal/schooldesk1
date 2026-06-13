@@ -28,6 +28,13 @@ class RouteAccessGuard {
     AppRoutes.homeworkMessaging,
   };
 
+  static const Set<String> deprecatedProtectedRoutes = {
+    AppRoutes.teacherStudentNotes,
+    AppRoutes.teacherDiscipline,
+    AppRoutes.teacherParentInteraction,
+    AppRoutes.teacherPTM,
+  };
+
   static const Map<String, Set<String>> _routeRoles = {
     AppRoutes.principalDashboard: {'principal'},
     AppRoutes.staffManagement: {'principal', 'admin'},
@@ -92,19 +99,23 @@ class RouteAccessGuard {
     AppRoutes.reportCardGenerator: {'admin'},
     AppRoutes.teacherDashboard: {'teacher'},
     AppRoutes.teacherClasses: {'teacher'},
+    AppRoutes.teacherTimetable: {'teacher'},
     AppRoutes.teacherAttendance: {'teacher'},
+    AppRoutes.teacherAttendanceHistory: {'teacher'},
     AppRoutes.teacherMyAttendance: {'teacher'},
     AppRoutes.teacherHomework: {'teacher'},
     AppRoutes.teacherHomeworkForm: {'teacher'},
     AppRoutes.teacherHomeworkSubmissions: {'teacher'},
+    AppRoutes.teacherStudyMaterials: {'teacher'},
+    AppRoutes.teacherStudyMaterialForm: {'teacher'},
     AppRoutes.teacherPerformance: {'teacher'},
-    AppRoutes.teacherStudentNotes: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
-    AppRoutes.teacherParentInteraction: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
     AppRoutes.teacherReports: {'teacher'},
     AppRoutes.teacherDiary: {'teacher'},
+    AppRoutes.teacherMarkEntry: {'teacher'},
+    AppRoutes.teacherSyllabus: {'teacher'},
     AppRoutes.parentDashboard: {'parent'},
     AppRoutes.parentAcademicProgress: {'parent'},
     AppRoutes.parentAttendance: {'parent'},
@@ -140,12 +151,19 @@ class RouteAccessGuard {
       return null;
     }
 
+    final normalizedRole = _normalizeRole(currentRole);
+    if (deprecatedProtectedRoutes.contains(routeName)) {
+      if (normalizedRole.isEmpty) {
+        return AppRoutes.landingPage;
+      }
+      return dashboardForRole(normalizedRole) ?? AppRoutes.landingPage;
+    }
+
     final allowedRoles = _routeRoles[routeName];
     if (allowedRoles == null || allowedRoles.isEmpty) {
       return null;
     }
 
-    final normalizedRole = _normalizeRole(currentRole);
     if (normalizedRole.isEmpty) {
       return AppRoutes.landingPage;
     }
@@ -163,6 +181,9 @@ class RouteAccessGuard {
     }
     if (sharedProtectedRoutes.contains(routeName)) {
       return authenticatedRoles;
+    }
+    if (deprecatedProtectedRoutes.contains(routeName)) {
+      return const <String>{};
     }
     return _routeRoles[routeName] ?? const <String>{};
   }

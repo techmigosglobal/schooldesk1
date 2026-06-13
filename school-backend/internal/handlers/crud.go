@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
@@ -107,6 +108,10 @@ func (h *CRUDHandler[T]) Update(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to load "+h.Module)
 		return
 	}
+	if err := h.validateExistingRecordMutation(c, &row); err != nil {
+		fail(c, http.StatusForbidden, err.Error())
+		return
+	}
 	if h.TableName == "messages" {
 		if message, ok := any(&row).(*models.Message); ok {
 			h.updateMessageReadReceipt(c, message)
@@ -162,17 +167,39 @@ func (h *CRUDHandler[T]) updateMessageReadReceipt(c *gin.Context, message *model
 
 func (h *CRUDHandler[T]) Delete(c *gin.Context) {
 	id := c.Param("id")
-	result := h.scopedQuery(c).Delete(new(T), h.idCondition(), id)
-	if result.Error != nil {
-		fail(c, http.StatusInternalServerError, "Failed to delete "+h.Module)
+	var row T
+	if err := h.scopedQuery(c).First(&row, h.idCondition(), id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fail(c, http.StatusNotFound, h.Module+" not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "Failed to load "+h.Module)
 		return
 	}
-	if result.RowsAffected == 0 {
-		fail(c, http.StatusNotFound, h.Module+" not found")
+	if err := h.validateExistingRecordMutation(c, &row); err != nil {
+		fail(c, http.StatusForbidden, err.Error())
+		return
+	}
+	if err := database.DB.Delete(&row).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to delete "+h.Module)
 		return
 	}
 	auditAction(c, h.Module, "delete", h.TableName, &id)
 	success(c, http.StatusOK, nil, h.Module+" deleted successfully")
+}
+
+func (h *CRUDHandler[T]) validateExistingRecordMutation(c *gin.Context, row *T) error {
+	if h.TableName != "diary_entries" || currentRole(c) != "teacher" {
+		return nil
+	}
+	entryDate := getTimeField(row, "EntryDate")
+	if entryDate.IsZero() {
+		return errors.New("Diary entry date is missing")
+	}
+	if !sameSchoolDay(entryDate, time.Now()) {
+		return errors.New("Diary entries can only be changed on the same day")
+	}
+	return validateHomeworkDiaryPolicy(c, row)
 }
 
 func (h *CRUDHandler[T]) scopedQuery(c *gin.Context) *gorm.DB {
@@ -617,6 +644,33 @@ func setStringField(row interface{}, name, value string) {
 	if field.IsValid() && field.CanSet() && field.Kind() == reflect.String {
 		field.SetString(value)
 	}
+}
+
+func getTimeField(row interface{}, name string) time.Time {
+	v := reflect.ValueOf(row)
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return time.Time{}
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return time.Time{}
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		return time.Time{}
+	}
+	value, ok := field.Interface().(time.Time)
+	if !ok {
+		return time.Time{}
+	}
+	return value
+}
+
+func sameSchoolDay(left, right time.Time) bool {
+	location := staffAttendanceLocation()
+	return left.In(location).Format("2006-01-02") == right.In(location).Format("2006-01-02")
 }
 
 func modelID(row interface{}) string {

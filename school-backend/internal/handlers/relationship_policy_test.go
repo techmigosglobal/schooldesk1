@@ -442,6 +442,158 @@ func TestTeacherCannotCreateAttendanceSessionForUnassignedSection(t *testing.T) 
 	}
 }
 
+func TestClassTeacherCanCreateAttendanceSessionWithoutTimetableSlot(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	if err := database.DB.Delete(&models.TimetableSlot{}, "id = ?", f.timetableSlotID).Error; err != nil {
+		t.Fatalf("delete timetable slot: %v", err)
+	}
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/attendance/sessions", NewAttendanceHandler().CreateAttendanceSession)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost,
+		"/attendance/sessions",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","section_id":"`+f.sectionID+`","staff_id":"`+f.teacherStaffID+`","date":"2026-05-08","period_number":1}`),
+	))
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("class teacher attendance create without slot status=%d body=%s", response.Code, response.Body.String())
+	}
+	var session models.AttendanceSession
+	if err := database.DB.First(&session, "section_id = ? AND date >= ? AND date < ?", f.sectionID, time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC), time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)).Error; err != nil {
+		t.Fatalf("created session not found: %v", err)
+	}
+	if session.SubjectID != f.subjectID {
+		t.Fatalf("session subject=%q, want %q", session.SubjectID, f.subjectID)
+	}
+	if session.TimetableSlotID != nil {
+		t.Fatalf("session timetable slot=%v, want nil", *session.TimetableSlotID)
+	}
+}
+
+func TestTeacherDiarySameDayEditDeleteAndPastArchive(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	todayDate, _ := staffAttendanceDate(time.Now())
+	today := todayDate.Add(9 * time.Hour)
+	yesterday := today.AddDate(0, 0, -1)
+	todayEntry := models.DiaryEntry{
+		BaseModel: models.BaseModel{ID: "diary-policy-today"},
+		SchoolID:  f.schoolID, EntryDate: today, SectionID: f.sectionID,
+		TeacherID: f.teacherStaffID, Title: "Today diary", Subject: "Mathematics",
+		Classwork: "Fractions", Homework: "Practice sums",
+	}
+	pastEntry := models.DiaryEntry{
+		BaseModel: models.BaseModel{ID: "diary-policy-past"},
+		SchoolID:  f.schoolID, EntryDate: yesterday, SectionID: f.sectionID,
+		TeacherID: f.teacherStaffID, Title: "Past diary", Subject: "Mathematics",
+		Classwork: "Tables", Homework: "Archived practice",
+	}
+	for _, row := range []models.DiaryEntry{todayEntry, pastEntry} {
+		if err := database.DB.Create(&row).Error; err != nil {
+			t.Fatalf("seed diary: %v", err)
+		}
+	}
+
+	diary := NewCRUDHandler[models.DiaryEntry]("diary_entries", "diary_entries", []string{"title"}, true)
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.PUT("/diary-entries/:id", diary.Update)
+	router.DELETE("/diary-entries/:id", diary.Delete)
+
+	updateToday := httptest.NewRecorder()
+	router.ServeHTTP(updateToday, httptest.NewRequest(
+		http.MethodPut,
+		"/diary-entries/"+todayEntry.ID,
+		strings.NewReader(`{"title":"Today diary","section_id":"`+f.sectionID+`","teacher_id":"`+f.teacherStaffID+`","subject":"Mathematics","classwork":"Fractions completed","homework":"Practice examples","date":"`+today.Format(time.RFC3339)+`"}`),
+	))
+	if updateToday.Code != http.StatusOK {
+		t.Fatalf("same-day diary update status=%d body=%s", updateToday.Code, updateToday.Body.String())
+	}
+
+	deletePast := httptest.NewRecorder()
+	router.ServeHTTP(deletePast, httptest.NewRequest(http.MethodDelete, "/diary-entries/"+pastEntry.ID, nil))
+	if deletePast.Code != http.StatusForbidden {
+		t.Fatalf("past diary delete status=%d body=%s", deletePast.Code, deletePast.Body.String())
+	}
+
+	deleteToday := httptest.NewRecorder()
+	router.ServeHTTP(deleteToday, httptest.NewRequest(http.MethodDelete, "/diary-entries/"+todayEntry.ID, nil))
+	if deleteToday.Code != http.StatusOK {
+		t.Fatalf("same-day diary delete status=%d body=%s", deleteToday.Code, deleteToday.Body.String())
+	}
+}
+
+func TestTeacherCannotTakeAttendanceForNonClassTeacherSection(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	slotID := "slot-policy-subject-teacher-other-section"
+	if err := database.DB.Create(&models.TimetableSlot{
+		BaseModel:      models.BaseModel{ID: slotID},
+		SectionID:      f.otherSectionID,
+		AcademicYearID: f.yearID,
+		TermID:         f.termID,
+		DayOfWeek:      5,
+		PeriodNumber:   2,
+		StartTime:      mustTimetableTestClock(t, "10:00"),
+		EndTime:        mustTimetableTestClock(t, "10:45"),
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		SlotType:       "regular",
+	}).Error; err != nil {
+		t.Fatalf("seed other-section subject slot: %v", err)
+	}
+	if err := database.DB.Create(&models.StaffSubject{
+		BaseModel:      models.BaseModel{ID: "staff-subject-policy-cross-section"},
+		SchoolID:       f.schoolID,
+		AcademicYearID: f.yearID,
+		StaffID:        f.teacherStaffID,
+		SubjectID:      f.subjectID,
+		GradeID:        "grade-policy",
+		SectionID:      &f.otherSectionID,
+		IsPrimary:      true,
+	}).Error; err != nil {
+		t.Fatalf("seed other-section staff subject: %v", err)
+	}
+
+	handler := NewAttendanceHandler()
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/attendance/sessions", handler.CreateAttendanceSession)
+	router.POST("/attendance/sessions/:session_id/mark", handler.MarkStudentAttendance)
+
+	create := httptest.NewRecorder()
+	router.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/attendance/sessions",
+		strings.NewReader(`{"academic_year_id":"`+f.yearID+`","section_id":"`+f.otherSectionID+`","subject_id":"`+f.subjectID+`","staff_id":"`+f.teacherStaffID+`","date":"2026-05-08","period_number":2,"timetable_slot_id":"`+slotID+`"}`),
+	))
+	if create.Code != http.StatusForbidden {
+		t.Fatalf("subject teacher attendance create status=%d body=%s", create.Code, create.Body.String())
+	}
+
+	session := models.AttendanceSession{
+		BaseModel:       models.BaseModel{ID: "attendance-policy-other-class-session"},
+		SectionID:       f.otherSectionID,
+		AcademicYearID:  f.yearID,
+		TimetableSlotID: &slotID,
+		SubjectID:       f.subjectID,
+		StaffID:         f.teacherStaffID,
+		Date:            time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:    2,
+	}
+	if err := database.DB.Create(&session).Error; err != nil {
+		t.Fatalf("seed other-class attendance session: %v", err)
+	}
+
+	mark := httptest.NewRecorder()
+	router.ServeHTTP(mark, httptest.NewRequest(
+		http.MethodPost,
+		"/attendance/sessions/"+session.ID+"/mark",
+		strings.NewReader(`{"attendances":[{"student_id":"`+f.otherStudentID+`","enrollment_id":"`+f.otherEnrollmentID+`","status":"present"}]}`),
+	))
+	if mark.Code != http.StatusForbidden {
+		t.Fatalf("subject teacher attendance mark status=%d body=%s", mark.Code, mark.Body.String())
+	}
+}
+
 func TestAttendanceMarkRejectsStudentOutsideSessionSection(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	session := models.AttendanceSession{

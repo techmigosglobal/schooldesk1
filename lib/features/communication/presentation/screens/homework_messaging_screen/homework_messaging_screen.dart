@@ -132,6 +132,13 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
       appBar: AppBar(
         backgroundColor: _primaryColor,
         elevation: 0,
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                tooltip: 'Back',
+                onPressed: () => Navigator.maybePop(context),
+              )
+            : null,
         title: Row(
           children: [
             Expanded(
@@ -154,7 +161,9 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                 decoration: BoxDecoration(
                   color: context.appTheme.surface.withAlpha(50),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.appTheme.surface.withAlpha(80)),
+                  border: Border.all(
+                    color: context.appTheme.surface.withAlpha(80),
+                  ),
                 ),
                 child: Text(
                   '$_totalUnread unread',
@@ -314,7 +323,9 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
       onTap: () => _openConversation(conv['id'] as String),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        color: isActive ? _primaryColor.withAlpha(15) : context.appTheme.surface,
+        color: isActive
+            ? _primaryColor.withAlpha(15)
+            : context.appTheme.surface,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +361,10 @@ class _HomeworkMessagingScreenState extends State<HomeworkMessagingScreen> {
                       decoration: BoxDecoration(
                         color: Colors.red.shade600,
                         shape: BoxShape.circle,
-                        border: Border.all(color: context.appTheme.surface, width: 1.5),
+                        border: Border.all(
+                          color: context.appTheme.surface,
+                          width: 1.5,
+                        ),
                       ),
                       child: Center(
                         child: Text(

@@ -171,13 +171,9 @@ func writeReportArtifact(row models.ReportExport, payload map[string]interface{}
 func reportCSV(row models.ReportExport, payload map[string]interface{}) []byte {
 	var buffer bytes.Buffer
 	writer := csv.NewWriter(&buffer)
-	_ = writer.Write([]string{"field", "value"})
-	_ = writer.Write([]string{"report_title", row.ReportTitle})
-	_ = writer.Write([]string{"category", row.Category})
-	_ = writer.Write([]string{"format", row.Format})
-	_ = writer.Write([]string{"scope", row.Scope})
-	for key, value := range payload {
-		_ = writer.Write([]string{key, fmt.Sprint(value)})
+	reportRows := reportArtifactRows(row, payload)
+	for _, cells := range reportRows {
+		_ = writer.Write(cells)
 	}
 	writer.Flush()
 	return buffer.Bytes()
@@ -206,15 +202,14 @@ func reportXLSX(row models.ReportExport, payload map[string]interface{}) ([]byte
 }
 
 func reportPDF(row models.ReportExport, payload map[string]interface{}) []byte {
-	body := []string{
-		"SchoolDesk report export",
-		"Title: " + row.ReportTitle,
-		"Category: " + row.Category,
-		"Format: " + row.Format,
-		"Requested: " + row.RequestedAt.Format(time.RFC3339),
-	}
-	if len(payload) > 0 {
-		body = append(body, "Parameters recorded in backend export metadata.")
+	rows := reportArtifactRows(row, payload)
+	body := []string{"SchoolDesk report export"}
+	for index, cells := range rows {
+		if index > 24 {
+			body = append(body, "More rows are available in CSV/XLSX export.")
+			break
+		}
+		body = append(body, strings.Join(cells, " | "))
 	}
 	return minimalPDF(row.ReportTitle, body)
 }
@@ -293,16 +288,7 @@ func xlsxWorkbookRels() string {
 }
 
 func xlsxSheet(row models.ReportExport, payload map[string]interface{}) string {
-	rows := [][]string{
-		{"field", "value"},
-		{"report_title", row.ReportTitle},
-		{"category", row.Category},
-		{"format", row.Format},
-		{"scope", row.Scope},
-	}
-	for key, value := range payload {
-		rows = append(rows, []string{key, fmt.Sprint(value)})
-	}
+	rows := reportArtifactRows(row, payload)
 	var sheet strings.Builder
 	sheet.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 	sheet.WriteString(`<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>`)
@@ -315,6 +301,151 @@ func xlsxSheet(row models.ReportExport, payload map[string]interface{}) string {
 	}
 	sheet.WriteString(`</sheetData></worksheet>`)
 	return sheet.String()
+}
+
+func reportArtifactRows(row models.ReportExport, payload map[string]interface{}) [][]string {
+	switch strings.ToLower(strings.TrimSpace(row.ReportType)) {
+	case "teacher_attendance", "class_attendance", "attendance":
+		if rows := attendanceReportRows(row, payload); len(rows) > 1 {
+			return rows
+		}
+	case "teacher_homework", "homework_submissions", "homework":
+		if rows := homeworkReportRows(row, payload); len(rows) > 1 {
+			return rows
+		}
+	}
+	rows := [][]string{
+		{"field", "value"},
+		{"report_title", row.ReportTitle},
+		{"category", row.Category},
+		{"format", row.Format},
+		{"scope", row.Scope},
+	}
+	for key, value := range payload {
+		rows = append(rows, []string{key, fmt.Sprint(value)})
+	}
+	return rows
+}
+
+func attendanceReportRows(row models.ReportExport, payload map[string]interface{}) [][]string {
+	type attendanceReportRow struct {
+		Date          time.Time
+		SectionName   string
+		SubjectName   string
+		StaffName     string
+		PeriodNumber  int
+		TotalStudents int
+		PresentCount  int
+		AbsentCount   int
+		LateCount     int
+		IsFinalized   bool
+	}
+	query := database.DB.Table("attendance_sessions").
+		Select(`
+			attendance_sessions.date,
+			COALESCE(grades.grade_name || ' ' || sections.section_name, sections.section_name, '') AS section_name,
+			COALESCE(subjects.subject_name, attendance_sessions.subject_id) AS subject_name,
+			TRIM(COALESCE(staff.first_name, '') || ' ' || COALESCE(staff.last_name, '')) AS staff_name,
+			attendance_sessions.period_number,
+			attendance_sessions.total_students,
+			attendance_sessions.present_count,
+			SUM(CASE WHEN LOWER(student_attendances.status) = 'absent' THEN 1 ELSE 0 END) AS absent_count,
+			SUM(CASE WHEN LOWER(student_attendances.status) = 'late' THEN 1 ELSE 0 END) AS late_count,
+			attendance_sessions.is_finalized
+		`).
+		Joins("LEFT JOIN sections ON sections.id = attendance_sessions.section_id").
+		Joins("LEFT JOIN grades ON grades.id = sections.grade_id").
+		Joins("LEFT JOIN subjects ON subjects.id = attendance_sessions.subject_id").
+		Joins("LEFT JOIN staff ON staff.id = attendance_sessions.staff_id").
+		Joins("LEFT JOIN student_attendances ON student_attendances.session_id = attendance_sessions.id").
+		Where("grades.school_id = ?", row.SchoolID).
+		Group("attendance_sessions.id, grades.grade_name, sections.section_name, subjects.subject_name, staff.first_name, staff.last_name").
+		Order("attendance_sessions.date DESC, attendance_sessions.period_number ASC")
+	if sectionID := textPayload(payload, "section_id"); sectionID != "" {
+		query = query.Where("attendance_sessions.section_id = ?", sectionID)
+	}
+	if teacherID := textPayload(payload, "teacher_id"); teacherID != "" {
+		query = query.Where("attendance_sessions.staff_id = ?", teacherID)
+	}
+	var rows []attendanceReportRow
+	if err := query.Find(&rows).Error; err != nil {
+		return nil
+	}
+	result := [][]string{{"date", "class", "subject", "teacher", "period", "total_students", "present", "absent", "late", "finalized"}}
+	for _, item := range rows {
+		result = append(result, []string{
+			item.Date.Format("2006-01-02"),
+			item.SectionName,
+			item.SubjectName,
+			item.StaffName,
+			fmt.Sprint(item.PeriodNumber),
+			fmt.Sprint(item.TotalStudents),
+			fmt.Sprint(item.PresentCount),
+			fmt.Sprint(item.AbsentCount),
+			fmt.Sprint(item.LateCount),
+			fmt.Sprint(item.IsFinalized),
+		})
+	}
+	return result
+}
+
+func homeworkReportRows(row models.ReportExport, payload map[string]interface{}) [][]string {
+	type homeworkReportRow struct {
+		Title           string
+		SubjectID       string
+		ClassID         string
+		SectionID       string
+		TeacherID       string
+		DueDate         time.Time
+		Status          string
+		SubmissionCount int
+		ReviewedCount   int
+	}
+	query := database.DB.Table("homework").
+		Select(`
+			homework.title,
+			homework.subject_id,
+			homework.class_id,
+			homework.section_id,
+			homework.staff_id AS teacher_id,
+			homework.submission_date AS due_date,
+			homework.status,
+			COUNT(homework_submissions.id) AS submission_count,
+			SUM(CASE WHEN homework_submissions.reviewed_at IS NOT NULL OR homework_submissions.reviewed_by != '' THEN 1 ELSE 0 END) AS reviewed_count
+		`).
+		Joins("LEFT JOIN homework_submissions ON homework_submissions.homework_id = homework.homework_id").
+		Where("homework.school_id = ?", row.SchoolID).
+		Group("homework.homework_id, homework.title, homework.subject_id, homework.class_id, homework.section_id, homework.staff_id, homework.submission_date, homework.status").
+		Order("homework.submission_date DESC, homework.created_at DESC")
+	if sectionID := textPayload(payload, "section_id"); sectionID != "" {
+		query = query.Where("homework.section_id = ?", sectionID)
+	}
+	if teacherID := textPayload(payload, "teacher_id"); teacherID != "" {
+		query = query.Where("homework.staff_id = ?", teacherID)
+	}
+	var rows []homeworkReportRow
+	if err := query.Find(&rows).Error; err != nil {
+		return nil
+	}
+	result := [][]string{{"title", "subject", "class", "section", "teacher", "due_date", "status", "submissions", "reviewed"}}
+	for _, item := range rows {
+		due := ""
+		if !item.DueDate.IsZero() {
+			due = item.DueDate.Format("2006-01-02")
+		}
+		result = append(result, []string{
+			item.Title,
+			item.SubjectID,
+			item.ClassID,
+			item.SectionID,
+			item.TeacherID,
+			due,
+			item.Status,
+			fmt.Sprint(item.SubmissionCount),
+			fmt.Sprint(item.ReviewedCount),
+		})
+	}
+	return result
 }
 
 func xlsxCell(columnIndex, rowIndex int, value string) string {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,8 @@ func TestSmartTimetableGenerateRegenerateScopeDeletesExistingSlotsSafely(t *test
 		&models.Staff{},
 		&models.StaffSubject{},
 		&models.Room{},
+		&models.TimetableTemplate{},
+		&models.TimetableConstraint{},
 		&models.TimetableSlot{},
 		&models.TimetableGenerationJob{},
 		&models.TimetableGenerationLog{},
@@ -77,8 +80,8 @@ func TestSmartTimetableGenerateRegenerateScopeDeletesExistingSlotsSafely(t *test
 	if err != nil {
 		t.Fatalf("generate failed: %v", err)
 	}
-	if result.Summary.CreatedSlots != 2 {
-		t.Fatalf("created slots = %d, want 2", result.Summary.CreatedSlots)
+	if result.Summary.CreatedSlots != 3 {
+		t.Fatalf("created slots = %d, want 3", result.Summary.CreatedSlots)
 	}
 	if result.Summary.ReservedBreaks != 1 {
 		t.Fatalf("reserved breaks = %d, want 1", result.Summary.ReservedBreaks)
@@ -91,7 +94,7 @@ func TestSmartTimetableGenerateRegenerateScopeDeletesExistingSlotsSafely(t *test
 		t.Fatalf("old scoped slot was not deleted")
 	}
 	var breakSlot models.TimetableSlot
-	if err := db.First(&breakSlot, "section_id = ? AND day_of_week = ? AND period_number = ?", section.ID, 1, 2).Error; err != nil {
+	if err := db.First(&breakSlot, "section_id = ? AND day_of_week = ? AND period_number = ?", section.ID, 1, 3).Error; err != nil {
 		t.Fatalf("load break slot: %v", err)
 	}
 	if breakSlot.SlotType != "break:Lunch Break" {
@@ -105,6 +108,117 @@ func TestSmartTimetableGenerateRegenerateScopeDeletesExistingSlotsSafely(t *test
 	}
 	if breakSlot.EndTime == nil || breakSlot.EndTime.Format("15:04") != "10:45" {
 		t.Fatalf("break end time = %v, want 10:45", breakSlot.EndTime)
+	}
+}
+
+func TestSmartTimetableBreaksAreInsertedAfterTeachingPeriods(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.AutoMigrate(
+		&models.School{},
+		&models.AcademicYear{},
+		&models.Term{},
+		&models.Grade{},
+		&models.Section{},
+		&models.Department{},
+		&models.Subject{},
+		&models.GradeSubject{},
+		&models.Staff{},
+		&models.StaffSubject{},
+		&models.Room{},
+		&models.TimetableTemplate{},
+		&models.TimetableConstraint{},
+		&models.TimetableSlot{},
+		&models.TimetableGenerationJob{},
+		&models.TimetableGenerationLog{},
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	start := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	school := models.School{BaseModel: models.BaseModel{ID: "school-smart-breaks-after"}, Name: "Smart School", SchoolType: "private"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-smart-breaks-after"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: start, EndDate: start.AddDate(1, 0, -1), IsCurrent: true}
+	term := models.Term{BaseModel: models.BaseModel{ID: "term-smart-breaks-after"}, AcademicYearID: year.ID, TermNumber: 1, TermName: "Term 1", StartDate: start, EndDate: start.AddDate(0, 6, 0), IsCurrent: true}
+	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-smart-breaks-after"}, SchoolID: school.ID, GradeNumber: 1, GradeName: "Play Group"}
+	teacherID := "staff-smart-breaks-after"
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-smart-breaks-after"}, SchoolID: school.ID, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 20, ClassTeacherID: &teacherID}
+	department := models.Department{BaseModel: models.BaseModel{ID: "dept-smart-breaks-after"}, SchoolID: school.ID, DepartmentName: "Academics"}
+	subject := models.Subject{BaseModel: models.BaseModel{ID: "subject-smart-breaks-after"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Hindi", SubjectCode: "HIN", SubjectType: "core"}
+	teacher := models.Staff{BaseModel: models.BaseModel{ID: teacherID}, SchoolID: school.ID, StaffCode: "TE-201", FirstName: "Hindi", LastName: "Teacher", Status: "active"}
+	constraint := models.TimetableConstraint{
+		BaseModel:      models.BaseModel{ID: "constraint-smart-breaks-after"},
+		SchoolID:       school.ID,
+		AcademicYearID: year.ID,
+		ConstraintType: "workload_limit",
+		Payload:        `{"max_weekly_periods":48,"max_daily_periods":8,"max_consecutive_periods":8}`,
+		IsActive:       true,
+	}
+	seeds := []any{
+		&school, &year, &term, &grade, &section, &department, &subject, &teacher, &constraint,
+		&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-subject-smart-breaks-after"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SubjectID: subject.ID, PeriodsPerWeek: 8, IsMandatory: true},
+		&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-smart-breaks-after"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: teacher.ID, SubjectID: subject.ID, GradeID: grade.ID, SectionID: &section.ID, IsPrimary: true},
+	}
+	for _, seed := range seeds {
+		if err := db.Create(seed).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	result, err := NewSmartTimetableEngine(db).Generate(context.Background(), school.ID, "principal-smart", "Principal", SmartTimetableRequest{
+		SectionID:             section.ID,
+		AcademicYearID:        year.ID,
+		TermID:                term.ID,
+		Mode:                  "regenerate_scope",
+		Days:                  []int{1},
+		PeriodsPerDay:         8,
+		StartTime:             "09:00",
+		PeriodDurationMinutes: 40,
+		GapMinutes:            5,
+		Breaks: []map[string]interface{}{
+			{"label": "Interval", "days": []int{1}, "periods": []int{2}, "start_time": "10:25", "end_time": "10:40"},
+			{"label": "Lunch Break", "days": []int{1}, "periods": []int{5}, "start_time": "13:00", "end_time": "13:30"},
+		},
+		RegenerateScope: true,
+	})
+	if err != nil {
+		t.Fatalf("generate failed: %v", err)
+	}
+	if result.Summary.SuggestedSlots != 8 {
+		t.Fatalf("teaching suggestions = %d, want 8", result.Summary.SuggestedSlots)
+	}
+	if result.Summary.ReservedBreaks != 2 {
+		t.Fatalf("reserved breaks = %d, want 2", result.Summary.ReservedBreaks)
+	}
+	if result.Summary.CreatedSlots != 10 {
+		t.Fatalf("created slots = %d, want 10", result.Summary.CreatedSlots)
+	}
+
+	var slots []models.TimetableSlot
+	if err := db.Order("period_number").Find(&slots, "section_id = ? AND day_of_week = ?", section.ID, 1).Error; err != nil {
+		t.Fatalf("load slots: %v", err)
+	}
+	if len(slots) != 10 {
+		t.Fatalf("slot count = %d, want 10", len(slots))
+	}
+	breaks := map[int]string{}
+	regularCount := 0
+	for _, slot := range slots {
+		if strings.HasPrefix(slot.SlotType, "break:") {
+			breaks[slot.PeriodNumber] = slot.SlotType
+			continue
+		}
+		regularCount++
+	}
+	if regularCount != 8 {
+		t.Fatalf("regular teaching slots = %d, want 8; slots=%+v", regularCount, slots)
+	}
+	if breaks[3] != "break:Interval" {
+		t.Fatalf("interval slot type at inserted period 3 = %q", breaks[3])
+	}
+	if breaks[7] != "break:Lunch Break" {
+		t.Fatalf("lunch slot type at inserted period 7 = %q", breaks[7])
 	}
 }
 

@@ -247,4 +247,49 @@ extension BackendCommunicationsApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  Future<List<Map<String, dynamic>>> getMyTeacherPtmSlots() async {
+    try {
+      final response = await _dio.get('/teacher/ptm-slots');
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asListMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load teacher PTM slots',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createMyTeacherPtmSlot({
+    required String sectionId,
+    required String slotDate,
+    required String slotTime,
+    int durationMin = 15,
+    String eventId = '',
+    String studentId = '',
+    String guardianId = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/teacher/ptm-slots',
+        data: {
+          if (eventId.trim().isNotEmpty) 'event_id': eventId.trim(),
+          'section_id': sectionId.trim(),
+          'slot_date': slotDate.trim(),
+          'slot_time': slotTime.trim(),
+          'duration_min': durationMin,
+          if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+          if (guardianId.trim().isNotEmpty) 'guardian_id': guardianId.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create teacher PTM slot',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

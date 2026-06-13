@@ -41,7 +41,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       );
       final counts = <String, int>{};
       for (final row in rows.take(12)) {
-        final id = teacherFlowText(row['id']);
+        final id = _homeworkId(row);
         if (id.isEmpty) continue;
         final submissions = await BackendApiClient.instance
             .getHomeworkSubmissions(id);
@@ -80,41 +80,14 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     if (result != null) await _loadHomework();
   }
 
-  Future<void> _logNoHomework() async {
-    final sectionId = RoleAccessService.teacherClassId;
-    await BackendApiClient.instance.createRaw('/diary-entries', {
-      'section_id': sectionId,
-      'teacher_id': RoleAccessService.teacherStaffId,
-      'staff_id': RoleAccessService.teacherStaffId,
-      'entry_type': 'no_homework',
-      'type': 'no_homework',
-      'title': 'No Homework Today',
-      'class': RoleAccessService.teacherClassName,
-      'subject': RoleAccessService.teacherSubject,
-      'homework': 'No homework',
-      'content':
-          'No homework assigned for ${RoleAccessService.teacherSubject} today.',
-      'notes':
-          'No homework assigned for ${RoleAccessService.teacherSubject} today.',
-      'date': DateTime.now().toUtc().toIso8601String(),
-      'entry_date': teacherFlowDate(DateTime.now()),
-    });
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('No homework logged'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    await _loadHomework();
-  }
-
   Future<void> _deleteHomework(Map<String, dynamic> row) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Homework'),
-        content: Text('Are you sure you want to delete "${teacherFlowText(row['title'], fallback: 'Homework')}"?'),
+        content: Text(
+          'Are you sure you want to delete "${teacherFlowText(row['title'], fallback: 'Homework')}"?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -122,7 +95,9 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: context.appTheme.error),
+            style: TextButton.styleFrom(
+              foregroundColor: context.appTheme.error,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -130,7 +105,10 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     );
     if (confirmed != true) return;
     try {
-      final id = teacherFlowText(row['id']);
+      final id = _homeworkId(row);
+      if (id.isEmpty) {
+        throw Exception('Homework record is missing its server id.');
+      }
       await BackendApiClient.instance.deleteHomework(id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -139,17 +117,17 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       await _loadHomework();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
-      title: 'Homework / Diary',
-      subtitle: 'Period completion, homework sharing, and submission review',
+      title: 'Homework / Assignments',
+      subtitle: 'Assignments, homework sharing, and submission review',
       selectedIndex: 3,
       loading: _loading,
       error: _error,
@@ -162,10 +140,10 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(
-            greeting: 'Period completion',
+            greeting: 'Assignment workspace',
             classLabel: RoleAccessService.teacherClassName,
             subject: RoleAccessService.teacherSubject,
-            timeLabel: 'Homework, classwork, or no-homework log',
+            timeLabel: 'Create, edit, and review homework',
             actions: [
               TeacherFlowAction(
                 label: 'Assign Homework',
@@ -174,9 +152,10 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                 onTap: () => _openForm(),
               ),
               TeacherFlowAction(
-                label: 'No Homework',
-                icon: Icons.task_alt_rounded,
-                onTap: _logNoHomework,
+                label: 'Class Diary',
+                icon: Icons.menu_book_rounded,
+                onTap: () =>
+                    Navigator.pushNamed(context, AppRoutes.teacherDiary),
               ),
             ],
           ),
@@ -206,9 +185,9 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                 tone: const Color(0xFFFFF4E5),
               ),
               TeacherFlowMetric(
-                label: 'No Homework',
-                value: '1 tap',
-                icon: Icons.done_all_rounded,
+                label: 'Diary',
+                value: 'Open',
+                icon: Icons.menu_book_rounded,
                 color: Colors.green,
                 tone: const Color(0xFFEAFBF0),
               ),
@@ -221,11 +200,11 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
             const TeacherFlowCard(
               icon: Icons.assignment_late_rounded,
               title: 'No homework yet',
-              subtitle: 'Assign homework or log no-homework after a period.',
+              subtitle: 'Assignments you create for this class appear here.',
             )
           else
             ..._homework.map((row) {
-              final id = teacherFlowText(row['id']);
+              final id = _homeworkId(row);
               final title = teacherFlowText(row['title'], fallback: 'Homework');
               final subject = teacherFlowText(
                 row['subject'] ?? row['subject_id'],
@@ -287,5 +266,9 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     if (due == null) return false;
     final now = DateTime.now();
     return due.difference(DateTime(now.year, now.month, now.day)).inDays <= 2;
+  }
+
+  String _homeworkId(Map<String, dynamic> row) {
+    return teacherFlowText(row['homework_id'] ?? row['id']);
   }
 }

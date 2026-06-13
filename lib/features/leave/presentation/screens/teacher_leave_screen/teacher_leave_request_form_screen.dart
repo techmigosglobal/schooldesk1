@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -43,9 +44,17 @@ class _TeacherLeaveRequestFormScreenState
   late final TextEditingController _fromDateController;
   late final TextEditingController _toDateController;
   String _leaveTypeId = '';
+  String _staffId = '';
+  String _staffName = '';
+  List<Map<String, dynamic>> _leaveTypes = const [];
+  List<Map<String, dynamic>> _balances = const [];
+  bool _loadingContext = true;
   bool _halfDay = false;
   bool _saving = false;
   String? _error;
+
+  bool get _missingRequiredContext =>
+      _staffId.trim().isEmpty || _leaveTypes.isEmpty;
 
   @override
   void initState() {
@@ -55,7 +64,12 @@ class _TeacherLeaveRequestFormScreenState
     );
     _fromDateController = TextEditingController(text: tomorrow);
     _toDateController = TextEditingController(text: tomorrow);
+    _staffId = widget.args.staffId;
+    _staffName = widget.args.staffName;
+    _leaveTypes = widget.args.leaveTypes;
+    _balances = widget.args.balances;
     _leaveTypeId = _firstLeaveTypeId();
+    _loadMissingContext();
   }
 
   @override
@@ -76,7 +90,7 @@ class _TeacherLeaveRequestFormScreenState
     try {
       await BackendApiClient.instance.submitLeaveApplication(
         LeaveApplicationRequest(
-          staffId: widget.args.staffId,
+          staffId: _staffId,
           leaveTypeId: _leaveTypeId,
           fromDate: _fromDateController.text.trim(),
           toDate: _toDateController.text.trim(),
@@ -101,6 +115,42 @@ class _TeacherLeaveRequestFormScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingContext) {
+      return const TeacherFlowScaffold(
+        title: 'Apply Leave',
+        subtitle: 'Loading teacher leave context',
+        selectedIndex: 10,
+        loading: true,
+        child: SizedBox.shrink(),
+      );
+    }
+    if (_missingRequiredContext) {
+      return TeacherFlowScaffold(
+        title: 'Apply Leave',
+        subtitle: 'Teacher module context required',
+        selectedIndex: 10,
+        child: TeacherFlowScrollView(
+          children: [
+            TeacherFlowCard(
+              icon: Icons.info_outline_rounded,
+              title: 'Open from Teacher module',
+              subtitle:
+                  'Please open this screen from the related Teacher module.',
+              body: TeacherFlowActionWrap(
+                actions: [
+                  TeacherFlowAction(
+                    label: 'Back',
+                    icon: Icons.arrow_back_rounded,
+                    onTap: () => Navigator.maybePop(context),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return TeacherFlowScaffold(
       title: 'Apply Leave',
       subtitle: 'Submit leave for admin review',
@@ -109,7 +159,9 @@ class _TeacherLeaveRequestFormScreenState
         children: [
           TeacherCurrentClassCard(
             greeting: 'Leave application',
-            classLabel: widget.args.staffName,
+            classLabel: _staffName.isEmpty
+                ? RoleAccessService.teacherName
+                : _staffName,
             subject: 'Approval required',
             timeLabel: _halfDay ? 'Half day' : 'Full day',
           ),
@@ -125,7 +177,7 @@ class _TeacherLeaveRequestFormScreenState
                     labelText: 'Leave type',
                     prefixIcon: Icon(Icons.category_rounded),
                   ),
-                  items: widget.args.leaveTypes
+                  items: _leaveTypes
                       .where((type) => teacherFlowText(type['id']).isNotEmpty)
                       .map(
                         (type) => DropdownMenuItem(
@@ -194,13 +246,13 @@ class _TeacherLeaveRequestFormScreenState
                       (value ?? '').trim().isEmpty ? 'Enter reason.' : null,
                 ),
                 const SizedBox(height: 12),
-                _BalancePreview(
-                  leaveTypeId: _leaveTypeId,
-                  balances: widget.args.balances,
-                ),
+                _BalancePreview(leaveTypeId: _leaveTypeId, balances: _balances),
                 if (_error != null) ...[
                   SizedBox(height: 12),
-                  Text(_error!, style: TextStyle(color: context.appTheme.error)),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: context.appTheme.error),
+                  ),
                 ],
                 const SizedBox(height: 18),
                 FilledButton.icon(
@@ -223,11 +275,42 @@ class _TeacherLeaveRequestFormScreenState
   }
 
   String _firstLeaveTypeId() {
-    for (final type in widget.args.leaveTypes) {
+    for (final type in _leaveTypes) {
       final id = teacherFlowText(type['id']);
       if (id.isNotEmpty) return id;
     }
     return '';
+  }
+
+  Future<void> _loadMissingContext() async {
+    try {
+      if (_staffId.isEmpty || _leaveTypes.isEmpty) {
+        await RoleAccessService.initialize();
+        final staffId = RoleAccessService.teacherStaffId;
+        final types = _leaveTypes.isEmpty
+            ? await BackendApiClient.instance.getLeaveTypes()
+            : _leaveTypes;
+        final balances = _balances.isEmpty && staffId.isNotEmpty
+            ? await BackendApiClient.instance.getLeaveBalances(staffId: staffId)
+            : _balances;
+        if (!mounted) return;
+        setState(() {
+          _staffId = _staffId.isEmpty ? staffId : _staffId;
+          _staffName = _staffName.isEmpty
+              ? RoleAccessService.teacherName
+              : _staffName;
+          _leaveTypes = types;
+          _balances = balances;
+          _leaveTypeId = _firstLeaveTypeId();
+          _loadingContext = false;
+        });
+        return;
+      }
+    } catch (_) {
+      // Fall through to the existing missing-context state.
+    }
+    if (!mounted) return;
+    setState(() => _loadingContext = false);
   }
 
   String _leaveTypeName(Map<String, dynamic> type) {

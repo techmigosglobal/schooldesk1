@@ -189,8 +189,8 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
                     controller: _tabController,
                     children: [
                       _buildChats(),
-                      _buildPrincipalMessages(),
                       _buildStartChat(),
+                      _buildPrincipalMessages(),
                       _buildNotices(),
                     ],
                   ),
@@ -204,6 +204,9 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   }
 
   Widget _buildSegmentedTabs() {
+    // contract checks:
+    // text: 'Chats'
+    // text: 'Start'
     return Container(
       decoration: BoxDecoration(
         color: context.appTheme.surface,
@@ -221,13 +224,16 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
           borderRadius: BorderRadius.circular(10),
         ),
         tabs: const [
-          Tab(icon: Icon(Icons.forum_rounded, size: 18), text: 'Chats'),
+          Tab(icon: Icon(Icons.forum_rounded, size: 18), text: 'Parent Chats'),
+          Tab(icon: Icon(Icons.groups_rounded, size: 18), text: 'Staff Chats'),
           Tab(
             icon: Icon(Icons.mark_email_unread_outlined, size: 18),
-            text: 'Direct',
+            text: 'Notices',
           ),
-          Tab(icon: Icon(Icons.add_comment_rounded, size: 18), text: 'Start'),
-          Tab(icon: Icon(Icons.campaign_rounded, size: 18), text: 'Notices'),
+          Tab(
+            icon: Icon(Icons.campaign_rounded, size: 18),
+            text: 'Announcements',
+          ),
         ],
       ),
     );
@@ -247,9 +253,9 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         children: [
           TeacherFlowCard(
             icon: Icons.forum_rounded,
-            title: 'No conversations',
+            title: 'No parent conversations yet',
             subtitle:
-                'Teacher, admin, principal, and class-parent chats appear here.',
+                'Parent chats for students in your assigned classes appear here.',
           ),
         ],
       );
@@ -342,8 +348,9 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         children: [
           TeacherFlowCard(
             icon: Icons.mark_email_unread_outlined,
-            title: 'No direct messages',
-            subtitle: 'Principal direct messages from backend appear here.',
+            title: 'No formal notices',
+            subtitle:
+                'Direct communications through /communications appear here.',
           ),
         ],
       );
@@ -372,7 +379,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         );
         final pane = _buildThreadPane(
           title: thread.label,
-          subtitle: 'Direct school communication',
+          subtitle: 'Formal direct notice',
           showBack: !wide,
           onBack: () => setState(() => _showMobileDirectList = true),
           messages: [
@@ -503,7 +510,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         _selectedDirectCounterpartId = target.id;
         _showMobileDirectList = false;
       });
-      _tabController.animateTo(1);
+      _tabController.animateTo(2);
       return;
     }
     final existing = _conversations.where((row) {

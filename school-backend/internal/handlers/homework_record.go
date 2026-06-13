@@ -39,7 +39,19 @@ func loadHomeworkRecord(schoolID, homeworkID string) (HomeworkRecord, error) {
 		Where(`"homework_id" = ? AND "school_id" = ?`, homeworkID, schoolID).
 		Take(&row).Error
 	if err != nil {
-		return HomeworkRecord{}, err
+		if err != gorm.ErrRecordNotFound ||
+			!database.DB.Migrator().HasColumn("homework", "id") {
+			return HomeworkRecord{}, err
+		}
+		err = homeworkTable().
+			Where(`"id" = ? AND "school_id" = ?`, homeworkID, schoolID).
+			Take(&row).Error
+		if err != nil {
+			return HomeworkRecord{}, err
+		}
+	}
+	if len(row) == 0 {
+		return HomeworkRecord{}, gorm.ErrRecordNotFound
 	}
 	return homeworkRecordFromMap(row), nil
 }

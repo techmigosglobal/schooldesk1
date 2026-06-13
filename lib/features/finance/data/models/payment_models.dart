@@ -6,6 +6,7 @@ part 'payment_models.g.dart';
 @freezed
 abstract class CreateRazorpayOrderRequest with _$CreateRazorpayOrderRequest {
   const factory CreateRazorpayOrderRequest({
+    @JsonKey(name: 'student_id') required String studentId,
     @JsonKey(name: 'invoice_ids') required List<String> invoiceIds,
   }) = _CreateRazorpayOrderRequest;
 

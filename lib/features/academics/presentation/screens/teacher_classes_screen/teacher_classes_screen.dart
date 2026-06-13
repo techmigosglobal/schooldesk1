@@ -32,7 +32,8 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
       await RoleAccessService.initialize();
       if (!mounted) return;
       setState(() {
-        _classes = RoleAccessService.teacherAssignedClasses;
+        // Only the sections where this teacher IS the class teacher.
+        _classes = RoleAccessService.teacherClassTeacherClasses;
         _students = RoleAccessService.teacherClassStudents;
         _loading = false;
       });
@@ -54,39 +55,46 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
               '${teacherFlowText(_students.first['name'], fallback: 'Student')}';
     return TeacherFlowScaffold(
       title: 'My Classes',
-      subtitle: 'Assigned sections, students, and classroom actions',
+      subtitle: 'Your class teacher section, students, and classroom actions',
       selectedIndex: 1,
       loading: _loading,
       error: _error,
       onRefresh: _loadClasses,
       child: TeacherFlowScrollView(
         children: [
-          TeacherCurrentClassCard(
-            greeting: 'Classroom context',
-            classLabel: classLabel,
-            subject: RoleAccessService.teacherSubject,
-            timeLabel: linkedStudentPreview,
-            actions: [
-              TeacherFlowAction(
-                label: 'Attendance',
-                icon: Icons.how_to_reg_rounded,
-                filled: true,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherAttendance),
-              ),
-              TeacherFlowAction(
-                label: 'Homework',
-                icon: Icons.assignment_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherHomework),
-              ),
-            ],
-          ),
+          if (!RoleAccessService.hasTeacherStaffLink)
+            const TeacherFlowCard(
+              icon: Icons.badge_outlined,
+              title: 'Your teacher account is not linked to a staff profile.',
+              subtitle: 'Please contact Admin/Principal.',
+            )
+          else
+            TeacherCurrentClassCard(
+              greeting: 'Classroom context',
+              classLabel: classLabel,
+              subject: RoleAccessService.teacherSubject,
+              timeLabel: linkedStudentPreview,
+              actions: [
+                TeacherFlowAction(
+                  label: 'Timetable',
+                  icon: Icons.calendar_month_rounded,
+                  filled: true,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherTimetable),
+                ),
+                TeacherFlowAction(
+                  label: 'Attendance',
+                  icon: Icons.how_to_reg_rounded,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherAttendance),
+                ),
+              ],
+            ),
           const SizedBox(height: 18),
           TeacherFlowMetricGrid(
             metrics: [
               TeacherFlowMetric(
-                label: 'Classes',
+                label: 'My Class',
                 value: '${_classes.length}',
                 icon: Icons.class_rounded,
                 color: teacherFlowAccent,
@@ -116,7 +124,76 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          TeacherFlowSectionHeader(title: 'Student Roll'),
+          const TeacherFlowSectionHeader(title: 'My Class (Class Teacher)'),
+          const SizedBox(height: 10),
+          if (_classes.isEmpty)
+            const TeacherFlowCard(
+              icon: Icons.class_outlined,
+              title: 'No classes assigned yet.',
+              subtitle:
+                  'Classes appear here after Admin/Principal assigns sections.',
+            )
+          else
+            ..._classes.map(
+              (row) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TeacherFlowCard(
+                  icon: Icons.class_rounded,
+                  title: teacherFlowText(row['label'], fallback: 'Class'),
+                  subtitle:
+                      '${teacherFlowText(row['section_name'], fallback: 'Section')} · ${teacherFlowText(row['subject_name'] ?? row['subject'], fallback: RoleAccessService.teacherSubject)}',
+                  status: row['is_class_teacher'] == true
+                      ? 'Class Teacher'
+                      : teacherFlowText(
+                          row['student_count'] ?? row['strength'],
+                          fallback: 'View students',
+                        ),
+                  statusColor: row['is_class_teacher'] == true
+                      ? Colors.green
+                      : teacherFlowAccent,
+                  body: TeacherFlowActionWrap(
+                    actions: [
+                      if (row['is_class_teacher'] == true)
+                        TeacherFlowAction(
+                          label: 'Attendance',
+                          icon: Icons.how_to_reg_rounded,
+                          filled: true,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.teacherAttendance,
+                          ),
+                        ),
+                      TeacherFlowAction(
+                        label: 'Homework',
+                        icon: Icons.assignment_rounded,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.teacherHomework,
+                        ),
+                      ),
+                      TeacherFlowAction(
+                        label: 'Diary',
+                        icon: Icons.menu_book_rounded,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.teacherDiary,
+                        ),
+                      ),
+                      TeacherFlowAction(
+                        label: 'Performance',
+                        icon: Icons.trending_up_rounded,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.teacherPerformance,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(height: 18),
+          const TeacherFlowSectionHeader(title: 'Primary Class Roll'),
           const SizedBox(height: 10),
           if (_students.isEmpty)
             const TeacherFlowCard(
@@ -137,26 +214,6 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                   status: teacherFlowText(
                     student['class'],
                     fallback: classLabel,
-                  ),
-                  body: TeacherFlowActionWrap(
-                    actions: [
-                      TeacherFlowAction(
-                        label: 'Notes',
-                        icon: Icons.note_alt_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherStudentNotes,
-                        ),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Performance',
-                        icon: Icons.trending_up_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherPerformance,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),

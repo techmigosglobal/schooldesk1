@@ -7,6 +7,9 @@ import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 
 void main() {
   final appRoutesSource = File('lib/routes/app_routes.dart').readAsStringSync();
+  final teacherNavigationSource = File(
+    'lib/core/widgets/teacher_navigation.dart',
+  ).readAsStringSync();
   final routeConstants = _routeConstants(appRoutesSource);
   final visibleRouteNames = _visibleRouteNames(appRoutesSource);
 
@@ -52,10 +55,7 @@ void main() {
         );
 
         expect(
-          RouteAccessGuard.isRoleAllowedFor(
-            routeName: route,
-            role: entry.key,
-          ),
+          RouteAccessGuard.isRoleAllowedFor(routeName: route, role: entry.key),
           isTrue,
           reason:
               '$routeName ($route) must be explicitly allowed for ${entry.key}',
@@ -111,6 +111,56 @@ void main() {
       }
     });
   }
+
+  test(
+    'teacher drawer exposes phase one screens and hides duplicate PTM route',
+    () {
+      for (final routeName in [
+        'teacherDashboard',
+        'teacherClasses',
+        'teacherTimetable',
+        'teacherAttendance',
+        'teacherAttendanceHistory',
+        'teacherMyAttendance',
+        'teacherHomework',
+        'teacherStudyMaterials',
+        'teacherDiary',
+        'teacherPerformance',
+        'teacherCommunication',
+        'teacherLeave',
+        'teacherReports',
+        'teacherMarkEntry',
+        'teacherSyllabus',
+        'notificationCenter',
+        'profileScreen',
+        'settingsScreen',
+        'homeworkMessaging',
+      ]) {
+        expect(
+          teacherNavigationSource,
+          contains('AppRoutes.$routeName'),
+          reason: '$routeName should be reachable from TeacherDrawer',
+        );
+      }
+
+      expect(
+        teacherNavigationSource,
+        isNot(contains('AppRoutes.teacherPTM')),
+        reason: 'TeacherPTM is no longer part of Teacher navigation',
+      );
+      for (final removedRouteName in [
+        'teacherStudentNotes',
+        'teacherDiscipline',
+        'teacherParentInteraction',
+      ]) {
+        expect(
+          teacherNavigationSource,
+          isNot(contains('AppRoutes.$removedRouteName')),
+          reason: '$removedRouteName is no longer part of Teacher navigation',
+        );
+      }
+    },
+  );
 }
 
 Map<String, String> _routeConstants(String source) {

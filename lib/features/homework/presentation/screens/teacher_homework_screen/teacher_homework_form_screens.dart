@@ -60,6 +60,10 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   bool _saving = false;
   String? _error;
 
+  bool get _missingRequiredContext =>
+      widget.args.teacherStaffId.trim().isEmpty ||
+      widget.args.assignedClasses.isEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -166,6 +170,13 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_missingRequiredContext) {
+      return _TeacherModuleEntryError(
+        title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
+        selectedIndex: 3,
+      );
+    }
+
     return TeacherFlowScaffold(
       title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
       subtitle: 'Minimal typing flow with class defaults',
@@ -301,7 +312,10 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                 ),
                 if (_error != null) ...[
                   SizedBox(height: 12),
-                  Text(_error!, style: TextStyle(color: context.appTheme.error)),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: context.appTheme.error),
+                  ),
                 ],
                 const SizedBox(height: 18),
                 FilledButton.icon(
@@ -395,7 +409,12 @@ class _TeacherHomeworkSubmissionsScreenState
   @override
   void initState() {
     super.initState();
-    _loadSubmissions();
+    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+      _loading = false;
+      _error = 'Please open this screen from the related Teacher module.';
+    } else {
+      _loadSubmissions();
+    }
   }
 
   Future<void> _loadSubmissions() async {
@@ -438,6 +457,13 @@ class _TeacherHomeworkSubmissionsScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+      return const _TeacherModuleEntryError(
+        title: 'Submissions',
+        selectedIndex: 3,
+      );
+    }
+
     final title = teacherFlowText(
       widget.args.homework['title'],
       fallback: 'Homework',
@@ -502,6 +528,44 @@ class _TeacherHomeworkSubmissionsScreenState
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeacherModuleEntryError extends StatelessWidget {
+  final String title;
+  final int selectedIndex;
+
+  const _TeacherModuleEntryError({
+    required this.title,
+    required this.selectedIndex,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TeacherFlowScaffold(
+      title: title,
+      subtitle: 'Teacher module context required',
+      selectedIndex: selectedIndex,
+      child: TeacherFlowScrollView(
+        children: [
+          TeacherFlowCard(
+            icon: Icons.info_outline_rounded,
+            title: 'Open from Teacher module',
+            subtitle:
+                'Please open this screen from the related Teacher module.',
+            body: TeacherFlowActionWrap(
+              actions: [
+                TeacherFlowAction(
+                  label: 'Back',
+                  icon: Icons.arrow_back_rounded,
+                  onTap: () => Navigator.maybePop(context),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

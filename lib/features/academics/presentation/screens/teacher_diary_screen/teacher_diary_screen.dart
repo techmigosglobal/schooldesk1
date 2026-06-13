@@ -14,13 +14,15 @@ class TeacherDiaryScreen extends StatefulWidget {
 
 class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   final _classworkController = TextEditingController();
-  final _homeworkController = TextEditingController();
+  final _practiceController = TextEditingController();
+  final _nextClassController = TextEditingController();
   final _noteController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
   String? _error;
   String _entryType = 'regular';
+  Map<String, dynamic>? _editingEntry;
   List<Map<String, dynamic>> _entries = const [];
 
   @override
@@ -32,7 +34,8 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   @override
   void dispose() {
     _classworkController.dispose();
-    _homeworkController.dispose();
+    _practiceController.dispose();
+    _nextClassController.dispose();
     _noteController.dispose();
     super.dispose();
   }
@@ -92,15 +95,16 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       ),
       'title': teacherFlowText(row['title'], fallback: 'Class diary'),
       'classwork': teacherFlowText(row['classwork'] ?? row['work_done']),
-      'homework': teacherFlowText(
+      'practice': teacherFlowText(
         row['homework'],
         fallback: teacherFlowText(row['entry_type']) == 'no_homework'
-            ? 'No homework'
+            ? 'No practice work'
             : '',
       ),
       'notes': teacherFlowText(
         row['notes'] ?? row['remarks'] ?? row['content'],
       ),
+      'schedule': teacherFlowText(row['schedule']),
       'type': teacherFlowText(
         row['type'] ?? row['entry_type'],
         fallback: 'regular',
@@ -108,18 +112,24 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     };
   }
 
-  Future<void> _saveDiaryEntry({bool noHomework = false}) async {
+  Future<void> _saveDiaryEntry({bool noPractice = false}) async {
     if (_saving) return;
     final classwork = _classworkController.text.trim();
-    final homework = noHomework
-        ? 'No homework'
-        : _homeworkController.text.trim();
+    final practice = noPractice
+        ? 'No practice work'
+        : _practiceController.text.trim();
+    final nextClass = _nextClassController.text.trim();
     final notes = _noteController.text.trim();
-    if (classwork.isEmpty && homework.isEmpty && notes.isEmpty) return;
+    if (classwork.isEmpty &&
+        practice.isEmpty &&
+        nextClass.isEmpty &&
+        notes.isEmpty) {
+      return;
+    }
 
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.createRaw('/diary-entries', {
+      final payload = {
         'date': DateTime.now().toUtc().toIso8601String(),
         'entry_date': teacherFlowDate(DateTime.now()),
         'section_id': RoleAccessService.teacherClassId,
@@ -127,26 +137,35 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         'staff_id': RoleAccessService.teacherStaffId,
         'class': RoleAccessService.teacherClassName,
         'subject': RoleAccessService.teacherSubject,
-        'title': noHomework ? 'No homework assigned' : 'Daily class diary',
+        'title': noPractice ? 'No practice work' : 'Daily class diary',
         'classwork': classwork,
-        'homework': homework,
+        'homework': practice,
+        'schedule': nextClass,
         'notes': notes,
-        'type': noHomework ? 'no_homework' : _entryType,
-        'entry_type': noHomework ? 'no_homework' : _entryType,
+        'type': noPractice ? 'no_practice' : _entryType,
+        'entry_type': noPractice ? 'no_practice' : _entryType,
         'content': [
-          if (classwork.isNotEmpty) 'Classwork: $classwork',
-          if (homework.isNotEmpty) 'Homework: $homework',
+          if (classwork.isNotEmpty) 'Today: $classwork',
+          if (nextClass.isNotEmpty) 'Next: $nextClass',
+          if (practice.isNotEmpty) 'Practice: $practice',
           if (notes.isNotEmpty) 'Notes: $notes',
         ].join('\n'),
         'created_by': RoleAccessService.teacherName,
-      });
-      _classworkController.clear();
-      _homeworkController.clear();
-      _noteController.clear();
+      };
+      final editingId = teacherFlowText(_editingEntry?['id']);
+      if (editingId.isEmpty) {
+        await BackendApiClient.instance.createRaw('/diary-entries', payload);
+      } else {
+        await BackendApiClient.instance.updateRaw(
+          '/diary-entries/$editingId',
+          payload,
+        );
+      }
+      _clearEntryForm();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(noHomework ? 'No-homework diary saved' : 'Diary saved'),
+          content: Text(editingId.isEmpty ? 'Diary saved' : 'Diary updated'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -164,12 +183,32 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     }
   }
 
+  void _clearEntryForm() {
+    _editingEntry = null;
+    _classworkController.clear();
+    _practiceController.clear();
+    _nextClassController.clear();
+    _noteController.clear();
+  }
+
+  void _editEntry(Map<String, dynamic> entry) {
+    if (!_isTodayEntry(entry)) return;
+    setState(() {
+      _editingEntry = entry;
+      _entryType = teacherFlowText(entry['type'], fallback: 'regular');
+      _classworkController.text = teacherFlowText(entry['classwork']);
+      _practiceController.text = teacherFlowText(entry['practice']);
+      _nextClassController.text = teacherFlowText(entry['schedule']);
+      _noteController.text = teacherFlowText(entry['notes']);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
       title: 'Class Diary',
-      subtitle: 'Record teaching progress, homework, and class notes',
-      selectedIndex: 13,
+      subtitle: 'Record today, next class, and practice work',
+      selectedIndex: 3,
       loading: _loading,
       error: _error,
       onRefresh: _loadDiary,
@@ -188,9 +227,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 onTap: _saving ? null : _saveDiaryEntry,
               ),
               TeacherFlowAction(
-                label: 'No Homework',
+                label: 'No Practice',
                 icon: Icons.assignment_turned_in_rounded,
-                onTap: _saving ? null : () => _saveDiaryEntry(noHomework: true),
+                onTap: _saving ? null : () => _saveDiaryEntry(noPractice: true),
               ),
             ],
           ),
@@ -205,9 +244,8 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 tone: const Color(0xFFEAF3FF),
               ),
               TeacherFlowMetric(
-                label: 'No homework',
-                value:
-                    '${_entries.where((row) => row['type'] == 'no_homework').length}',
+                label: 'Archived',
+                value: '${_entries.where((row) => !_isTodayEntry(row)).length}',
                 icon: Icons.task_alt_rounded,
                 color: teacherFlowAccent,
                 tone: const Color(0xFFEAFBF5),
@@ -217,24 +255,21 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
           const SizedBox(height: 18),
           _buildQuickEntry(),
           const SizedBox(height: 18),
-          const TeacherFlowSectionHeader(title: 'Recent Diary Entries'),
+          const TeacherFlowSectionHeader(title: "Today's Diary Entries"),
           const SizedBox(height: 10),
-          if (_entries.isEmpty)
+          if (_todayEntries.isEmpty)
             const TeacherFlowCard(
               icon: Icons.menu_book_outlined,
-              title: 'No diary entries',
-              subtitle:
-                  'Saved teaching logs from the backend will appear here.',
+              title: 'No diary for today',
+              subtitle: 'Record each completed period before the day ends.',
             )
           else
-            ..._entries
-                .take(20)
-                .map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _entryCard(entry),
-                  ),
-                ),
+            ..._todayEntries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _entryCard(entry),
+              ),
+            ),
         ],
       ),
     );
@@ -275,11 +310,21 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
           ),
           const SizedBox(height: 10),
           TextField(
-            controller: _homeworkController,
+            controller: _nextClassController,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Next class plan',
+              prefixIcon: Icon(Icons.next_plan_rounded),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _practiceController,
             minLines: 2,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: 'Homework assigned',
+              labelText: 'Practice work',
               prefixIcon: Icon(Icons.assignment_rounded),
             ),
           ),
@@ -298,10 +343,59 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     );
   }
 
+  Future<void> _deleteEntry(Map<String, dynamic> entry) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Diary Entry'),
+        content: Text(
+          'Are you sure you want to delete "${teacherFlowText(entry['title'], fallback: 'Class diary')}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: context.appTheme.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final id = teacherFlowText(entry['id'] ?? entry['diary_entry_id']);
+      if (id.isEmpty) {
+        throw Exception('Diary entry is missing its server id.');
+      }
+      await BackendApiClient.instance.deleteRaw('/diary-entries/$id');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Diary entry deleted successfully')),
+      );
+      await _loadDiary();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete diary entry: $error'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _entryCard(Map<String, dynamic> entry) {
-    final homework = teacherFlowText(entry['homework']);
+    final practice = teacherFlowText(entry['practice']);
     final classwork = teacherFlowText(entry['classwork']);
     final notes = teacherFlowText(entry['notes']);
+    final schedule = teacherFlowText(entry['schedule']);
+    final editable = _isTodayEntry(entry);
     return TeacherFlowCard(
       icon: Icons.menu_book_rounded,
       title: teacherFlowText(entry['title'], fallback: 'Class diary'),
@@ -315,14 +409,41 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
           if (classwork.isNotEmpty)
             TeacherInfoPill(icon: Icons.school_rounded, label: classwork),
           if (classwork.isNotEmpty) const SizedBox(height: 8),
-          if (homework.isNotEmpty)
-            TeacherInfoPill(icon: Icons.assignment_rounded, label: homework),
-          if (homework.isNotEmpty) const SizedBox(height: 8),
+          if (schedule.isNotEmpty)
+            TeacherInfoPill(icon: Icons.next_plan_rounded, label: schedule),
+          if (schedule.isNotEmpty) const SizedBox(height: 8),
+          if (practice.isNotEmpty)
+            TeacherInfoPill(icon: Icons.assignment_rounded, label: practice),
+          if (practice.isNotEmpty) const SizedBox(height: 8),
           if (notes.isNotEmpty)
             TeacherInfoPill(icon: Icons.notes_rounded, label: notes),
+          if (editable) ...[
+            const SizedBox(height: 10),
+            TeacherFlowActionWrap(
+              actions: [
+                TeacherFlowAction(
+                  label: 'Edit',
+                  icon: Icons.edit_rounded,
+                  onTap: () => _editEntry(entry),
+                ),
+                TeacherFlowAction(
+                  label: 'Delete',
+                  icon: Icons.delete_rounded,
+                  onTap: () => _deleteEntry(entry),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  List<Map<String, dynamic>> get _todayEntries =>
+      _entries.where(_isTodayEntry).toList();
+
+  bool _isTodayEntry(Map<String, dynamic> entry) {
+    return teacherFlowText(entry['date']) == teacherFlowDate(DateTime.now());
   }
 
   Color _typeColor(String type) {

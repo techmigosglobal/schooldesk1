@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,6 +109,53 @@ func TestMarkStaffAttendance(t *testing.T) {
 	assert.Equal(t, "2024-04-30T00:00:00Z", attendance["date"])
 	assert.Equal(t, "2024-04-30T09:00:00Z", attendance["check_in"])
 	assert.Equal(t, "2024-04-30T17:00:00Z", attendance["check_out"])
+}
+
+func TestTeacherAttendanceLocksUntilPrincipalReopens(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	session := models.AttendanceSession{
+		BaseModel:      models.BaseModel{ID: "attendance-lock-session"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:   1,
+	}
+	if err := database.DB.Create(&session).Error; err != nil {
+		t.Fatalf("seed attendance session: %v", err)
+	}
+
+	handler := NewAttendanceHandler()
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/attendance/sessions/:session_id/mark", handler.MarkStudentAttendance)
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.POST("/attendance/sessions/:session_id/reopen", handler.ReopenAttendanceSession)
+
+	body := `{"attendances":[{"student_id":"` + f.studentID + `","enrollment_id":"` + f.enrollmentID + `","status":"present"}]}`
+	first := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(first, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first mark status=%d body=%s", first.Code, first.Body.String())
+	}
+
+	second := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(second, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
+	if second.Code != http.StatusForbidden {
+		t.Fatalf("locked mark status=%d body=%s", second.Code, second.Body.String())
+	}
+
+	reopen := httptest.NewRecorder()
+	principalRouter.ServeHTTP(reopen, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/reopen", strings.NewReader(`{"reason":"Correction requested"}`)))
+	if reopen.Code != http.StatusOK {
+		t.Fatalf("reopen status=%d body=%s", reopen.Code, reopen.Body.String())
+	}
+
+	third := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(third, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
+	if third.Code != http.StatusOK {
+		t.Fatalf("mark after reopen status=%d body=%s", third.Code, third.Body.String())
+	}
 }
 
 func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {

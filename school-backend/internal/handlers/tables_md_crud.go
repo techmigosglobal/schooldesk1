@@ -293,6 +293,23 @@ func (h *TablesMDCRUDHandler) Delete(c *gin.Context) {
 	pk := quoteHandlerIdentifier(h.resource.PrimaryKey)
 	baseQuery := h.scopedQuery(c)
 	var result *gorm.DB
+	if h.resource.Table == "homework" {
+		var homeworkIDs []string
+		if err := baseQuery.Session(&gorm.Session{}).
+			Where(pk+" = ? OR \"id\" = ?", id, id).
+			Pluck(h.resource.PrimaryKey, &homeworkIDs).Error; err != nil {
+			fail(c, http.StatusInternalServerError, "Failed to prepare homework delete")
+			return
+		}
+		if len(homeworkIDs) > 0 {
+			if err := database.DB.
+				Where("school_id = ? AND homework_id IN ?", scopedSchoolID(c), homeworkIDs).
+				Delete(&models.HomeworkSubmission{}).Error; err != nil {
+				fail(c, http.StatusInternalServerError, "Failed to delete homework submissions")
+				return
+			}
+		}
+	}
 	if h.columnSet["id"] && h.resource.PrimaryKey != "id" {
 		// Table has both a domain PK and a generic id column – match either.
 		result = baseQuery.

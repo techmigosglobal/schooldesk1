@@ -9,6 +9,7 @@ part of 'payment_models.dart';
 _CreateRazorpayOrderRequest _$CreateRazorpayOrderRequestFromJson(
   Map<String, dynamic> json,
 ) => _CreateRazorpayOrderRequest(
+  studentId: json['student_id'] as String,
   invoiceIds: (json['invoice_ids'] as List<dynamic>)
       .map((e) => e as String)
       .toList(),
@@ -16,7 +17,10 @@ _CreateRazorpayOrderRequest _$CreateRazorpayOrderRequestFromJson(
 
 Map<String, dynamic> _$CreateRazorpayOrderRequestToJson(
   _CreateRazorpayOrderRequest instance,
-) => <String, dynamic>{'invoice_ids': instance.invoiceIds};
+) => <String, dynamic>{
+  'student_id': instance.studentId,
+  'invoice_ids': instance.invoiceIds,
+};
 
 _CreateRazorpayOrderResponse _$CreateRazorpayOrderResponseFromJson(
   Map<String, dynamic> json,

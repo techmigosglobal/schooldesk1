@@ -87,6 +87,29 @@ extension BackendAttendanceApi on BackendApiClient {
     }
   }
 
+  Future<AttendanceSessionModel> reopenAttendanceSession(
+    String sessionId, {
+    required String reason,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/attendance/sessions/$sessionId/reopen',
+        data: {'reason': reason},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return AttendanceSessionModel.fromJson(
+          data['data'] as Map<String, dynamic>,
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to reopen attendance session',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getStudentAttendanceSummary({
     required String studentId,
     String? academicYearId,

@@ -93,12 +93,18 @@ class AppRoutes {
   static const String teacherLogin = '/teacher-login-screen';
   static const String teacherDashboard = '/teacher-dashboard-screen';
   static const String teacherClasses = '/teacher-classes-screen';
+  static const String teacherTimetable = '/teacher-timetable-screen';
   static const String teacherAttendance = '/teacher-attendance-screen';
+  static const String teacherAttendanceHistory =
+      '/teacher-attendance-history-screen';
   static const String teacherMyAttendance = '/teacher-my-attendance-screen';
   static const String teacherHomework = '/teacher-homework-screen';
   static const String teacherHomeworkForm = '/teacher-homework-screen/form';
   static const String teacherHomeworkSubmissions =
       '/teacher-homework-screen/submissions';
+  static const String teacherStudyMaterials = '/teacher-study-materials-screen';
+  static const String teacherStudyMaterialForm =
+      '/teacher-study-materials-screen/form';
   static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDiscipline = '/teacher-discipline-screen';
@@ -290,14 +296,20 @@ class AppRoutes {
     teacherLogin: (context) => const AuthLoginScreen(),
     teacherDashboard: (context) => const TeacherDashboardScreen(),
     teacherClasses: (context) => const TeacherClassesScreen(),
+    teacherTimetable: (context) => const TeacherTimetableScreen(),
     teacherAttendance: (context) => const TeacherAttendanceScreen(),
+    teacherAttendanceHistory: (context) =>
+        const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
-    teacherHomework: (context) => const TeacherHomeworkScreen(),
+    teacherHomework: (context) => const TeacherDiaryScreen(),
     teacherHomeworkForm: (context) =>
         TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
     teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
       args: _teacherHomeworkSubmissionsArgs(context),
     ),
+    teacherStudyMaterials: (context) => const TeacherStudyMaterialsScreen(),
+    teacherStudyMaterialForm: (context) =>
+        const TeacherStudyMaterialFormScreen(),
     teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherDiscipline: (context) => const TeacherDisciplineScreen(),
@@ -350,7 +362,7 @@ class AppRoutes {
     parentPTMBooking: (context) => const ParentPTMBookingScreen(),
     parentDiscipline: (context) => const ParentDisciplineScreen(),
     teacherMarkEntry: (context) => const TeacherMarkEntryScreen(),
-    teacherPTM: (context) => const TeacherPTMScreen(),
+    teacherPTM: (context) => const TeacherParentInteractionScreen(),
     teacherSyllabus: (context) => const TeacherSyllabusScreen(),
     // New Screens,
     notificationCenter: (context) {
@@ -500,11 +512,15 @@ class AppRoutes {
     reportCardGenerator,
     teacherDashboard,
     teacherClasses,
+    teacherTimetable,
     teacherAttendance,
+    teacherAttendanceHistory,
     teacherMyAttendance,
     teacherHomework,
     teacherHomeworkForm,
     teacherHomeworkSubmissions,
+    teacherStudyMaterials,
+    teacherStudyMaterialForm,
     teacherPerformance,
     teacherStudentNotes,
     teacherDiscipline,

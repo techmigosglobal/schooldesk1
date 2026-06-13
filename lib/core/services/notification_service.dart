@@ -8,6 +8,7 @@ class NotificationService extends ChangeNotifier {
   final BackendApiClient _api = BackendApiClient.instance;
   List<AppNotification> _notifications = [];
   final Map<String, bool> _settings = {};
+  bool _loaded = false;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get totalUnread => _notifications.where((n) => !n.isRead).length;
@@ -19,15 +20,26 @@ class NotificationService extends ChangeNotifier {
 
   static Future<NotificationService> getInstance() async {
     _instance ??= NotificationService._();
-    await _instance!._load();
+    // Only load data once — avoids repeated API calls on every getInstance().
+    if (!_instance!._loaded) {
+      await _instance!._load();
+    }
     return _instance!;
   }
 
   NotificationService._();
 
   Future<void> _load() async {
+    _loaded = true;
     final rows = await _api.getNotifications();
     _notifications = rows.map(AppNotification.fromJson).toList();
+  }
+
+  /// Force a fresh reload of notifications from the backend.
+  Future<void> refresh() async {
+    _loaded = false;
+    await _load();
+    notifyListeners();
   }
 
   Future<void> addNotification(AppNotification notification) async {

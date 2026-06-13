@@ -222,6 +222,44 @@ extension BackendTimetableApi on BackendApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> createTimetableSlot({
+    required String sectionId,
+    required String academicYearId,
+    required String termId,
+    required int dayOfWeek,
+    required int periodNumber,
+    required String subjectId,
+    required String staffId,
+    required String startTime,
+    required String endTime,
+    String roomId = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/timetable/slots',
+        data: {
+          'section_id': sectionId.trim(),
+          'academic_year_id': academicYearId.trim(),
+          'term_id': termId.trim(),
+          'day_of_week': dayOfWeek,
+          'period_number': periodNumber,
+          'subject_id': subjectId.trim(),
+          'staff_id': staffId.trim(),
+          'start_time': startTime.trim(),
+          'end_time': endTime.trim(),
+          if (roomId.trim().isNotEmpty) 'room_id': roomId.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create timetable slot',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> _smartTimetable({
     required String path,
     required String sectionId,

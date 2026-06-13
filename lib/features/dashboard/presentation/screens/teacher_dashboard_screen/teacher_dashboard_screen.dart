@@ -27,11 +27,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _teacherName = 'Teacher';
   String _assignedClass = 'Not assigned';
   String _assignedSubject = 'General';
-  int _assignedStudents = 0;
+  int _assignedClasses = 0;
   int _homeworkDue = 0;
   int _homeworkTotal = 0;
   int _unreadMessages = 0;
-  double _attendancePct = 0;
+  int _attendancePending = 0;
   StaffAttendanceModel? _myAttendance;
   List<Map<String, dynamic>> _timetable = const [];
   List<AnnouncementModel> _announcements = const [];
@@ -64,20 +64,21 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final metrics = Map<String, dynamic>.from(
         dashboard['metrics'] as Map? ?? const {},
       );
-      final attendance = Map<String, dynamic>.from(
-        dashboard['today_attendance'] as Map? ?? const {},
-      );
       if (!mounted) return;
       setState(() {
         _teacherName = RoleAccessService.teacherName;
         _assignedClass = RoleAccessService.teacherClassName;
         _assignedSubject = RoleAccessService.teacherSubject;
         _timetable = RoleAccessService.teacherTimetableToday;
-        _assignedStudents = teacherFlowInt(metrics['assigned_students']);
+        _assignedClasses = RoleAccessService.assignedTeacherClasses.length;
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
-        _attendancePct = _doubleValue(attendance['attendance_pct']);
+        _attendancePending = _timetable
+            .where(
+              (row) => teacherFlowText(row['done']).toLowerCase() != 'true',
+            )
+            .length;
         _myAttendance = results[2] as StaffAttendanceModel?;
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
@@ -135,33 +136,49 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ],
       child: TeacherFlowScrollView(
         children: [
-          TeacherCurrentClassCard(
-            greeting: 'Good morning, $shortName',
-            classLabel: _currentClassTitle,
-            subject: _currentSubject,
-            timeLabel: _currentTimeLabel,
-            actions: [
-              TeacherFlowAction(
-                label: 'Scan QR',
-                icon: Icons.qr_code_scanner_rounded,
-                filled: true,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherMyAttendance),
-              ),
-              TeacherFlowAction(
-                label: 'Student Attendance',
-                icon: Icons.how_to_reg_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherAttendance),
-              ),
-              TeacherFlowAction(
-                label: 'Homework',
-                icon: Icons.assignment_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherHomework),
-              ),
-            ],
-          ),
+          if (!RoleAccessService.hasTeacherStaffLink)
+            const TeacherFlowCard(
+              icon: Icons.badge_outlined,
+              title: 'Your teacher account is not linked to a staff profile.',
+              subtitle: 'Please contact Admin/Principal.',
+            )
+          else if (!RoleAccessService.hasAssignedClasses)
+            const TeacherFlowCard(
+              icon: Icons.class_outlined,
+              title: 'No classes assigned yet.',
+              subtitle:
+                  'Your classes, timetable, and attendance workflow will appear after assignment.',
+            )
+          else
+            TeacherCurrentClassCard(
+              greeting: 'Good morning, $shortName',
+              classLabel: _currentClassTitle,
+              subject: _currentSubject,
+              timeLabel: _currentTimeLabel,
+              actions: [
+                TeacherFlowAction(
+                  label: 'Scan QR',
+                  icon: Icons.qr_code_scanner_rounded,
+                  filled: true,
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.teacherMyAttendance,
+                  ),
+                ),
+                TeacherFlowAction(
+                  label: 'Attendance',
+                  icon: Icons.how_to_reg_rounded,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherAttendance),
+                ),
+                TeacherFlowAction(
+                  label: 'Timetable',
+                  icon: Icons.calendar_month_rounded,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherTimetable),
+                ),
+              ],
+            ),
           if (_timetable.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
@@ -180,29 +197,29 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           TeacherFlowMetricGrid(
             metrics: [
               TeacherFlowMetric(
-                label: 'Students',
-                value: '$_assignedStudents',
+                label: 'Classes',
+                value: '$_assignedClasses',
                 icon: Icons.groups_rounded,
                 color: teacherFlowAccent,
                 tone: const Color(0xFFE3FAF5),
               ),
               TeacherFlowMetric(
-                label: 'Attendance',
-                value: '${_attendancePct.toStringAsFixed(0)}%',
+                label: 'Pending',
+                value: '$_attendancePending',
                 icon: Icons.fact_check_rounded,
                 color: Colors.indigo,
                 tone: const Color(0xFFEAF0FF),
               ),
               TeacherFlowMetric(
-                label: 'Homework',
+                label: 'Practice',
                 value: '$_homeworkDue/$_homeworkTotal',
-                icon: Icons.assignment_outlined,
+                icon: Icons.menu_book_outlined,
                 color: Colors.orange,
                 tone: const Color(0xFFFFF4E5),
               ),
               TeacherFlowMetric(
                 label: 'Messages',
-                value: '$_unreadMessages',
+                value: '${_unreadMessages + _announcements.length}',
                 icon: Icons.markunread_rounded,
                 color: Colors.purple,
                 tone: const Color(0xFFF5EAFE),
@@ -338,7 +355,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       );
     } else {
-      for (final row in _timetable.take(4)) {
+      for (final row in _timetable) {
         final subject = teacherFlowText(row['subject'], fallback: 'Subject');
         final classLabel = teacherFlowText(row['class'], fallback: 'Class');
         final time = teacherFlowText(row['time'], fallback: 'Period');
@@ -348,7 +365,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             child: TeacherTimelineItem(
               time: time,
               title: '$subject - $classLabel',
-              subtitle: 'Attendance, homework, and notes ready.',
+              subtitle: 'Attendance, diary, and notes ready.',
               icon: Icons.auto_stories_rounded,
               onTap: () =>
                   Navigator.pushNamed(context, AppRoutes.teacherHomework),
@@ -359,11 +376,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
     return rows;
   }
-
-  double _doubleValue(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse('${value ?? ''}') ?? 0;
-  }
 }
 
 class _TeacherQuickActionGrid extends StatelessWidget {
@@ -372,33 +384,33 @@ class _TeacherQuickActionGrid extends StatelessWidget {
     final actions = [
       _QuickAction(
         'My Classes',
-        'Open schedule',
+        'Assigned sections',
         SchoolDeskUiIllustrations.classRoutine,
         AppRoutes.teacherClasses,
       ),
       _QuickAction(
-        'Class Attendance',
-        'First period flow',
+        'Timetable',
+        'Today and week',
+        SchoolDeskUiIllustrations.calendar,
+        AppRoutes.teacherTimetable,
+      ),
+      _QuickAction(
+        'Attendance',
+        'Select period',
         SchoolDeskUiIllustrations.attendance,
         AppRoutes.teacherAttendance,
       ),
       _QuickAction(
-        'Homework / Diary',
-        'Share or log no homework',
-        SchoolDeskUiIllustrations.homework,
+        'Diary',
+        'Today and practice',
+        SchoolDeskUiIllustrations.resources,
         AppRoutes.teacherHomework,
       ),
       _QuickAction(
-        'Communication',
-        'Chats and notices',
-        SchoolDeskUiIllustrations.chat,
-        AppRoutes.teacherCommunication,
-      ),
-      _QuickAction(
-        'My Leaves',
-        'Apply and track',
-        SchoolDeskUiIllustrations.calendar,
-        AppRoutes.teacherLeave,
+        'Marks Entry',
+        'Exam scores',
+        SchoolDeskUiIllustrations.resources,
+        AppRoutes.teacherMarkEntry,
       ),
       _QuickAction(
         'Reports',

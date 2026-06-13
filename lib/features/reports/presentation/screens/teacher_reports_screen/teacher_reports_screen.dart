@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -39,18 +38,18 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       description: 'Assigned work and submission follow-up',
     ),
     _TeacherReportType(
+      title: 'Marks Summary',
+      type: 'marks',
+      icon: Icons.edit_note_rounded,
+      color: context.appTheme.secondary,
+      description: 'Teacher-scoped marks entry summary',
+    ),
+    _TeacherReportType(
       title: 'Student Support Report',
       type: 'support',
       icon: Icons.support_rounded,
       color: context.appTheme.warning,
       description: 'Notes, conduct items, and support actions',
-    ),
-    _TeacherReportType(
-      title: 'Report Cards Export',
-      type: 'report_cards',
-      icon: Icons.picture_as_pdf_rounded,
-      color: context.appTheme.secondary,
-      description: 'Jump into generated academic report cards',
     ),
   ];
 
@@ -153,8 +152,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       actions: [
         IconButton(
           tooltip: 'Report Cards',
-          onPressed: () =>
-              Navigator.pushNamed(context, AppRoutes.reportCardGenerator),
+          onPressed: _showReportCardManagedMessage,
           icon: const Icon(Icons.picture_as_pdf_rounded),
         ),
       ],
@@ -198,6 +196,13 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
                 tone: const Color(0xFFFFF0F0),
               ),
             ],
+          ),
+          const SizedBox(height: 18),
+          const TeacherFlowCard(
+            icon: Icons.picture_as_pdf_rounded,
+            title: 'Full report card generation is managed by Admin/Principal.',
+            subtitle:
+                'Teacher reports are limited to assigned class summaries and export requests.',
           ),
           const SizedBox(height: 18),
           const TeacherFlowSectionHeader(title: 'Create Report Export'),
@@ -266,14 +271,16 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
             icon: Icons.table_chart_rounded,
             onTap: exporting ? null : () => _exportReport(report, 'csv'),
           ),
-          if (report.type == 'report_cards')
-            TeacherFlowAction(
-              label: 'Open Cards',
-              icon: Icons.open_in_new_rounded,
-              onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.reportCardGenerator),
-            ),
         ],
+      ),
+    );
+  }
+
+  void _showReportCardManagedMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Report card generation is managed by Admin/Principal.'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

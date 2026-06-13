@@ -594,7 +594,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],
@@ -2177,7 +2179,11 @@ class _ClassesDirectoryErrorCard extends StatelessWidget {
       decoration: _classesPanelDecoration(radius: 8),
       child: Column(
         children: [
-          Icon(Icons.cloud_off_rounded, color: context.appTheme.error, size: 30),
+          Icon(
+            Icons.cloud_off_rounded,
+            color: context.appTheme.error,
+            size: 30,
+          ),
           const SizedBox(height: 10),
           Text(
             message,
@@ -2587,6 +2593,7 @@ class _ClassDetailPage extends StatelessWidget {
               trailing: OpsStatusPill(label: healthLabel, color: healthColor),
               children: [
                 _ClassMetricGrid(row: row),
+                _ClassIssueBreakdown(items: _classIssueBreakdown(row)),
                 const SizedBox(height: 18),
                 _ClassDetailRow(
                   label: 'Class Teacher',
@@ -2710,36 +2717,49 @@ class _ClassMetricGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final twoColumns = constraints.maxWidth >= 360;
-        return GridView.count(
-          crossAxisCount: twoColumns ? 2 : 1,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: twoColumns ? 2.7 : 4.4,
+        const spacing = 10.0;
+        final twoColumns = constraints.maxWidth >= 340;
+        final columns = twoColumns ? 2 : 1;
+        final tileWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
           children: [
-            _ClassMetricTile(
-              icon: Icons.groups_outlined,
-              label: 'Students',
-              value:
-                  '${_classInt(row['total_students'])}/${_classInt(row['capacity'])}',
+            SizedBox(
+              width: tileWidth,
+              child: _ClassMetricTile(
+                icon: Icons.groups_outlined,
+                label: 'Students',
+                value:
+                    '${_classInt(row['total_students'])}/${_classInt(row['capacity'])}',
+              ),
             ),
-            _ClassMetricTile(
-              icon: Icons.fact_check_outlined,
-              label: 'Today Attendance',
-              value:
-                  '${_classNum(row['today_attendance_pct']).toStringAsFixed(0)}%',
+            SizedBox(
+              width: tileWidth,
+              child: _ClassMetricTile(
+                icon: Icons.fact_check_outlined,
+                label: 'Today Attendance',
+                value:
+                    '${_classNum(row['today_attendance_pct']).toStringAsFixed(0)}%',
+              ),
             ),
-            _ClassMetricTile(
-              icon: Icons.warning_amber_rounded,
-              label: 'Pending Issues',
-              value: '${_classInt(row['pending_issues'])}',
+            SizedBox(
+              width: tileWidth,
+              child: _ClassMetricTile(
+                icon: Icons.warning_amber_rounded,
+                label: 'Pending Issues',
+                value: '${_classInt(row['pending_issues'])}',
+              ),
             ),
-            _ClassMetricTile(
-              icon: Icons.account_balance_wallet_outlined,
-              label: 'Fee Due',
-              value: '₹${_classNum(row['fees_due_amount']).toStringAsFixed(0)}',
+            SizedBox(
+              width: tileWidth,
+              child: _ClassMetricTile(
+                icon: Icons.account_balance_wallet_outlined,
+                label: 'Fee Due',
+                value:
+                    '₹${_classNum(row['fees_due_amount']).toStringAsFixed(0)}',
+              ),
             ),
           ],
         );
@@ -2762,7 +2782,8 @@ class _ClassMetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(minHeight: 84),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF7FBFE),
         borderRadius: BorderRadius.circular(8),
@@ -2776,22 +2797,27 @@ class _ClassMetricTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: const Color(0xFF64727E),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
@@ -2799,6 +2825,182 @@ class _ClassMetricTile extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
+  final practicePending = _classInt(row['homework_pending']);
+  final feeDueStudents = _classInt(row['fees_due_students']);
+  final disciplineNotes = _classInt(row['discipline_issues']);
+  final openComplaints = _classInt(row['complaints_open']);
+  final feeDueAmount = _classNum(row['fees_due_amount']);
+
+  return [
+    if (practicePending > 0)
+      _ClassIssueItem(
+        icon: Icons.assignment_late_outlined,
+        label: 'Practice pending',
+        value: '$practicePending',
+        note: 'Diary follow-up needed',
+        color: const Color(0xFFF59E0B),
+      ),
+    if (feeDueStudents > 0)
+      _ClassIssueItem(
+        icon: Icons.account_balance_wallet_outlined,
+        label: 'Fee due students',
+        value: '$feeDueStudents',
+        note: '${_formatCurrencyCompact(feeDueAmount)} due',
+        color: const Color(0xFFDC2626),
+      ),
+    if (disciplineNotes > 0)
+      _ClassIssueItem(
+        icon: Icons.report_problem_outlined,
+        label: 'Discipline notes',
+        value: '$disciplineNotes',
+        note: 'Needs principal review',
+        color: const Color(0xFF7C3AED),
+      ),
+    if (openComplaints > 0)
+      _ClassIssueItem(
+        icon: Icons.mark_unread_chat_alt_outlined,
+        label: 'Open complaints',
+        value: '$openComplaints',
+        note: 'Parent or student issue',
+        color: const Color(0xFF0891B2),
+      ),
+  ];
+}
+
+class _ClassIssueItem {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String note;
+  final Color color;
+
+  const _ClassIssueItem({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.note,
+    required this.color,
+  });
+}
+
+class _ClassIssueBreakdown extends StatelessWidget {
+  final List<_ClassIssueItem> items;
+
+  const _ClassIssueBreakdown({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FCFD),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD8E4EA)),
+      ),
+      child: items.isEmpty
+          ? Row(
+              children: [
+                const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: Color(0xFF0F9F6E),
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No pending class issues',
+                    style: textTheme.labelLarge?.copyWith(
+                      color: const Color(0xFF20313B),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Issue breakdown',
+                  style: textTheme.labelLarge?.copyWith(
+                    color: const Color(0xFF20313B),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (var index = 0; index < items.length; index++) ...[
+                  _ClassIssueLine(item: items[index]),
+                  if (index != items.length - 1)
+                    const Divider(height: 14, color: Color(0xFFE4EEF3)),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _ClassIssueLine extends StatelessWidget {
+  final _ClassIssueItem item;
+
+  const _ClassIssueLine({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: item.color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(item.icon, color: item.color, size: 18),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF20313B),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                item.note,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFF64727E),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          item.value,
+          style: textTheme.titleMedium?.copyWith(
+            color: item.color,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -4403,17 +4605,24 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
   bool _loading = true;
   bool _previewing = false;
   bool _generating = false;
+  bool _manualSaving = false;
   bool _replaceExisting = true;
   bool _showBreaks = false;
   bool _dirty = false;
   String _termId = '';
+  String _manualDay = '1';
+  String _manualPeriod = '1';
+  String _manualMapping = '';
   String? _error;
   List<Map<String, dynamic>> _terms = const [];
   List<Map<String, dynamic>> _slots = const [];
+  List<Map<String, dynamic>> _subjects = const [];
+  List<Map<String, dynamic>> _staffSubjects = const [];
   Map<String, dynamic>? _preview;
   Map<String, dynamic>? _generation;
 
   String get _sectionId => _classText(widget.classRow['section_id']);
+  String get _gradeId => _classText(widget.classRow['grade_id']);
   String get _academicYearId => _classText(widget.classRow['academic_year_id']);
   String get _className => _classText(
     widget.classRow['class_name'],
@@ -4480,9 +4689,18 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
                 sectionId: _sectionId,
                 academicYearId: _academicYearId,
               ),
+        api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
+        _gradeId.isEmpty
+            ? Future<List<Map<String, dynamic>>>.value(const [])
+            : api.getRawList(
+                '/staff-subjects',
+                queryParameters: {'grade_id': _gradeId, 'page_size': 500},
+              ),
       ]);
       final terms = results[0] as List<Map<String, dynamic>>;
       final slots = results[1] as List<Map<String, dynamic>>;
+      final subjects = results[2] as List<Map<String, dynamic>>;
+      final staffSubjects = results[3] as List<Map<String, dynamic>>;
       final preferredTerm = _classText(widget.classRow['term_id']);
       final nextTermId =
           _safeTermId(_termId, terms) ??
@@ -4492,7 +4710,10 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
       setState(() {
         _terms = terms;
         _slots = slots;
+        _subjects = subjects;
+        _staffSubjects = staffSubjects;
         _termId = nextTermId;
+        _manualMapping = _safeManualMapping(_manualMapping);
         _loading = false;
       });
     } catch (error) {
@@ -4571,6 +4792,59 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
       setState(() => _error = 'Timetable generation failed. $error');
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  Future<void> _createManualSlot() async {
+    if (!_ready) {
+      setState(() {
+        _error =
+            'Create the academic year term before adding a manual timetable period.';
+      });
+      return;
+    }
+    final mapping = _manualMappingParts(_manualMapping);
+    if (mapping == null) {
+      setState(() => _error = 'Select a subject and teacher mapping.');
+      return;
+    }
+    final day = int.tryParse(_manualDay) ?? 0;
+    final period = int.tryParse(_manualPeriod) ?? 0;
+    final times = _manualSlotTime(period);
+    if (day <= 0 || period <= 0 || times == null) {
+      setState(() => _error = 'Select a valid day and period.');
+      return;
+    }
+    setState(() {
+      _manualSaving = true;
+      _error = null;
+    });
+    try {
+      await BackendApiClient.instance.createTimetableSlot(
+        sectionId: _sectionId,
+        academicYearId: _academicYearId,
+        termId: _termId,
+        dayOfWeek: day,
+        periodNumber: period,
+        subjectId: mapping.$1,
+        staffId: mapping.$2,
+        startTime: times.$1,
+        endTime: times.$2,
+      );
+      _dirty = true;
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Manual timetable period created.'),
+          backgroundColor: context.appTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = 'Manual timetable creation failed. $error');
+    } finally {
+      if (mounted) setState(() => _manualSaving = false);
     }
   }
 
@@ -4853,6 +5127,20 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
           ),
           const SizedBox(height: 14),
           _buildGeneratorActions(),
+          const SizedBox(height: 14),
+          _ManualTimetableSlotPanel(
+            days: _selectedDays,
+            slotOptions: _manualSlotOptions,
+            mappingOptions: _manualMappingOptions,
+            selectedDay: _manualDay,
+            selectedPeriod: _manualPeriod,
+            selectedMapping: _manualMapping,
+            saving: _manualSaving,
+            onDayChanged: (value) => setState(() => _manualDay = value),
+            onPeriodChanged: (value) => setState(() => _manualPeriod = value),
+            onMappingChanged: (value) => setState(() => _manualMapping = value),
+            onCreate: _manualSaving ? null : _createManualSlot,
+          ),
           if (_preview != null || _generation != null) ...[
             const SizedBox(height: 14),
             _SmartTimetableResultPanel(
@@ -5098,6 +5386,118 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
         .toList();
   }
 
+  List<_ManualSlotOption> get _manualSlotOptions {
+    final totalTeaching = _positiveInt(_periodsController.text, 8);
+    final breakAfter = _breakPeriods.toSet();
+    final options = <_ManualSlotOption>[];
+    var slotNumber = 0;
+    for (
+      var teachingPeriod = 1;
+      teachingPeriod <= totalTeaching;
+      teachingPeriod++
+    ) {
+      slotNumber++;
+      final times = _manualSlotTime(slotNumber);
+      if (times != null) {
+        options.add(
+          _ManualSlotOption(
+            value: '$slotNumber',
+            label: 'Period $teachingPeriod (${times.$1} - ${times.$2})',
+          ),
+        );
+      }
+      if (breakAfter.contains(teachingPeriod)) {
+        slotNumber++;
+      }
+    }
+    return options;
+  }
+
+  List<_ManualMappingOption> get _manualMappingOptions {
+    final rows = _staffSubjects.where((row) {
+      final sectionId = _classText(row['section_id']);
+      return _classText(row['grade_id']) == _gradeId &&
+          (sectionId.isEmpty || sectionId == _sectionId) &&
+          _classText(row['subject_id']).isNotEmpty &&
+          _classText(row['staff_id']).isNotEmpty;
+    }).toList();
+    final seen = <String>{};
+    final options = <_ManualMappingOption>[];
+    for (final row in rows) {
+      final subjectId = _classText(row['subject_id']);
+      final staffId = _classText(row['staff_id']);
+      final value = '$subjectId|$staffId';
+      if (!seen.add(value)) continue;
+      options.add(
+        _ManualMappingOption(
+          value: value,
+          label: '${_manualSubjectName(subjectId)} - ${_manualStaffName(row)}',
+        ),
+      );
+    }
+    options.sort(
+      (left, right) =>
+          left.label.toLowerCase().compareTo(right.label.toLowerCase()),
+    );
+    return options;
+  }
+
+  String _safeManualMapping(String value) {
+    final options = _manualMappingOptions;
+    if (options.isEmpty) return '';
+    if (options.any((option) => option.value == value)) return value;
+    return options.first.value;
+  }
+
+  (String, String)? _manualMappingParts(String value) {
+    final parts = value.split('|');
+    if (parts.length != 2 || parts.first.isEmpty || parts.last.isEmpty) {
+      return null;
+    }
+    return (parts.first, parts.last);
+  }
+
+  (String, String)? _manualSlotTime(int slotNumber) {
+    if (slotNumber <= 0) return null;
+    final start =
+        _timeMinutes(_startController.text) +
+        (slotNumber - 1) *
+            (_positiveInt(_durationController.text, 40) +
+                _nonNegativeInt(_gapController.text, 5));
+    final end = start + _positiveInt(_durationController.text, 40);
+    return (_formatClock(start), _formatClock(end));
+  }
+
+  String _formatClock(int minutes) {
+    final hour = (minutes ~/ 60) % 24;
+    final minute = minutes % 60;
+    return '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+  }
+
+  String _manualSubjectName(String subjectId) {
+    final subject = _subjects.firstWhere(
+      (row) => _classText(row['id'] ?? row['subject_id']) == subjectId,
+      orElse: () => const {},
+    );
+    return _classText(
+      subject['subject_name'] ?? subject['name'] ?? subject['subject_code'],
+      fallback: subjectId,
+    );
+  }
+
+  String _manualStaffName(Map<String, dynamic> row) {
+    final staff = _classMap(row['staff']);
+    final parts = [
+      _classText(staff['first_name']),
+      _classText(staff['last_name']),
+    ].where((part) => part.isNotEmpty).join(' ');
+    if (parts.isNotEmpty) return parts;
+    return _classText(
+      row['staff_name'] ?? row['teacher_name'] ?? row['staff_id'],
+      fallback: 'Teacher',
+    );
+  }
+
   List<Map<String, dynamic>> get _breakRows {
     final rows = <Map<String, dynamic>>[];
     void addBreak(
@@ -5253,6 +5653,162 @@ class _TimetableReviewSetupPageState extends State<_TimetableReviewSetupPage> {
       return 'Generated $created timetable slots. Skipped $skipped.';
     }
     return 'Timetable generation finished. Review the blocked slots.';
+  }
+}
+
+class _ManualSlotOption {
+  final String value;
+  final String label;
+
+  const _ManualSlotOption({required this.value, required this.label});
+}
+
+class _ManualMappingOption {
+  final String value;
+  final String label;
+
+  const _ManualMappingOption({required this.value, required this.label});
+}
+
+String _classWeekdayLabel(int day) {
+  const names = {
+    1: 'Monday',
+    2: 'Tuesday',
+    3: 'Wednesday',
+    4: 'Thursday',
+    5: 'Friday',
+    6: 'Saturday',
+    7: 'Sunday',
+  };
+  return names[day] ?? 'Day $day';
+}
+
+class _ManualTimetableSlotPanel extends StatelessWidget {
+  final List<int> days;
+  final List<_ManualSlotOption> slotOptions;
+  final List<_ManualMappingOption> mappingOptions;
+  final String selectedDay;
+  final String selectedPeriod;
+  final String selectedMapping;
+  final bool saving;
+  final ValueChanged<String> onDayChanged;
+  final ValueChanged<String> onPeriodChanged;
+  final ValueChanged<String> onMappingChanged;
+  final VoidCallback? onCreate;
+
+  const _ManualTimetableSlotPanel({
+    required this.days,
+    required this.slotOptions,
+    required this.mappingOptions,
+    required this.selectedDay,
+    required this.selectedPeriod,
+    required this.selectedMapping,
+    required this.saving,
+    required this.onDayChanged,
+    required this.onPeriodChanged,
+    required this.onMappingChanged,
+    required this.onCreate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dayValues = days.isEmpty ? const [1] : days;
+    final safeDay = dayValues.contains(int.tryParse(selectedDay))
+        ? selectedDay
+        : '${dayValues.first}';
+    final safePeriod =
+        slotOptions.any((option) => option.value == selectedPeriod)
+        ? selectedPeriod
+        : (slotOptions.isEmpty ? null : slotOptions.first.value);
+    final safeMapping =
+        mappingOptions.any((option) => option.value == selectedMapping)
+        ? selectedMapping
+        : (mappingOptions.isEmpty ? null : mappingOptions.first.value);
+    return _TimetableSetupSection(
+      title: 'Create period manually',
+      icon: Icons.edit_calendar_outlined,
+      child: mappingOptions.isEmpty
+          ? const _TimetableSetupHint(
+              icon: Icons.menu_book_outlined,
+              title: 'Subject and teacher mapping needed',
+              message:
+                  'Assign subjects and teachers for this class before creating manual timetable periods.',
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: safeDay,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Day',
+                    prefixIcon: Icon(Icons.today_outlined),
+                  ),
+                  items: [
+                    for (final day in dayValues)
+                      DropdownMenuItem(
+                        value: '$day',
+                        child: Text(_classWeekdayLabel(day)),
+                      ),
+                  ],
+                  onChanged: saving
+                      ? null
+                      : (value) {
+                          if (value != null) onDayChanged(value);
+                        },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: safePeriod,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Period',
+                    prefixIcon: Icon(Icons.schedule_outlined),
+                  ),
+                  items: [
+                    for (final option in slotOptions)
+                      DropdownMenuItem(
+                        value: option.value,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged: saving
+                      ? null
+                      : (value) {
+                          if (value != null) onPeriodChanged(value);
+                        },
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: safeMapping,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Subject and teacher',
+                    prefixIcon: Icon(Icons.co_present_outlined),
+                  ),
+                  items: [
+                    for (final option in mappingOptions)
+                      DropdownMenuItem(
+                        value: option.value,
+                        child: Text(option.label),
+                      ),
+                  ],
+                  onChanged: saving
+                      ? null
+                      : (value) {
+                          if (value != null) onMappingChanged(value);
+                        },
+                ),
+                const SizedBox(height: 12),
+                _SetupPrimaryButton(
+                  label: saving ? 'Creating Period' : 'Create Period',
+                  icon: Icons.add_rounded,
+                  saving: saving,
+                  onPressed: onCreate,
+                ),
+              ],
+            ),
+    );
   }
 }
 
@@ -5651,7 +6207,9 @@ class _SmartTimetableResultPanel extends StatelessWidget {
                 generated
                     ? Icons.check_circle_outline_rounded
                     : Icons.visibility_outlined,
-                color: generated ? context.appTheme.success : context.appTheme.info,
+                color: generated
+                    ? context.appTheme.success
+                    : context.appTheme.info,
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -5686,7 +6244,9 @@ class _SmartTimetableResultPanel extends StatelessWidget {
           ),
           if (suggestions.isNotEmpty) ...[
             const SizedBox(height: 12),
-            ...suggestions.take(5).map((row) => _suggestionPreviewRow(context, row)),
+            ...suggestions
+                .take(5)
+                .map((row) => _suggestionPreviewRow(context, row)),
           ],
           if (conflicts.isNotEmpty || logs.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -5747,7 +6307,9 @@ class _SmartTimetableResultPanel extends StatelessWidget {
                 : blocking
                 ? Icons.warning_amber_rounded
                 : Icons.check_rounded,
-            color: blocking ? context.appTheme.warning : context.appTheme.success,
+            color: blocking
+                ? context.appTheme.warning
+                : context.appTheme.success,
             size: 18,
           ),
           const SizedBox(width: 8),
@@ -7156,7 +7718,9 @@ class _FeeChoiceCard extends StatelessWidget {
                   : _CreateClassSetupPageState._line,
               width: selected ? 1.4 : 1,
             ),
-            color: selected ? const Color(0xFFF4F8FF) : context.appTheme.surface,
+            color: selected
+                ? const Color(0xFFF4F8FF)
+                : context.appTheme.surface,
           ),
           child: Row(
             children: [

@@ -209,6 +209,18 @@ void main() {
     expect(screen, contains('Save & Continue'));
     expect(screen, contains('Assign Subjects'));
     expect(screen, contains('Class Details'));
+    expect(screen, contains('_ClassIssueBreakdown'));
+    expect(screen, contains('_ClassIssueLine'));
+    expect(screen, contains('_classIssueBreakdown(row)'));
+    expect(
+      screen,
+      contains('constraints: const BoxConstraints(minHeight: 84)'),
+    );
+    expect(screen, contains('mainAxisSize: MainAxisSize.min'));
+    expect(screen, contains('FittedBox('));
+    expect(screen, contains('Practice pending'));
+    expect(screen, contains('Fee due students'));
+    expect(screen, contains('Open complaints'));
     expect(screen, contains('Subjects in this Class'));
     expect(screen, contains('Add / Select Subject'));
     expect(screen, contains('Available Subjects'));
@@ -231,7 +243,10 @@ void main() {
     expect(screen, contains('Open timetable'));
     expect(screen, contains('Continue to fees'));
     expect(screen, isNot(contains('Save & Publish')));
-    expect(screen, isNot(contains('Edit Timetable Manually')));
+    expect(screen, contains('Create period manually'));
+    expect(screen, contains('_ManualTimetableSlotPanel'));
+    expect(screen, contains('_manualSlotOptions'));
+    expect(screen, contains('createTimetableSlot'));
     expect(screen, contains('previewSmartTimetable'));
     expect(screen, contains('generateSmartTimetable'));
     expect(screen, isNot(contains('saveTimetableTemplate')));

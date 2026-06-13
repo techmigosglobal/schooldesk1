@@ -207,6 +207,70 @@ void main() {
       );
     });
 
+    test('allows all phase one teacher module routes for teacher role', () {
+      const teacherRoutes = [
+        AppRoutes.teacherDashboard,
+        AppRoutes.teacherClasses,
+        AppRoutes.teacherTimetable,
+        AppRoutes.teacherAttendance,
+        AppRoutes.teacherAttendanceHistory,
+        AppRoutes.teacherMyAttendance,
+        AppRoutes.teacherHomework,
+        AppRoutes.teacherHomeworkForm,
+        AppRoutes.teacherHomeworkSubmissions,
+        AppRoutes.teacherStudyMaterials,
+        AppRoutes.teacherStudyMaterialForm,
+        AppRoutes.teacherPerformance,
+        AppRoutes.teacherCommunication,
+        AppRoutes.teacherLeave,
+        AppRoutes.teacherLeaveRequestForm,
+        AppRoutes.teacherReports,
+        AppRoutes.teacherDiary,
+        AppRoutes.teacherMarkEntry,
+        AppRoutes.teacherSyllabus,
+        AppRoutes.notificationCenter,
+        AppRoutes.profileScreen,
+        AppRoutes.settingsScreen,
+        AppRoutes.homeworkMessaging,
+      ];
+
+      for (final route in teacherRoutes) {
+        expect(
+          RouteAccessGuard.allowedRolesFor(route),
+          contains('teacher'),
+          reason: '$route should explicitly list Teacher as an allowed role',
+        );
+        expect(
+          RouteAccessGuard.redirectFor(
+            routeName: route,
+            isAuthenticated: true,
+            currentRole: 'Teacher',
+          ),
+          isNull,
+          reason: '$route should be reachable for Teacher',
+        );
+      }
+    });
+
+    test('removed teacher support routes are not teacher reachable', () {
+      for (final route in [
+        AppRoutes.teacherStudentNotes,
+        AppRoutes.teacherDiscipline,
+        AppRoutes.teacherParentInteraction,
+        AppRoutes.teacherPTM,
+      ]) {
+        expect(
+          RouteAccessGuard.redirectFor(
+            routeName: route,
+            isAuthenticated: true,
+            currentRole: 'Teacher',
+          ),
+          AppRoutes.teacherDashboard,
+          reason: '$route should no longer be reachable for Teacher',
+        );
+      }
+    });
+
     test('guards routed homework input and submission screens by role', () {
       for (final route in [
         AppRoutes.teacherHomeworkForm,

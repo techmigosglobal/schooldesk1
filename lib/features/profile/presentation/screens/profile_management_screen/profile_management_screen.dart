@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ProfileManagementScreen extends StatefulWidget {
@@ -34,9 +35,11 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
   bool _isEditing = false;
   String? _error;
   UserResponse? _profile;
+  StaffModel? _teacherStaff;
   String _avatarPath = '';
 
   bool get _isPrincipal => widget.role.toLowerCase() == 'principal';
+  bool get _isTeacher => widget.role.toLowerCase() == 'teacher';
 
   @override
   void initState() {
@@ -55,9 +58,20 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
       if (_isPrincipal) {
         school = await BackendApiClient.instance.getCurrentSchool();
       }
+      StaffModel? teacherStaff;
+      if (_isTeacher) {
+        await RoleAccessService.initialize();
+        final staffId = RoleAccessService.teacherStaffId;
+        if (staffId.isNotEmpty) {
+          teacherStaff = await BackendApiClient.instance.getStaffMember(
+            staffId,
+          );
+        }
+      }
       if (!mounted) return;
       setState(() {
         _profile = profile;
+        _teacherStaff = teacherStaff;
         _nameCtrl.text = profile.name.isNotEmpty ? profile.name : profile.email;
         _emailCtrl.text = profile.email;
         _phoneCtrl.text = profile.phone;
@@ -140,7 +154,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.dmSans()),
-        backgroundColor: isError ? context.appTheme.error : context.appTheme.success,
+        backgroundColor: isError
+            ? context.appTheme.error
+            : context.appTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -295,6 +311,10 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
                           ),
                         ],
                       ),
+                    ],
+                    if (_isTeacher) ...[
+                      const SizedBox(height: 12),
+                      _buildTeacherStaffDetails(),
                     ],
                     _buildAccountActions(),
                   ],
@@ -456,7 +476,9 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
             vertical: 12,
           ),
           filled: true,
-          fillColor: _isEditing ? context.appTheme.surface : context.appTheme.surfaceVariant,
+          fillColor: _isEditing
+              ? context.appTheme.surface
+              : context.appTheme.surfaceVariant,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
@@ -475,6 +497,54 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
               : 'Replace Profile Picture',
         ),
       ),
+    );
+  }
+
+  Widget _buildTeacherStaffDetails() {
+    final staff = _teacherStaff;
+    if (staff == null) {
+      return _buildSection(
+        title: 'Staff Details',
+        children: const [
+          ListTile(
+            leading: Icon(Icons.badge_outlined),
+            title: Text('Staff details unavailable'),
+            subtitle: Text('Staff details are managed by Admin/Principal.'),
+          ),
+        ],
+      );
+    }
+    return _buildSection(
+      title: 'Staff Details',
+      children: [
+        _readOnlyRow(
+          'Staff ID',
+          staff.staffCode.isEmpty ? staff.id : staff.staffCode,
+        ),
+        _readOnlyRow('Designation', staff.designation ?? 'Not assigned'),
+        _readOnlyRow('Department', staff.departmentName ?? 'Not assigned'),
+        _readOnlyRow('Employment', staff.employmentType ?? 'Not assigned'),
+        _readOnlyRow('Joining Date', staff.joinDate ?? 'Not available'),
+        _readOnlyRow('Status', staff.status),
+        const Divider(),
+        const ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(Icons.info_outline_rounded),
+          title: Text('Staff details are managed by Admin/Principal.'),
+        ),
+      ],
+    );
+  }
+
+  Widget _readOnlyRow(String label, String value) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        label,
+        style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+      ),
+      subtitle: Text(value, style: GoogleFonts.dmSans()),
     );
   }
 

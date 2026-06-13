@@ -130,16 +130,17 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
             timeLabel: '${_students.length} students',
             actions: [
               TeacherFlowAction(
+                label: 'Enter Marks',
+                icon: Icons.edit_note_rounded,
+                filled: true,
+                onTap: () =>
+                    Navigator.pushNamed(context, AppRoutes.teacherMarkEntry),
+              ),
+              TeacherFlowAction(
                 label: 'Student Notes',
                 icon: Icons.note_add_rounded,
                 onTap: () =>
                     Navigator.pushNamed(context, AppRoutes.teacherStudentNotes),
-              ),
-              TeacherFlowAction(
-                label: 'Reports',
-                icon: Icons.analytics_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherReports),
               ),
             ],
           ),
@@ -172,6 +173,16 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
           const SizedBox(height: 18),
           _filterStrip(),
           const SizedBox(height: 18),
+          if (_students.isNotEmpty &&
+              _students.every((row) => row.percent <= 0)) ...[
+            const TeacherFlowCard(
+              icon: Icons.info_outline_rounded,
+              title: 'No marks-based performance data yet.',
+              subtitle:
+                  'Enter marks after exam schedules are assigned. Until then this screen only lists students.',
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_filteredStudents.isEmpty)
             const TeacherFlowCard(
               icon: Icons.insights_rounded,

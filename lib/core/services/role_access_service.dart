@@ -31,9 +31,11 @@ class RoleAccessService {
     _teacherAssignedClasses = _listMap(_teacherDashboard['assigned_classes']);
 
     final teacherStaffId = _text(_teacherDashboard['staff_id']);
-    final teacherSectionId = _teacherAssignedClasses.isNotEmpty
-        ? _text(_teacherAssignedClasses.first['id'])
-        : '';
+    final classTeacherRow = _teacherAssignedClasses.firstWhere(
+      (row) => row['is_class_teacher'] == true,
+      orElse: () => _teacherAssignedClasses.isNotEmpty ? _teacherAssignedClasses.first : const {},
+    );
+    final teacherSectionId = _text(classTeacherRow['id']);
 
     final students = await _try(
       () => api.getStudents(
@@ -216,6 +218,80 @@ class RoleAccessService {
     return _teacherAssignedClasses
         .map((row) => {...row, 'label': _classLabel(row)})
         .toList();
+  }
+
+  static List<Map<String, dynamic>> get teacherClassTeacherClasses {
+    _ensureInitialized();
+    return _teacherAssignedClasses
+        .where((row) => row['is_class_teacher'] == true)
+        .map((row) => {...row, 'label': _classLabel(row)})
+        .toList();
+  }
+
+  static List<Map<String, dynamic>> get assignedTeacherClasses =>
+      teacherAssignedClasses;
+
+  static Map<String, dynamic> get primaryTeacherClass {
+    _ensureInitialized();
+    if (_teacherAssignedClasses.isEmpty) return const {};
+    return {
+      ..._teacherAssignedClasses.first,
+      'label': _classLabel(_teacherAssignedClasses.first),
+    };
+  }
+
+  static List<String> get teacherSectionIds {
+    _ensureInitialized();
+    return _teacherAssignedClasses
+        .map((row) => _text(row['id'] ?? row['section_id']))
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  static List<String> get teacherSubjectIds {
+    _ensureInitialized();
+    final ids = <String>{};
+    for (final row in _teacherAssignedClasses) {
+      final subjectId = _text(row['subject_id']);
+      if (subjectId.isNotEmpty) ids.add(subjectId);
+      final subjects = row['subjects'];
+      if (subjects is List) {
+        for (final subject in subjects) {
+          if (subject is Map) {
+            final id = _text(subject['id'] ?? subject['subject_id']);
+            if (id.isNotEmpty) ids.add(id);
+          } else {
+            final id = _text(subject);
+            if (id.isNotEmpty) ids.add(id);
+          }
+        }
+      }
+    }
+    for (final slot in _todayTimetable) {
+      final id = _text(slot['subject_id']);
+      if (id.isNotEmpty) ids.add(id);
+    }
+    return ids.toList();
+  }
+
+  static bool get hasTeacherStaffLink {
+    _ensureInitialized();
+    return teacherStaffId.isNotEmpty;
+  }
+
+  static bool get hasAssignedClasses {
+    _ensureInitialized();
+    return _teacherAssignedClasses.isNotEmpty;
+  }
+
+  static String get teacherScopeStatus {
+    _ensureInitialized();
+    if (!hasTeacherStaffLink) {
+      return 'Your teacher account is not linked to a staff profile. Please contact Admin/Principal.';
+    }
+    if (!hasAssignedClasses) return 'No classes assigned yet.';
+    return '';
   }
 
   static Map<String, dynamic> get teacherDashboardMetrics {

@@ -52,9 +52,7 @@ class _TeacherParentInteractionScreenState
     });
     try {
       await RoleAccessService.initialize();
-      final rows = await BackendApiClient.instance.getRawList(
-        '/parent-teacher-meetings',
-      );
+      final rows = await BackendApiClient.instance.getMyTeacherPtmSlots();
       final meetings = rows.where(_belongsToTeacher).map(_mapMeeting).toList()
         ..sort(
           (a, b) => teacherFlowText(
@@ -128,15 +126,12 @@ class _TeacherParentInteractionScreenState
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.createRaw('/parent-teacher-meetings', {
-        'section_id': RoleAccessService.teacherClassId,
-        'teacher_id': RoleAccessService.teacherStaffId,
-        'slot_date': _dateController.text.trim(),
-        'slot_time': _timeController.text.trim(),
-        'duration_min': 15,
-        'status': 'available',
-        'notes': _purposeController.text.trim(),
-      });
+      await BackendApiClient.instance.createMyTeacherPtmSlot(
+        sectionId: RoleAccessService.teacherClassId,
+        slotDate: _dateController.text.trim(),
+        slotTime: _timeController.text.trim(),
+        durationMin: 15,
+      );
       _purposeController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -180,7 +175,7 @@ class _TeacherParentInteractionScreenState
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
-      title: 'Parent Interaction',
+      title: 'Parent Interaction / PTM',
       subtitle: 'PTM slots, booked discussions, and follow-up notes',
       selectedIndex: 9,
       loading: _loading,
@@ -262,6 +257,8 @@ class _TeacherParentInteractionScreenState
             decoration: const InputDecoration(
               labelText: 'Purpose or note',
               prefixIcon: Icon(Icons.notes_rounded),
+              helperText:
+                  'Notes are shown locally until /teacher/ptm-slots accepts notes.',
             ),
           ),
         ],

@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$CreateRazorpayOrderRequest {
 
-@JsonKey(name: 'invoice_ids') List<String> get invoiceIds;
+@JsonKey(name: 'student_id') String get studentId;@JsonKey(name: 'invoice_ids') List<String> get invoiceIds;
 /// Create a copy of CreateRazorpayOrderRequest
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $CreateRazorpayOrderRequestCopyWith<CreateRazorpayOrderRequest> get copyWith => 
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is CreateRazorpayOrderRequest&&const DeepCollectionEquality().equals(other.invoiceIds, invoiceIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is CreateRazorpayOrderRequest&&(identical(other.studentId, studentId) || other.studentId == studentId)&&const DeepCollectionEquality().equals(other.invoiceIds, invoiceIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(invoiceIds));
+int get hashCode => Object.hash(runtimeType,studentId,const DeepCollectionEquality().hash(invoiceIds));
 
 @override
 String toString() {
-  return 'CreateRazorpayOrderRequest(invoiceIds: $invoiceIds)';
+  return 'CreateRazorpayOrderRequest(studentId: $studentId, invoiceIds: $invoiceIds)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $CreateRazorpayOrderRequestCopyWith<$Res>  {
   factory $CreateRazorpayOrderRequestCopyWith(CreateRazorpayOrderRequest value, $Res Function(CreateRazorpayOrderRequest) _then) = _$CreateRazorpayOrderRequestCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: 'invoice_ids') List<String> invoiceIds
+@JsonKey(name: 'student_id') String studentId,@JsonKey(name: 'invoice_ids') List<String> invoiceIds
 });
 
 
@@ -65,9 +65,10 @@ class _$CreateRazorpayOrderRequestCopyWithImpl<$Res>
 
 /// Create a copy of CreateRazorpayOrderRequest
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? invoiceIds = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? studentId = null,Object? invoiceIds = null,}) {
   return _then(_self.copyWith(
-invoiceIds: null == invoiceIds ? _self.invoiceIds : invoiceIds // ignore: cast_nullable_to_non_nullable
+studentId: null == studentId ? _self.studentId : studentId // ignore: cast_nullable_to_non_nullable
+as String,invoiceIds: null == invoiceIds ? _self.invoiceIds : invoiceIds // ignore: cast_nullable_to_non_nullable
 as List<String>,
   ));
 }
@@ -153,10 +154,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'invoice_ids')  List<String> invoiceIds)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: 'student_id')  String studentId, @JsonKey(name: 'invoice_ids')  List<String> invoiceIds)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _CreateRazorpayOrderRequest() when $default != null:
-return $default(_that.invoiceIds);case _:
+return $default(_that.studentId,_that.invoiceIds);case _:
   return orElse();
 
 }
@@ -174,10 +175,10 @@ return $default(_that.invoiceIds);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'invoice_ids')  List<String> invoiceIds)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: 'student_id')  String studentId, @JsonKey(name: 'invoice_ids')  List<String> invoiceIds)  $default,) {final _that = this;
 switch (_that) {
 case _CreateRazorpayOrderRequest():
-return $default(_that.invoiceIds);case _:
+return $default(_that.studentId,_that.invoiceIds);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -194,10 +195,10 @@ return $default(_that.invoiceIds);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'invoice_ids')  List<String> invoiceIds)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: 'student_id')  String studentId, @JsonKey(name: 'invoice_ids')  List<String> invoiceIds)?  $default,) {final _that = this;
 switch (_that) {
 case _CreateRazorpayOrderRequest() when $default != null:
-return $default(_that.invoiceIds);case _:
+return $default(_that.studentId,_that.invoiceIds);case _:
   return null;
 
 }
@@ -209,9 +210,10 @@ return $default(_that.invoiceIds);case _:
 @JsonSerializable()
 
 class _CreateRazorpayOrderRequest implements CreateRazorpayOrderRequest {
-  const _CreateRazorpayOrderRequest({@JsonKey(name: 'invoice_ids') required final  List<String> invoiceIds}): _invoiceIds = invoiceIds;
+  const _CreateRazorpayOrderRequest({@JsonKey(name: 'student_id') required this.studentId, @JsonKey(name: 'invoice_ids') required final  List<String> invoiceIds}): _invoiceIds = invoiceIds;
   factory _CreateRazorpayOrderRequest.fromJson(Map<String, dynamic> json) => _$CreateRazorpayOrderRequestFromJson(json);
 
+@override@JsonKey(name: 'student_id') final  String studentId;
  final  List<String> _invoiceIds;
 @override@JsonKey(name: 'invoice_ids') List<String> get invoiceIds {
   if (_invoiceIds is EqualUnmodifiableListView) return _invoiceIds;
@@ -233,16 +235,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CreateRazorpayOrderRequest&&const DeepCollectionEquality().equals(other._invoiceIds, _invoiceIds));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _CreateRazorpayOrderRequest&&(identical(other.studentId, studentId) || other.studentId == studentId)&&const DeepCollectionEquality().equals(other._invoiceIds, _invoiceIds));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_invoiceIds));
+int get hashCode => Object.hash(runtimeType,studentId,const DeepCollectionEquality().hash(_invoiceIds));
 
 @override
 String toString() {
-  return 'CreateRazorpayOrderRequest(invoiceIds: $invoiceIds)';
+  return 'CreateRazorpayOrderRequest(studentId: $studentId, invoiceIds: $invoiceIds)';
 }
 
 
@@ -253,7 +255,7 @@ abstract mixin class _$CreateRazorpayOrderRequestCopyWith<$Res> implements $Crea
   factory _$CreateRazorpayOrderRequestCopyWith(_CreateRazorpayOrderRequest value, $Res Function(_CreateRazorpayOrderRequest) _then) = __$CreateRazorpayOrderRequestCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: 'invoice_ids') List<String> invoiceIds
+@JsonKey(name: 'student_id') String studentId,@JsonKey(name: 'invoice_ids') List<String> invoiceIds
 });
 
 
@@ -270,9 +272,10 @@ class __$CreateRazorpayOrderRequestCopyWithImpl<$Res>
 
 /// Create a copy of CreateRazorpayOrderRequest
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? invoiceIds = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? studentId = null,Object? invoiceIds = null,}) {
   return _then(_CreateRazorpayOrderRequest(
-invoiceIds: null == invoiceIds ? _self._invoiceIds : invoiceIds // ignore: cast_nullable_to_non_nullable
+studentId: null == studentId ? _self.studentId : studentId // ignore: cast_nullable_to_non_nullable
+as String,invoiceIds: null == invoiceIds ? _self._invoiceIds : invoiceIds // ignore: cast_nullable_to_non_nullable
 as List<String>,
   ));
 }

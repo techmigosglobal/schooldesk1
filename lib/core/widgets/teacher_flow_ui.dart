@@ -86,22 +86,29 @@ const List<SchoolDeskModuleBottomAction> teacherFlowBottomActions = [
     route: AppRoutes.teacherDashboard,
   ),
   SchoolDeskModuleBottomAction(
-    label: 'Scan',
-    icon: Icons.qr_code_scanner_outlined,
-    activeIcon: Icons.qr_code_scanner_rounded,
-    route: AppRoutes.teacherMyAttendance,
+    label: 'Classes',
+    icon: Icons.class_outlined,
+    activeIcon: Icons.class_rounded,
+    route: AppRoutes.teacherClasses,
   ),
   SchoolDeskModuleBottomAction(
-    label: 'Class',
-    icon: Icons.school_outlined,
-    activeIcon: Icons.school_rounded,
+    label: 'Attendance',
+    icon: Icons.how_to_reg_outlined,
+    activeIcon: Icons.how_to_reg_rounded,
     route: AppRoutes.teacherAttendance,
   ),
   SchoolDeskModuleBottomAction(
     label: 'Diary',
-    icon: Icons.assignment_outlined,
-    activeIcon: Icons.assignment_rounded,
+    icon: Icons.menu_book_outlined,
+    activeIcon: Icons.menu_book_rounded,
     route: AppRoutes.teacherHomework,
+  ),
+  SchoolDeskModuleBottomAction(
+    label: 'Profile',
+    icon: Icons.account_circle_outlined,
+    activeIcon: Icons.account_circle_rounded,
+    route: AppRoutes.profileScreen,
+    arguments: 'teacher',
   ),
 ];
 

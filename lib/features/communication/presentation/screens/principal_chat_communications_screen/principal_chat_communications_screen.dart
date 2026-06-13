@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
@@ -408,7 +409,10 @@ class _PrincipalChatCommunicationsScreenState
       return Scaffold(
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF6FAFE),
-        drawer: PrincipalDrawer(selectedIndex: 18, onDestinationSelected: (_) {}),
+        drawer: PrincipalDrawer(
+          selectedIndex: 18,
+          onDestinationSelected: (_) {},
+        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -417,10 +421,11 @@ class _PrincipalChatCommunicationsScreenState
                 child: _loading
                     ? const Center(child: CircularProgressIndicator())
                     : _error != null
-                        ? _buildErrorState()
-                        : ChatWallpaperBackground(
-                            child: _buildActiveView(), // Wraps parentThread or teacherDirect view
-                          ),
+                    ? _buildErrorState()
+                    : ChatWallpaperBackground(
+                        child:
+                            _buildActiveView(), // Wraps parentThread or teacherDirect view
+                      ),
               ),
               ChatInputBar(
                 controller: _messageController,
@@ -442,9 +447,7 @@ class _PrincipalChatCommunicationsScreenState
       drawer: PrincipalDrawer(selectedIndex: 18, onDestinationSelected: (_) {}),
       bottomNavigationBar: const Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          PrincipalShellBottomBar(),
-        ],
+        children: [PrincipalShellBottomBar()],
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -624,6 +627,28 @@ class _PrincipalChatCommunicationsScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        TeacherCurrentClassCard(
+          greeting: 'Principal communication center',
+          classLabel: 'School community',
+          subject:
+              '${_parentThreads.length + _teacherThreads.length} conversations',
+          timeLabel: '$_totalUnread unread messages',
+          actions: [
+            TeacherFlowAction(
+              label: 'All Chats',
+              icon: Icons.forum_rounded,
+              filled: true,
+              onTap: () => _openView(_PrincipalCommunicationView.allChats),
+            ),
+            TeacherFlowAction(
+              label: 'Announcement',
+              icon: Icons.campaign_rounded,
+              onTap: () =>
+                  _openView(_PrincipalCommunicationView.composeAnnouncement),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
         _buildMetricGrid(),
         const SizedBox(height: 18),
         _sectionTitle('Quick Actions'),
@@ -856,7 +881,9 @@ class _PrincipalChatCommunicationsScreenState
     String? lastDateString;
     for (final message in thread.messages) {
       if (message.sentAt != null) {
-        final dateStr = DateFormat('yyyy-MM-dd').format(message.sentAt!.toLocal());
+        final dateStr = DateFormat(
+          'yyyy-MM-dd',
+        ).format(message.sentAt!.toLocal());
         if (dateStr != lastDateString) {
           final displayDate = _formatDateSeparator(message.sentAt!.toLocal());
           widgets.add(ChatDateSeparator(dateText: displayDate));
@@ -872,8 +899,12 @@ class _PrincipalChatCommunicationsScreenState
         ),
       );
       // Mark read if incoming and unread
-      if (!message.isRead && _role(message.senderRole) != 'principal' && message.id.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _markParentMessageRead(message));
+      if (!message.isRead &&
+          _role(message.senderRole) != 'principal' &&
+          message.id.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _markParentMessageRead(message),
+        );
       }
     }
     return widgets;
@@ -947,7 +978,9 @@ class _PrincipalChatCommunicationsScreenState
     String? lastDateString;
     for (final message in thread.messages) {
       if (message.sentAt != null) {
-        final dateStr = DateFormat('yyyy-MM-dd').format(message.sentAt!.toLocal());
+        final dateStr = DateFormat(
+          'yyyy-MM-dd',
+        ).format(message.sentAt!.toLocal());
         if (dateStr != lastDateString) {
           final displayDate = _formatDateSeparator(message.sentAt!.toLocal());
           widgets.add(ChatDateSeparator(dateText: displayDate));
@@ -963,8 +996,12 @@ class _PrincipalChatCommunicationsScreenState
         ),
       );
       // Mark read if incoming and unread
-      if (message.isIncomingToPrincipal && !message.isRead && message.id.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _markDirectMessageRead(message));
+      if (message.isIncomingToPrincipal &&
+          !message.isRead &&
+          message.id.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _markDirectMessageRead(message),
+        );
       }
     }
     return widgets;
@@ -1285,7 +1322,9 @@ class _PrincipalChatCommunicationsScreenState
                 showCheckmark: false,
                 selectedColor: const Color(0xFF0B72F0),
                 labelStyle: _textTheme.labelSmall?.copyWith(
-                  color: i == 0 ? context.appTheme.surface : const Color(0xFF334155),
+                  color: i == 0
+                      ? context.appTheme.surface
+                      : const Color(0xFF334155),
                   fontWeight: FontWeight.w900,
                 ),
                 side: BorderSide(
@@ -2211,6 +2250,7 @@ class _AnnouncementTile extends StatelessWidget {
     );
   }
 }
+
 class _StatusPill extends StatelessWidget {
   final String label;
   final Color color;

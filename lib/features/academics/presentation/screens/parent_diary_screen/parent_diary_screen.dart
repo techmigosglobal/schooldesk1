@@ -171,7 +171,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     return _filteredEntries.where((e) => e['date'] == fmt).toList();
   }
 
-  List<Map<String, dynamic>> get _pendingHomework {
+  List<Map<String, dynamic>> get _practiceWork {
     return _filteredEntries
         .where((e) => (e['homework'] as String? ?? '').isNotEmpty)
         .take(5)
@@ -300,7 +300,9 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
-                        color: sel ? context.appTheme.surface : context.appTheme.surface.withAlpha(30),
+                        color: sel
+                            ? context.appTheme.surface
+                            : context.appTheme.surface.withAlpha(30),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: sel
@@ -487,19 +489,18 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
             const SizedBox(height: 10),
             ...todayEntries.map((e) => _buildEntryCard(e)),
           ],
-          // Pending homework section
-          if (_pendingHomework.isNotEmpty) ...[
+          if (_practiceWork.isNotEmpty) ...[
             const SizedBox(height: 16),
             Row(
               children: [
                 Icon(
-                  Icons.assignment_late_outlined,
+                  Icons.assignment_outlined,
                   size: 18,
                   color: context.appTheme.error,
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Recent Homework',
+                  'Practice Work',
                   style: GoogleFonts.dmSans(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -509,7 +510,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
               ],
             ),
             const SizedBox(height: 10),
-            ..._pendingHomework.map((e) => _buildHomeworkCard(e)),
+            ..._practiceWork.map((e) => _buildPracticeCard(e)),
           ],
         ],
       ),
@@ -590,7 +591,9 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: isToday ? _headerColor : context.appTheme.surfaceVariant,
+                  color: isToday
+                      ? _headerColor
+                      : context.appTheme.surfaceVariant,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -598,7 +601,9 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isToday ? Colors.white : context.appTheme.onSurfaceVariant,
+                    color: isToday
+                        ? Colors.white
+                        : context.appTheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -707,7 +712,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                   const SizedBox(height: 8),
                   _infoRow(
                     Icons.assignment_outlined,
-                    'Homework',
+                    'Practice',
                     entry['homework'] as String,
                     color: context.appTheme.error,
                   ),
@@ -758,7 +763,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     );
   }
 
-  Widget _buildHomeworkCard(Map<String, dynamic> entry) {
+  Widget _buildPracticeCard(Map<String, dynamic> entry) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -806,12 +811,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     );
   }
 
-  Widget _infoRow(
-    IconData icon,
-    String label,
-    String value, {
-    Color? color,
-  }) {
+  Widget _infoRow(IconData icon, String label, String value, {Color? color}) {
     final effectiveColor = color ?? context.appTheme.primary;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -870,7 +870,10 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),

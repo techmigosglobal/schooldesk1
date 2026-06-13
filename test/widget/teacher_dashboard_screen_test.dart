@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -54,5 +56,14 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Science - Grade 5'), findsOneWidget);
+  });
+
+  test('teacher dashboard today feed is not capped to four timetable rows', () {
+    final source = File(
+      'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('for (final row in _timetable)'));
+    expect(source, isNot(contains('_timetable.take(4)')));
   });
 }

@@ -295,6 +295,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			attendance.GET("/sessions", attendanceHandler.GetAttendanceSessions)
 			attendance.POST("/sessions", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.CreateAttendanceSession)
 			attendance.POST("/sessions/:session_id/mark", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStudentAttendance)
+			attendance.POST("/sessions/:session_id/reopen", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ReopenAttendanceSession)
 			attendance.GET("/summary", attendanceHandler.GetStudentAttendanceSummary)
 			attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.ListStaffAttendance)
 			attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal"), attendanceHandler.GetStaffQRToken)

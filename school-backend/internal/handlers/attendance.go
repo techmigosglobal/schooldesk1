@@ -66,7 +66,7 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 		if staffID == "" {
 			query = query.Where("1 = 0")
 		} else {
-			query = query.Where("attendance_sessions.staff_id = ?", staffID)
+			query = query.Where("sections.class_teacher_id = ?", staffID)
 		}
 	}
 	if sectionID != "" {
@@ -95,7 +95,7 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 	var req struct {
 		AcademicYearID  string `json:"academic_year_id" binding:"required"`
 		SectionID       string `json:"section_id" binding:"required"`
-		SubjectID       string `json:"subject_id" binding:"required"`
+		SubjectID       string `json:"subject_id"`
 		StaffID         string `json:"staff_id" binding:"required"`
 		Date            string `json:"date" binding:"required"`
 		PeriodNumber    int    `json:"period_number"`
@@ -116,9 +116,25 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "period_number must be greater than zero")
 		return
 	}
-	if currentRole(c) != "" && !canTeachSectionSubject(c, req.StaffID, req.SectionID, req.SubjectID, req.TimetableSlotID) {
+	req.SubjectID = strings.TrimSpace(req.SubjectID)
+	req.TimetableSlotID = strings.TrimSpace(req.TimetableSlotID)
+	if currentRole(c) == "teacher" {
+		if req.StaffID != currentStaffID(c) ||
+			!classTeacherForSection(currentStaffID(c), req.SectionID, scopedSchoolID(c)) {
+			fail(c, http.StatusForbidden, "Only the class teacher can take attendance for this class")
+			return
+		}
+	} else if currentRole(c) != "" && !canTeachSectionSubject(c, req.StaffID, req.SectionID, req.SubjectID, req.TimetableSlotID) {
 		fail(c, http.StatusForbidden, "attendance session ownership denied")
 		return
+	}
+	if req.SubjectID == "" {
+		subjectID, err := defaultAttendanceSubjectID(scopedSchoolID(c), req.AcademicYearID, req.SectionID, req.StaffID)
+		if err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		req.SubjectID = subjectID
 	}
 	if err := academicDomainService().ValidateTimetableSlotRefs(scopedSchoolID(c), req.AcademicYearID, req.SectionID, req.SubjectID, req.StaffID); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -149,6 +165,38 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 	id := session.ID
 	auditAction(c, "attendance", "create", "attendance_sessions", &id)
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: session})
+}
+
+func defaultAttendanceSubjectID(schoolID, academicYearID, sectionID, staffID string) (string, error) {
+	var section models.Section
+	if err := database.DB.Model(&models.Section{}).
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		Where("sections.id = ? AND sections.academic_year_id = ? AND grades.school_id = ?", sectionID, academicYearID, schoolID).
+		First(&section).Error; err != nil {
+		return "", errors.New("section must belong to the selected academic year")
+	}
+
+	baseQuery := database.DB.Model(&models.StaffSubject{}).
+		Joins("JOIN staffs ON staffs.id = staff_subjects.staff_id").
+		Joins("JOIN subjects ON subjects.id = staff_subjects.subject_id").
+		Where("staffs.school_id = ? AND subjects.school_id = ?", schoolID, schoolID).
+		Where("staff_subjects.academic_year_id = ? AND staff_subjects.staff_id = ? AND staff_subjects.grade_id = ?", academicYearID, staffID, section.GradeID).
+		Order("staff_subjects.is_primary DESC, staff_subjects.created_at ASC")
+
+	var assignment models.StaffSubject
+	if err := baseQuery.Where("staff_subjects.section_id = ?", sectionID).First(&assignment).Error; err == nil {
+		return assignment.SubjectID, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", errors.New("Failed to resolve attendance subject")
+	}
+
+	if err := baseQuery.Where("staff_subjects.section_id IS NULL OR staff_subjects.section_id = ''").First(&assignment).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", errors.New("Failed to resolve attendance subject")
+		}
+		return "", errors.New("No subject assignment is available for attendance in this class")
+	}
+	return assignment.SubjectID, nil
 }
 
 func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
@@ -183,7 +231,17 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to load attendance session")
 		return
 	}
-	if currentRole(c) != "" && !canTeachSectionSubject(c, session.StaffID, session.SectionID, session.SubjectID, stringValue(session.TimetableSlotID)) {
+	role := currentRole(c)
+	if role == "teacher" && session.IsFinalized {
+		fail(c, http.StatusForbidden, "Attendance is locked. Ask the principal to reopen this session.")
+		return
+	}
+	if role == "teacher" {
+		if !classTeacherForSection(currentStaffID(c), session.SectionID, scopedSchoolID(c)) {
+			fail(c, http.StatusForbidden, "Only the class teacher can take attendance for this class")
+			return
+		}
+	} else if role != "" && role != "admin" && role != "principal" && !canTeachSectionSubject(c, session.StaffID, session.SectionID, session.SubjectID, stringValue(session.TimetableSlotID)) {
 		fail(c, http.StatusForbidden, "attendance session ownership denied")
 		return
 	}
@@ -224,6 +282,7 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		}
 		session.TotalStudents = len(req.Attendances)
 		session.PresentCount = presentCount
+		session.IsFinalized = true
 		return tx.Save(&session).Error
 	})
 	if err != nil {
@@ -237,6 +296,44 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 
 	auditAction(c, "attendance", "update", "student_attendances", &sessionID)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Attendance marked successfully"})
+}
+
+func (h *AttendanceHandler) ReopenAttendanceSession(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "reason is required")
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		fail(c, http.StatusBadRequest, "reason is required")
+		return
+	}
+
+	var session models.AttendanceSession
+	if err := database.DB.Model(&models.AttendanceSession{}).
+		Joins("JOIN sections ON sections.id = attendance_sessions.section_id").
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		Where("attendance_sessions.id = ? AND grades.school_id = ?", sessionID, scopedSchoolID(c)).
+		First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fail(c, http.StatusNotFound, "Attendance session not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "Failed to load attendance session")
+		return
+	}
+
+	if err := database.DB.Model(&session).Update("is_finalized", false).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to reopen attendance session")
+		return
+	}
+	session.IsFinalized = false
+	auditAction(c, "attendance", "reopen: "+reason, "attendance_sessions", &sessionID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: session, Message: "Attendance session reopened"})
 }
 
 var errInvalidAttendanceStatus = errors.New("invalid attendance status")

@@ -220,24 +220,12 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 		previousByDay := map[int]string{}
 
 		for _, day := range state.Template.Days {
+			slotNumber := 0
 			for period := 1; period <= state.Template.PeriodsPerDay; period++ {
+				slotNumber++
 				plan.Summary.RequestedSlots++
-				start, end := periodTime(state.Template, period)
-				if row, ok := breakConfig(state.Template, day, period); ok {
-					start, end = breakTime(state.Template, period, row)
-					label := firstNonEmpty(row.Label, "Break")
-					plan.Summary.ReservedBreaks++
-					plan.Suggestions = append(plan.Suggestions, SmartTimetableSuggestion{
-						SectionID: section.ID, ClassName: classLabel(section),
-						AcademicYearID: state.AcademicYearID, TermID: state.TermID,
-						DayOfWeek: day, DayLabel: weekdayLabel(day), PeriodNumber: period,
-						SubjectName: label, StartTime: start, EndTime: end,
-						Status: "reserved_break", Confidence: 100,
-						Reasons: []string{"Break/lunch reserved by timetable template."},
-					})
-					continue
-				}
-				if state.ClassBusy[section.ID] != nil && state.ClassBusy[section.ID][day] != nil && state.ClassBusy[section.ID][day][period] {
+				start, end := periodTime(state.Template, slotNumber)
+				if state.ClassBusy[section.ID] != nil && state.ClassBusy[section.ID][day] != nil && state.ClassBusy[section.ID][day][slotNumber] {
 					plan.Summary.ExistingSlots++
 					continue
 				}
@@ -257,7 +245,7 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 				reasons := []string{}
 				firstPeriodPreferred := false
 				if period == 1 {
-					if teacherSubject, ok, reason := e.classTeacherSubject(state, section, subjects, day, period); ok {
+					if teacherSubject, ok, reason := e.classTeacherSubject(state, section, subjects, day, slotNumber); ok {
 						subject = teacherSubject
 						firstPeriodPreferred = true
 						reasons = append(reasons, "Class teacher first-period preference applied.")
@@ -272,9 +260,9 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 					}
 				}
 
-				staff, staffReasons, ok := e.chooseStaff(state, section, subject, day, period, firstPeriodPreferred)
+				staff, staffReasons, ok := e.chooseStaff(state, section, subject, day, slotNumber, firstPeriodPreferred)
 				reasons = append(reasons, staffReasons...)
-				roomID, roomName, roomReasons, roomBlocking := e.chooseRoom(state, section, subject, day, period)
+				roomID, roomName, roomReasons, roomBlocking := e.chooseRoom(state, section, subject, day, slotNumber)
 				reasons = append(reasons, roomReasons...)
 				blocking := !ok || roomBlocking
 				confidence := 94
@@ -287,10 +275,10 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 					confidence = 78
 				}
 				if !blocking {
-					markBusy(state.StaffBusy, staff.ID, day, period)
-					markBusy(state.ClassBusy, section.ID, day, period)
+					markBusy(state.StaffBusy, staff.ID, day, slotNumber)
+					markBusy(state.ClassBusy, section.ID, day, slotNumber)
 					if roomID != "" {
-						markBusy(state.RoomBusy, roomID, day, period)
+						markBusy(state.RoomBusy, roomID, day, slotNumber)
 					}
 					state.StaffWeeklyLoad[staff.ID]++
 					if state.StaffDailyLoad[staff.ID] == nil {
@@ -304,13 +292,27 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 				plan.Suggestions = append(plan.Suggestions, SmartTimetableSuggestion{
 					SectionID: section.ID, ClassName: classLabel(section),
 					AcademicYearID: state.AcademicYearID, TermID: state.TermID,
-					DayOfWeek: day, DayLabel: weekdayLabel(day), PeriodNumber: period,
+					DayOfWeek: day, DayLabel: weekdayLabel(day), PeriodNumber: slotNumber,
 					SubjectID: subject.ID, SubjectName: subject.Name,
 					StaffID: staff.ID, StaffName: staffDisplayName(staff),
 					RoomID: roomID, RoomName: roomName,
 					StartTime: start, EndTime: end, Status: status,
 					Confidence: confidence, Blocking: blocking, Reasons: reasons,
 				})
+				if row, ok := breakConfig(state.Template, day, period); ok {
+					slotNumber++
+					breakStart, breakEnd := breakTime(state.Template, slotNumber, row)
+					label := firstNonEmpty(row.Label, "Break")
+					plan.Summary.ReservedBreaks++
+					plan.Suggestions = append(plan.Suggestions, SmartTimetableSuggestion{
+						SectionID: section.ID, ClassName: classLabel(section),
+						AcademicYearID: state.AcademicYearID, TermID: state.TermID,
+						DayOfWeek: day, DayLabel: weekdayLabel(day), PeriodNumber: slotNumber,
+						SubjectName: label, StartTime: breakStart, EndTime: breakEnd,
+						Status: "reserved_break", Confidence: 100,
+						Reasons: []string{"Break/lunch reserved after teaching period " + strconv.Itoa(period) + "."},
+					})
+				}
 			}
 		}
 	}

@@ -697,6 +697,7 @@ class AttendanceSessionModel {
   final int periodNumber;
   final int totalStudents;
   final int presentCount;
+  final bool isFinalized;
 
   const AttendanceSessionModel({
     required this.id,
@@ -708,6 +709,7 @@ class AttendanceSessionModel {
     required this.periodNumber,
     required this.totalStudents,
     required this.presentCount,
+    required this.isFinalized,
   });
 
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) =>
@@ -721,6 +723,7 @@ class AttendanceSessionModel {
         periodNumber: json['period_number'] as int? ?? 0,
         totalStudents: json['total_students'] as int? ?? 0,
         presentCount: json['present_count'] as int? ?? 0,
+        isFinalized: json['is_finalized'] as bool? ?? false,
       );
 }
 

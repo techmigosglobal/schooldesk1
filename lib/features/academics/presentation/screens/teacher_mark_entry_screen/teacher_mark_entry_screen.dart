@@ -40,19 +40,22 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
         '/exams/schedules',
       );
 
-      // Filter schedules to only show sections/subjects assigned to the teacher
-      // or show all if there's no strict assignment metadata.
+      final sectionIds = RoleAccessService.teacherSectionIds.toSet();
+      final subjectIds = RoleAccessService.teacherSubjectIds.toSet();
       final filtered = schedules.where((s) {
         final secId = (s['section_id'] ?? '').toString();
-        // If teacher has a class assigned, prioritize it, otherwise allow all
-        if (RoleAccessService.teacherClassId.isNotEmpty) {
-          return secId == RoleAccessService.teacherClassId;
+        final subjectId = (s['subject_id'] ?? '').toString();
+        if (sectionIds.isNotEmpty && !sectionIds.contains(secId)) {
+          return false;
+        }
+        if (subjectIds.isNotEmpty && subjectId.isNotEmpty) {
+          return subjectIds.contains(subjectId);
         }
         return true;
       }).toList();
 
       setState(() {
-        _schedules = filtered.isNotEmpty ? filtered : schedules;
+        _schedules = filtered;
         _loading = false;
       });
     } catch (e) {
@@ -163,9 +166,13 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
     setState(() => _saving = true);
 
     final scheduleId = (_selectedSchedule['id'] ?? '').toString();
+    final maxMarks = _maxMarksForSchedule(_selectedSchedule);
     try {
       final marksPayload = _studentRows.map((r) {
         final marksObtained = double.tryParse(r.controller.text) ?? 0.0;
+        if (!r.isAbsent && !r.isExempted && marksObtained > maxMarks) {
+          throw Exception('${r.studentName} marks cannot exceed $maxMarks.');
+        }
         return {
           'student_id': r.studentId,
           'enrollment_id': r.enrollmentId,
@@ -234,8 +241,7 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
               const TeacherFlowCard(
                 icon: Icons.assignment_rounded,
                 title: 'No Exam Schedules',
-                subtitle:
-                    'There are no active exam schedules for your classes.',
+                subtitle: 'No exam schedules assigned for marks entry.',
               )
             else
               ..._schedules.map((s) {
@@ -427,6 +433,12 @@ class _TeacherMarkEntryScreenState extends State<TeacherMarkEntryScreen> {
         ),
       ],
     );
+  }
+
+  double _maxMarksForSchedule(dynamic schedule) {
+    final value = schedule is Map ? schedule['max_marks'] : null;
+    if (value is num) return value.toDouble();
+    return double.tryParse('${value ?? ''}') ?? 100;
   }
 }
 
