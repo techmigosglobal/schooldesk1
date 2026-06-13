@@ -151,6 +151,18 @@ void main() {
       );
       expect(env, contains('ENABLE_FCM_PUSH=false'));
       expect(env, contains('FIREBASE_SERVICE_ACCOUNT_FILE='));
+      expect(env, contains('RAZORPAY_KEY_ID=rzp_test_'));
+      expect(
+        env,
+        contains('RAZORPAY_KEY_SECRET=replace_with_razorpay_test_secret'),
+      );
+      expect(
+        env,
+        contains(
+          'RAZORPAY_WEBHOOK_SECRET=replace_with_razorpay_test_webhook_secret',
+        ),
+      );
+      expect(env, contains('RAZORPAY_CURRENCY=INR'));
     },
   );
 

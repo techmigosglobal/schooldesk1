@@ -163,6 +163,10 @@ func (h *ParentFeeHandler) CreatePaymentOrder(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
 	}
+	if h.paymentService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "payment service is not configured"})
+		return
+	}
 
 	var req struct {
 		StudentID  string   `json:"student_id" binding:"required"`
@@ -208,8 +212,10 @@ func (h *ParentFeeHandler) CreatePaymentOrder(c *gin.Context) {
 
 	// Calculate total payable amount
 	var totalPayable float64
+	selectedInvoiceIDs := make([]string, 0, len(selectedInvoices))
 	for _, inv := range selectedInvoices {
 		totalPayable += inv.PayableAmount - inv.PaidAmount
+		selectedInvoiceIDs = append(selectedInvoiceIDs, inv.ID)
 	}
 
 	if totalPayable <= 0 {
@@ -228,7 +234,7 @@ func (h *ParentFeeHandler) CreatePaymentOrder(c *gin.Context) {
 	response, err := h.paymentService.CreatePaymentOrder(
 		parent.ID,
 		req.StudentID,
-		req.InvoiceIDs,
+		selectedInvoiceIDs,
 		totalPayable,
 		schoolID,
 	)
@@ -239,7 +245,12 @@ func (h *ParentFeeHandler) CreatePaymentOrder(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
-		Data:    response,
+		Data: gin.H{
+			"payment_order_id":  response.ID,
+			"razorpay_order_id": response.RazorpayOrderID,
+			"amount":            response.Amount,
+			"currency":          response.Currency,
+		},
 	})
 }
 
@@ -262,6 +273,22 @@ func (h *ParentFeeHandler) VerifyPayment(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var order models.PaymentOrder
+	if err := database.DB.
+		Where("id = ? AND parent_id = ?", req.PaymentOrderID, userID).
+		First(&order).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized payment order"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate payment order"})
+		return
+	}
+	if h.paymentService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "payment service is not configured"})
 		return
 	}
 

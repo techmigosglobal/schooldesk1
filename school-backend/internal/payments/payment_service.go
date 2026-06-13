@@ -179,17 +179,32 @@ func (ps *PaymentService) VerifyPaymentSignature(
 		invoiceIDs := paymentOrder.GetInvoiceIDs()
 
 		if len(invoiceIDs) > 0 {
-			// Update invoices
+			invoices := make([]models.FeeInvoice, 0, len(invoiceIDs))
+			balances := make([]float64, 0, len(invoiceIDs))
 			for _, invoiceID := range invoiceIDs {
 				var invoice models.FeeInvoice
 				if err := tx.First(&invoice, "id = ?", invoiceID).Error; err != nil {
 					tx.Rollback()
 					return nil, fmt.Errorf("invoice not found: %w", err)
 				}
+				invoices = append(invoices, invoice)
+				balances = append(balances, invoice.Balance)
+			}
+
+			allocations := allocatePaymentAcrossBalances(transaction.Amount, balances)
+			for i := range invoices {
+				invoice := invoices[i]
+				allocated := allocations[i]
+				if allocated <= 0 {
+					continue
+				}
 
 				// Update payment amount
-				invoice.PaidAmount += transaction.Amount
+				invoice.PaidAmount += allocated
 				invoice.Balance = invoice.PayableAmount - invoice.PaidAmount
+				if invoice.Balance < 0 {
+					invoice.Balance = 0
+				}
 
 				// Update status
 				if invoice.Balance <= 0 {
@@ -205,8 +220,8 @@ func (ps *PaymentService) VerifyPaymentSignature(
 
 				// Update mapping allocation
 				if err := tx.Model(&models.PaymentOrderInvoiceMap{}).
-					Where("payment_order_id = ? AND fee_invoice_id = ?", paymentOrderID, invoiceID).
-					Update("amount_allocated", transaction.Amount).Error; err != nil {
+					Where("payment_order_id = ? AND fee_invoice_id = ?", paymentOrderID, invoice.ID).
+					Update("amount_allocated", allocated).Error; err != nil {
 					tx.Rollback()
 					return nil, fmt.Errorf("failed to update invoice mapping: %w", err)
 				}
@@ -259,6 +274,26 @@ func (ps *PaymentService) CheckDuplicateReceipt(paymentTransactionID string) boo
 	var receipt models.FeeReceipt
 	err := database.DB.Where("payment_transaction_id = ?", paymentTransactionID).First(&receipt).Error
 	return err == nil
+}
+
+func allocatePaymentAcrossBalances(amount float64, balances []float64) []float64 {
+	allocations := make([]float64, len(balances))
+	remaining := amount
+	for i, balance := range balances {
+		if remaining <= 0 {
+			break
+		}
+		if balance <= 0 {
+			continue
+		}
+		allocated := balance
+		if remaining < balance {
+			allocated = remaining
+		}
+		allocations[i] = allocated
+		remaining -= allocated
+	}
+	return allocations
 }
 
 // CreateReceiptIfNotExists creates a receipt if it doesn't already exist

@@ -5,6 +5,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 
 class ParentPaymentSuccessScreen extends StatelessWidget {
   final String transactionId;
+  final String receiptId;
   final double amountPaid;
   final List<String> invoiceIds;
   final String date;
@@ -12,6 +13,7 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
   const ParentPaymentSuccessScreen({
     super.key,
     required this.transactionId,
+    this.receiptId = '',
     required this.amountPaid,
     required this.invoiceIds,
     required this.date,
@@ -26,7 +28,9 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.close, color: context.appTheme.onSurface),
-          onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst), // Or custom logic
+          onPressed: () => Navigator.of(
+            context,
+          ).popUntil((route) => route.isFirst), // Or custom logic
         ),
       ),
       body: SafeArea(
@@ -89,9 +93,18 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
                     Divider(height: 32, color: context.appTheme.outlineVariant),
                     _buildDetailRow(context, 'Date', date.split(' ')[0]),
                     Divider(height: 32, color: context.appTheme.outlineVariant),
-                    _buildDetailRow(context, 'Amount Paid', '₹${amountPaid.toStringAsFixed(2)}', isHighlight: true),
+                    _buildDetailRow(
+                      context,
+                      'Amount Paid',
+                      '₹${amountPaid.toStringAsFixed(2)}',
+                      isHighlight: true,
+                    ),
                     Divider(height: 32, color: context.appTheme.outlineVariant),
-                    _buildDetailRow(context, 'Invoices Paid', invoiceIds.join(', ')),
+                    _buildDetailRow(
+                      context,
+                      'Invoices Paid',
+                      invoiceIds.join(', '),
+                    ),
                   ],
                 ),
               ),
@@ -103,6 +116,7 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (context) => ReceiptViewScreen(
                         transactionId: transactionId,
+                        receiptId: receiptId,
                       ),
                     ),
                   );
@@ -150,17 +164,19 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value, {bool isHighlight = false}) {
+  Widget _buildDetailRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool isHighlight = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: GoogleFonts.ibmPlexSans(
-            fontSize: 14,
-            color: Colors.grey,
-          ),
+          style: GoogleFonts.ibmPlexSans(fontSize: 14, color: Colors.grey),
         ),
         const SizedBox(width: 16),
         Expanded(

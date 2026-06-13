@@ -33,7 +33,7 @@ class _ParentPaymentProcessingScreenState
   double _progress = 0.2;
   bool _hasError = false;
   String _errorMessage = '';
-  
+
   String? _paymentOrderId;
   String? _razorpayOrderId;
 
@@ -45,7 +45,7 @@ class _ParentPaymentProcessingScreenState
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-    
+
     _startPaymentProcess();
   }
 
@@ -70,7 +70,9 @@ class _ParentPaymentProcessingScreenState
       final razorpayKey = config['razorpay_key_id'] as String? ?? '';
 
       if (!razorpayEnabled || razorpayKey.isEmpty) {
-        throw Exception("Razorpay online payments are not enabled on the server.");
+        throw Exception(
+          "Razorpay online payments are not enabled on the server.",
+        );
       }
 
       setState(() {
@@ -78,9 +80,17 @@ class _ParentPaymentProcessingScreenState
         _progress = 0.4;
       });
 
+      final studentId = _studentId;
+      if (studentId.isEmpty) {
+        throw Exception('Unable to identify the selected child for payment.');
+      }
+
       // 1. Create Order on Backend
       final orderResponse = await _datasource.createRazorpayOrder(
-        CreateRazorpayOrderRequest(invoiceIds: widget.selectedInvoiceIds),
+        CreateRazorpayOrderRequest(
+          studentId: studentId,
+          invoiceIds: widget.selectedInvoiceIds,
+        ),
       );
 
       _paymentOrderId = orderResponse.paymentOrderId;
@@ -101,20 +111,23 @@ class _ParentPaymentProcessingScreenState
       } catch (_) {}
 
       // 2. Open Razorpay Checkout
-      var options = {
+      final options = {
         'key': razorpayKey,
         'amount': (orderResponse.amount * 100).toInt(), // amount in paisa
+        'currency': orderResponse.currency,
         'name': 'SchoolDesk',
         'description': 'Fee Payment',
         'order_id': orderResponse.razorpayOrderId,
-        'prefill': {
-          'contact': contact, 
-          'email': email
-        }
+        'method': {
+          'upi': true,
+          'card': true,
+          'netbanking': true,
+          'wallet': true,
+        },
+        'prefill': {'contact': contact, 'email': email},
       };
 
       _razorpay.open(options);
-
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -134,7 +147,7 @@ class _ParentPaymentProcessingScreenState
 
     try {
       // 3. Verify Payment on Backend
-      await _datasource.verifyRazorpayPayment(
+      final verification = await _datasource.verifyRazorpayPayment(
         VerifyRazorpayPaymentRequest(
           paymentOrderId: _paymentOrderId!,
           razorpayOrderId: response.orderId ?? _razorpayOrderId!,
@@ -154,7 +167,10 @@ class _ParentPaymentProcessingScreenState
         context,
         MaterialPageRoute(
           builder: (context) => ParentPaymentSuccessScreen(
-            transactionId: response.paymentId ?? 'TXN-${DateTime.now().millisecondsSinceEpoch}',
+            transactionId:
+                response.paymentId ??
+                'TXN-${DateTime.now().millisecondsSinceEpoch}',
+            receiptId: _receiptIdFromVerification(verification),
             amountPaid: widget.totalAmount,
             invoiceIds: widget.selectedInvoiceIds,
             date: DateTime.now().toString(),
@@ -176,7 +192,8 @@ class _ParentPaymentProcessingScreenState
     if (mounted) {
       setState(() {
         _hasError = true;
-        _errorMessage = 'Payment failed: ${response.message ?? "Unknown error"}';
+        _errorMessage =
+            'Payment failed: ${response.message ?? "Unknown error"}';
         _progress = 0.0;
       });
     }
@@ -190,6 +207,20 @@ class _ParentPaymentProcessingScreenState
         _progress = 0.0;
       });
     }
+  }
+
+  String get _studentId {
+    final student = widget.student;
+    if (student == null) return '';
+    return (student['student_id'] ?? student['id'] ?? '').toString().trim();
+  }
+
+  String _receiptIdFromVerification(Map<String, dynamic> verification) {
+    final receipt = verification['receipt'];
+    if (receipt is Map) {
+      return (receipt['receipt_id'] ?? '').toString();
+    }
+    return '';
   }
 
   @override
@@ -244,9 +275,7 @@ class _ParentPaymentProcessingScreenState
                         ),
                         child: Text(
                           'Retry Payment',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -299,7 +328,9 @@ class _ParentPaymentProcessingScreenState
                           value: _progress,
                           minHeight: 8,
                           backgroundColor: context.appTheme.outlineVariant,
-                          valueColor: AlwaysStoppedAnimation<Color>(context.appTheme.primary),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            context.appTheme.primary,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 48),
