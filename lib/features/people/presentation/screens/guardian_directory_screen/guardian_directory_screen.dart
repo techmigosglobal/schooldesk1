@@ -805,6 +805,10 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   Future<void> _syncGuardianRows(_GuardianProfileInput input) async {
+    // Base payload for the /guardians CRUD endpoint.
+    // NOTE: student_id is intentionally omitted — the backend Guardian model
+    // marks StudentID as gorm:"-" so it is silently ignored by GORM on writes.
+    // Student ↔ guardian linking is done via POST /students/:id/guardians below.
     final payloadBase = {
       'full_name': input.fullName,
       'relationship': input.relationship,
@@ -824,10 +828,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       }
     }
     final nextStudentIds = input.linkedStudents
-        .map((student) => student.studentId)
+        .map((s) => s.studentId)
         .where((id) => id.trim().isNotEmpty)
         .toSet();
 
+    // Remove guardian rows for students that were unlinked.
     if (existingEntry != null) {
       for (final row in _guardianRowsForEntry(existingEntry)) {
         final rowStudentId = _stringValue(row['student_id']);
@@ -839,24 +844,55 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
 
     for (var i = 0; i < input.linkedStudents.length; i++) {
       final student = input.linkedStudents[i];
+      if (student.studentId.trim().isEmpty) continue;
+
+      final isPrimary = i == 0 || input.isPrimary;
       final existing = _findGuardianRowFor(
         student.studentId,
         name: input.fullName,
         phone: input.phone,
         email: input.email,
       );
-      final payload = {
-        ...payloadBase,
-        'student_id': student.studentId,
-        'is_primary': i == 0 || input.isPrimary,
-      };
+
+      String guardianRowId;
+
       if (existing == null) {
-        await api.BackendApiClient.instance.createRaw('/guardians', payload);
-      } else {
-        await api.BackendApiClient.instance.updateRaw(
-          '/guardians/${existing['id']}',
-          payload,
+        // Create the guardian profile row — student_id is NOT included because
+        // Guardian.StudentID is gorm:"-" and would be silently dropped anyway.
+        final created = await api.BackendApiClient.instance.createRaw(
+          '/guardians',
+          {...payloadBase, 'is_primary': isPrimary},
         );
+        // The CRUD endpoint wraps responses in { success, data } or returns
+        // the record directly depending on the handler — handle both shapes.
+        final record =
+            created['data'] is Map ? created['data'] as Map : created;
+        guardianRowId = _stringValue(record['id']);
+      } else {
+        guardianRowId = _stringValue(existing['id']);
+        await api.BackendApiClient.instance.updateRaw(
+          '/guardians/$guardianRowId',
+          {...payloadBase, 'is_primary': isPrimary},
+        );
+      }
+
+      // Explicitly link the guardian row to the student via the dedicated
+      // backend endpoint which writes to the student_guardians join table.
+      // This is the correct path — unlike putting student_id in the CRUD
+      // payload which is a no-op (gorm:"-").
+      if (guardianRowId.trim().isNotEmpty) {
+        try {
+          await api.BackendApiClient.instance.linkGuardianToStudent(
+            studentId: student.studentId,
+            guardianId: guardianRowId,
+            isPrimary: isPrimary,
+            canPickup: input.canPickup,
+          );
+        } catch (_) {
+          // Tolerate link failure — the parent-student link is already
+          // established via assignParentStudents above; the guardian profile
+          // row has been saved successfully.
+        }
       }
     }
   }

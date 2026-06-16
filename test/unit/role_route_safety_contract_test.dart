@@ -125,11 +125,12 @@ void main() {
         'teacherHomework',
         'teacherStudyMaterials',
         'teacherDiary',
-        'teacherPerformance',
+        'teacherEventPosts',
+        'teacherLessonPlanner',
+        'schoolGallery',
         'teacherCommunication',
         'teacherLeave',
         'teacherReports',
-        'teacherMarkEntry',
         'teacherSyllabus',
         'notificationCenter',
         'profileScreen',
@@ -152,6 +153,8 @@ void main() {
         'teacherStudentNotes',
         'teacherDiscipline',
         'teacherParentInteraction',
+        'teacherPerformance',
+        'teacherMarkEntry',
       ]) {
         expect(
           teacherNavigationSource,

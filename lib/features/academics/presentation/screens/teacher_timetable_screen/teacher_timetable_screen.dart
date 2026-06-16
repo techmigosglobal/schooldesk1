@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class TeacherTimetableScreen extends StatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -14,8 +15,6 @@ class TeacherTimetableScreen extends StatefulWidget {
 class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   bool _loading = true;
   String? _error;
-  bool _todayOnly = true;
-  String _sectionFilter = '';
   List<Map<String, dynamic>> _slots = const [];
 
   @override
@@ -51,153 +50,162 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     }
   }
 
+  /// Slots for today only
+  List<Map<String, dynamic>> get _todaySlots {
+    final today = DateTime.now().weekday;
+    return _slots
+        .where((s) => teacherFlowInt(s['day_of_week']) == today)
+        .toList()
+      ..sort((a, b) => teacherFlowInt(a['period_number'])
+          .compareTo(teacherFlowInt(b['period_number'])));
+  }
+
+  /// Unique subjects from today's slots
+  List<String> get _todaySubjects {
+    return _todaySlots
+        .map((s) {
+          final sub = teacherFlowMap(s['subject']);
+          return teacherFlowText(
+            sub['subject_name'] ?? s['subject_name'] ?? s['subject_id'],
+            fallback: '',
+          );
+        })
+        .where((s) => s.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  String get _assignedClass {
+    if (_todaySlots.isNotEmpty) {
+      final section = teacherFlowMap(_todaySlots.first['section']);
+      final grade = teacherFlowText(section['grade_name']);
+      final sec = teacherFlowText(section['section_name']);
+      if (grade.isNotEmpty) return sec.isEmpty ? grade : '$grade - $sec';
+    }
+    return RoleAccessService.teacherClassName;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final classes = RoleAccessService.assignedTeacherClasses;
-    final visible = _visibleSlots;
+    final today = _todaySlots;
+    final subjects = _todaySubjects;
+    final classLabel = _assignedClass;
+
     return TeacherFlowScaffold(
-      title: 'Teacher Timetable',
-      subtitle: 'Periods assigned to you',
+      title: 'Timetable',
+      subtitle: 'Full-day class assignment',
       selectedIndex: 1,
       loading: _loading,
       error: _error,
       onRefresh: _load,
       child: TeacherFlowScrollView(
         children: [
-          TeacherFlowSectionHeader(
-            title: 'Schedule',
-            actionLabel: _todayOnly ? 'Week' : 'Today',
-            onAction: () => setState(() => _todayOnly = !_todayOnly),
-          ),
-          const SizedBox(height: 10),
-          if (classes.length > 1) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('All classes'),
-                  selected: _sectionFilter.isEmpty,
-                  onSelected: (_) => setState(() => _sectionFilter = ''),
-                ),
-                ...classes.map((row) {
-                  final id = teacherFlowText(row['id'] ?? row['section_id']);
-                  return ChoiceChip(
-                    label: Text(teacherFlowText(row['label'])),
-                    selected: _sectionFilter == id,
-                    onSelected: (_) => setState(() => _sectionFilter = id),
-                  );
-                }),
-              ],
-            ),
-            const SizedBox(height: 14),
-          ],
           if (!RoleAccessService.hasAssignedClasses)
             const TeacherFlowCard(
               icon: Icons.class_outlined,
-              title: 'No classes assigned yet.',
-              subtitle:
-                  'Your timetable will appear after Admin/Principal assigns sections.',
+              title: 'No class assigned yet.',
+              subtitle: 'Your assignment will appear after Admin/Principal assigns you.',
             )
-          else if (visible.isEmpty)
-            const TeacherFlowCard(
-              icon: Icons.calendar_month_outlined,
-              title: 'No timetable assigned yet.',
-              subtitle: 'No periods match the selected timetable filter.',
-            )
-          else
-            ..._groupedByDay(visible).entries.map(
-              (entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TeacherFlowSectionHeader(title: _dayName(entry.key)),
-                    const SizedBox(height: 8),
-                    ...entry.value.map(
-                      (slot) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: TeacherFlowCard(
-                          icon: Icons.schedule_rounded,
-                          title: _slotClass(slot),
-                          subtitle:
-                              '${_slotTime(slot)} · ${_slotSubject(slot)}',
-                          status: _slotRoom(slot).isEmpty
-                              ? 'Period ${teacherFlowInt(slot['period_number'])}'
-                              : _slotRoom(slot),
-                          statusColor: teacherFlowAccent,
-                        ),
-                      ),
-                    ),
-                  ],
+          else ...[
+            // ── Card 1: Today's Full-Day Assigned Class ──────────────────
+            _FullDayClassCard(
+              classLabel: classLabel,
+              subjects: subjects,
+              date: _todayLabel(),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Card 2: Quick Actions ────────────────────────────────────
+            _buildQuickActions(context),
+            const SizedBox(height: 16),
+
+            // ── Card 3: Today's Periods (read-only list) ─────────────────
+            TeacherFlowSectionHeader(title: 'Today\'s Periods'),
+            const SizedBox(height: 8),
+            if (today.isEmpty)
+              const TeacherFlowCard(
+                icon: Icons.calendar_month_outlined,
+                title: 'No periods for today.',
+                subtitle: 'Your timetable is empty for today.',
+              )
+            else
+              ...today.map(
+                (slot) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: TeacherFlowCard(
+                    icon: Icons.schedule_rounded,
+                    title: _slotSubject(slot),
+                    subtitle: _slotTime(slot),
+                    status: 'Period ${teacherFlowInt(slot['period_number'])}',
+                    statusColor: teacherFlowAccent,
+                  ),
                 ),
               ),
-            ),
+          ],
         ],
       ),
     );
   }
 
-  List<Map<String, dynamic>> get _visibleSlots {
-    final today = DateTime.now().weekday;
-    final rows = _slots
-        .where((slot) {
-          if (_todayOnly && teacherFlowInt(slot['day_of_week']) != today) {
-            return false;
-          }
-          if (_sectionFilter.isNotEmpty &&
-              teacherFlowText(slot['section_id']) != _sectionFilter) {
-            return false;
-          }
-          return true;
-        })
-        .map((slot) => Map<String, dynamic>.from(slot))
-        .toList();
-    rows.sort((a, b) {
-      final day = teacherFlowInt(
-        a['day_of_week'],
-      ).compareTo(teacherFlowInt(b['day_of_week']));
-      if (day != 0) return day;
-      return teacherFlowInt(
-        a['period_number'],
-      ).compareTo(teacherFlowInt(b['period_number']));
-    });
-    return rows;
-  }
-
-  Map<int, List<Map<String, dynamic>>> _groupedByDay(
-    List<Map<String, dynamic>> slots,
-  ) {
-    final grouped = <int, List<Map<String, dynamic>>>{};
-    for (final slot in slots) {
-      grouped.putIfAbsent(teacherFlowInt(slot['day_of_week']), () => []);
-      grouped[teacherFlowInt(slot['day_of_week'])]!.add(slot);
-    }
-    return grouped;
-  }
-
-  String _slotClass(Map<String, dynamic> slot) {
-    final section = teacherFlowMap(slot['section']);
-    final grade = teacherFlowText(section['grade_name']);
-    final sectionName = teacherFlowText(section['section_name']);
-    final label = [
-      grade,
-      sectionName,
-    ].where((part) => part.isNotEmpty).join(' ');
-    if (label.isNotEmpty) return label;
-    final match = RoleAccessService.assignedTeacherClasses.where(
-      (row) =>
-          teacherFlowText(row['id']) == teacherFlowText(slot['section_id']),
+  Widget _buildQuickActions(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Quick Actions',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _ActionChip(
+                  label: 'Attendance',
+                  icon: Icons.how_to_reg_rounded,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherAttendance),
+                ),
+                _ActionChip(
+                  label: 'Homework',
+                  icon: Icons.menu_book_outlined,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherHomework),
+                ),
+                _ActionChip(
+                  label: 'Lesson Planner',
+                  icon: Icons.auto_stories_outlined,
+                  onTap: () => Navigator.pushNamed(
+                      context, AppRoutes.teacherLessonPlanner),
+                ),
+                _ActionChip(
+                  label: 'Event Post',
+                  icon: Icons.post_add_outlined,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
-    return match.isEmpty
-        ? 'Assigned class'
-        : teacherFlowText(match.first['label']);
   }
 
   String _slotSubject(Map<String, dynamic> slot) {
-    final subject = teacherFlowMap(slot['subject']);
+    final sub = teacherFlowMap(slot['subject']);
     return teacherFlowText(
-      subject['subject_name'] ?? slot['subject_name'] ?? slot['subject_id'],
+      sub['subject_name'] ?? slot['subject_name'] ?? slot['subject_id'],
       fallback: 'Subject',
     );
   }
@@ -205,30 +213,155 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   String _slotTime(Map<String, dynamic> slot) {
     final start = teacherFlowText(slot['start_time']);
     final end = teacherFlowText(slot['end_time']);
-    if (start.isEmpty && end.isEmpty) {
-      return 'Period ${teacherFlowInt(slot['period_number'])}';
-    }
-    return [start, end].where((part) => part.isNotEmpty).join(' - ');
+    if (start.isEmpty && end.isEmpty) return 'Period ${teacherFlowInt(slot['period_number'])}';
+    return [start, end].where((p) => p.isNotEmpty).join(' – ');
   }
 
-  String _slotRoom(Map<String, dynamic> slot) {
-    final room = slot['room'];
-    if (room is Map) {
-      return teacherFlowText(room['room_number']);
-    }
-    return teacherFlowText(room ?? slot['room_number']);
+  String _todayLabel() {
+    final days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final now = DateTime.now();
+    final dayName = days[now.weekday];
+    return '$dayName, ${now.day}/${now.month}/${now.year}';
   }
+}
 
-  String _dayName(int weekday) {
-    const names = {
-      1: 'Monday',
-      2: 'Tuesday',
-      3: 'Wednesday',
-      4: 'Thursday',
-      5: 'Friday',
-      6: 'Saturday',
-      7: 'Sunday',
-    };
-    return names[weekday] ?? 'Unscheduled';
+// ── Full-Day Class Card ──────────────────────────────────────────────────────
+
+class _FullDayClassCard extends StatelessWidget {
+  final String classLabel;
+  final List<String> subjects;
+  final String date;
+
+  const _FullDayClassCard({
+    required this.classLabel,
+    required this.subjects,
+    required this.date,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: teacherFlowAccent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: teacherFlowAccent.withValues(alpha: 0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: teacherFlowAccent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.class_rounded,
+                    color: teacherFlowAccent, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Today\'s Assigned Class',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: teacherFlowAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      classLabel,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today_outlined,
+                  size: 15, color: teacherFlowAccent),
+              const SizedBox(width: 6),
+              Text(
+                date,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          if (subjects.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Class Subjects',
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: subjects
+                  .map(
+                    (s) => Chip(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
+                      label: Text(s,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          )),
+                      backgroundColor:
+                          teacherFlowAccent.withValues(alpha: 0.12),
+                      side: BorderSide(
+                          color: teacherFlowAccent.withValues(alpha: 0.25)),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Action Chip ───────────────────────────────────────────────────────────────
+
+class _ActionChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ActionChip({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(icon, size: 18, color: teacherFlowAccent),
+      label: Text(label),
+      onPressed: onTap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: teacherFlowAccent.withValues(alpha: 0.35)),
+      ),
+      backgroundColor: teacherFlowAccent.withValues(alpha: 0.08),
+    );
   }
 }

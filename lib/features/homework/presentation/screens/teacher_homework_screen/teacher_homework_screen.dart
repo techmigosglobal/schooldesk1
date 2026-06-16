@@ -73,7 +73,11 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
         teacherStaffId: RoleAccessService.teacherStaffId,
         defaultClassName: RoleAccessService.teacherClassName,
         defaultSubject: RoleAccessService.teacherSubject,
-        assignedClasses: RoleAccessService.teacherAssignedClasses,
+        assignedClasses: RoleAccessService.teacherClassTeacherClasses.isNotEmpty
+            ? [RoleAccessService.teacherClassTeacherClasses.first]
+            : (RoleAccessService.teacherAssignedClasses.isNotEmpty
+                  ? [RoleAccessService.teacherAssignedClasses.first]
+                  : const []),
         students: RoleAccessService.teacherClassStudents,
         homework: homework,
       ),

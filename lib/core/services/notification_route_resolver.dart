@@ -33,10 +33,11 @@ class NotificationRouteResolver {
       'message' => _messageRouteFor(role),
       'homework' => _homeworkRouteFor(role),
       'fee' => _feeRouteFor(role),
-      'exam' || 'exam_schedule' => _examRouteFor(role),
+      'exam' || 'exam_schedule' => _dashboardRouteFor(role),
       'event' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
       'leave' => _leaveRouteFor(role),
+      'health' => AppRoutes.parentHealthUpdate,
       _ => AppRoutes.notificationCenter,
     };
     return NotificationRouteTarget(
@@ -59,7 +60,7 @@ class NotificationRouteResolver {
     if (route == AppRoutes.notificationCenter ||
         route == AppRoutes.settingsScreen ||
         route == AppRoutes.profileScreen) {
-      return role.isEmpty ? 'admin' : role;
+      return role.isEmpty ? 'principal' : role;
     }
     return null;
   }
@@ -68,7 +69,6 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.parentNotices,
       'teacher' => AppRoutes.teacherCommunication,
-      'admin' => AppRoutes.adminCommunication,
       'principal' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
     };
@@ -86,7 +86,6 @@ class NotificationRouteResolver {
   static String _feeRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentFees,
-      'admin' => AppRoutes.adminFees,
       'principal' => AppRoutes.feeMonitoring,
       _ => AppRoutes.notificationCenter,
     };
@@ -100,20 +99,20 @@ class NotificationRouteResolver {
     };
   }
 
-  static String _examRouteFor(String role) {
+  static String _dashboardRouteFor(String role) {
     return switch (role) {
-      'parent' => AppRoutes.parentCalendar,
-      'teacher' => AppRoutes.teacherPerformance,
-      'admin' => AppRoutes.adminExams,
-      'principal' => AppRoutes.examsResults,
+      'parent' => AppRoutes.parentDashboard,
+      'teacher' => AppRoutes.teacherDashboard,
+      'principal' => AppRoutes.principalDashboard,
       _ => AppRoutes.notificationCenter,
     };
   }
 
   static String _eventRouteFor(String role) {
     return switch (role) {
-      'parent' => AppRoutes.parentCalendar,
-      'principal' => AppRoutes.eventsCalendar,
+      'parent' => AppRoutes.schoolGallery,
+      'teacher' => AppRoutes.teacherEventPosts,
+      'principal' => AppRoutes.principalEventApprovals,
       _ => AppRoutes.notificationCenter,
     };
   }
@@ -122,7 +121,7 @@ class NotificationRouteResolver {
     return switch (role) {
       'parent' => AppRoutes.parentLeave,
       'teacher' => AppRoutes.teacherLeave,
-      'principal' || 'admin' => AppRoutes.approvalCenter,
+      'principal' => AppRoutes.approvalCenter,
       _ => AppRoutes.notificationCenter,
     };
   }

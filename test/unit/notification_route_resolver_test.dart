@@ -55,7 +55,7 @@ void main() {
       );
 
       expect(homework.route, AppRoutes.parentHomework);
-      expect(exam.route, AppRoutes.teacherPerformance);
+      expect(exam.route, AppRoutes.teacherDashboard);
     });
 
     test('routes principal messages to the communication center', () {

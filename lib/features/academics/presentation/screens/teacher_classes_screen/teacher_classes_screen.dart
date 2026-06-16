@@ -31,9 +31,13 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
     try {
       await RoleAccessService.initialize();
       if (!mounted) return;
+      final classTeacherOnly = RoleAccessService.teacherClassTeacherClasses;
+      final primaryClassTeacher = classTeacherOnly.isNotEmpty
+          ? [classTeacherOnly.first]
+          : const <Map<String, dynamic>>[];
       setState(() {
         // Only the sections where this teacher IS the class teacher.
-        _classes = RoleAccessService.teacherClassTeacherClasses;
+        _classes = primaryClassTeacher;
         _students = RoleAccessService.teacherClassStudents;
         _loading = false;
       });
@@ -177,14 +181,6 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                         onTap: () => Navigator.pushNamed(
                           context,
                           AppRoutes.teacherDiary,
-                        ),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Performance',
-                        icon: Icons.trending_up_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherPerformance,
                         ),
                       ),
                     ],

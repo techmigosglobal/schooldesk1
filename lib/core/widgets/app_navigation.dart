@@ -188,20 +188,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
             ),
             SchoolDeskNavigationItem(
               index: 5,
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book_rounded,
-              label: SchoolDeskGlossary.syllabusRecords,
-              route: AppRoutes.syllabusMonitoring,
-            ),
-            SchoolDeskNavigationItem(
-              index: 6,
-              icon: Icons.quiz_outlined,
-              activeIcon: Icons.quiz_rounded,
-              label: SchoolDeskGlossary.examRecords,
-              route: AppRoutes.principalExams,
-            ),
-            SchoolDeskNavigationItem(
-              index: 12,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
               label: SchoolDeskGlossary.academicManagement,
@@ -239,6 +225,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(
+              index: 25,
+              icon: Icons.approval_outlined,
+              activeIcon: Icons.approval_rounded,
+              label: 'Event Approvals',
+              route: AppRoutes.principalEventApprovals,
+            ),
+            SchoolDeskNavigationItem(
               index: 9,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,
@@ -262,7 +255,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               icon: Icons.bar_chart_outlined,
               activeIcon: Icons.bar_chart_rounded,
               label: SchoolDeskGlossary.reports,
-              route: AppRoutes.principalResults,
+              route: AppRoutes.reportsAnalytics,
             ),
             SchoolDeskNavigationItem(
               index: 13,

@@ -71,7 +71,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _assignedClass = RoleAccessService.teacherClassName;
         _assignedSubject = RoleAccessService.teacherSubject;
         _timetable = RoleAccessService.teacherTimetableToday;
-        _assignedClasses = RoleAccessService.assignedTeacherClasses.length;
+        _assignedClasses = RoleAccessService.teacherClassTeacherClasses.isNotEmpty
+            ? 1
+            : 0;
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
@@ -484,14 +486,20 @@ class _TeacherQuickActionGrid extends StatelessWidget {
       _QuickAction(
         'Lesson Planner',
         'Weekly plans',
-        SchoolDeskUiIllustrations.resources,
+        SchoolDeskUiIllustrations.lessonPlanner,
         AppRoutes.teacherLessonPlanner,
       ),
       _QuickAction(
         'Event Posts',
         'School updates',
-        SchoolDeskUiIllustrations.resources,
+        SchoolDeskUiIllustrations.notices,
         AppRoutes.teacherEventPosts,
+      ),
+      _QuickAction(
+        'Gallery',
+        'School photos',
+        SchoolDeskUiIllustrations.resources,
+        AppRoutes.schoolGallery,
       ),
       _QuickAction(
         'Reports',

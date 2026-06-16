@@ -207,7 +207,7 @@ void main() {
       );
     });
 
-    test('allows all phase one teacher module routes for teacher role', () {
+    test('allows active teacher module routes for teacher role', () {
       const teacherRoutes = [
         AppRoutes.teacherDashboard,
         AppRoutes.teacherClasses,
@@ -220,14 +220,15 @@ void main() {
         AppRoutes.teacherHomeworkSubmissions,
         AppRoutes.teacherStudyMaterials,
         AppRoutes.teacherStudyMaterialForm,
-        AppRoutes.teacherPerformance,
         AppRoutes.teacherCommunication,
         AppRoutes.teacherLeave,
         AppRoutes.teacherLeaveRequestForm,
         AppRoutes.teacherReports,
         AppRoutes.teacherDiary,
-        AppRoutes.teacherMarkEntry,
         AppRoutes.teacherSyllabus,
+        AppRoutes.teacherEventPosts,
+        AppRoutes.teacherLessonPlanner,
+        AppRoutes.schoolGallery,
         AppRoutes.notificationCenter,
         AppRoutes.profileScreen,
         AppRoutes.settingsScreen,
@@ -258,6 +259,8 @@ void main() {
         AppRoutes.teacherDiscipline,
         AppRoutes.teacherParentInteraction,
         AppRoutes.teacherPTM,
+        AppRoutes.teacherPerformance,
+        AppRoutes.teacherMarkEntry,
       ]) {
         expect(
           RouteAccessGuard.redirectFor(

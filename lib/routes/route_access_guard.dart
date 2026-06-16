@@ -5,7 +5,6 @@ class RouteAccessGuard {
 
   static const Set<String> authenticatedRoles = {
     'principal',
-    'admin',
     'teacher',
     'parent',
     'kiosk',
@@ -30,75 +29,41 @@ class RouteAccessGuard {
     AppRoutes.homeworkMessaging,
   };
 
-  static const Set<String> deprecatedProtectedRoutes = {
-    AppRoutes.teacherStudentNotes,
-    AppRoutes.teacherDiscipline,
-    AppRoutes.teacherParentInteraction,
-    AppRoutes.teacherPTM,
-  };
+  static const Set<String> deprecatedProtectedRoutes = {};
 
   static const Map<String, Set<String>> _routeRoles = {
+    // Principal routes
     AppRoutes.principalDashboard: {'principal'},
-    AppRoutes.staffManagement: {'principal', 'admin'},
-    AppRoutes.staffForm: {'principal', 'admin'},
+    AppRoutes.staffManagement: {'principal'},
+    AppRoutes.staffForm: {'principal'},
     AppRoutes.studentOversight: {'principal'},
     AppRoutes.approvalCenter: {'principal'},
     AppRoutes.feeMonitoring: {'principal'},
     AppRoutes.timetableManagement: {'principal'},
-    AppRoutes.syllabusMonitoring: {'principal'},
-    AppRoutes.examsResults: {'principal'},
     AppRoutes.communicationCenter: {'principal'},
     AppRoutes.principalChatCommunications: {'principal'},
     AppRoutes.complaintManagement: {'principal'},
     AppRoutes.eventsCalendar: {'principal'},
     AppRoutes.reportsAnalytics: {'principal'},
-    AppRoutes.academicManagement: {'principal', 'admin'},
-    AppRoutes.academicYearForm: {'principal', 'admin'},
-    AppRoutes.academicSubjectForm: {'principal', 'admin'},
-    AppRoutes.academicClassForm: {'principal', 'admin'},
-    AppRoutes.academicCurriculumForm: {'principal', 'admin'},
+    AppRoutes.academicManagement: {'principal'},
+    AppRoutes.academicYearForm: {'principal'},
+    AppRoutes.academicSubjectForm: {'principal'},
+    AppRoutes.academicClassForm: {'principal'},
+    AppRoutes.academicCurriculumForm: {'principal'},
     AppRoutes.principalAcademicInfo: {'principal'},
     AppRoutes.principalAnalytics: {'principal'},
     AppRoutes.principalUserManagement: {'principal'},
-    AppRoutes.guardianDirectory: {'principal'},
     AppRoutes.principalClasses: {'principal'},
     AppRoutes.principalAttendance: {'principal'},
     AppRoutes.principalSubjects: {'principal'},
     AppRoutes.principalTimetable: {'principal'},
-    AppRoutes.principalExams: {'principal'},
-    AppRoutes.principalResults: {'principal'},
+    AppRoutes.principalEventApprovals: {'principal'},
+    AppRoutes.guardianDirectory: {'principal'},
     AppRoutes.principalAccountCreate: {'principal'},
     AppRoutes.principalAccountEdit: {'principal'},
     AppRoutes.principalParentChildAssignment: {'principal'},
     AppRoutes.principalSchoolProfile: {'principal'},
-    AppRoutes.adminDashboard: {'admin'},
-    AppRoutes.adminStudents: {'admin'},
-    AppRoutes.adminTeachers: {'admin'},
-    AppRoutes.adminAttendance: {'admin'},
-    AppRoutes.adminFees: {'admin'},
-    AppRoutes.adminFeeStructureForm: {'principal', 'admin'},
-    AppRoutes.adminInvoiceGenerationForm: {'principal', 'admin'},
-    AppRoutes.adminPaymentRecordForm: {'principal', 'admin'},
-    AppRoutes.adminPaymentRequests: {'admin'},
-    AppRoutes.adminPaymentRequestDecision: {'admin'},
-    AppRoutes.adminTimetable: {'admin'},
-    AppRoutes.adminTimetableGenerationForm: {'admin'},
-    AppRoutes.adminTimetablePeriodForm: {'admin'},
-    AppRoutes.adminTimetableSubstitutionForm: {'admin'},
-    AppRoutes.adminExams: {'admin'},
-    AppRoutes.adminExamForm: {'principal', 'admin'},
-    AppRoutes.adminExamScheduleForm: {'principal', 'admin'},
-    AppRoutes.adminCommunication: {'admin'},
-    AppRoutes.adminHelpdesk: {'admin'},
-    AppRoutes.adminDocuments: {'admin'},
-    AppRoutes.adminUserAccess: {'admin'},
-    AppRoutes.adminAccountCreate: {'admin'},
-    AppRoutes.adminAccountEdit: {'admin'},
-    AppRoutes.adminParentChildAssignment: {'admin'},
-    AppRoutes.adminReports: {'admin'},
-    AppRoutes.adminAcademicInfo: {'admin'},
-    AppRoutes.idCardGeneration: {'admin'},
-    AppRoutes.reportCardGenerator: {'admin'},
+    // Teacher routes
     AppRoutes.teacherDashboard: {'teacher'},
     AppRoutes.teacherClasses: {'teacher'},
     AppRoutes.teacherTimetable: {'teacher'},
@@ -110,15 +75,19 @@ class RouteAccessGuard {
     AppRoutes.teacherHomeworkSubmissions: {'teacher'},
     AppRoutes.teacherStudyMaterials: {'teacher'},
     AppRoutes.teacherStudyMaterialForm: {'teacher'},
-    AppRoutes.teacherPerformance: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
     AppRoutes.teacherReports: {'teacher'},
     AppRoutes.teacherDiary: {'teacher'},
-    AppRoutes.teacherMarkEntry: {'teacher'},
     AppRoutes.teacherSyllabus: {'teacher'},
+    AppRoutes.teacherEventPosts: {'teacher'},
+    AppRoutes.teacherLessonPlanner: {'teacher'},
+    AppRoutes.teacherPTM: {'teacher'},
+    // Shared routes
+    AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},
     AppRoutes.kioskQrAttendance: {'kiosk'},
+    // Parent routes
     AppRoutes.parentDashboard: {'parent'},
     AppRoutes.parentAcademicProgress: {'parent'},
     AppRoutes.parentAttendance: {'parent'},
@@ -130,11 +99,16 @@ class RouteAccessGuard {
     AppRoutes.parentPaymentRequestForm: {'parent'},
     AppRoutes.parentLeave: {'parent'},
     AppRoutes.parentLeaveRequestForm: {'parent'},
+    AppRoutes.parentTimetable: {'parent'},
+    AppRoutes.parentPTMBooking: {'parent'},
     AppRoutes.parentCalendar: {'parent'},
     AppRoutes.parentDocuments: {'parent'},
     AppRoutes.parentDiary: {'parent'},
     AppRoutes.parentAcademicInfo: {'parent'},
     AppRoutes.feePaymentReceipt: {'parent'},
+    AppRoutes.parentLessonPlanner: {'parent'},
+    AppRoutes.parentHealthUpdate: {'parent'},
+    AppRoutes.parentPaymentSelection: {'parent'},
   };
 
   static String? redirectFor({
@@ -221,8 +195,6 @@ class RouteAccessGuard {
     switch (_normalizeRole(role)) {
       case 'principal':
         return AppRoutes.principalDashboard;
-      case 'admin':
-        return AppRoutes.adminDashboard;
       case 'teacher':
         return AppRoutes.teacherDashboard;
       case 'parent':

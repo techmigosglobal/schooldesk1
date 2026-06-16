@@ -50,6 +50,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	parentSelfHandler := handlers.NewParentSelfHandler()
 	teacherSelfHandler := handlers.NewTeacherSelfHandler()
 	bulkImportHandler := handlers.NewBulkImportHandler()
+	uploadHandler := handlers.NewUploadHandler()
 
 	parentFeeHandler := handlers.NewParentFeeHandler()
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
@@ -454,14 +455,22 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			announcements.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("announcement_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), announcementHandler.CreateAnnouncement)
 		}
 
+		// Generic file upload — used by event posts and lesson planners
+		uploads := api.Group("/uploads")
+		uploads.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Teacher", "Admin", "Principal"))
+		{
+			uploads.POST("", uploadHandler.UploadFile)
+		}
+
 		eventPosts := api.Group("/event-posts")
 		eventPosts.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			eventPosts.POST("", middleware.RBACMiddleware("Teacher"), eventPostHandler.CreateEventPost)
+			eventPosts.GET("", middleware.RBACMiddleware("Admin", "Principal"), eventPostHandler.ListAllEventPosts)
 			eventPosts.GET("/teacher", middleware.RBACMiddleware("Teacher"), eventPostHandler.ListTeacherEventPosts)
-			eventPosts.GET("/pending", middleware.RBACMiddleware("Principal"), eventPostHandler.ListPendingEventPosts)
-			eventPosts.POST("/:id/approve", middleware.RBACMiddleware("Principal"), eventPostHandler.ApproveEventPost)
-			eventPosts.POST("/:id/reject", middleware.RBACMiddleware("Principal"), eventPostHandler.RejectEventPost)
+			eventPosts.GET("/pending", middleware.RBACMiddleware("Admin", "Principal"), eventPostHandler.ListPendingEventPosts)
+			eventPosts.POST("/:id/approve", middleware.RBACMiddleware("Admin", "Principal"), eventPostHandler.ApproveEventPost)
+			eventPosts.POST("/:id/reject", middleware.RBACMiddleware("Admin", "Principal"), eventPostHandler.RejectEventPost)
 			eventPosts.GET("/gallery", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventPostHandler.ListGalleryEventPosts)
 			eventPosts.GET("/home-feed", middleware.RBACMiddleware("Parent"), eventPostHandler.ListParentHomeFeed)
 		}
@@ -582,7 +591,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			h := handlers.NewCRUDHandler[models.MedicalRecord]("medical_records", "medical_records", []string{"student_id"}, false, "Student")
 			medicalRecords.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("medical_records", "read"), h.List)
 			medicalRecords.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("medical_records", "read"), h.Get)
-			medicalRecords.POST("", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("medical_records", "create"), h.Create)
+			medicalRecords.POST("", middleware.RBACMiddleware("Admin", "Principal", "Parent"), middleware.PermissionMiddleware("medical_records", "create"), h.Create)
 			medicalRecords.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("medical_records", "update"), h.Update)
 			medicalRecords.DELETE("/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.PermissionMiddleware("medical_records", "delete"), h.Delete)
 		}

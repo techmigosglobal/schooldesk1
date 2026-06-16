@@ -15,10 +15,14 @@ void _showPublicEvents(BuildContext context) async {
     builder: (context) => const Center(child: CircularProgressIndicator()),
   );
   try {
-    final response = (await BackendApiClient.instance.dio.get('/api/v1/event-posts?destination=SCHOOL_LANDING')).data;
+    final response = (await BackendApiClient.instance.dio.get(
+      '/landing/events',
+    )).data;
     if (!context.mounted) return;
     Navigator.pop(context); // close loading
-    final List<dynamic> events = response is List ? response : (response['data'] as List? ?? []);
+    final List<dynamic> events = response is List
+        ? response
+        : (response['data'] as List? ?? []);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -41,7 +45,9 @@ void _showPublicEvents(BuildContext context) async {
                 margin: const EdgeInsets.only(bottom: 16),
                 child: ListTile(
                   title: Text(event['title'] ?? 'Event'),
-                  subtitle: Text('${event['description'] ?? ''}\nDate: ${event['event_date']}'),
+                  subtitle: Text(
+                    '${event['description'] ?? ''}\nDate: ${event['event_date']}',
+                  ),
                   isThreeLine: true,
                 ),
               );
@@ -53,7 +59,9 @@ void _showPublicEvents(BuildContext context) async {
   } catch (e) {
     if (!context.mounted) return;
     Navigator.pop(context); // close loading
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load events: $e')));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Failed to load events: $e')));
   }
 }
 

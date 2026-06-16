@@ -107,7 +107,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     final rows = widget.args.assignedClasses
         .where((row) => teacherFlowText(row['id']).isNotEmpty)
         .toList();
-    if (rows.isNotEmpty) return rows;
+    if (rows.isNotEmpty) return [rows.first];
     return [
       {'id': '', 'label': widget.args.defaultClassName},
     ];
@@ -219,7 +219,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                         ),
                       )
                       .toList(),
-                  onChanged: _saving
+                  onChanged: (_saving || _classOptions.length <= 1)
                       ? null
                       : (value) => setState(() => _sectionId = value ?? ''),
                   validator: (value) =>

@@ -337,16 +337,28 @@ class _QrBlock extends StatelessWidget {
               borderRadius: BorderRadius.circular(tokens.radius.control),
               border: Border.all(color: color.withValues(alpha: 0.24)),
             ),
-            child: Row(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.timer_outlined, color: color),
-                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.timer_outlined, color: color),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${secondsLeft}s',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
                 Text(
-                  '${secondsLeft}s',
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  'QR refreshes every 5 seconds',
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: color,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],

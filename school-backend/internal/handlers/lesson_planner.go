@@ -1,13 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
 	"school-backend/internal/services"
-	"context"
 
 	"github.com/gin-gonic/gin"
 )
@@ -78,7 +78,7 @@ func (h *LessonPlannerHandler) ListTeacherLessonPlanners(c *gin.Context) {
 	teacherID := c.GetString("linked_id")
 
 	var planners []models.LessonPlanner
-	if err := database.DB.Preload("Class").Preload("Section").Where("school_id = ? AND teacher_id = ?", schoolID, teacherID).Order("created_at desc").Find(&planners).Error; err != nil {
+	if err := database.DB.Preload("Grade").Preload("Section").Where("school_id = ? AND teacher_id = ?", schoolID, teacherID).Order("created_at desc").Find(&planners).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to fetch lesson planners")
 		return
 	}
@@ -126,21 +126,18 @@ func (h *LessonPlannerHandler) CompleteLessonPlanner(c *gin.Context) {
 // Parent List Planners
 func (h *LessonPlannerHandler) ListParentLessonPlanners(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
-	// In reality we should fetch based on parent's children class_id / section_id
-	// For now, simpler implementation:
-	// Find student's enrollment, get section_id
-	
-	// Just return all for the school, frontend filters, or if class_id passed in query
-	classID := c.Query("class_id")
-	sectionID := c.Query("section_id")
+	parentUserID := currentUserID(c)
 
-	query := database.DB.Preload("Teacher").Where("school_id = ?", schoolID)
-	if classID != "" {
-		query = query.Where("class_id = ?", classID)
-	}
-	if sectionID != "" {
-		query = query.Where("section_id = ?", sectionID)
-	}
+	query := database.DB.Model(&models.LessonPlanner{}).
+		Preload("Teacher").
+		Preload("Grade").
+		Preload("Section").
+		Select("DISTINCT lesson_planners.*").
+		Joins("JOIN parent_student_links ON parent_student_links.school_id = lesson_planners.school_id").
+		Joins("JOIN students ON students.id = parent_student_links.student_id").
+		Joins("LEFT JOIN enrollments ON enrollments.student_id = students.id").
+		Where("lesson_planners.school_id = ? AND parent_student_links.parent_user_id = ?", schoolID, parentUserID).
+		Where("(students.current_section_id = lesson_planners.section_id OR enrollments.section_id = lesson_planners.section_id)")
 
 	var planners []models.LessonPlanner
 	if err := query.Order("created_at desc").Find(&planners).Error; err != nil {
@@ -154,11 +151,11 @@ func (h *LessonPlannerHandler) ListParentLessonPlanners(c *gin.Context) {
 // Principal List Planners
 func (h *LessonPlannerHandler) ListPrincipalLessonPlanners(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
-	classID := c.Query("class_id")
+	gradeID := c.Query("grade_id")
 
-	query := database.DB.Preload("Teacher").Preload("Class").Preload("Section").Where("school_id = ?", schoolID)
-	if classID != "" {
-		query = query.Where("class_id = ?", classID)
+	query := database.DB.Preload("Teacher").Preload("Grade").Preload("Section").Where("school_id = ?", schoolID)
+	if gradeID != "" {
+		query = query.Where("grade_id = ?", gradeID)
 	}
 
 	var planners []models.LessonPlanner

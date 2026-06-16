@@ -658,6 +658,12 @@ class SchoolDeskScreenRegistry {
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(
+      route: '/parent-lesson-planner-screen',
+      title: 'Lesson Planner',
+      module: 'Child Academics',
+      portal: 'parent',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/parent-notices-screen',
       title: 'School Notices',
       module: 'Communication',

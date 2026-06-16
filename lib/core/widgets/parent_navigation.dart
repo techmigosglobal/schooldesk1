@@ -149,6 +149,13 @@ class _ParentDrawerState extends State<ParentDrawer> {
               label: 'Class Diary',
               route: AppRoutes.parentDiary,
             ),
+            SchoolDeskNavigationItem(
+              index: 20,
+              icon: Icons.auto_stories_outlined,
+              activeIcon: Icons.auto_stories_rounded,
+              label: 'Lesson Planner',
+              route: AppRoutes.parentLessonPlanner,
+            ),
           ],
         ),
         SchoolDeskNavigationSection(
@@ -236,8 +243,15 @@ class _ParentDrawerState extends State<ParentDrawer> {
           ],
         ),
         const SchoolDeskNavigationSection(
-          label: 'School Info',
+          label: 'Health & Info',
           items: [
+            SchoolDeskNavigationItem(
+              index: 19,
+              icon: Icons.medical_services_outlined,
+              activeIcon: Icons.medical_services_rounded,
+              label: 'Health Updates',
+              route: AppRoutes.parentHealthUpdate,
+            ),
             SchoolDeskNavigationItem(
               index: 12,
               icon: Icons.auto_stories_outlined,

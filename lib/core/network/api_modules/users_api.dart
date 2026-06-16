@@ -212,4 +212,34 @@ extension BackendUsersApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  /// Links a guardian record to a student via the student_guardians join table.
+  /// Calls POST /students/:studentId/guardians — the dedicated backend endpoint
+  /// that correctly creates the StudentGuardian row (unlike POST /guardians CRUD
+  /// which ignores student_id because Guardian.StudentID is gorm:"-").
+  Future<void> linkGuardianToStudent({
+    required String studentId,
+    required String guardianId,
+    bool isPrimary = false,
+    bool canPickup = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/students/$studentId/guardians',
+        data: {
+          'guardian_id': guardianId,
+          'is_primary': isPrimary,
+          'can_pickup': canPickup,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] != true && data['message'] == null) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to link guardian to student',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

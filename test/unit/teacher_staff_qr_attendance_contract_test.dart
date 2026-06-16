@@ -85,7 +85,7 @@ void main() {
     expect(handler, contains('verifyStaffQRToken'));
     expect(handler, contains('currentStaffID(c)'));
     expect(handler, contains('payload.SchoolID != schoolID'));
-    expect(handler, contains('staffQRRefreshSeconds = 20'));
+    expect(handler, contains('staffQRRefreshSeconds = 5'));
     expect(handler, contains('ExportStaffQRDailyLogs'));
   });
 

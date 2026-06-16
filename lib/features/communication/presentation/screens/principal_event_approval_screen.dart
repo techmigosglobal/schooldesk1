@@ -8,10 +8,12 @@ class PrincipalEventApprovalScreen extends StatefulWidget {
   const PrincipalEventApprovalScreen({super.key});
 
   @override
-  State<PrincipalEventApprovalScreen> createState() => _PrincipalEventApprovalScreenState();
+  State<PrincipalEventApprovalScreen> createState() =>
+      _PrincipalEventApprovalScreenState();
 }
 
-class _PrincipalEventApprovalScreenState extends State<PrincipalEventApprovalScreen> {
+class _PrincipalEventApprovalScreenState
+    extends State<PrincipalEventApprovalScreen> {
   List<dynamic> _posts = [];
   bool _loading = true;
   String? _error;
@@ -28,10 +30,14 @@ class _PrincipalEventApprovalScreenState extends State<PrincipalEventApprovalScr
       _error = null;
     });
     try {
-      final response = (await BackendApiClient.instance.dio.get('/api/v1/event-posts')).data;
+      final response = (await BackendApiClient.instance.dio.get(
+        '/event-posts/pending',
+      )).data;
       if (!mounted) return;
       setState(() {
-        _posts = response is List ? response : (response['data'] as List? ?? []);
+        _posts = response is List
+            ? response
+            : (response['data'] as List? ?? []);
         _loading = false;
       });
     } catch (e) {
@@ -45,13 +51,15 @@ class _PrincipalEventApprovalScreenState extends State<PrincipalEventApprovalScr
 
   Future<void> _approveStatus(String id) async {
     try {
-      await BackendApiClient.instance.dio.post('/api/v1/event-posts/$id/approve');
+      await BackendApiClient.instance.dio.post(
+        '/event-posts/$id/approve',
+      );
       _loadPosts();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to approve: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to approve: $e')));
     }
   }
 
@@ -87,15 +95,15 @@ class _PrincipalEventApprovalScreenState extends State<PrincipalEventApprovalScr
     if (confirmed == true && reasonController.text.trim().isNotEmpty) {
       try {
         await BackendApiClient.instance.dio.post(
-          '/api/v1/event-posts/$id/reject',
+          '/event-posts/$id/reject',
           data: {'reason': reasonController.text.trim()},
         );
         _loadPosts();
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to reject: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to reject: $e')));
       }
     }
   }
@@ -107,37 +115,64 @@ class _PrincipalEventApprovalScreenState extends State<PrincipalEventApprovalScr
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!, style: TextStyle(color: context.appTheme.error)))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(24.0),
-                  itemCount: _posts.length,
-                  itemBuilder: (context, index) {
-                    final post = _posts[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: ListTile(
-                        title: Text(post['title'] ?? 'No Title'),
-                        subtitle: Text('${post['description'] ?? ''}\nStatus: ${post['approval_status']}'),
-                        isThreeLine: true,
-                        trailing: post['approval_status'] == 'pending'
-                            ? Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.check, color: Colors.green),
-                                    onPressed: () => _approveStatus(post['id']),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.close, color: Colors.red),
-                                    onPressed: () => _rejectStatus(post['id']),
-                                  ),
-                                ],
-                              )
-                            : null,
-                      ),
-                    );
-                  },
-                ),
+          ? Center(
+              child: Text(
+                _error!,
+                style: TextStyle(color: context.appTheme.error),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(24.0),
+              itemCount: _posts.length,
+              itemBuilder: (context, index) {
+                final post = _posts[index];
+                final destinations = _labels(post['destinations']);
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ListTile(
+                    title: Text(post['title'] ?? 'No Title'),
+                    subtitle: Text(
+                      '${post['description'] ?? ''}\n'
+                      'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
+                    ),
+                    isThreeLine: true,
+                    trailing: post['approval_status'] == 'pending'
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.check,
+                                  color: Colors.green,
+                                ),
+                                onPressed: () => _approveStatus(post['id']),
+                              ),
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.red,
+                                ),
+                                onPressed: () => _rejectStatus(post['id']),
+                              ),
+                            ],
+                          )
+                        : null,
+                  ),
+                );
+              },
+            ),
     );
+  }
+
+  List<String> _labels(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
+    }
+    return raw
+        .toString()
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 }

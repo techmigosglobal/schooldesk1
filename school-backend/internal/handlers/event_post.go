@@ -17,6 +17,15 @@ func NewEventPostHandler() *EventPostHandler {
 	return &EventPostHandler{}
 }
 
+// publicEventPost is intentionally retained for public feed contracts.
+type publicEventPost struct {
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	EventDate   time.Time  `json:"event_date"`
+	MediaUrls   string     `json:"media_urls"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+}
+
 // Teacher Create
 func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
 	var req struct {
@@ -45,7 +54,12 @@ func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
 		return
 	}
 
-	destinationsStr := strings.Join(req.Destinations, ",")
+	destinations, ok := normalizeEventPostDestinations(req.Destinations)
+	if !ok {
+		fail(c, http.StatusBadRequest, "At least one valid destination is required")
+		return
+	}
+	destinationsStr := strings.Join(destinations, ",")
 
 	status := models.ApprovalStatusDraft
 	if req.IsSubmit {
@@ -93,6 +107,19 @@ func (h *EventPostHandler) ListTeacherEventPosts(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: posts})
 }
 
+// Principal/Admin List Pending
+func (h *EventPostHandler) ListAllEventPosts(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+
+	var posts []models.EventPost
+	if err := database.DB.Preload("CreatedByTeacher").Where("school_id = ?", schoolID).Order("created_at desc").Find(&posts).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to fetch event posts")
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: posts})
+}
+
 // Principal List Pending
 func (h *EventPostHandler) ListPendingEventPosts(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
@@ -103,7 +130,27 @@ func (h *EventPostHandler) ListPendingEventPosts(c *gin.Context) {
 		return
 	}
 
+	// Admin/Principal approvals require full payload (id, destinations, status, etc.).
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: posts})
+}
+
+func normalizeEventPostDestinations(raw []string) ([]string, bool) {
+	allowed := map[string]bool{
+		string(models.DestinationParentsHome):   true,
+		string(models.DestinationSchoolGallery): true,
+		string(models.DestinationSchoolLanding): true,
+	}
+	seen := map[string]bool{}
+	destinations := make([]string, 0, len(raw))
+	for _, item := range raw {
+		value := strings.ToUpper(strings.TrimSpace(item))
+		if !allowed[value] || seen[value] {
+			continue
+		}
+		seen[value] = true
+		destinations = append(destinations, value)
+	}
+	return destinations, len(destinations) > 0
 }
 
 // Principal Approve
@@ -167,7 +214,7 @@ func (h *EventPostHandler) RejectEventPost(c *gin.Context) {
 
 	database.DB.Preload("CreatedByTeacher").First(&post, "id = ?", post.ID)
 
-	createApprovalDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "Event Post Rejected", "Your event post has been rejected. Reason: " + req.Reason)
+	createApprovalDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "Event Post Rejected", "Your event post has been rejected. Reason: "+req.Reason)
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
 }

@@ -1,4 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -12,16 +17,20 @@ class TeacherEventPostScreen extends StatefulWidget {
   State<TeacherEventPostScreen> createState() => _TeacherEventPostScreenState();
 }
 
-class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with SingleTickerProviderStateMixin {
+class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _dateController = TextEditingController();
-  final _mediaUrlController = TextEditingController();
-  
+
   bool _destParentHome = true;
   bool _destSchoolGallery = false;
   bool _destSchoolLanding = false;
+
+  // Uploaded file URLs (returned by backend after upload)
+  final List<String> _uploadedUrls = [];
+  bool _uploading = false;
 
   bool _loading = false;
   String? _error;
@@ -32,16 +41,74 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.index == 1) {
-        _loadPosts();
-      }
+      if (_tabController.index == 1) _loadPosts();
     });
   }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _titleController.dispose();
+    _descController.dispose();
+    _dateController.dispose();
+    super.dispose();
+  }
+
+  // ── Pick and upload a file ──────────────────────────────────────────────────
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickMultiImage(imageQuality: 80);
+    if (picked.isEmpty) return;
+    for (final xfile in picked) {
+      await _uploadFile(xfile.path, xfile.name);
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final path = result.files.single.path;
+    if (path == null) return;
+    await _uploadFile(path, result.files.single.name);
+  }
+
+  Future<void> _uploadFile(String path, String name) async {
+    setState(() => _uploading = true);
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(path, filename: name),
+      });
+      final response = await BackendApiClient.instance.dio.post(
+        '/uploads',
+        data: formData,
+      );
+      final url = response.data['url']?.toString() ?? '';
+      if (url.isNotEmpty && mounted) {
+        setState(() => _uploadedUrls.add(url));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  // ── Load + Submit ───────────────────────────────────────────────────────────
 
   Future<void> _loadPosts() async {
     setState(() => _loading = true);
     try {
-      final response = (await BackendApiClient.instance.dio.get('/api/v1/event-posts/teacher')).data;
+      final response = (await BackendApiClient.instance.dio
+              .get('/event-posts/teacher'))
+          .data;
       if (!mounted) return;
       setState(() {
         _posts = response is List ? response : (response['data'] as List? ?? []);
@@ -58,7 +125,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
 
   Future<void> _submit(bool isSubmit) async {
     if (_titleController.text.trim().isEmpty) return;
-    
+
     final destinations = <String>[];
     if (_destParentHome) destinations.add('PARENTS_HOME');
     if (_destSchoolGallery) destinations.add('SCHOOL_GALLERY');
@@ -66,7 +133,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
 
     if (destinations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one destination.')),
+        const SnackBar(content: Text('Select at least one destination.')),
       );
       return;
     }
@@ -76,22 +143,30 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
       _error = null;
     });
     try {
-      await BackendApiClient.instance.dio.post('/api/v1/event-posts', data: {
-        'title': _titleController.text.trim(),
-        'description': _descController.text.trim(),
-        'event_date': _dateController.text.trim().isEmpty ? DateTime.now().toIso8601String() : '${_dateController.text.trim()}T00:00:00Z',
-        'media_urls': _mediaUrlController.text.trim(),
-        'destinations': destinations,
-        'is_submit': isSubmit,
-      });
+      await BackendApiClient.instance.dio.post(
+        '/event-posts',
+        data: {
+          'title': _titleController.text.trim(),
+          'description': _descController.text.trim(),
+          'event_date': _dateController.text.trim().isEmpty
+              ? DateTime.now().toIso8601String()
+              : '${_dateController.text.trim()}T00:00:00Z',
+          'media_urls': _uploadedUrls.join(','),
+          'destinations': destinations,
+          'is_submit': isSubmit,
+        },
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(isSubmit ? 'Event Post submitted for approval!' : 'Draft saved!')),
+        SnackBar(
+            content: Text(isSubmit
+                ? 'Submitted for approval!'
+                : 'Draft saved!')),
       );
       _titleController.clear();
       _descController.clear();
       _dateController.clear();
-      _mediaUrlController.clear();
+      _uploadedUrls.clear();
       setState(() {
         _loading = false;
         _tabController.animateTo(1);
@@ -100,10 +175,12 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Failed to create event post: $e';
+        _error = 'Failed to submit: $e';
       });
     }
   }
+
+  // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -114,19 +191,17 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
           TabBar(
             controller: _tabController,
             labelColor: context.appTheme.primary,
-            unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
+            unselectedLabelColor:
+                context.appTheme.onSurface.withOpacity(0.6),
             tabs: const [
               Tab(text: 'Create Post', icon: Icon(Icons.add_box)),
-              Tab(text: 'Post Status', icon: Icon(Icons.history)),
+              Tab(text: 'My Posts', icon: Icon(Icons.history)),
             ],
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                _buildCreateForm(),
-                _buildStatusList(),
-              ],
+              children: [_buildCreateForm(), _buildStatusList()],
             ),
           ),
         ],
@@ -136,7 +211,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
 
   Widget _buildCreateForm() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(20),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 600),
@@ -147,72 +222,141 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
               side: BorderSide(color: context.appTheme.outlineVariant),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
-                    'Create New Event Post',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 24),
+                  Text('Create Event Post',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 20),
                   if (_error != null)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      margin: const EdgeInsets.only(bottom: 24),
-                      decoration: BoxDecoration(
-                        color: context.appTheme.error.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _error!,
-                        style: TextStyle(color: context.appTheme.error),
-                      ),
-                    ),
+                    _ErrorBox(message: _error!),
                   SchoolDeskTextField(
                     controller: _titleController,
-                    label: 'Event Title',
+                    label: 'Event Title *',
                     hint: 'E.g. Annual Sports Day',
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   SchoolDeskTextField(
                     controller: _descController,
                     label: 'Description',
                     hint: 'Enter details...',
                     maxLines: 4,
                   ),
-                  const SizedBox(height: 16),
-                  SchoolDeskTextField(
+                  const SizedBox(height: 14),
+                  // Date picker
+                  TextFormField(
                     controller: _dateController,
-                    label: 'Event Date (YYYY-MM-DD)',
-                    hint: 'Optional',
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Event Date',
+                      hintText: 'Tap to pick a date',
+                      border: OutlineInputBorder(),
+                      suffixIcon: Icon(Icons.calendar_today_outlined),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null && mounted) {
+                        _dateController.text =
+                            '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                      }
+                    },
                   ),
-                  const SizedBox(height: 16),
-                  SchoolDeskTextField(
-                    controller: _mediaUrlController,
-                    label: 'Media URL (Image/Video attachment)',
-                    hint: 'https://...',
+                  const SizedBox(height: 20),
+                  // ── Attachment section ──────────────────────────────
+                  Text('Attachments / Images',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _uploading ? null : _pickImage,
+                        icon: const Icon(Icons.photo_outlined, size: 18),
+                        label: const Text('Pick Images'),
+                      ),
+                      const SizedBox(width: 10),
+                      OutlinedButton.icon(
+                        onPressed: _uploading ? null : _pickFile,
+                        icon: const Icon(Icons.attach_file_rounded, size: 18),
+                        label: const Text('Pick File'),
+                      ),
+                      if (_uploading) ...[
+                        const SizedBox(width: 10),
+                        const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 24),
-                  Text('Destinations', style: Theme.of(context).textTheme.titleMedium),
+                  if (_uploadedUrls.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    ..._uploadedUrls.asMap().entries.map((entry) => Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle,
+                                  color: Colors.green, size: 16),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  entry.value.split('/').last,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () => setState(
+                                    () => _uploadedUrls.removeAt(entry.key)),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ),
+                        )),
+                  ],
+                  const SizedBox(height: 20),
+                  // ── Destinations ───────────────────────────────────
+                  Text('Destinations *',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
                   CheckboxListTile(
                     title: const Text('Parent Home Feed'),
                     value: _destParentHome,
-                    onChanged: (val) => setState(() => _destParentHome = val ?? false),
+                    dense: true,
+                    onChanged: (v) =>
+                        setState(() => _destParentHome = v ?? false),
                   ),
                   CheckboxListTile(
                     title: const Text('School Gallery'),
                     value: _destSchoolGallery,
-                    onChanged: (val) => setState(() => _destSchoolGallery = val ?? false),
+                    dense: true,
+                    onChanged: (v) =>
+                        setState(() => _destSchoolGallery = v ?? false),
                   ),
                   CheckboxListTile(
                     title: const Text('Public Landing Page'),
                     value: _destSchoolLanding,
-                    onChanged: (val) => setState(() => _destSchoolLanding = val ?? false),
+                    dense: true,
+                    onChanged: (v) =>
+                        setState(() => _destSchoolLanding = v ?? false),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -220,7 +364,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
                         onPressed: _loading ? null : () => _submit(false),
                         child: const Text('Save Draft'),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 12),
                       FilledButton(
                         onPressed: _loading ? null : () => _submit(true),
                         child: const Text('Submit for Approval'),
@@ -241,38 +385,73 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen> with Si
       return const Center(child: CircularProgressIndicator());
     }
     if (_posts.isEmpty) {
-      return const Center(child: Text('No posts found.'));
+      return const Center(child: Text('No posts yet.'));
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(20),
       itemCount: _posts.length,
-      itemBuilder: (context, index) {
-        final post = _posts[index];
+      itemBuilder: (context, i) {
+        final post = _posts[i];
         final status = post['approval_status'] ?? 'draft';
-        Color statusColor = Colors.grey;
-        if (status == 'approved') statusColor = Colors.green;
-        if (status == 'rejected') statusColor = Colors.red;
-        if (status == 'pending') statusColor = Colors.orange;
-
+        final Color statusColor = switch (status) {
+          'approved' => Colors.green,
+          'rejected' => Colors.red,
+          'pending' => Colors.orange,
+          _ => Colors.grey,
+        };
+        final media = _labels(post['media_urls']);
         return Card(
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: const EdgeInsets.only(bottom: 14),
           child: ListTile(
             title: Text(post['title'] ?? 'No Title'),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(post['description'] ?? ''),
-                if (status == 'rejected' && post['rejection_reason'] != null)
-                  Text('Reason: ${post['rejection_reason']}', style: const TextStyle(color: Colors.red)),
+                if ((post['description'] ?? '').isNotEmpty)
+                  Text(post['description']),
+                if (media.isNotEmpty)
+                  Text('${media.length} attachment${media.length == 1 ? '' : 's'}'),
+                if (status == 'rejected' &&
+                    post['rejection_reason'] != null)
+                  Text('Reason: ${post['rejection_reason']}',
+                      style: const TextStyle(color: Colors.red)),
               ],
             ),
             trailing: Chip(
-              label: Text(status.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.white)),
+              label: Text(status.toUpperCase(),
+                  style:
+                      const TextStyle(fontSize: 10, color: Colors.white)),
               backgroundColor: statusColor,
+              padding: EdgeInsets.zero,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         );
       },
+    );
+  }
+
+  List<String> _labels(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return raw.toString().split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final String message;
+  const _ErrorBox({required this.message});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: context.appTheme.error.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(message, style: TextStyle(color: context.appTheme.error)),
     );
   }
 }
