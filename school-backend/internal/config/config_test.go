@@ -19,9 +19,6 @@ func TestValidateProductionSuccess(t *testing.T) {
 		RedisURL:              "redis://:pass@redis:6379/0",
 		RedisPassword:         "pass",
 		AllowedOrigins:        []string{"https://app.example.com"},
-		RazorpayKeyID:         "rzp_test_key",
-		RazorpayKeySecret:     "razorpay-secret",
-		RazorpayWebhookSecret: "webhook-secret",
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected no validation error, got %v", err)
@@ -42,20 +39,7 @@ func TestValidateProductionAllowsMissingOptionalRazorpay(t *testing.T) {
 	}
 }
 
-func TestValidateProductionRejectsPartialRazorpayConfig(t *testing.T) {
-	cfg := &Config{
-		Environment:    "production",
-		JWTSecret:      "12345678901234567890123456789012",
-		DatabaseURL:    "postgres://user:pass@db:5432/app",
-		RedisURL:       "redis://:pass@redis:6379/0",
-		RedisPassword:  "pass",
-		AllowedOrigins: []string{"https://app.example.com"},
-		RazorpayKeyID:  "rzp_test_key",
-	}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validation error for partial Razorpay config")
-	}
-}
+
 
 func TestLoadReadsRelationshipConstraintFlag(t *testing.T) {
 	t.Setenv("ENABLE_RELATIONSHIP_CONSTRAINTS", "true")

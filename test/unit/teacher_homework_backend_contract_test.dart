@@ -41,9 +41,6 @@ void main() {
     expect(teacherScreen, contains('AppRoutes.teacherHomeworkSubmissions'));
     expect(teacherScreen, contains('getHomework('));
     expect(teacherScreen, contains('getHomeworkSubmissions('));
-    expect(teacherScreen, contains("createRaw('/diary-entries'"));
-    expect(teacherScreen, contains("'entry_type': 'no_homework'"));
-    expect(teacherScreen, contains("'homework': 'No homework'"));
     expect(teacherScreen, isNot(contains('showModalBottomSheet(')));
     expect(teacherScreen, isNot(contains('showDialog(')));
     expect(teacherScreen, isNot(contains('_showAddHomeworkSheet')));
@@ -62,12 +59,23 @@ void main() {
     expect(teacherForms, isNot(contains('showModalBottomSheet(')));
     expect(teacherForms, isNot(contains('showDialog(')));
     expect(teacherDiary, contains("row['entry_date']"));
+    expect(teacherDiary, contains("row['period_number']"));
     expect(teacherDiary, contains("row['entry_type']"));
     expect(teacherDiary, contains("row['content']"));
+    expect(teacherDiary, contains('_archivedEntries'));
+    expect(teacherDiary, contains('Archived Diary Entries'));
+    expect(teacherDiary, contains('_prefillFromRouteArgs'));
+    expect(
+      File(
+        'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
+      ).readAsStringSync(),
+      contains('_offerDiaryAfterPeriod'),
+    );
     expect(
       teacherDiary,
       contains("'staff_id': RoleAccessService.teacherStaffId"),
     );
+    expect(teacherDiary, contains("'period_number': _periodNumber"));
 
     expect(parentScreen, contains('AppRoutes.parentHomeworkSubmit'));
     expect(parentScreen, contains('getHomeworkSubmissions('));

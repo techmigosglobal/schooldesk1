@@ -22,6 +22,8 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   bool _saving = false;
   String? _error;
   String _entryType = 'regular';
+  int _periodNumber = 1;
+  bool _routeArgsApplied = false;
   Map<String, dynamic>? _editingEntry;
   List<Map<String, dynamic>> _entries = const [];
 
@@ -38,6 +40,25 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     _nextClassController.dispose();
     _noteController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _prefillFromRouteArgs();
+  }
+
+  void _prefillFromRouteArgs() {
+    if (_routeArgsApplied) return;
+    _routeArgsApplied = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+    final period = teacherFlowInt(args['period_number'] ?? args['period']);
+    if (period > 0) _periodNumber = period;
+    final subject = teacherFlowText(args['subject']);
+    if (subject.isNotEmpty && _noteController.text.trim().isEmpty) {
+      _noteController.text = 'Diary for $subject';
+    }
   }
 
   Future<void> _loadDiary() async {
@@ -93,6 +114,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         row['subject'] ?? row['subject_name'],
         fallback: RoleAccessService.teacherSubject,
       ),
+      'period_number': teacherFlowInt(row['period_number']),
       'title': teacherFlowText(row['title'], fallback: 'Class diary'),
       'classwork': teacherFlowText(row['classwork'] ?? row['work_done']),
       'practice': teacherFlowText(
@@ -137,7 +159,10 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         'staff_id': RoleAccessService.teacherStaffId,
         'class': RoleAccessService.teacherClassName,
         'subject': RoleAccessService.teacherSubject,
-        'title': noPractice ? 'No practice work' : 'Daily class diary',
+        'period_number': _periodNumber,
+        'title': noPractice
+            ? 'No practice work'
+            : 'Period $_periodNumber class diary',
         'classwork': classwork,
         'homework': practice,
         'schedule': nextClass,
@@ -189,6 +214,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     _practiceController.clear();
     _nextClassController.clear();
     _noteController.clear();
+    _periodNumber = 1;
   }
 
   void _editEntry(Map<String, dynamic> entry) {
@@ -196,6 +222,8 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     setState(() {
       _editingEntry = entry;
       _entryType = teacherFlowText(entry['type'], fallback: 'regular');
+      final period = teacherFlowInt(entry['period_number']);
+      _periodNumber = period > 0 ? period : 1;
       _classworkController.text = teacherFlowText(entry['classwork']);
       _practiceController.text = teacherFlowText(entry['practice']);
       _nextClassController.text = teacherFlowText(entry['schedule']);
@@ -212,6 +240,11 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       loading: _loading,
       error: _error,
       onRefresh: _loadDiary,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _saveDiaryEntry(),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Period Diary'),
+      ),
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(
@@ -270,6 +303,17 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 child: _entryCard(entry),
               ),
             ),
+          if (_archivedEntries.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const TeacherFlowSectionHeader(title: 'Archived Diary Entries'),
+            const SizedBox(height: 10),
+            ..._archivedEntries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _entryCard(entry),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -297,6 +341,21 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
             onChanged: _saving
                 ? null
                 : (value) => setState(() => _entryType = value ?? 'regular'),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(
+            value: _periodNumber,
+            decoration: const InputDecoration(
+              labelText: 'Period',
+              prefixIcon: Icon(Icons.schedule_rounded),
+            ),
+            items: [
+              for (var period = 1; period <= 10; period++)
+                DropdownMenuItem(value: period, child: Text('Period $period')),
+            ],
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _periodNumber = value ?? 1),
           ),
           const SizedBox(height: 10),
           TextField(
@@ -395,12 +454,13 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     final classwork = teacherFlowText(entry['classwork']);
     final notes = teacherFlowText(entry['notes']);
     final schedule = teacherFlowText(entry['schedule']);
+    final period = teacherFlowInt(entry['period_number']);
     final editable = _isTodayEntry(entry);
     return TeacherFlowCard(
       icon: Icons.menu_book_rounded,
       title: teacherFlowText(entry['title'], fallback: 'Class diary'),
       subtitle:
-          '${teacherFlowText(entry['subject'])} · ${teacherFlowText(entry['class'])}',
+          '${teacherFlowText(entry['subject'])} · ${teacherFlowText(entry['class'])}${period > 0 ? ' · Period $period' : ''}',
       status: teacherFlowText(entry['date'], fallback: 'Today'),
       statusColor: _typeColor(teacherFlowText(entry['type'])),
       body: Column(
@@ -441,6 +501,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
 
   List<Map<String, dynamic>> get _todayEntries =>
       _entries.where(_isTodayEntry).toList();
+
+  List<Map<String, dynamic>> get _archivedEntries =>
+      _entries.where((entry) => !_isTodayEntry(entry)).toList();
 
   bool _isTodayEntry(Map<String, dynamic> entry) {
     return teacherFlowText(entry['date']) == teacherFlowDate(DateTime.now());

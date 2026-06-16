@@ -6,6 +6,56 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+
+void _showPublicEvents(BuildContext context) async {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+  try {
+    final response = (await BackendApiClient.instance.dio.get('/api/v1/event-posts?destination=SCHOOL_LANDING')).data;
+    if (!context.mounted) return;
+    Navigator.pop(context); // close loading
+    final List<dynamic> events = response is List ? response : (response['data'] as List? ?? []);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) {
+          if (events.isEmpty) {
+            return const Center(child: Text('No public events right now.'));
+          }
+          return ListView.builder(
+            controller: scrollController,
+            padding: const EdgeInsets.all(24),
+            itemCount: events.length,
+            itemBuilder: (context, index) {
+              final event = events[index];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: ListTile(
+                  title: Text(event['title'] ?? 'Event'),
+                  subtitle: Text('${event['description'] ?? ''}\nDate: ${event['event_date']}'),
+                  isThreeLine: true,
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  } catch (e) {
+    if (!context.mounted) return;
+    Navigator.pop(context); // close loading
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to load events: $e')));
+  }
+}
 
 class LandingPageScreen extends StatefulWidget {
   const LandingPageScreen({super.key});
@@ -391,6 +441,11 @@ class _TopBar extends StatelessWidget {
             onPressed: () => Navigator.pushNamed(context, AppRoutes.kioskLogin),
             tooltip: 'QR Display',
             icon: const Icon(Icons.qr_code_2_rounded),
+          ),
+          IconButton.outlined(
+            onPressed: () => _showPublicEvents(context),
+            tooltip: 'Public Events',
+            icon: const Icon(Icons.event_available_rounded),
           ),
           const SizedBox(width: 8),
           FilledButton.icon(

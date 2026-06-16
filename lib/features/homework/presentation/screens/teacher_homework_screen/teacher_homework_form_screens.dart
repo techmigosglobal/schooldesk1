@@ -226,13 +226,17 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                       _required(value, 'Select a class section.'),
                 ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _subjectController,
+                DropdownButtonFormField<String>(
+                  value: _subjectOptions.contains(_subjectController.text) 
+                      ? _subjectController.text 
+                      : (_subjectOptions.isNotEmpty ? _subjectOptions.first : ''),
                   decoration: const InputDecoration(
                     labelText: 'Subject',
                     prefixIcon: Icon(Icons.menu_book_rounded),
                   ),
-                  validator: (value) => _required(value, 'Enter subject.'),
+                  items: _subjectOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  onChanged: _saving ? null : (value) => setState(() => _subjectController.text = value ?? ''),
+                  validator: (value) => _required(value, 'Select subject.'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -366,6 +370,24 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     );
     if (match.isNotEmpty) return _classLabel(match.first);
     return widget.args.defaultClassName;
+  }
+
+  List<String> get _subjectOptions {
+    final match = _classOptions.where(
+      (row) => teacherFlowText(row['id']) == _sectionId,
+    );
+    if (match.isEmpty) return [widget.args.defaultSubject];
+    
+    final row = match.first;
+    final subjects = row['subjects'];
+    if (subjects is List && subjects.isNotEmpty) {
+      final list = subjects.map((e) {
+        if (e is Map) return teacherFlowText(e['subject_name'] ?? e['name'] ?? e['subject_id'] ?? e['id']);
+        return teacherFlowText(e);
+      }).where((e) => e.isNotEmpty).toSet().toList();
+      if (list.isNotEmpty) return list;
+    }
+    return [widget.args.defaultSubject];
   }
 
   Future<void> _writeDiaryEntry() async {

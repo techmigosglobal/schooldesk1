@@ -36,7 +36,6 @@ func TestDeleteStudentRemovesOperationalAssociations(t *testing.T) {
 		&models.StudentGuardian{ID: "student-guardian-cleanup", SchoolID: f.schoolID, StudentID: f.studentID, GuardianID: "guardian-linked", IsPrimary: true, CreatedAt: now, UpdatedAt: now},
 		&models.MedicalRecord{BaseModel: models.BaseModel{ID: "medical-cleanup"}, StudentID: f.studentID, Conditions: "None"},
 		&models.StudentDocument{BaseModel: models.BaseModel{ID: "doc-cleanup"}, StudentID: f.studentID, DocType: "id", FileURL: "/x.pdf", UploadedAt: now},
-		&models.StudentTransport{BaseModel: models.BaseModel{ID: "transport-cleanup"}, StudentID: f.studentID, AcademicYearID: f.yearID, RouteID: "route-cleanup", StopID: "stop-cleanup"},
 		&models.StudentLeaveApplication{BaseModel: models.BaseModel{ID: "student-leave-cleanup"}, SchoolID: f.schoolID, StudentID: f.studentID, ParentUserID: f.parentUserID, LeaveType: "sick", FromDate: now, ToDate: now, Reason: "Sick", AppliedAt: now},
 	}
 	for _, row := range rows {
@@ -68,7 +67,6 @@ func TestDeleteStudentRemovesOperationalAssociations(t *testing.T) {
 	assertZeroRows(t, &models.ParentStudentLink{}, "student_id = ?", f.studentID)
 	assertZeroRows(t, &models.StudentGuardian{}, "student_id = ?", f.studentID)
 	assertZeroRows(t, &models.Enrollment{}, "student_id = ?", f.studentID)
-	assertZeroRows(t, &models.StudentTransport{}, "student_id = ?", f.studentID)
 	assertZeroRows(t, &models.StudentLeaveApplication{}, "student_id = ?", f.studentID)
 }
 

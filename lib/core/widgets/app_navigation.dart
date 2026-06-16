@@ -11,12 +11,12 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class PrincipalDrawer extends StatefulWidget {
-  final int selectedIndex;
+  final int? selectedIndex;
   final Function(int) onDestinationSelected;
 
   const PrincipalDrawer({
     super.key,
-    required this.selectedIndex,
+    this.selectedIndex,
     required this.onDestinationSelected,
   });
 

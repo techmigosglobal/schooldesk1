@@ -115,6 +115,7 @@ type DiaryEntry struct {
 	ClassName string    `gorm:"type:text" json:"class"`
 	SectionID string    `gorm:"type:text" json:"section_id"`
 	Subject   string    `gorm:"type:text" json:"subject"`
+	Period    int       `gorm:"column:period_number" json:"period_number"`
 	Title     string    `gorm:"type:text;not null" json:"title"`
 	Classwork string    `gorm:"type:text" json:"classwork"`
 	Homework  string    `gorm:"type:text" json:"homework"`

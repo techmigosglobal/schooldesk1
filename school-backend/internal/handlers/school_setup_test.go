@@ -72,8 +72,18 @@ func TestSchoolSetupCreatesSchoolRolesPermissionsAndPrincipalSession(t *testing.
 	if err := db.Model(&models.Role{}).Where("school_id = ?", school.ID).Count(&roleCount).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if roleCount != 4 {
-		t.Fatalf("role count=%d, want 4", roleCount)
+	if roleCount != 5 {
+		t.Fatalf("role count=%d, want 5", roleCount)
+	}
+	var kiosk models.User
+	if err := db.Preload("Role").First(&kiosk, "school_id = ? AND username = ?", school.ID, "kiosk").Error; err != nil {
+		t.Fatalf("load kiosk user: %v", err)
+	}
+	if kiosk.Role == nil || kiosk.Role.RoleName != "Kiosk" {
+		t.Fatalf("kiosk role=%v, want Kiosk", kiosk.Role)
+	}
+	if !kiosk.IsActive || !kiosk.IsVerified {
+		t.Fatalf("kiosk user should be active and verified")
 	}
 	var principal models.User
 	if err := db.Preload("Role").First(&principal, "email = ?", "principal@example.test").Error; err != nil {

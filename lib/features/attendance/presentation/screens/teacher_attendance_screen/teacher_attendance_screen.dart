@@ -204,6 +204,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+      await _offerDiaryAfterPeriod();
       setState(() => _saving = false);
       await _loadFlow();
     } catch (error) {
@@ -217,6 +218,40 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         ),
       );
     }
+  }
+
+  Future<void> _offerDiaryAfterPeriod() async {
+    final session = _session;
+    if (session == null || !mounted) return;
+    final record = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Record period ${session.periodNumber} diary?'),
+        content: const Text(
+          'Add what was taught, next class plan, and practice work before moving on.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Later'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.menu_book_rounded),
+            label: const Text('Open Diary'),
+          ),
+        ],
+      ),
+    );
+    if (record != true || !mounted) return;
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.teacherDiary,
+      arguments: {
+        'period_number': session.periodNumber,
+        'subject': _subjectLabel,
+      },
+    );
   }
 
   void _markAll(String status) {

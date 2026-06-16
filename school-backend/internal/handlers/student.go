@@ -575,7 +575,6 @@ func cleanupStudentAssociations(tx *gorm.DB, schoolID, studentID string) error {
 		{"student_id = ?", []interface{}{studentID}, &models.Homework{}},
 		{"student_id = ?", []interface{}{studentID}, &models.DiaryEntry{}},
 		{"student_id = ?", []interface{}{studentID}, &models.ParentTeacherMeeting{}},
-		{"student_id = ?", []interface{}{studentID}, &models.StudentTransport{}},
 		{"student_id = ?", []interface{}{studentID}, &models.TransferRecord{}},
 		{"student_id = ?", []interface{}{studentID}, &models.MedicalRecord{}},
 		{"student_id = ?", []interface{}{studentID}, &models.StudentDocument{}},
@@ -993,16 +992,7 @@ func (h *StudentHandler) GetStudentProgress(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"student_id": studentID, "progress": rows})
 }
 
-func (h *StudentHandler) GetStudentTransport(c *gin.Context) {
-	studentID := c.Param("id")
-	if !h.canAccessStudent(c, studentID) {
-		fail(c, http.StatusForbidden, "student access denied")
-		return
-	}
-	var transports []models.StudentTransport
-	database.DB.Where("student_id = ?", studentID).Preload("Route").Preload("Stop").Find(&transports)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: transports})
-}
+
 
 func (h *StudentHandler) canAccessStudent(c *gin.Context, studentID string) bool {
 	return canAccessStudent(c, studentID)

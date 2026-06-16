@@ -64,22 +64,29 @@ void main() {
     expect(qrPanel, contains('secondsRemaining'));
     expect(qrPanel, contains('Recent scans'));
     expect(qrPanel, contains('Semantics('));
+    expect(qrPanel, isNot(contains('Future.wait<Object>([')));
+    expect(qrPanel, contains('_loadRecentScans'));
+    expect(qrPanel, contains('_exportDailyQrLog'));
+    expect(qrPanel, contains('SharePlus.instance.share'));
 
     expect(api, contains('Future<StaffQrTokenModel> getStaffQrToken()'));
     expect(api, contains('Future<StaffAttendanceModel> scanStaffQr'));
+    expect(api, contains('exportStaffQrLogsCsv'));
     expect(api, contains('getMyStaffAttendanceToday'));
     expect(api, contains('getStaffAttendanceForDate'));
     expect(api, contains('refresh_after_seconds'));
     expect(api, contains('StaffAttendanceModel'));
 
     expect(main, contains('attendance.GET("/staff/qr-token"'));
+    expect(main, contains('attendance.GET("/staff/qr-logs/export"'));
     expect(main, contains('attendance.POST("/staff/qr-scan"'));
     expect(main, contains('attendance.GET("/staff/me/today"'));
     expect(main, contains('attendance.GET("/staff"'));
     expect(handler, contains('verifyStaffQRToken'));
     expect(handler, contains('currentStaffID(c)'));
     expect(handler, contains('payload.SchoolID != schoolID'));
-    expect(handler, contains('staffQRRefreshSeconds = 60'));
+    expect(handler, contains('staffQRRefreshSeconds = 20'));
+    expect(handler, contains('ExportStaffQRDailyLogs'));
   });
 
   test('staff QR display uses separate kiosk login and teacher scan identity', () {

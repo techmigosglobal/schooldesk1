@@ -626,6 +626,7 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 	}
 
 	suggestions := make([]timetableSuggestion, 0, req.PeriodCount)
+	var dayStaff *timetableStaffOption
 	for period := 1; period <= req.PeriodCount; period++ {
 		subject := subjectPlan[(period-1)%len(subjectPlan)]
 		start := startClock.Add(time.Duration(period-1) * time.Duration(req.PeriodDurationMinutes+req.GapMinutes) * time.Minute)
@@ -651,7 +652,24 @@ func (h *TimetableHandler) buildTimetableSuggestionPlan(c *gin.Context, req time
 			continue
 		}
 
-		staff, warnings, blocking := chooseTimetableStaff(subject.ID, period, subjectStaff, staffOptions, staffBusy, staffLoad, section.ClassTeacherID)
+		var staff timetableStaffOption
+		var warnings []string
+		var blocking bool
+
+		if dayStaff != nil {
+			staff = *dayStaff
+			if staffBusy[staff.ID][period] {
+				blocking = true
+				warnings = append(warnings, "Suggested teacher is already assigned in this period.")
+			} else {
+				warnings = append(warnings, "Assigned for the whole day.")
+			}
+		} else {
+			staff, warnings, blocking = chooseTimetableStaff(subject.ID, period, subjectStaff, staffOptions, staffBusy, staffLoad, section.ClassTeacherID)
+			if !blocking {
+				dayStaff = &staff
+			}
+		}
 		suggestion.StaffID = staff.ID
 		suggestion.StaffName = staff.Name
 		suggestion.Warnings = append(suggestion.Warnings, warnings...)

@@ -1095,7 +1095,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       controller: _msgCtrl,
       isSending: _sendingMessage,
       onSend: () => _sendMessage(teacherId),
-      onAttach: () => _showAttachmentOptions(teacherId),
     );
   }
 
@@ -1149,11 +1148,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     return created['id'].toString();
   }
 
-  void _showAttachmentOptions(String teacherId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const _AttachmentBackendGapPage()),
-    );
-  }
 
   void _showTeacherInfo(int index) {
     final t = _teachers[index];
@@ -1833,51 +1827,4 @@ String _ptmInitials(String value) {
   return parts.isEmpty ? 'T' : parts;
 }
 
-class _AttachmentBackendGapPage extends StatelessWidget {
-  const _AttachmentBackendGapPage();
 
-  @override
-  Widget build(BuildContext context) {
-    final options = [
-      (Icons.image_rounded, 'Photo'),
-      (Icons.camera_alt_rounded, 'Camera'),
-      (Icons.insert_drive_file_rounded, 'Document'),
-      (Icons.picture_as_pdf_rounded, 'PDF'),
-    ];
-    return Scaffold(
-      appBar: AppBar(title: const Text('Share Attachment')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appTheme.warningContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'Attachment upload is blocked because this screen does not have a real file picker or upload endpoint wired yet. No synthetic file message was sent.',
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                color: context.appTheme.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          ...options.map(
-            (option) => ListTile(
-              leading: Icon(option.$1, color: context.appTheme.muted),
-              title: Text(option.$2, style: GoogleFonts.dmSans()),
-              subtitle: Text(
-                'Unavailable until real upload support is connected',
-                style: GoogleFonts.dmSans(fontSize: 12),
-              ),
-              enabled: false,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -95,6 +96,9 @@ func (h *SchoolSetupHandler) Setup(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		if err := createSetupKioskUser(tx, school.ID, roles["Kiosk"]); err != nil {
+			return err
+		}
 		adminRole = roles[adminRoleName]
 		adminUser, err = createUserWithRole(
 			tx,
@@ -134,7 +138,7 @@ func (h *SchoolSetupHandler) Setup(c *gin.Context) {
 
 func createSetupRoles(tx *gorm.DB, schoolID string) (map[string]models.Role, error) {
 	roles := map[string]models.Role{}
-	for _, roleName := range []string{"Principal", "Admin", "Teacher", "Parent"} {
+	for _, roleName := range []string{"Principal", "Admin", "Teacher", "Parent", "Kiosk"} {
 		role := models.Role{
 			SchoolID:     schoolID,
 			RoleName:     roleName,
@@ -150,6 +154,31 @@ func createSetupRoles(tx *gorm.DB, schoolID string) (map[string]models.Role, err
 		return nil, err
 	}
 	return roles, nil
+}
+
+func createSetupKioskUser(tx *gorm.DB, schoolID string, role models.Role) error {
+	password := strings.TrimSpace(os.Getenv("SCHOOLDESK_KIOSK_PASSWORD"))
+	if password == "" {
+		password = "Kiosk@12345"
+	}
+	hash, err := database.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	_, err = createUserWithRole(
+		tx,
+		schoolID,
+		role,
+		"Attendance Kiosk",
+		"kiosk",
+		"kiosk+"+schoolID+"@schooldesk.local",
+		"",
+		hash,
+		"",
+		nil,
+		true,
+	)
+	return err
 }
 
 func createSetupRolePermissions(tx *gorm.DB, roles map[string]models.Role) error {
@@ -179,7 +208,8 @@ func createSetupRolePermissions(tx *gorm.DB, roles map[string]models.Role) error
 		}
 		teacherRead := inSetupList(module, "dashboard", "guardians", "medical_records", "student_documents", "staff_subjects", "staff_qualifications", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
 		teacherManage := inSetupList(module, "homework", "diary_entries", "message_conversations", "messages", "parent_teacher_meetings")
-		if err := createSetupPermission(tx, roles["Teacher"].ID, module, teacherRead, teacherManage, teacherManage, false, false); err != nil {
+		teacherDelete := module == "diary_entries" || module == "homework"
+		if err := createSetupPermission(tx, roles["Teacher"].ID, module, teacherRead, teacherManage, teacherManage, teacherDelete, false); err != nil {
 			return err
 		}
 		parentRead := inSetupList(module, "dashboard", "guardians", "medical_records", "student_documents", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")

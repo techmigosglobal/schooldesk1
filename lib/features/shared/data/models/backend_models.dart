@@ -761,7 +761,7 @@ class StaffQrTokenModel {
         issuedAt: _parseDateTime(json['issued_at']),
         expiresAt: _parseDateTime(json['expires_at']),
         serverTime: _parseDateTime(json['server_time']),
-        refreshAfterSeconds: _intValue(json['refresh_after_seconds'], 60),
+        refreshAfterSeconds: _intValue(json['refresh_after_seconds'], 20),
       );
 
   static DateTime? _parseDateTime(Object? value) {

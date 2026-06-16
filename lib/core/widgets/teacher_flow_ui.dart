@@ -415,7 +415,12 @@ class TeacherFlowCard extends StatelessWidget {
                           ),
                         ),
                         if (status != null)
-                          TeacherStatusPill(label: status!, color: statusColor),
+                          Flexible(
+                            child: TeacherStatusPill(
+                              label: status!,
+                              color: statusColor,
+                            ),
+                          ),
                       ],
                     ),
                     SizedBox(height: tokens.spacing.xs),

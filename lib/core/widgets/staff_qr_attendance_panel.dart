@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -20,8 +22,10 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   StaffQrTokenModel? _token;
   List<StaffAttendanceModel> _recent = const [];
   Timer? _timer;
+  Timer? _pollingTimer;
   bool _loading = true;
   bool _refreshing = false;
+  bool _exportingLog = false;
   String? _error;
   int _secondsLeft = 0;
 
@@ -29,11 +33,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   void initState() {
     super.initState();
     _load();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollRecentScans());
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _pollingTimer?.cancel();
     super.dispose();
   }
 
@@ -46,21 +52,16 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     });
     try {
       final api = BackendApiClient.instance;
-      final results = await Future.wait<Object>([
-        api.getStaffQrToken(),
-        api.getStaffAttendanceForDate(),
-      ]);
-      final token = results[0] as StaffQrTokenModel;
-      final rows = results[1] as List<StaffAttendanceModel>;
+      final token = await api.getStaffQrToken();
       if (!mounted) return;
       setState(() {
         _token = token;
-        _recent = rows;
         _secondsLeft = token.secondsRemaining;
         _loading = false;
         _refreshing = false;
       });
       _startCountdown();
+      _loadRecentScans();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -69,6 +70,81 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         _refreshing = false;
       });
     }
+  }
+
+  Future<void> _loadRecentScans() async {
+    try {
+      final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
+      if (!mounted) return;
+      setState(() => _recent = rows);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _recent = const []);
+    }
+  }
+
+  Future<void> _pollRecentScans() async {
+    if (_refreshing || _loading) return;
+    try {
+      final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
+      if (!mounted) return;
+      if (rows.length > _recent.length) {
+        _load(quiet: true);
+      } else {
+        setState(() => _recent = rows);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _exportDailyQrLog() async {
+    if (_exportingLog) return;
+    setState(() => _exportingLog = true);
+    final date = _todayDateText();
+    try {
+      final bytes = await BackendApiClient.instance.exportStaffQrLogsCsv(
+        date: date,
+      );
+      final fileName = 'staff_qr_logs_$date.csv';
+      await SharePlus.instance.share(
+        ShareParams(
+          title: 'Staff QR logs',
+          subject: 'Staff QR logs for $date',
+          text: 'Daily staff QR attendance log exported from SchoolDesk.',
+          files: [
+            XFile.fromData(
+              Uint8List.fromList(bytes),
+              mimeType: 'text/csv',
+              name: fileName,
+            ),
+          ],
+          fileNameOverrides: [fileName],
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Staff QR log exported for $date'),
+          backgroundColor: Theme.of(context).schoolDesk.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Staff QR log export failed: $error'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _exportingLog = false);
+    }
+  }
+
+  String _todayDateText() {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '${now.year}-$month-$day';
   }
 
   void _startCountdown() {
@@ -122,6 +198,8 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
                     error: _error,
                     compact: widget.compact,
                     onRefresh: () => _load(),
+                    exportingLog: _exportingLog,
+                    onExport: _exportDailyQrLog,
                   );
                   final status = _StaffQrStatusBlock(
                     presentCount: presentCount,
@@ -152,17 +230,21 @@ class _QrBlock extends StatelessWidget {
   final StaffQrTokenModel? token;
   final int secondsLeft;
   final bool refreshing;
+  final bool exportingLog;
   final String? error;
   final bool compact;
   final VoidCallback onRefresh;
+  final VoidCallback onExport;
 
   const _QrBlock({
     required this.token,
     required this.secondsLeft,
     required this.refreshing,
+    required this.exportingLog,
     required this.error,
     required this.compact,
     required this.onRefresh,
+    required this.onExport,
   });
 
   @override
@@ -188,6 +270,18 @@ class _QrBlock extends StatelessWidget {
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
+              ),
+            ),
+            Tooltip(
+              message: 'Export daily QR log',
+              child: IconButton.filledTonal(
+                onPressed: exportingLog ? null : onExport,
+                icon: exportingLog
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.file_download_outlined),
               ),
             ),
             Tooltip(

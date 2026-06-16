@@ -33,13 +33,13 @@ docker compose up --build
 2. Verify the API is healthy:
 
 ```bash
-curl http://127.0.0.1:8090/health
+curl http://127.0.0.1:8080/health
 ```
 
 3. For a wireless Android device, forward the device port to the local FastAPI service:
 
 ```bash
-adb reverse tcp:8090 tcp:8090
+adb reverse tcp:8080 tcp:8080
 ```
 
 4. Run Flutter against the local FastAPI service:

@@ -9,12 +9,12 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class TeacherDrawer extends StatefulWidget {
-  final int selectedIndex;
+  final int? selectedIndex;
   final Function(int) onDestinationSelected;
 
   const TeacherDrawer({
     super.key,
-    required this.selectedIndex,
+    this.selectedIndex,
     required this.onDestinationSelected,
   });
 
@@ -154,19 +154,26 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               label: 'Study Materials',
               route: AppRoutes.teacherStudyMaterials,
             ),
-            SchoolDeskNavigationItem(
-              index: 17,
-              icon: Icons.edit_note_outlined,
-              activeIcon: Icons.edit_note_rounded,
-              label: 'Marks Entry',
-              route: AppRoutes.teacherMarkEntry,
+            const SchoolDeskNavigationItem(
+              index: 22,
+              icon: Icons.post_add_outlined,
+              activeIcon: Icons.post_add_rounded,
+              label: 'Event Posts',
+              route: AppRoutes.teacherEventPosts,
             ),
-            SchoolDeskNavigationItem(
-              index: 5,
-              icon: Icons.trending_up_outlined,
-              activeIcon: Icons.trending_up_rounded,
-              label: 'Student Performance',
-              route: AppRoutes.teacherPerformance,
+            const SchoolDeskNavigationItem(
+              index: 23,
+              icon: Icons.auto_stories_outlined,
+              activeIcon: Icons.auto_stories_rounded,
+              label: 'Lesson Planner',
+              route: AppRoutes.teacherLessonPlanner,
+            ),
+            const SchoolDeskNavigationItem(
+              index: 24,
+              icon: Icons.photo_library_outlined,
+              activeIcon: Icons.photo_library_rounded,
+              label: 'Gallery',
+              route: AppRoutes.schoolGallery,
             ),
             SchoolDeskNavigationItem(
               index: 19,

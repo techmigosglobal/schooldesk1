@@ -10,12 +10,12 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class ParentDrawer extends StatefulWidget {
-  final int selectedIndex;
+  final int? selectedIndex;
   final Function(int) onDestinationSelected;
 
   const ParentDrawer({
     super.key,
-    required this.selectedIndex,
+    this.selectedIndex,
     required this.onDestinationSelected,
   });
 
@@ -225,6 +225,13 @@ class _ParentDrawerState extends State<ParentDrawer> {
               activeIcon: Icons.description_rounded,
               label: SchoolDeskGlossary.documents,
               route: AppRoutes.parentDocuments,
+            ),
+            SchoolDeskNavigationItem(
+              index: 18,
+              icon: Icons.photo_library_outlined,
+              activeIcon: Icons.photo_library_rounded,
+              label: 'Gallery',
+              route: AppRoutes.schoolGallery,
             ),
           ],
         ),

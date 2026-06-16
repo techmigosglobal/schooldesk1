@@ -771,6 +771,31 @@ class SchoolDeskScreenRegistry {
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(
+      route: '/teacher-event-posts-screen',
+      title: 'Event Posts',
+      module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/teacher-lesson-planner-screen',
+      title: 'Lesson Planner',
+      module: 'Academics',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/school-gallery-screen',
+      title: 'School Gallery',
+      module: 'Shared Tools',
+      portal: 'shared',
+      isShared: true,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-event-approvals-screen',
+      title: 'Event Approvals',
+      module: 'Communication',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/notification-center-screen',
       title: 'Notifications',
       module: 'Shared Tools',

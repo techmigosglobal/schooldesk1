@@ -13,7 +13,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
 
   final String title;
   final String? subtitle;
-  final Widget drawer;
+  final Widget? drawer;
   final Widget body;
   final List<Widget> actions;
   final PreferredSizeWidget? bottom;
@@ -28,7 +28,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
     super.key,
     required this.title,
     this.subtitle,
-    required this.drawer,
+    this.drawer,
     required this.body,
     this.actions = const [],
     this.bottom,
@@ -123,7 +123,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
             : null,
         body: Row(
           children: [
-            if (showRail) widget.drawer,
+            if (showRail && widget.drawer != null) widget.drawer!,
             Expanded(
               child: Column(
                 children: [

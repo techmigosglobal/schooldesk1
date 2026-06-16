@@ -203,6 +203,65 @@ func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {
 	assert.Equal(t, int64(1), count)
 }
 
+func TestStaffQRDailyLogExportIncludesOnlyQRRowsForDate(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	h := NewAttendanceHandler()
+	date := time.Date(2026, 6, 13, 0, 0, 0, 0, time.UTC)
+	checkIn := time.Date(2026, 6, 13, 9, 15, 0, 0, time.UTC)
+	otherDateCheckIn := time.Date(2026, 6, 12, 9, 30, 0, 0, time.UTC)
+
+	rows := []models.StaffAttendance{
+		{
+			BaseModel: models.BaseModel{ID: "qr-export-row"},
+			StaffID:   f.teacherStaffID,
+			Date:      date,
+			CheckIn:   &checkIn,
+			Status:    "present",
+			Source:    "qr",
+		},
+		{
+			BaseModel: models.BaseModel{ID: "manual-export-row"},
+			StaffID:   f.teacherStaffID,
+			Date:      date,
+			CheckIn:   &checkIn,
+			Status:    "present",
+			Source:    "manual",
+		},
+		{
+			BaseModel: models.BaseModel{ID: "other-date-qr-export-row"},
+			StaffID:   f.teacherStaffID,
+			Date:      date.AddDate(0, 0, -1),
+			CheckIn:   &otherDateCheckIn,
+			Status:    "present",
+			Source:    "qr",
+		},
+	}
+	for _, row := range rows {
+		if err := database.DB.Create(&row).Error; err != nil {
+			t.Fatalf("seed staff attendance: %v", err)
+		}
+	}
+
+	router := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	router.GET("/attendance/staff/qr-logs/export", h.ExportStaffQRDailyLogs)
+
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/attendance/staff/qr-logs/export?date=2026-06-13", nil)
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", resp.Code, resp.Body.String())
+	}
+	assert.Equal(t, "text/csv; charset=utf-8", resp.Header().Get("Content-Type"))
+	assert.Contains(t, resp.Header().Get("Content-Disposition"), "staff_qr_logs_2026-06-13.csv")
+	body := resp.Body.String()
+	assert.Contains(t, body, "date,staff_id,staff_name,status,check_in,source")
+	assert.Contains(t, body, "2026-06-13,"+f.teacherStaffID)
+	assert.Contains(t, body, ",qr")
+	assert.NotContains(t, body, "manual-export-row")
+	assert.NotContains(t, body, "other-date-qr-export-row")
+}
+
 func TestKioskQRScanRecordsStaffFromSubmittedStaffID(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	h := NewAttendanceHandler()

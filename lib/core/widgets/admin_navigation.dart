@@ -9,12 +9,12 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class AdminDrawer extends StatefulWidget {
-  final int selectedIndex;
+  final int? selectedIndex;
   final Function(int) onDestinationSelected;
 
   const AdminDrawer({
     super.key,
-    required this.selectedIndex,
+    this.selectedIndex,
     required this.onDestinationSelected,
   });
 
@@ -187,11 +187,25 @@ class _AdminDrawerState extends State<AdminDrawer> {
               route: AppRoutes.adminCommunication,
             ),
             SchoolDeskNavigationItem(
+              index: 18,
+              icon: Icons.check_circle_outline,
+              activeIcon: Icons.check_circle_rounded,
+              label: 'Event Approvals',
+              route: AppRoutes.principalEventApprovals,
+            ),
+            SchoolDeskNavigationItem(
               index: 8,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,
               label: SchoolDeskGlossary.helpdesk,
               route: AppRoutes.adminHelpdesk,
+            ),
+            SchoolDeskNavigationItem(
+              index: 17,
+              icon: Icons.photo_library_outlined,
+              activeIcon: Icons.photo_library_rounded,
+              label: 'Gallery',
+              route: AppRoutes.schoolGallery,
             ),
           ],
         ),

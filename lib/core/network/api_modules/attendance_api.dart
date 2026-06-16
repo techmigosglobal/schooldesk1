@@ -251,4 +251,20 @@ extension BackendAttendanceApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  Future<Uint8List> exportStaffQrLogsCsv({String? date}) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (date != null && date.isNotEmpty) queryParams['date'] = date;
+      final response = await _dio.get<List<int>>(
+        '/attendance/staff/qr-logs/export',
+        queryParameters: queryParams,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final data = response.data;
+      return Uint8List.fromList(data ?? const <int>[]);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

@@ -61,7 +61,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
 
   Future<void> _selectFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
         allowMultiple: false,

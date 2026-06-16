@@ -9,7 +9,6 @@ import (
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
-	"school-backend/internal/payments"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,14 +16,11 @@ import (
 
 // ParentFeeHandler handles parent fee-related endpoints
 type ParentFeeHandler struct {
-	paymentService *payments.PaymentService
 }
 
 // NewParentFeeHandler creates a new parent fee handler
-func NewParentFeeHandler(paymentService *payments.PaymentService) *ParentFeeHandler {
-	return &ParentFeeHandler{
-		paymentService: paymentService,
-	}
+func NewParentFeeHandler() *ParentFeeHandler {
+	return &ParentFeeHandler{}
 }
 
 // GetMyStudents fetches students linked to authenticated parent
@@ -153,180 +149,6 @@ func (h *ParentFeeHandler) GetStudentFeeSummary(c *gin.Context) {
 	})
 }
 
-// CreatePaymentOrder creates a Razorpay payment order
-// POST /api/v1/parents/fees/payment-orders
-func (h *ParentFeeHandler) CreatePaymentOrder(c *gin.Context) {
-	userID := c.GetString("user_id")
-	schoolID := scopedSchoolID(c)
-
-	if userID == "" || schoolID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-	if h.paymentService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "payment service is not configured"})
-		return
-	}
-
-	var req struct {
-		StudentID  string   `json:"student_id" binding:"required"`
-		InvoiceIDs []string `json:"invoice_ids" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Verify parent-student relationship
-	var link models.ParentStudentLink
-	if err := database.DB.Where("parent_user_id = ? AND student_id = ?", userID, req.StudentID).First(&link).Error; err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized access to student"})
-		return
-	}
-
-	// Fetch unpaid/partially paid invoices for this student
-	var invoices []models.FeeInvoice
-	if err := database.DB.
-		Where("student_id = ? AND (status = 'unpaid' OR status = 'partially_paid')", req.StudentID).
-		Find(&invoices).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch invoices"})
-		return
-	}
-
-	// Filter to requested invoice IDs
-	var selectedInvoices []models.FeeInvoice
-	for _, inv := range invoices {
-		for _, reqID := range req.InvoiceIDs {
-			if inv.ID == reqID {
-				selectedInvoices = append(selectedInvoices, inv)
-				break
-			}
-		}
-	}
-
-	if len(selectedInvoices) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid invoices found"})
-		return
-	}
-
-	// Calculate total payable amount
-	var totalPayable float64
-	selectedInvoiceIDs := make([]string, 0, len(selectedInvoices))
-	for _, inv := range selectedInvoices {
-		totalPayable += inv.PayableAmount - inv.PaidAmount
-		selectedInvoiceIDs = append(selectedInvoiceIDs, inv.ID)
-	}
-
-	if totalPayable <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no amount due"})
-		return
-	}
-
-	// Get parent ID from link
-	var parent models.User
-	if err := database.DB.Where("id = ?", userID).First(&parent).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch parent"})
-		return
-	}
-
-	// Create payment order through payment service
-	response, err := h.paymentService.CreatePaymentOrder(
-		parent.ID,
-		req.StudentID,
-		selectedInvoiceIDs,
-		totalPayable,
-		schoolID,
-	)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, models.APIResponse{
-		Success: true,
-		Data: gin.H{
-			"payment_order_id":  response.ID,
-			"razorpay_order_id": response.RazorpayOrderID,
-			"amount":            response.Amount,
-			"currency":          response.Currency,
-		},
-	})
-}
-
-// VerifyPayment verifies a Razorpay payment
-// POST /api/v1/parents/fees/verify-payment
-func (h *ParentFeeHandler) VerifyPayment(c *gin.Context) {
-	userID := c.GetString("user_id")
-
-	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-		return
-	}
-
-	var req struct {
-		PaymentOrderID    string `json:"payment_order_id" binding:"required"`
-		RazorpayOrderID   string `json:"razorpay_order_id" binding:"required"`
-		RazorpayPaymentID string `json:"razorpay_payment_id" binding:"required"`
-		RazorpaySignature string `json:"razorpay_signature" binding:"required"`
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	var order models.PaymentOrder
-	if err := database.DB.
-		Where("id = ? AND parent_id = ?", req.PaymentOrderID, userID).
-		First(&order).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized payment order"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate payment order"})
-		return
-	}
-	if h.paymentService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "payment service is not configured"})
-		return
-	}
-
-	// Verify payment through payment service
-	_, err := h.paymentService.VerifyPaymentSignature(
-		req.PaymentOrderID,
-		req.RazorpayOrderID,
-		req.RazorpayPaymentID,
-		req.RazorpaySignature,
-	)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Fetch receipt to return details
-	var receipt models.FeeReceipt
-	if err := database.DB.
-		Where("payment_transaction_id IN (SELECT id FROM payment_transactions WHERE razorpay_payment_id = ?)", req.RazorpayPaymentID).
-		First(&receipt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch receipt"})
-		return
-	}
-
-	c.JSON(http.StatusOK, models.APIResponse{
-		Success: true,
-		Data: gin.H{
-			"status":  "success",
-			"message": "Payment verified successfully",
-			"receipt": gin.H{
-				"receipt_id": receipt.ID,
-				"receipt_no": receipt.ReceiptNo,
-				"amount":     receipt.Amount,
-				"paid_at":    receipt.PaidAt.Format("2006-01-02T15:04:05Z"),
-			},
-		},
-	})
-}
 
 // GetPaymentHistory fetches payment history for parent
 // GET /api/v1/parents/fees/payments

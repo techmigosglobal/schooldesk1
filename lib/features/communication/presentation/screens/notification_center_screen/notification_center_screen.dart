@@ -33,7 +33,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: widget.role == 'teacher' ? 2 : 5, vsync: this);
     _init();
   }
 
@@ -102,13 +102,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         labelColor: context.appTheme.primary,
         unselectedLabelColor: mutedColor,
         indicatorColor: context.appTheme.primary,
-        tabs: const [
-          Tab(text: 'All'),
-          Tab(text: 'Approvals'),
-          Tab(text: 'Fees'),
-          Tab(text: 'Exams'),
-          Tab(text: 'Circulars'),
-        ],
+        tabs: widget.role == 'teacher'
+            ? const [
+                Tab(text: 'All'),
+                Tab(text: 'Circulars'),
+              ]
+            : const [
+                Tab(text: 'All'),
+                Tab(text: 'Approvals'),
+                Tab(text: 'Fees'),
+                Tab(text: 'Exams'),
+                Tab(text: 'Circulars'),
+              ],
       ),
       body: ColoredBox(
         color: bgColor,
@@ -116,43 +121,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
                 controller: _tabController,
-                children: [
-                  _buildList(
-                    null,
-                    bgColor,
-                    surfaceColor,
-                    onSurfaceColor,
-                    mutedColor,
-                  ),
-                  _buildList(
-                    NotificationCategory.pendingApproval,
-                    bgColor,
-                    surfaceColor,
-                    onSurfaceColor,
-                    mutedColor,
-                  ),
-                  _buildList(
-                    NotificationCategory.feeDue,
-                    bgColor,
-                    surfaceColor,
-                    onSurfaceColor,
-                    mutedColor,
-                  ),
-                  _buildList(
-                    NotificationCategory.examReminder,
-                    bgColor,
-                    surfaceColor,
-                    onSurfaceColor,
-                    mutedColor,
-                  ),
-                  _buildList(
-                    NotificationCategory.general,
-                    bgColor,
-                    surfaceColor,
-                    onSurfaceColor,
-                    mutedColor,
-                  ),
-                ],
+                children: widget.role == 'teacher'
+                    ? [
+                        _buildList(null, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(NotificationCategory.general, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                      ]
+                    : [
+                        _buildList(null, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(NotificationCategory.pendingApproval, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(NotificationCategory.feeDue, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(NotificationCategory.examReminder, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(NotificationCategory.general, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                      ],
               ),
       ),
     );
@@ -311,17 +291,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   Widget _drawerForRole() {
     switch (widget.role.trim().toLowerCase()) {
       case 'principal':
-        return PrincipalDrawer(
-          selectedIndex: 99,
-          onDestinationSelected: (_) {},
-        );
+        return PrincipalDrawer(onDestinationSelected: (_) {});
       case 'teacher':
-        return TeacherDrawer(selectedIndex: 99, onDestinationSelected: (_) {});
+        return TeacherDrawer(onDestinationSelected: (_) {});
       case 'parent':
-        return ParentDrawer(selectedIndex: 99, onDestinationSelected: (_) {});
+        return ParentDrawer(onDestinationSelected: (_) {});
       case 'admin':
       default:
-        return AdminDrawer(selectedIndex: 99, onDestinationSelected: (_) {});
+        return AdminDrawer(onDestinationSelected: (_) {});
     }
   }
 

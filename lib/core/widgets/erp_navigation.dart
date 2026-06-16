@@ -74,7 +74,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
   final String initials;
   final IconData portalIcon;
   final Widget? organizationLogo;
-  final int selectedIndex;
+  final int? selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final List<SchoolDeskNavigationSection> sections;
   final List<SchoolDeskNavigationFooterAction> footerActions;
@@ -90,7 +90,7 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
     required this.userSubtitle,
     required this.initials,
     required this.portalIcon,
-    required this.selectedIndex,
+    this.selectedIndex,
     required this.onDestinationSelected,
     required this.sections,
     this.organizationLogo,

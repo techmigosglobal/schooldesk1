@@ -262,14 +262,10 @@ func autoMigrate() error {
 		&models.FeeReceipt{},
 		&models.PaymentOrderInvoiceMap{},
 		&models.PaymentWebhookEvent{},
-		&models.BookCategory{},
-		&models.Book{},
-		&models.BookIssue{},
-		&models.Vehicle{},
-		&models.Route{},
-		&models.RouteStop{},
-		&models.StudentTransport{},
+
 		&models.Announcement{},
+		&models.EventPost{},
+		&models.LessonPlanner{},
 		// School events use Tables.md table `events`. Legacy `event_calendars` is backfilled.
 		&models.ParentTeacherMeeting{},
 		// Homework assignments use Tables.md table `homework` (see ensureTablesMDSchema).
@@ -402,7 +398,6 @@ func cleanupInactiveStudentOperationalRow(schoolID, studentID string) error {
 			{"student_id = ?", []interface{}{studentID}, &models.Homework{}},
 			{"student_id = ?", []interface{}{studentID}, &models.DiaryEntry{}},
 			{"student_id = ?", []interface{}{studentID}, &models.ParentTeacherMeeting{}},
-			{"student_id = ?", []interface{}{studentID}, &models.StudentTransport{}},
 			{"student_id = ?", []interface{}{studentID}, &models.TransferRecord{}},
 			{"student_id = ?", []interface{}{studentID}, &models.MedicalRecord{}},
 			{"student_id = ?", []interface{}{studentID}, &models.StudentDocument{}},
@@ -837,7 +832,8 @@ func seedRolePermissions(adminRoleID, principalRoleID, teacherRoleID, parentRole
 
 		teacherRead := inList(module, "dashboard", "guardians", "medical_records", "student_documents", "staff_subjects", "staff_qualifications", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
 		teacherManage := inList(module, "homework", "diary_entries", "message_conversations", "messages", "parent_teacher_meetings")
-		createPermission(teacherRoleID, module, teacherRead, teacherManage, teacherManage, false, false)
+		teacherDelete := module == "diary_entries" || module == "homework"
+		createPermission(teacherRoleID, module, teacherRead, teacherManage, teacherManage, teacherDelete, false)
 
 		parentRead := inList(module, "dashboard", "guardians", "medical_records", "student_documents", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
 		parentCreate := inList(module, "parent_teacher_meetings", "message_conversations", "messages")

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"school-backend/internal/database"
+	"school-backend/internal/middleware"
 	"school-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -180,6 +181,10 @@ func scopedPolicyRouter(roleName, userID, linkedType, linkedID, email, schoolID 
 		c.Set("school_id", schoolID)
 		c.Set("role_name", roleName)
 		c.Set("role", roleName)
+		var role models.Role
+		if err := database.DB.First(&role, "school_id = ? AND role_name = ?", schoolID, roleName).Error; err == nil {
+			c.Set("role_id", role.ID)
+		}
 		c.Set("user_id", userID)
 		c.Set("linked_type", linkedType)
 		if linkedID != "" {
@@ -520,6 +525,36 @@ func TestTeacherDiarySameDayEditDeleteAndPastArchive(t *testing.T) {
 	router.ServeHTTP(deleteToday, httptest.NewRequest(http.MethodDelete, "/diary-entries/"+todayEntry.ID, nil))
 	if deleteToday.Code != http.StatusOK {
 		t.Fatalf("same-day diary delete status=%d body=%s", deleteToday.Code, deleteToday.Body.String())
+	}
+}
+
+func TestTeacherDiaryRouteAllowsSameDayDeletePermission(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	if err := database.EnsureDefaultRolePermissions(); err != nil {
+		t.Fatalf("seed permissions: %v", err)
+	}
+	todayDate, _ := staffAttendanceDate(time.Now())
+	entry := models.DiaryEntry{
+		BaseModel: models.BaseModel{ID: "diary-route-delete"},
+		SchoolID:  f.schoolID,
+		EntryDate: todayDate.Add(9 * time.Hour),
+		SectionID: f.sectionID,
+		TeacherID: f.teacherStaffID,
+		Title:     "Delete me",
+		Subject:   "Mathematics",
+	}
+	if err := database.DB.Create(&entry).Error; err != nil {
+		t.Fatalf("seed diary: %v", err)
+	}
+
+	diary := NewCRUDHandler[models.DiaryEntry]("diary_entries", "diary_entries", []string{"title"}, true)
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.DELETE("/diary-entries/:id", middleware.PermissionMiddleware("diary_entries", "delete"), diary.Delete)
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/diary-entries/"+entry.ID, nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("same-day diary route delete status=%d body=%s", resp.Code, resp.Body.String())
 	}
 }
 
@@ -908,7 +943,7 @@ func TestTeacherStudentSubresourcesRejectOutsideSection(t *testing.T) {
 	router.GET("/students/:id/attendance", studentHandler.GetStudentAttendance)
 	router.GET("/students/:id/fees", studentHandler.GetStudentFees)
 	router.GET("/students/:id/marks", studentHandler.GetStudentMarks)
-	router.GET("/students/:id/transport", studentHandler.GetStudentTransport)
+
 	router.GET("/compat/students/:id/marks", aliasHandler.GetStudentGrades)
 
 	for _, tc := range []struct {
@@ -918,7 +953,7 @@ func TestTeacherStudentSubresourcesRejectOutsideSection(t *testing.T) {
 		{"attendance", "/students/" + f.otherStudentID + "/attendance"},
 		{"fees", "/students/" + f.otherStudentID + "/fees"},
 		{"marks", "/students/" + f.otherStudentID + "/marks"},
-		{"transport", "/students/" + f.otherStudentID + "/transport"},
+
 		{"compat marks", "/compat/students/" + f.otherStudentID + "/marks"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

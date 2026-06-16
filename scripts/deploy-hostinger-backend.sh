@@ -246,7 +246,7 @@ compose_source="$repo_root/$compose_file"
 if [[ -n "$expected_fingerprint" ]]; then
   log "Checking VPS ED25519 fingerprint before SSH."
   host_key_scan="$(ssh-keyscan -T 5 -t ed25519 "$vps_host" 2>/dev/null || true)"
-  actual_fingerprint="$(ssh-keygen -lf - 2>/dev/null <<<"$host_key_scan" | awk '{print $2; exit}')"
+  actual_fingerprint="$(ssh-keygen -lf - 2>/dev/null <<<"$host_key_scan" | awk '{print $2; exit}' || true)"
   [[ -n "$actual_fingerprint" ]] || fail "Could not read ED25519 host fingerprint for $vps_host"
   [[ "$actual_fingerprint" == "$expected_fingerprint" ]] ||
     fail "Host fingerprint mismatch. Expected $expected_fingerprint, got $actual_fingerprint"

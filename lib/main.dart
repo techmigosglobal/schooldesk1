@@ -20,7 +20,7 @@ void main() async {
   await BackendApiClient.initialize();
   await ServiceLocator.initialize();
   EnvConfig.validate();
-  unawaited(RoleAccessService.initialize());
+  await RoleAccessService.initialize();
   await PushNotificationService.instance.initialize();
   unawaited(PushNotificationService.instance.registerDeviceTokenIfPossible());
 
@@ -108,11 +108,26 @@ class MyApp extends StatelessWidget {
             if (redirectRoute != null) {
               return MaterialPageRoute(
                 settings: RouteSettings(name: redirectRoute),
-                builder: (context) => AppRoutes.buildRoutePage(
-                  context,
-                  routeName: redirectRoute,
-                  routeBuilder: AppRoutes.routes[redirectRoute]!,
-                ),
+                builder: (context) {
+                  if (RouteAccessGuard.deprecatedProtectedRoutes.contains(routeName)) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('This feature is currently unavailable.'),
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: AppTheme.darkTheme.colorScheme.error,
+                          ),
+                        );
+                      }
+                    });
+                  }
+                  return AppRoutes.buildRoutePage(
+                    context,
+                    routeName: redirectRoute,
+                    routeBuilder: AppRoutes.routes[redirectRoute]!,
+                  );
+                },
               );
             }
 

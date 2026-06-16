@@ -221,6 +221,7 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 
 		for _, day := range state.Template.Days {
 			slotNumber := 0
+			var dayStaff *models.Staff
 			for period := 1; period <= state.Template.PeriodsPerDay; period++ {
 				slotNumber++
 				plan.Summary.RequestedSlots++
@@ -260,7 +261,25 @@ func (e *SmartTimetableEngine) Preview(ctx context.Context, schoolID string, req
 					}
 				}
 
-				staff, staffReasons, ok := e.chooseStaff(state, section, subject, day, slotNumber, firstPeriodPreferred)
+				var staff models.Staff
+				var staffReasons []string
+				var ok bool
+
+				if dayStaff != nil {
+					staff = *dayStaff
+					if available, reason := staffAvailable(state, staff.ID, day, slotNumber); !available {
+						ok = false
+						staffReasons = append(staffReasons, "Assigned day teacher is unavailable: "+reason)
+					} else {
+						ok = true
+						staffReasons = append(staffReasons, "Assigned for the whole day.")
+					}
+				} else {
+					staff, staffReasons, ok = e.chooseStaff(state, section, subject, day, slotNumber, firstPeriodPreferred)
+					if ok {
+						dayStaff = &staff
+					}
+				}
 				reasons = append(reasons, staffReasons...)
 				roomID, roomName, roomReasons, roomBlocking := e.chooseRoom(state, section, subject, day, slotNumber)
 				reasons = append(reasons, roomReasons...)

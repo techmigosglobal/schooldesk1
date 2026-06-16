@@ -9,7 +9,6 @@ import (
 	"school-backend/internal/handlers"
 	"school-backend/internal/middleware"
 	"school-backend/internal/models"
-	"school-backend/internal/payments"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,6 +27,9 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	ptmHandler := handlers.NewParentTeacherMeetingHandler()
 	homeworkSubmissionHandler := handlers.NewHomeworkSubmissionHandler()
 	announcementHandler := handlers.NewAnnouncementHandler()
+	eventPostHandler := handlers.NewEventPostHandler()
+	lessonPlannerHandler := handlers.NewLessonPlannerHandler()
+	homeworkReminderHandler := handlers.NewHomeworkReminderHandler()
 	notificationDeviceHandler := handlers.NewNotificationDeviceHandler()
 	parentLinkHandler := handlers.NewParentLinkHandler()
 	userHandler := handlers.NewUserHandler()
@@ -49,12 +51,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	teacherSelfHandler := handlers.NewTeacherSelfHandler()
 	bulkImportHandler := handlers.NewBulkImportHandler()
 
-	// Initialize payment services
-	razorpayClient := payments.NewRazorpayClient(cfg)
-	paymentService := payments.NewPaymentService(razorpayClient)
-	webhookHandler := payments.NewWebhookHandler(razorpayClient, paymentService)
-	parentFeeHandler := handlers.NewParentFeeHandler(paymentService)
-	paymentWebhookHandler := handlers.NewPaymentWebhookHandler(webhookHandler)
+	parentFeeHandler := handlers.NewParentFeeHandler()
 	tableCRUD := func(table string) *handlers.TablesMDCRUDHandler {
 		resource, ok := handlers.TablesMDResourceFor(table)
 		if !ok {
@@ -299,6 +296,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			attendance.GET("/summary", attendanceHandler.GetStudentAttendanceSummary)
 			attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal", "Kiosk"), attendanceHandler.ListStaffAttendance)
 			attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal", "Kiosk"), attendanceHandler.GetStaffQRToken)
+			attendance.GET("/staff/qr-logs/export", middleware.RBACMiddleware("Admin", "Principal", "Kiosk"), attendanceHandler.ExportStaffQRDailyLogs)
 			attendance.POST("/staff/qr-scan", middleware.RBACMiddleware("Teacher", "Kiosk"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ScanStaffQR)
 			attendance.GET("/staff/me/today", middleware.RBACMiddleware("Teacher"), attendanceHandler.GetMyStaffAttendanceToday)
 			attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStaffAttendance)
@@ -456,6 +454,30 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			announcements.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher"), middleware.RateLimitMiddleware("announcement_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), announcementHandler.CreateAnnouncement)
 		}
 
+		eventPosts := api.Group("/event-posts")
+		eventPosts.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			eventPosts.POST("", middleware.RBACMiddleware("Teacher"), eventPostHandler.CreateEventPost)
+			eventPosts.GET("/teacher", middleware.RBACMiddleware("Teacher"), eventPostHandler.ListTeacherEventPosts)
+			eventPosts.GET("/pending", middleware.RBACMiddleware("Principal"), eventPostHandler.ListPendingEventPosts)
+			eventPosts.POST("/:id/approve", middleware.RBACMiddleware("Principal"), eventPostHandler.ApproveEventPost)
+			eventPosts.POST("/:id/reject", middleware.RBACMiddleware("Principal"), eventPostHandler.RejectEventPost)
+			eventPosts.GET("/gallery", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), eventPostHandler.ListGalleryEventPosts)
+			eventPosts.GET("/home-feed", middleware.RBACMiddleware("Parent"), eventPostHandler.ListParentHomeFeed)
+		}
+
+		lessonPlanners := api.Group("/lesson-planners")
+		lessonPlanners.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			lessonPlanners.POST("", middleware.RBACMiddleware("Teacher"), lessonPlannerHandler.CreateLessonPlanner)
+			lessonPlanners.GET("/teacher", middleware.RBACMiddleware("Teacher"), lessonPlannerHandler.ListTeacherLessonPlanners)
+			lessonPlanners.POST("/:id/complete", middleware.RBACMiddleware("Teacher"), lessonPlannerHandler.CompleteLessonPlanner)
+			lessonPlanners.GET("/parent", middleware.RBACMiddleware("Parent"), lessonPlannerHandler.ListParentLessonPlanners)
+			lessonPlanners.GET("/principal", middleware.RBACMiddleware("Principal", "Admin"), lessonPlannerHandler.ListPrincipalLessonPlanners)
+		}
+
+		api.GET("/landing/events", eventPostHandler.ListLandingEvents)
+
 		notices := api.Group("/notices")
 		notices.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
@@ -510,15 +532,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		parentFees := api.Group("/parents/fees")
 		parentFees.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Parent"))
 		{
-			parentFees.POST("/payment-orders", middleware.RateLimitMiddleware("payment_order_create", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), parentFeeHandler.CreatePaymentOrder)
-			parentFees.POST("/verify-payment", middleware.RateLimitMiddleware("payment_verify", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), parentFeeHandler.VerifyPayment)
 			parentFees.GET("/payments", parentFeeHandler.GetPaymentHistory)
 			parentFees.GET("/receipts/:receipt_id", parentFeeHandler.GetReceipt)
-		}
-
-		payments := api.Group("/payments")
-		{
-			payments.POST("/razorpay/webhook", paymentWebhookHandler.HandleWebhook)
 		}
 
 		me := api.Group("/me")
@@ -653,6 +668,12 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		homework := api.Group("/homework")
 		homework.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
+			homework.POST("/reminders/trigger-end-of-day", middleware.RBACMiddleware("Admin", "Principal"), homeworkReminderHandler.TriggerEndOfDayReminders)
+		}
+
+		homeworkSubmissions := api.Group("/homework-submissions")
+		homeworkSubmissions.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
 			homeworkTable := tableCRUD("homework")
 			homework.GET("", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), homeworkTable.List)
 			homework.GET("/:id", middleware.RBACMiddleware("Admin", "Principal", "Teacher", "Parent"), middleware.PermissionMiddleware("homework", "read"), homeworkTable.Get)
@@ -739,6 +760,4 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		frontendResource("/helpdesk-tickets", "Admin", "Principal", "Teacher", "Parent")
 		api.POST("/documents/requests/:id/prints", middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Admin", "Principal"), handlers.NewFrontendRecordHandler("documents/requests/prints").Create)
 	}
-
-	api.POST("/webhooks/razorpay", feeHandler.RazorpayWebhook)
 }

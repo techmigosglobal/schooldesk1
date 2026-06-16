@@ -39,10 +39,6 @@ class EnvConfig {
   );
   static const bool _hasEnableLogging = bool.hasEnvironment('ENABLE_LOGGING');
 
-  static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-  );
   static const String firebaseApiKey = String.fromEnvironment(
     'FIREBASE_API_KEY',
   );
@@ -109,20 +105,20 @@ class EnvConfig {
       return _productionApiBaseUrl;
     }
     if (kIsWeb) {
-      return 'http://localhost:8090/api';
+      return 'http://localhost:8080/api';
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         if (_localApiHost.isNotEmpty) {
-          return 'http://$_localApiHost:8090/api';
+          return 'http://$_localApiHost:8080/api';
         }
-        return 'http://10.0.2.2:8090/api';
+        return 'http://10.0.2.2:8080/api';
       case TargetPlatform.iOS:
       case TargetPlatform.macOS:
       case TargetPlatform.linux:
       case TargetPlatform.windows:
       case TargetPlatform.fuchsia:
-        return 'http://localhost:8090/api';
+        return 'http://localhost:8080/api';
     }
   }
 

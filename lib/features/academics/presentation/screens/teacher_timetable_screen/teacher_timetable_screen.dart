@@ -212,7 +212,11 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   String _slotRoom(Map<String, dynamic> slot) {
-    return teacherFlowText(slot['room'] ?? slot['room_number']);
+    final room = slot['room'];
+    if (room is Map) {
+      return teacherFlowText(room['room_number']);
+    }
+    return teacherFlowText(room ?? slot['room_number']);
   }
 
   String _dayName(int weekday) {

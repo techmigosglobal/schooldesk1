@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -85,11 +86,71 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             .toList();
         _loading = false;
       });
+      _checkEndOfDayReminder();
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Unable to load teacher dashboard from backend.';
+      });
+    }
+  }
+
+  Future<void> _checkEndOfDayReminder() async {
+    final now = DateTime.now();
+    if (now.hour >= 15 && _homeworkTotal == 0) {
+      final prefs = await SharedPreferences.getInstance();
+      final dateKey = 'no_homework_dismissed_${now.year}_${now.month}_${now.day}';
+      if (prefs.getBool(dateKey) == true) {
+        return;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('End of Day Reminder'),
+            content: const Text('You have not added any homework for today.'),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  await prefs.setBool(dateKey, true);
+                  try {
+                    await BackendApiClient.instance.createRaw('/diary-entries', {
+                      'date': DateTime.now().toUtc().toIso8601String(),
+                      'entry_date': teacherFlowDate(DateTime.now()),
+                      'section_id': RoleAccessService.teacherClassId,
+                      'teacher_id': RoleAccessService.teacherStaffId,
+                      'staff_id': RoleAccessService.teacherStaffId,
+                      'class': RoleAccessService.teacherClassName,
+                      'subject': RoleAccessService.teacherSubject,
+                      'period_number': 1,
+                      'title': 'No practice work',
+                      'classwork': '',
+                      'homework': 'No practice work',
+                      'schedule': '',
+                      'notes': '',
+                      'type': 'no_practice',
+                      'entry_type': 'no_practice',
+                      'content': 'Practice: No practice work',
+                      'created_by': RoleAccessService.teacherName,
+                    });
+                  } catch (_) {}
+                  if (context.mounted) Navigator.pop(context);
+                },
+                child: const Text('No homework'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(context, AppRoutes.teacherHomework);
+                },
+                child: const Text('Add Homework'),
+              ),
+            ],
+          ),
+        );
       });
     }
   }
@@ -355,9 +416,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       );
     } else {
+      final uniqueSubjects = _timetable.map((row) => teacherFlowText(row['subject'])).toSet().toList();
+      final classLabel = teacherFlowText(_timetable.first['class'], fallback: 'Class');
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TeacherTimelineItem(
+            time: 'All Day',
+            title: 'Today\'s Assigned Class: $classLabel',
+            subtitle: 'Subjects: ${uniqueSubjects.join(', ')}',
+            icon: Icons.class_rounded,
+            color: teacherFlowAccent,
+            onTap: () {},
+          ),
+        ),
+      );
       for (final row in _timetable) {
         final subject = teacherFlowText(row['subject'], fallback: 'Subject');
-        final classLabel = teacherFlowText(row['class'], fallback: 'Class');
         final time = teacherFlowText(row['time'], fallback: 'Period');
         rows.add(
           Padding(
@@ -407,10 +482,16 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         AppRoutes.teacherHomework,
       ),
       _QuickAction(
-        'Marks Entry',
-        'Exam scores',
+        'Lesson Planner',
+        'Weekly plans',
         SchoolDeskUiIllustrations.resources,
-        AppRoutes.teacherMarkEntry,
+        AppRoutes.teacherLessonPlanner,
+      ),
+      _QuickAction(
+        'Event Posts',
+        'School updates',
+        SchoolDeskUiIllustrations.resources,
+        AppRoutes.teacherEventPosts,
       ),
       _QuickAction(
         'Reports',

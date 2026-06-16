@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"strings"
@@ -12,11 +10,8 @@ import (
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
-	"school-backend/internal/payments"
 	"school-backend/internal/policy"
-
 	"github.com/gin-gonic/gin"
-	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -1256,234 +1251,12 @@ func normalizeInvoiceSegment(value string) string {
 }
 
 // GetPaymentConfig returns the payment gateway configuration for the frontend.
-// The Razorpay public key is safe to expose — it is not the secret.
 func (h *FeeHandler) GetPaymentConfig(c *gin.Context) {
-	enabled := payments.GetClient() != nil
-	keyID := ""
-	if enabled {
-		keyID = payments.GetKeyID()
-	}
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
 		Data: gin.H{
-			"razorpay_enabled": enabled,
-			"razorpay_key_id":  keyID,
+			"razorpay_enabled": false,
+			"razorpay_key_id":  "",
 		},
 	})
-}
-
-// Razorpay Integrations
-
-func (h *FeeHandler) CreateRazorpayOrder(c *gin.Context) {
-	var req struct {
-		InvoiceIDs []string `json:"invoice_ids" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if len(req.InvoiceIDs) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invoice_ids must not be empty"})
-		return
-	}
-
-	// Guard: Razorpay must be configured.
-	if payments.GetClient() == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": "Online payment is not configured. Please use the payment request form to submit proof of payment.",
-		})
-		return
-	}
-
-	schoolID := scopedSchoolID(c)
-	parentUserID := currentUserID(c)
-
-	var invoices []models.FeeInvoice
-	if err := database.DB.Where("id IN ? AND status != 'paid'", req.InvoiceIDs).Find(&invoices).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch invoices"})
-		return
-	}
-
-	if len(invoices) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No valid invoices found to pay"})
-		return
-	}
-
-	var totalAmount float64
-	for _, inv := range invoices {
-		totalAmount += inv.Balance
-	}
-
-	// Create a placeholder PaymentOrder in DB
-	paymentOrder := models.PaymentOrder{
-		ParentID:  parentUserID,
-		StudentID: invoices[0].StudentID,
-		Amount:    totalAmount,
-		Currency:  "INR",
-		Status:    "created",
-	}
-	_ = paymentOrder.SetInvoiceIDs(req.InvoiceIDs)
-	_ = paymentOrder.SetNotes(map[string]interface{}{"school_id": schoolID})
-	if err := database.DB.Create(&paymentOrder).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment order record"})
-		return
-	}
-
-	// Call Razorpay API
-	rzpReq := payments.CreateOrderRequest{
-		Amount:   totalAmount,
-		Currency: "INR",
-		Receipt:  paymentOrder.ID,
-		Notes: map[string]interface{}{
-			"school_id": schoolID,
-			"parent_id": parentUserID,
-		},
-	}
-	rzpOrder, err := payments.CreateOrder(rzpReq)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Update PaymentOrder with Razorpay's Order ID
-	razorpayOrderID := rzpOrder["id"].(string)
-	paymentOrder.RazorpayOrderID = razorpayOrderID
-	database.DB.Save(&paymentOrder)
-
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{
-		"payment_order_id":  paymentOrder.ID,
-		"razorpay_order_id": razorpayOrderID,
-		"amount":            totalAmount,
-		"currency":          "INR",
-	}})
-}
-
-func (h *FeeHandler) VerifyRazorpayPayment(c *gin.Context) {
-	var req struct {
-		PaymentOrderID    string `json:"payment_order_id" binding:"required"`
-		RazorpayOrderID   string `json:"razorpay_order_id" binding:"required"`
-		RazorpayPaymentID string `json:"razorpay_payment_id" binding:"required"`
-		RazorpaySignature string `json:"razorpay_signature" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Verify signature
-	if err := payments.VerifyPaymentSignature(req.RazorpayOrderID, req.RazorpayPaymentID, req.RazorpaySignature); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid signature"})
-		return
-	}
-
-	// Signature is valid, fetch the payment order
-	var paymentOrder models.PaymentOrder
-	if err := database.DB.First(&paymentOrder, "id = ?", req.PaymentOrderID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Payment order not found"})
-		return
-	}
-
-	// Start a transaction to update order, create transaction and receipt, and update invoices
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		paymentOrder.Status = "paid"
-		if err := tx.Save(&paymentOrder).Error; err != nil {
-			return err
-		}
-
-		txn := models.PaymentTransaction{
-			PaymentOrderID:    paymentOrder.ID,
-			RazorpayPaymentID: req.RazorpayPaymentID,
-			Amount:            paymentOrder.Amount,
-			Currency:          paymentOrder.Currency,
-			Status:            "captured",
-		}
-		if err := tx.Create(&txn).Error; err != nil {
-			return err
-		}
-
-		receipt := models.FeeReceipt{
-			PaymentTransactionID: txn.ID,
-			StudentID:            paymentOrder.StudentID,
-			ParentID:             paymentOrder.ParentID,
-			ReceiptNo:            fmt.Sprintf("REC-%d", time.Now().UnixNano()),
-			Amount:               txn.Amount,
-			PaymentMode:          "razorpay",
-			PaidAt:               time.Now(),
-		}
-		if err := tx.Create(&receipt).Error; err != nil {
-			return err
-		}
-
-		// Update Invoices
-		for _, invID := range paymentOrder.GetInvoiceIDs() {
-			var invoice models.FeeInvoice
-			if err := tx.First(&invoice, "id = ?", invID).Error; err != nil {
-				continue
-			}
-			invoice.PaidAmount += invoice.Balance
-			invoice.Balance = 0
-			invoice.Status = "paid"
-			tx.Save(&invoice)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process payment"})
-		return
-	}
-
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"status": "Payment verified and recorded successfully"}})
-}
-
-func (h *FeeHandler) RazorpayWebhook(c *gin.Context) {
-	// Read raw body for signature verification
-	payloadBody, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
-		return
-	}
-
-	signature := c.GetHeader("X-Razorpay-Signature")
-	if err := payments.VerifyWebhookSignature(payloadBody, signature); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid webhook signature"})
-		return
-	}
-
-	// Parse JSON
-	var payload map[string]interface{}
-	if err := json.Unmarshal(payloadBody, &payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON"})
-		return
-	}
-
-	eventType, _ := payload["event"].(string)
-
-	webhookEvent := models.PaymentWebhookEvent{
-		EventType: eventType,
-		Payload:   datatypes.JSON(payloadBody),
-	}
-	// Extract basic info if available (order_id, payment_id) depending on the event type
-	if payload["payload"] != nil {
-		payloadData, _ := payload["payload"].(map[string]interface{})
-		if paymentData, ok := payloadData["payment"].(map[string]interface{}); ok {
-			if entity, ok := paymentData["entity"].(map[string]interface{}); ok {
-				if rzpPaymentID, ok := entity["id"].(string); ok {
-					webhookEvent.PaymentID = &rzpPaymentID
-				}
-				if rzpOrderID, ok := entity["order_id"].(string); ok {
-					webhookEvent.RazorpayOrderID = &rzpOrderID
-				}
-			}
-		}
-	}
-
-	database.DB.Create(&webhookEvent)
-
-	// Since we do synchronous signature verification in VerifyRazorpayPayment from frontend,
-	// webhook acts mainly as a fallback or for other events like 'payment.failed'
-	// For now, just logging it. We could implement complex event handlers here later (Phase 9).
-
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }

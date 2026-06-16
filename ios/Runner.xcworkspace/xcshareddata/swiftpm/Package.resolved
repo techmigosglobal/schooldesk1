@@ -145,15 +145,6 @@
       }
     },
     {
-      "identity" : "razorpay-pod",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/razorpay/razorpay-pod.git",
-      "state" : {
-        "revision" : "55825c43d5b7fad08e17201f6dfe6095703fcb30",
-        "version" : "1.5.4"
-      }
-    },
-    {
       "identity" : "sdwebimage",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/SDWebImage/SDWebImage",

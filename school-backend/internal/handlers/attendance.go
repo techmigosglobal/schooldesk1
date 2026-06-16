@@ -1,12 +1,15 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/hmac"
 	cryptoRand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -25,7 +28,7 @@ func NewAttendanceHandler() *AttendanceHandler {
 	return &AttendanceHandler{}
 }
 
-const staffQRRefreshSeconds = 60
+const staffQRRefreshSeconds = 5
 
 var (
 	errInvalidStaffQRToken = errors.New("invalid staff qr token")
@@ -890,4 +893,74 @@ func (h *AttendanceHandler) ListStaffAttendance(c *gin.Context) {
 		"date":        dateText,
 		"attendances": attendances,
 	}})
+}
+
+func (h *AttendanceHandler) ExportStaffQRDailyLogs(c *gin.Context) {
+	schoolID := scopedSchoolID(c)
+	if schoolID == "" {
+		fail(c, http.StatusForbidden, "school scope required")
+		return
+	}
+	dateText := strings.TrimSpace(c.Query("date"))
+	var date time.Time
+	var err error
+	if dateText == "" {
+		date, dateText = staffAttendanceDate(time.Now().UTC())
+	} else {
+		date, err = time.Parse("2006-01-02", dateText)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "Invalid date format. Use YYYY-MM-DD")
+			return
+		}
+	}
+
+	start, end := staffAttendanceDayRange(date)
+	var attendances []models.StaffAttendance
+	if err := database.DB.Model(&models.StaffAttendance{}).
+		Joins("JOIN staffs ON staffs.id = staff_attendances.staff_id").
+		Where("staffs.school_id = ? AND staff_attendances.date >= ? AND staff_attendances.date < ? AND LOWER(staff_attendances.source) = ?", schoolID, start, end, "qr").
+		Preload("Staff").
+		Order("staff_attendances.check_in ASC, staff_attendances.updated_at ASC").
+		Find(&attendances).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to export staff QR logs")
+		return
+	}
+
+	var buffer bytes.Buffer
+	writer := csv.NewWriter(&buffer)
+	_ = writer.Write([]string{"date", "staff_id", "staff_name", "status", "check_in", "source"})
+	for _, row := range attendances {
+		_ = writer.Write(staffQRLogExportRow(row))
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to build staff QR log export")
+		return
+	}
+
+	filename := fmt.Sprintf("staff_qr_logs_%s.csv", dateText)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", buffer.Bytes())
+}
+
+func staffQRLogExportRow(row models.StaffAttendance) []string {
+	staffName := strings.TrimSpace(row.StaffID)
+	if row.Staff != nil {
+		name := strings.TrimSpace(strings.TrimSpace(row.Staff.FirstName) + " " + strings.TrimSpace(row.Staff.LastName))
+		if name != "" {
+			staffName = name
+		}
+	}
+	checkIn := ""
+	if row.CheckIn != nil {
+		checkIn = row.CheckIn.In(staffAttendanceLocation()).Format(time.RFC3339)
+	}
+	return []string{
+		row.Date.Format("2006-01-02"),
+		row.StaffID,
+		staffName,
+		row.Status,
+		checkIn,
+		row.Source,
+	}
 }

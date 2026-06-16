@@ -18,10 +18,13 @@ import 'package:schooldesk1/features/profile/profile.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
-import 'package:schooldesk1/core/widgets/blank_role_module_screen.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
+import 'package:schooldesk1/features/academics/presentation/screens/lesson_planner_screen.dart';
+import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
+import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -130,8 +133,6 @@ class AppRoutes {
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
   static const String parentPaymentSelection =
       '/parent-fees-screen/payment-selection';
-  static const String parentPaymentProcessing =
-      '/parent-fees-screen/payment-processing';
   static const String parentLeave = '/parent-leave-screen';
   static const String parentLeaveRequestForm = '/parent-leave-screen/request';
   static const String parentCalendar = '/parent-calendar-screen';
@@ -149,6 +150,10 @@ class AppRoutes {
   static const String teacherMarkEntry = '/teacher-mark-entry-screen';
   static const String teacherPTM = '/teacher-ptm-screen';
   static const String teacherSyllabus = '/teacher-syllabus-screen';
+  static const String teacherEventPosts = '/teacher-event-posts-screen';
+  static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
+  static const String schoolGallery = '/school-gallery-screen';
+  static const String principalEventApprovals = '/principal-event-approvals-screen';
   // New Screens
   static const String notificationCenter = '/notification-center-screen';
   static const String settingsScreen = '/settings-screen';
@@ -176,7 +181,6 @@ class AppRoutes {
       '/principal-user-management-screen/assign-children';
   static const String principalSchoolProfile =
       '/principal-school-profile-screen';
-  static const bool blankRoleModuleScreens = false;
 
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
@@ -303,7 +307,7 @@ class AppRoutes {
     teacherAttendanceHistory: (context) =>
         const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
-    teacherHomework: (context) => const TeacherDiaryScreen(),
+    teacherHomework: (context) => const TeacherHomeworkScreen(),
     teacherHomeworkForm: (context) =>
         TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
     teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
@@ -345,14 +349,6 @@ class AppRoutes {
         student: args.student,
       );
     },
-    parentPaymentProcessing: (context) {
-      final args = _parentPaymentProcessingArgs(context);
-      return ParentPaymentProcessingScreen(
-        selectedInvoiceIds: args.selectedInvoiceIds,
-        totalAmount: args.totalAmount,
-        student: args.student,
-      );
-    },
     parentLeave: (context) => const ParentLeaveScreen(),
     parentLeaveRequestForm: (context) =>
         ParentLeaveRequestFormScreen(args: _parentLeaveFormArgs(context)),
@@ -368,6 +364,10 @@ class AppRoutes {
     teacherMarkEntry: (context) => const TeacherMarkEntryScreen(),
     teacherPTM: (context) => const TeacherParentInteractionScreen(),
     teacherSyllabus: (context) => const TeacherSyllabusScreen(),
+    teacherEventPosts: (context) => const TeacherEventPostScreen(),
+    teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
+    schoolGallery: (context) => const SchoolGalleryScreen(),
+    principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
     // New Screens,
     notificationCenter: (context) {
       final role =
@@ -424,131 +424,11 @@ class AppRoutes {
     required Widget? child,
     required WidgetBuilder? routeBuilder,
   }) {
-    // Temporary UI-only switch: keep unfinished role route registrations hidden,
-    // while allowing the implemented principal, parent, and shared workflows.
-    if (blankRoleModuleScreens &&
-        metadata != null &&
-        !metadata.isPublic &&
-        !metadata.isShared &&
-        !_roleWorkflowVisibleRoutes.contains(metadata.route)) {
-      return const BlankRoleModuleScreen();
-    }
-
     if (child != null) return child;
     if (routeBuilder != null) return routeBuilder(context);
     return const SizedBox.shrink();
   }
 
-  static const Set<String> _roleWorkflowVisibleRoutes = {
-    principalDashboard,
-    principalSchoolProfile,
-    principalUserManagement,
-    guardianDirectory,
-    principalClasses,
-    principalAttendance,
-    principalSubjects,
-    principalTimetable,
-    principalExams,
-    principalResults,
-    principalAccountCreate,
-    principalAccountEdit,
-    principalParentChildAssignment,
-    academicManagement,
-    timetableManagement,
-    syllabusMonitoring,
-    examsResults,
-    reportsAnalytics,
-    staffManagement,
-    staffForm,
-    studentOversight,
-    approvalCenter,
-    feeMonitoring,
-    communicationCenter,
-    principalChatCommunications,
-    complaintManagement,
-    eventsCalendar,
-    principalAcademicInfo,
-    parentDashboard,
-    kioskQrAttendance,
-    parentAcademicProgress,
-    parentAttendance,
-    parentHomework,
-    parentHomeworkSubmit,
-    parentNotices,
-    parentTeacherChat,
-    parentFees,
-    parentPaymentRequestForm,
-    parentPaymentSelection,
-    parentPaymentProcessing,
-    feePaymentReceipt,
-    parentLeave,
-    parentLeaveRequestForm,
-    parentCalendar,
-    parentDocuments,
-    parentDiary,
-    parentAcademicInfo,
-    adminDashboard,
-    adminStudents,
-    adminTeachers,
-    adminAttendance,
-    adminFees,
-    adminFeeStructureForm,
-    adminInvoiceGenerationForm,
-    adminPaymentRecordForm,
-    adminPaymentRequests,
-    adminPaymentRequestDecision,
-    adminTimetable,
-    adminTimetableGenerationForm,
-    adminTimetablePeriodForm,
-    adminTimetableSubstitutionForm,
-    adminExams,
-    adminExamForm,
-    adminExamScheduleForm,
-    adminCommunication,
-    adminHelpdesk,
-    adminDocuments,
-    adminUserAccess,
-    adminAccountCreate,
-    adminAccountEdit,
-    adminParentChildAssignment,
-    adminReports,
-    adminAcademicInfo,
-    idCardGeneration,
-    reportCardGenerator,
-    teacherDashboard,
-    teacherClasses,
-    teacherTimetable,
-    teacherAttendance,
-    teacherAttendanceHistory,
-    teacherMyAttendance,
-    teacherHomework,
-    teacherHomeworkForm,
-    teacherHomeworkSubmissions,
-    teacherStudyMaterials,
-    teacherStudyMaterialForm,
-    teacherPerformance,
-    teacherStudentNotes,
-    teacherDiscipline,
-    teacherCommunication,
-    teacherParentInteraction,
-    teacherLeave,
-    teacherLeaveRequestForm,
-    teacherReports,
-    teacherDiary,
-    principalAnalytics,
-    notificationCenter,
-    settingsScreen,
-    profileScreen,
-    globalSearch,
-    parentTimetable,
-    parentExamSchedule,
-    parentReportCards,
-    parentPTMBooking,
-    parentDiscipline,
-    teacherMarkEntry,
-    teacherPTM,
-    teacherSyllabus,
-  };
 
   static AccountAccessFormArgs _accountFormArgs(
     BuildContext context,
@@ -797,24 +677,6 @@ class AppRoutes {
     }
     return const ParentPaymentSelectionArgs(fees: []);
   }
-
-  static ParentPaymentProcessingArgs _parentPaymentProcessingArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is ParentPaymentProcessingArgs) return args;
-    if (args is Map<String, dynamic>) {
-      return ParentPaymentProcessingArgs(
-        selectedInvoiceIds: List<String>.from(args['selectedInvoiceIds'] ?? []),
-        totalAmount: (args['totalAmount'] as num?)?.toDouble() ?? 0.0,
-        student: args['student'] as Map<String, dynamic>?,
-      );
-    }
-    return const ParentPaymentProcessingArgs(
-      selectedInvoiceIds: [],
-      totalAmount: 0.0,
-    );
-  }
 }
 
 class ParentPaymentSelectionArgs {
@@ -822,16 +684,4 @@ class ParentPaymentSelectionArgs {
   final Map<String, dynamic>? student;
 
   const ParentPaymentSelectionArgs({required this.fees, this.student});
-}
-
-class ParentPaymentProcessingArgs {
-  final List<String> selectedInvoiceIds;
-  final double totalAmount;
-  final Map<String, dynamic>? student;
-
-  const ParentPaymentProcessingArgs({
-    required this.selectedInvoiceIds,
-    required this.totalAmount,
-    this.student,
-  });
 }

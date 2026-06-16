@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -24,6 +25,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   String? _error;
   List<Map<String, dynamic>> _children = const [];
   List<AnnouncementModel> _notices = const [];
+  List<dynamic> _eventPosts = [];
   Map<String, dynamic> _dashboard = const {};
 
   @override
@@ -45,6 +47,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         api.getMyStudents(),
         api.getAnnouncements(),
         api.getDashboard('parent'),
+        api.dio.get('/api/v1/event-posts?destination=PARENTS_HOME').catchError((_) => Response(requestOptions: RequestOptions(path: ''), data: [])),
+        api.dio.get('/api/v1/lesson-planners').catchError((_) => Response(requestOptions: RequestOptions(path: ''), data: [])),
       ]);
 
       if (!mounted) return;
@@ -66,10 +70,57 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       }
       // Backend integration: add attendance, homeworkDue, classTeacher, and
       // fee summary fields to the parent dashboard response when available.
+      final homeworkResults = await Future.wait(children.map((child) {
+        final id = '${child['id'] ?? child['student_id'] ?? ''}';
+        if (id.isEmpty) return Future.value(<Map<String, dynamic>>[]);
+        return api.getHomework(studentId: id).catchError((_) => <Map<String, dynamic>>[]);
+      }));
+
       setState(() {
         _children = children;
         _notices = (results[1] as List).whereType<AnnouncementModel>().toList();
         _dashboard = dashboard;
+        
+        final res3 = results[3] is Response ? (results[3] as Response).data : results[3];
+        final res4 = results[4] is Response ? (results[4] as Response).data : results[4];
+        
+        final rawEvents = res3 is List ? res3 : (res3 is Map ? (res3['data'] as List? ?? []) : []);
+        final rawPlanners = res4 is List ? res4 : (res4 is Map ? (res4['data'] as List? ?? []) : []);
+        final rawHomework = homeworkResults.expand((e) => e).toList();
+        
+        final List<Map<String, dynamic>> feedItems = [];
+        
+        for (final ev in rawEvents) {
+          feedItems.add({
+            'type': 'event',
+            'title': ev['title'] ?? 'Event Post',
+            'description': ev['description'] ?? '',
+            'date': ev['event_date'] ?? ev['created_at'],
+            'sort_date': ev['created_at'] ?? '',
+          });
+        }
+        for (final hw in rawHomework) {
+          feedItems.add({
+            'type': 'homework',
+            'title': hw['title'] ?? 'Homework',
+            'description': hw['description'] ?? hw['instructions'] ?? '',
+            'date': hw['submission_date'] ?? hw['due_date'],
+            'sort_date': hw['created_at'] ?? '',
+          });
+        }
+        for (final lp in rawPlanners) {
+          feedItems.add({
+            'type': 'lesson_planner',
+            'title': 'Lesson Plan: ${lp['grade_id']} ${lp['section_id']}',
+            'description': 'Week: ${lp['week_start_date']} to ${lp['week_end_date']}\nNote: ${lp['note'] ?? ''}',
+            'date': lp['week_start_date'],
+            'sort_date': lp['created_at'] ?? '',
+          });
+        }
+        
+        feedItems.sort((a, b) => (b['sort_date']?.toString() ?? '').compareTo(a['sort_date']?.toString() ?? ''));
+        _eventPosts = feedItems;
+        
         if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
         _loading = false;
       });
@@ -138,6 +189,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         onChildSelected: (index) => setState(() => _activeChildIndex = index),
         notices: _notices,
         dashboard: _dashboard,
+        eventPosts: _eventPosts,
       );
     }
 
@@ -159,6 +211,7 @@ class _ParentDashboardContent extends StatelessWidget {
   final ValueChanged<int> onChildSelected;
   final List<AnnouncementModel> notices;
   final Map<String, dynamic> dashboard;
+  final List<dynamic> eventPosts;
 
   const _ParentDashboardContent({
     required this.children,
@@ -166,6 +219,7 @@ class _ParentDashboardContent extends StatelessWidget {
     required this.onChildSelected,
     required this.notices,
     required this.dashboard,
+    required this.eventPosts,
   });
 
   @override
@@ -184,6 +238,7 @@ class _ParentDashboardContent extends StatelessWidget {
         dashboard: dashboard,
         child: child,
         parentColor: parentColor,
+        eventPosts: eventPosts,
       );
     }
 
@@ -229,6 +284,7 @@ class _ParentDashboardContent extends StatelessWidget {
                     child: _ParentActionAndNoticePanel(
                       child: child,
                       notices: notices,
+                      eventPosts: eventPosts,
                     ),
                   ),
                 ],
@@ -238,7 +294,7 @@ class _ParentDashboardContent extends StatelessWidget {
               children: [
                 _ChildProfileCard(child: child),
                 SizedBox(height: tokens.spacing.md),
-                _ParentActionAndNoticePanel(child: child, notices: notices),
+                _ParentActionAndNoticePanel(child: child, notices: notices, eventPosts: eventPosts),
               ],
             );
           },
@@ -255,6 +311,7 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
   final Map<String, dynamic> dashboard;
   final Map<String, dynamic> child;
   final Color parentColor;
+  final List<dynamic> eventPosts;
 
   const _ParentMobileWireframeDashboard({
     required this.children,
@@ -263,6 +320,7 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
     required this.dashboard,
     required this.child,
     required this.parentColor,
+    required this.eventPosts,
   });
 
   @override
@@ -305,6 +363,10 @@ class _ParentMobileWireframeDashboard extends StatelessWidget {
         _ParentSectionTitle('Quick Actions'),
         SizedBox(height: tokens.spacing.sm),
         _ParentQuickActionGrid(parentColor: parentColor),
+        SizedBox(height: tokens.spacing.md),
+        _ParentSectionTitle('School Feed'),
+        SizedBox(height: tokens.spacing.sm),
+        _SchoolFeedList(eventPosts: eventPosts),
       ],
     );
   }
@@ -1049,10 +1111,12 @@ class _ChildProfileCard extends StatelessWidget {
 class _ParentActionAndNoticePanel extends StatelessWidget {
   final Map<String, dynamic> child;
   final List<AnnouncementModel> notices;
+  final List<dynamic> eventPosts;
 
   const _ParentActionAndNoticePanel({
     required this.child,
     required this.notices,
+    required this.eventPosts,
   });
 
   @override
@@ -1061,6 +1125,8 @@ class _ParentActionAndNoticePanel extends StatelessWidget {
     return Column(
       children: [
         _QuickActionsCard(),
+        SizedBox(height: tokens.spacing.md),
+        _SchoolFeedList(eventPosts: eventPosts),
         SizedBox(height: tokens.spacing.md),
         _NoticesCard(notices: notices),
       ],
@@ -1531,4 +1597,92 @@ String _initials(String name) {
       .map((part) => part[0].toUpperCase())
       .join();
   return value.isEmpty ? 'S' : value;
+}
+
+class _SchoolFeedList extends StatelessWidget {
+  final List<dynamic> eventPosts;
+
+  const _SchoolFeedList({required this.eventPosts});
+
+  @override
+  Widget build(BuildContext context) {
+    if (eventPosts.isEmpty) {
+      return const SchoolDeskSectionCard(
+        title: 'School Feed',
+        subtitle: 'Latest updates from the school.',
+        child: SchoolDeskStatusPanel.empty(
+          title: 'No new posts',
+          message: 'Recent school events and announcements will appear here.',
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final post in eventPosts.take(10))
+          Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Theme.of(context).schoolDesk.panelBorder),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        post['type'] == 'homework' ? Icons.assignment : post['type'] == 'lesson_planner' ? Icons.menu_book : Icons.event_note, 
+                        color: Theme.of(context).colorScheme.primary
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          post['title'] ?? 'Event Post',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    post['description'] ?? '',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  if (post['date'] != null && post['date'].toString().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_month, size: 16, color: Theme.of(context).schoolDesk.textMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Date: ${post['date']}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).schoolDesk.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        if (eventPosts.length > 10)
+          TextButton.icon(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Feed expanded (View More logic)')));
+            },
+            icon: const Icon(Icons.expand_more),
+            label: const Text('View More'),
+          ),
+      ],
+    );
+  }
 }

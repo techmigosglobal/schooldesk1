@@ -19,6 +19,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   String? _error;
   List<Map<String, dynamic>> _homework = const [];
   Map<String, int> _submissionCounts = const {};
+  bool _skippedToday = false;
 
   @override
   void initState() {
@@ -159,6 +160,32 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
               ),
             ],
           ),
+          if (!_loading && !_isHomeworkSubmittedToday() && !_skippedToday)
+            Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: TeacherFlowCard(
+                icon: Icons.notification_important_rounded,
+                title: 'Homework Pending',
+                subtitle: 'You have not assigned homework for today.',
+                status: 'Action required',
+                statusColor: Colors.orange,
+                body: TeacherFlowActionWrap(
+                  actions: [
+                    TeacherFlowAction(
+                      label: 'Assign Now',
+                      icon: Icons.add_task_rounded,
+                      filled: true,
+                      onTap: () => _openForm(),
+                    ),
+                    TeacherFlowAction(
+                      label: 'Skip for Today',
+                      icon: Icons.close_rounded,
+                      onTap: () => setState(() => _skippedToday = true),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           const SizedBox(height: 18),
           TeacherFlowMetricGrid(
             metrics: [
@@ -270,5 +297,20 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
 
   String _homeworkId(Map<String, dynamic> row) {
     return teacherFlowText(row['homework_id'] ?? row['id']);
+  }
+
+  bool _isHomeworkSubmittedToday() {
+    final today = DateTime.now();
+    for (final row in _homework) {
+      final dateStr = row['created_at'] ?? row['homework_date'] ?? row['due_date'];
+      final date = DateTime.tryParse(teacherFlowDateOnly(dateStr));
+      if (date != null &&
+          date.year == today.year &&
+          date.month == today.month &&
+          date.day == today.day) {
+        return true;
+      }
+    }
+    return false;
   }
 }
