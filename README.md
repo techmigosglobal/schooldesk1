@@ -102,6 +102,20 @@ scripts/build-android-vps.sh apk
 scripts/build-android-vps.sh aab
 ```
 
+## Railway Deployment
+
+The backend is fully prepared to be deployed on [Railway](https://railway.app/). Railway will automatically detect the `school-backend/Dockerfile` and deploy the service.
+
+To attach your Flutter APK to the Railway backend:
+1. Deploy the backend on Railway and get the public URL (e.g. `https://school-backend-production.up.railway.app/api`).
+2. Create `env.railway.json` based on `env.hostinger.example.json` and set your API URL.
+3. Build your APK with the Railway environment:
+
+```bash
+flutter build apk --dart-define-from-file=env.railway.json
+```
+This ensures your APK is attached to the Railway backend.
+
 For the Hostinger "Ubuntu 24.04 with Docker and Traefik" template, deploy the
 backend with:
 
