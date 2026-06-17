@@ -228,10 +228,15 @@ func seedAcademicFixtures(schoolID, yearID string) error {
 		BaseModel:      models.BaseModel{ID: "section-default-pp1a"},
 		GradeID:        grade.ID,
 		AcademicYearID: yearID,
+		SchoolID:       schoolID,
 		SectionName:    "A",
 		Capacity:       40,
 	}
-	return database.DB.Where("id = ?", section.ID).FirstOrCreate(&section).Error
+	if err := database.DB.Where("id = ?", section.ID).FirstOrCreate(&section).Error; err != nil {
+		return err
+	}
+
+	return seedPrePrimaryTemplates(schoolID, yearID)
 }
 
 func seedKioskAttendanceUser() (kioskCredentials, error) {

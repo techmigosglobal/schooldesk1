@@ -29,9 +29,40 @@ class RouteAccessGuard {
     AppRoutes.homeworkMessaging,
   };
 
-  static const Set<String> deprecatedProtectedRoutes = {};
 
   static const Map<String, Set<String>> _routeRoles = {
+    // Admin routes (principal manages admin module)
+    AppRoutes.adminDashboard: {'principal'},
+    AppRoutes.adminStudents: {'principal'},
+    AppRoutes.adminTeachers: {'principal'},
+    AppRoutes.adminAttendance: {'principal'},
+    AppRoutes.adminFees: {'principal'},
+    AppRoutes.adminTimetable: {'principal'},
+    AppRoutes.adminExams: {'principal'},
+    AppRoutes.adminCommunication: {'principal'},
+    AppRoutes.adminHelpdesk: {'principal'},
+    AppRoutes.adminDocuments: {'principal'},
+    AppRoutes.adminUserAccess: {'principal'},
+    AppRoutes.adminReports: {'principal'},
+    AppRoutes.adminAcademicInfo: {'principal'},
+    AppRoutes.idCardGeneration: {'principal'},
+    AppRoutes.reportCardGenerator: {'principal'},
+    AppRoutes.adminExamForm: {'principal'},
+    AppRoutes.adminExamScheduleForm: {'principal'},
+    AppRoutes.adminFeeStructureForm: {'principal'},
+    AppRoutes.adminInvoiceGenerationForm: {'principal'},
+    AppRoutes.adminPaymentRecordForm: {'principal'},
+    AppRoutes.adminPaymentRequests: {'principal'},
+    AppRoutes.adminPaymentRequestDecision: {'principal'},
+    AppRoutes.adminTimetableGenerationForm: {'principal'},
+    AppRoutes.adminTimetablePeriodForm: {'principal'},
+    AppRoutes.adminTimetableSubstitutionForm: {'principal'},
+    AppRoutes.adminAccountCreate: {'principal'},
+    AppRoutes.adminAccountEdit: {'principal'},
+    AppRoutes.adminParentChildAssignment: {'principal'},
+    // Principal sub-module routes
+    AppRoutes.principalExams: {'principal'},
+    AppRoutes.principalResults: {'principal'},
     // Principal routes
     AppRoutes.principalDashboard: {'principal'},
     AppRoutes.staffManagement: {'principal'},
@@ -129,13 +160,6 @@ class RouteAccessGuard {
     }
 
     final normalizedRole = _normalizeRole(currentRole);
-    if (deprecatedProtectedRoutes.contains(routeName)) {
-      if (normalizedRole.isEmpty) {
-        return AppRoutes.landingPage;
-      }
-      return dashboardForRole(normalizedRole) ?? AppRoutes.landingPage;
-    }
-
     final allowedRoles = _routeRoles[routeName];
     if (allowedRoles == null || allowedRoles.isEmpty) {
       return null;
@@ -158,9 +182,6 @@ class RouteAccessGuard {
     }
     if (sharedProtectedRoutes.contains(routeName)) {
       return authenticatedRoles;
-    }
-    if (deprecatedProtectedRoutes.contains(routeName)) {
-      return const <String>{};
     }
     return _routeRoles[routeName] ?? const <String>{};
   }

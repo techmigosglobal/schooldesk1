@@ -815,3 +815,77 @@ Map<String, dynamic> _$MessageDtoToJson(_MessageDto instance) =>
       'is_read': instance.isRead,
       'sent_at': instance.sentAt,
     };
+
+_PrePrimaryTimetableTemplateDto _$PrePrimaryTimetableTemplateDtoFromJson(
+  Map<String, dynamic> json,
+) => _PrePrimaryTimetableTemplateDto(
+  id: json['id'] as String?,
+  schoolId: json['school_id'] as String?,
+  academicYearId: json['academic_year_id'] as String?,
+  name: json['name'] as String?,
+  days:
+      (json['days'] as List<dynamic>?)
+          ?.map(
+            (e) =>
+                PrePrimaryTimetableDayDto.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      const <PrePrimaryTimetableDayDto>[],
+);
+
+Map<String, dynamic> _$PrePrimaryTimetableTemplateDtoToJson(
+  _PrePrimaryTimetableTemplateDto instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'school_id': instance.schoolId,
+  'academic_year_id': instance.academicYearId,
+  'name': instance.name,
+  'days': instance.days,
+};
+
+_PrePrimaryTimetableDayDto _$PrePrimaryTimetableDayDtoFromJson(
+  Map<String, dynamic> json,
+) => _PrePrimaryTimetableDayDto(
+  id: json['id'] as String?,
+  templateId: json['template_id'] as String?,
+  dayOfWeek: (json['day_of_week'] as num?)?.toInt(),
+  slots:
+      (json['slots'] as List<dynamic>?)
+          ?.map(
+            (e) =>
+                PrePrimaryTimetableSlotDto.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      const <PrePrimaryTimetableSlotDto>[],
+);
+
+Map<String, dynamic> _$PrePrimaryTimetableDayDtoToJson(
+  _PrePrimaryTimetableDayDto instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'template_id': instance.templateId,
+  'day_of_week': instance.dayOfWeek,
+  'slots': instance.slots,
+};
+
+_PrePrimaryTimetableSlotDto _$PrePrimaryTimetableSlotDtoFromJson(
+  Map<String, dynamic> json,
+) => _PrePrimaryTimetableSlotDto(
+  id: json['id'] as String?,
+  dayId: json['day_id'] as String?,
+  startTime: json['start_time'] as String?,
+  endTime: json['end_time'] as String?,
+  activityName: json['activity_name'] as String?,
+  isBreak: json['is_break'] as bool?,
+);
+
+Map<String, dynamic> _$PrePrimaryTimetableSlotDtoToJson(
+  _PrePrimaryTimetableSlotDto instance,
+) => <String, dynamic>{
+  'id': instance.id,
+  'day_id': instance.dayId,
+  'start_time': instance.startTime,
+  'end_time': instance.endTime,
+  'activity_name': instance.activityName,
+  'is_break': instance.isBreak,
+};

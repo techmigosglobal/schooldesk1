@@ -6,7 +6,7 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -99,49 +99,23 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   Future<void> _checkEndOfDayReminder() async {
+    // Only show a reminder after 3 PM if no homework has been assigned today.
+    // We navigate the teacher to the proper Homework screen — no raw API bypass.
     final now = DateTime.now();
     if (now.hour >= 15 && _homeworkTotal == 0) {
-      final prefs = await SharedPreferences.getInstance();
-      final dateKey = 'no_homework_dismissed_${now.year}_${now.month}_${now.day}';
-      if (prefs.getBool(dateKey) == true) {
-        return;
-      }
-
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('End of Day Reminder'),
-            content: const Text('You have not added any homework for today.'),
+            content: const Text(
+              'You have not added any homework for today. Would you like to add homework for your class?',
+            ),
             actions: [
               TextButton(
-                onPressed: () async {
-                  await prefs.setBool(dateKey, true);
-                  try {
-                    await BackendApiClient.instance.createRaw('/diary-entries', {
-                      'date': DateTime.now().toUtc().toIso8601String(),
-                      'entry_date': teacherFlowDate(DateTime.now()),
-                      'section_id': RoleAccessService.teacherClassId,
-                      'teacher_id': RoleAccessService.teacherStaffId,
-                      'staff_id': RoleAccessService.teacherStaffId,
-                      'class': RoleAccessService.teacherClassName,
-                      'subject': RoleAccessService.teacherSubject,
-                      'period_number': 1,
-                      'title': 'No practice work',
-                      'classwork': '',
-                      'homework': 'No practice work',
-                      'schedule': '',
-                      'notes': '',
-                      'type': 'no_practice',
-                      'entry_type': 'no_practice',
-                      'content': 'Practice: No practice work',
-                      'created_by': RoleAccessService.teacherName,
-                    });
-                  } catch (_) {}
-                  if (context.mounted) Navigator.pop(context);
-                },
-                child: const Text('No homework'),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Dismiss'),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -329,61 +303,33 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     );
   }
 
+  // A teacher is assigned one class for the whole day and teaches all subjects
+  // for that class. We no longer try to guess the "current" slot from time strings.
+
+  /// Returns the teacher's assigned class name (from timetable or profile).
   String get _currentClassTitle {
-    final slot = _currentSlot;
-    final slotClass = teacherFlowText(slot['class']);
-    if (slotClass.isNotEmpty) return slotClass;
+    if (_timetable.isNotEmpty) {
+      final classLabel = teacherFlowText(_timetable.first['class']);
+      if (classLabel.isNotEmpty) return classLabel;
+    }
     return _assignedClass;
   }
 
+  /// Returns a comma-separated list of all subjects the teacher covers today.
   String get _currentSubject {
-    final slot = _currentSlot;
-    final slotSubject = teacherFlowText(slot['subject']);
-    if (slotSubject.isNotEmpty) return slotSubject;
+    if (_timetable.isNotEmpty) {
+      final subjects = _timetable
+          .map((row) => teacherFlowText(row['subject']))
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .toList();
+      if (subjects.isNotEmpty) return subjects.join(', ');
+    }
     return _assignedSubject;
   }
 
-  String get _currentTimeLabel {
-    final slot = _currentSlot;
-    final slotTime = teacherFlowText(slot['time']);
-    return slotTime.isEmpty ? 'Next teaching moment' : slotTime;
-  }
-
-  Map<String, dynamic> get _currentSlot {
-    if (_timetable.isEmpty) return const {};
-    final upcoming = _timetable.where((row) {
-      final start = _slotStart(row);
-      if (start == null) return false;
-      return !start.isBefore(DateTime.now());
-    }).toList();
-    if (upcoming.isNotEmpty) {
-      upcoming.sort((a, b) => _slotStart(a)!.compareTo(_slotStart(b)!));
-      return upcoming.first;
-    }
-    final sorted = [..._timetable]
-      ..sort((a, b) {
-        final aStart = _slotStart(a);
-        final bStart = _slotStart(b);
-        if (aStart == null && bStart == null) return 0;
-        if (aStart == null) return 1;
-        if (bStart == null) return -1;
-        return bStart.compareTo(aStart);
-      });
-    return sorted.first;
-  }
-
-  DateTime? _slotStart(Map<String, dynamic> row) {
-    var time = teacherFlowText(row['time']);
-    if (time.contains(' - ')) {
-      time = time.split(' - ').first;
-    }
-    final match = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(time);
-    if (match == null) return null;
-    final now = DateTime.now();
-    final hour = int.tryParse(match.group(1) ?? '') ?? 0;
-    final minute = int.tryParse(match.group(2) ?? '') ?? 0;
-    return DateTime(now.year, now.month, now.day, hour, minute);
-  }
+  /// Since the teacher covers one class all day, the time label is always 'All Day'.
+  String get _currentTimeLabel => 'All Day';
 
   List<Widget> _todayFeed(BuildContext context) {
     final rows = <Widget>[];

@@ -446,6 +446,13 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			timetable.GET("/exports", middleware.RBACMiddleware("Admin", "Principal"), reportExportHandler.List("timetable_reports"))
 			timetable.POST("/exports", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreateTimetableExport)
 			timetable.GET("/section/:section_id", timetableHandler.GetTimetableBySection)
+
+			// Pre-Primary Timetable Templates
+			timetable.GET("/pre-primary/templates", middleware.RBACMiddleware("Admin", "Principal"), timetableHandler.GetPrePrimaryTimetableTemplates)
+			timetable.POST("/pre-primary/templates", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.CreatePrePrimaryTimetableTemplate)
+			timetable.PUT("/pre-primary/templates/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.UpdatePrePrimaryTimetableTemplate)
+			timetable.DELETE("/pre-primary/templates/:id", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("timetable_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), timetableHandler.DeletePrePrimaryTimetableTemplate)
+			timetable.GET("/pre-primary/section/:section_id", timetableHandler.GetPrePrimaryTimetableBySection)
 		}
 
 		announcements := api.Group("/announcements")

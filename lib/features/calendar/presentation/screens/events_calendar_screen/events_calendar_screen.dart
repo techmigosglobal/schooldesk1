@@ -341,6 +341,165 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return false;
   }
 
+  // ── School Calendar Seed ─────────────────────────────────────────────────
+
+  Future<void> _seedSchoolCalendar() async {
+    if (!_canManageEvents) return;
+
+    // Require an academic year to be selected.
+    if (_selectedAcademicYearId.isEmpty) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No academic year selected'),
+          content: const Text(
+            'Please create an academic year covering 2026–27 before loading the school calendar.\n\n'
+            'Go to Academic Management → Add Academic Year.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final entries = _SchoolCalendarData.all;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Load 2026–27 school calendar?'),
+        content: Text(
+          'This will create ${entries.length} school calendar entries '
+          '(holidays, events & celebrations) for the selected academic year.\n\n'
+          'Entries with the same title and date that already exist will be skipped.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Load calendar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Build a set of existing (title+date) pairs to skip duplicates.
+    final existing = _events
+        .map((e) => '${e.title.toLowerCase()}|${_formatDate(e.start)}')
+        .toSet();
+
+    int done = 0;
+    int skipped = 0;
+    int failed = 0;
+    final errors = <String>[];
+
+    // Show a progress bottom-sheet.
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (_, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Loading school calendar…',
+                    style: GoogleFonts.dmSans(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                      color: principalDirectoryText,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$done / ${entries.length} entries created'
+                    '${skipped > 0 ? ' · $skipped skipped' : ''}'
+                    '${failed > 0 ? ' · $failed failed' : ''}',
+                    style: GoogleFonts.dmSans(
+                      color: principalDirectoryMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  LinearProgressIndicator(
+                    value: (done + skipped + failed) / entries.length,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    // Iterate and POST each entry.
+    for (final entry in entries) {
+      final key = '${entry.title.toLowerCase()}|${entry.startDate}';
+      if (existing.contains(key)) {
+        skipped++;
+        continue;
+      }
+      try {
+        final payload = {
+          'academic_year_id': _selectedAcademicYearId,
+          'event_name': entry.title,
+          'event_type': entry.eventType,
+          'description': entry.description,
+          'start_date': entry.startDate,
+          'end_date': entry.endDate,
+          'start_time': '00:00:00',
+          'end_time': '23:59:00',
+          'venue': '',
+          'audience_type': entry.audienceType,
+          'status': 'approved',
+          'is_holiday': entry.isHoliday,
+        };
+        await BackendApiClient.instance.createRaw('/events', payload);
+        existing.add(key);
+        done++;
+      } catch (err) {
+        failed++;
+        errors.add('${entry.title}: $err');
+      }
+    }
+
+    // Dismiss the bottom-sheet.
+    if (mounted) Navigator.of(context, rootNavigator: true).maybePop();
+
+    // Refresh the event list.
+    await _loadData();
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'School calendar loaded: $done added'
+          '${skipped > 0 ? ', $skipped skipped' : ''}'
+          '${failed > 0 ? ', $failed failed' : ''}.'
+        ),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: failed > 0 ? context.appTheme.error : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visible = _visibleEvents;
@@ -355,6 +514,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       onAdd: _canManageEvents ? _openCreateEvent : null,
       addTooltip: 'Create event',
       addIcon: Icons.event_available_rounded,
+      secondaryActions: _canManageEvents
+          ? [
+              IconButton(
+                tooltip: 'Load 2026–27 school calendar',
+                icon: const Icon(Icons.download_for_offline_rounded),
+                onPressed: _seedSchoolCalendar,
+              ),
+            ]
+          : null,
       isEmpty: !_loading && _error == null && showList && visible.isEmpty,
       emptyState: EmptyStateWidget(
         icon: Icons.event_busy_rounded,
@@ -1766,4 +1934,244 @@ String _monthName(int month) {
   ];
   if (month < 1 || month > 12) return '';
   return months[month - 1];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// School Calendar 2026–27 – Seed Data
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SchoolCalendarEntry {
+  const _SchoolCalendarEntry({
+    required this.title,
+    required this.startDate,
+    required this.endDate,
+    required this.eventType,
+    required this.description,
+    this.isHoliday = false,
+    this.audienceType = 'all',
+  });
+
+  final String title;
+  final String startDate; // ISO‑8601 date (YYYY‑MM‑DD)
+  final String endDate;
+  final String eventType; // 'holiday' | 'cultural' | 'academic' | 'sports' …
+  final String description;
+  final bool isHoliday;
+  final String audienceType;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+abstract final class _SchoolCalendarData {
+  // Holiday
+  static _SchoolCalendarEntry _h(
+    String title,
+    String start, {
+    String? end,
+    String desc = '',
+  }) =>
+      _SchoolCalendarEntry(
+        title: title,
+        startDate: start,
+        endDate: end ?? start,
+        eventType: 'holiday',
+        description: desc.isEmpty ? title : desc,
+        isHoliday: true,
+        audienceType: 'all',
+      );
+
+  // Cultural / celebration
+  static _SchoolCalendarEntry _c(
+    String title,
+    String start, {
+    String? end,
+    String desc = '',
+    String type = 'cultural',
+  }) =>
+      _SchoolCalendarEntry(
+        title: title,
+        startDate: start,
+        endDate: end ?? start,
+        eventType: type,
+        description: desc.isEmpty ? title : desc,
+        isHoliday: false,
+        audienceType: 'all',
+      );
+
+  static final List<_SchoolCalendarEntry> all = [
+    // ── June 2026 ──────────────────────────────────────────────────────────
+    _h('Muharram', '2026-06-26',
+        desc: 'Islamic New Year – public holiday'),
+
+    // ── August 2026 ────────────────────────────────────────────────────────
+    _h('Bonalu Festival', '2026-08-10',
+        desc: 'Bonalu Festival – Telangana public holiday'),
+    _h('Independence Day', '2026-08-15',
+        desc: 'India Independence Day – national holiday'),
+    _c('Varalakshmi Vratam', '2026-08-21',
+        desc: 'Varalakshmi Vratam celebration'),
+    _c('Onam', '2026-08-26', desc: 'Onam harvest festival'),
+    _c('Raksha Bandhan', '2026-08-28',
+        desc: 'Raksha Bandhan – sibling bonding celebration'),
+
+    // ── September 2026 ─────────────────────────────────────────────────────
+    _c('Janmashtami', '2026-09-04',
+        desc: 'Janmashtami – Krishna Jayanti celebration'),
+    _c("Teacher's Day", '2026-09-05',
+        desc: "Teacher's Day celebration – Dr Sarvepalli Radhakrishnan",
+        type: 'academic'),
+    _h("Milad-un-Nabi / Eid-e-Milad", '2026-09-14',
+        desc: 'Prophet Muhammad\'s Birthday – public holiday'),
+    _c('Vinayaka Chaturthi', '2026-09-16',
+        desc: 'Ganesh Chaturthi – 10-day festival'),
+    _c("Pitra Paksha / Mahalaya", '2026-10-01',
+        desc: 'Mahalaya – beginning of Durga Puja period'),
+
+    // ── October 2026 ───────────────────────────────────────────────────────
+    _h('Gandhi Jayanti', '2026-10-02',
+        desc: 'Gandhi Jayanti – national holiday'),
+    _c('Navratri Begin', '2026-10-07',
+        desc: 'Navratri festival begins – 9 days of celebration'),
+    _h('Dussehra (Vijayadashami)', '2026-10-15', end: '2026-10-16',
+        desc: 'Dussehra / Vijayadashami – public holiday'),
+    _c('Navratri End', '2026-10-15',
+        desc: 'Navratri concludes with Vijayadashami'),
+
+    // ── November 2026 ──────────────────────────────────────────────────────
+    _h('Diwali', '2026-11-08', end: '2026-11-10',
+        desc: 'Diwali festival holidays'),
+    _c('Bhai Dooj', '2026-11-10',
+        desc: 'Bhai Dooj – sibling celebration after Diwali'),
+    _h('Guru Nanak Jayanti', '2026-11-25',
+        desc: 'Guru Nanak Jayanti – public holiday'),
+    _c('Constitution Day', '2026-11-26',
+        desc: 'Constitution Day of India', type: 'academic'),
+
+    // ── December 2026 ──────────────────────────────────────────────────────
+    _c('Christmas Week', '2026-12-21', end: '2026-12-31',
+        desc: 'Winter holiday / Christmas break'),
+    _h('Christmas Day', '2026-12-25',
+        desc: 'Christmas Day – public holiday'),
+
+    // ── January 2027 ───────────────────────────────────────────────────────
+    _c('Winter Holiday', '2027-01-01', end: '2027-01-02',
+        desc: 'New Year winter break continues'),
+    _h('Makara Sankranti', '2027-01-14', end: '2027-01-16',
+        desc: 'Makara Sankranti / Pongal – harvest festival holidays'),
+    _h('Pongal', '2027-01-15',
+        desc: 'Pongal – Tamil harvest festival'),
+    _h('Republic Day', '2027-01-26',
+        desc: 'Republic Day – national holiday'),
+
+    // ── February 2027 ──────────────────────────────────────────────────────
+    _c('Saraswati Puja', '2027-02-01',
+        desc: 'Saraswati Puja – Vasant Panchami'),
+    _c("Children's Science Congress", '2027-02-05',
+        desc: "Children's Science Congress / Science Day",
+        type: 'academic'),
+    _c('Shivaji Jayanti', '2027-02-19',
+        desc: 'Chhatrapati Shivaji Maharaj Jayanti'),
+
+    // ── March 2027 ─────────────────────────────────────────────────────────
+    _h('Maha Shivaratri', '2027-02-26',
+        desc: 'Maha Shivaratri – public holiday'),
+    _c('Holi', '2027-03-01', end: '2027-03-02',
+        desc: 'Holi festival of colors'),
+    _h('Holi (main)', '2027-03-02',
+        desc: 'Holi – public holiday'),
+    _c('Annual Day / Sports Day', '2027-03-15',
+        desc: 'School Annual Day & Sports Day celebration',
+        type: 'sports'),
+
+    // ── April 2027 ─────────────────────────────────────────────────────────
+    _h('Good Friday', '2027-04-02',
+        desc: 'Good Friday – public holiday'),
+    _h('Ram Navami', '2027-04-06',
+        desc: 'Ram Navami – public holiday'),
+    _h('Dr Ambedkar Jayanti', '2027-04-14',
+        desc: 'Dr B R Ambedkar Jayanti – national holiday'),
+    _c('Vishu', '2027-04-14', desc: 'Vishu – Kerala New Year celebration'),
+    _h('Ugadi / Telugu New Year', '2027-04-14',
+        desc: 'Ugadi / Telugu New Year – public holiday'),
+    _h('Eid-ul-Fitr', '2027-04-21',
+        desc: 'Eid-ul-Fitr – public holiday'),
+
+    // ── May 2027 ───────────────────────────────────────────────────────────
+    _h('Maharashtra Day / May Day', '2027-05-01',
+        desc: 'Maharashtra Foundation Day & International Labour Day'),
+    _c("Buddha Purnima", '2027-05-12',
+        desc: 'Buddha Purnima / Vesak celebration'),
+    _c("Mother's Day", '2027-05-09',
+        desc: "Mother's Day school celebration"),
+    _c('Farewell / Valedictory', '2027-05-15',
+        desc: 'Farewell ceremony for graduating students',
+        type: 'academic'),
+    _h('Summer Vacation Begin', '2027-05-16', end: '2027-05-31',
+        desc: 'Summer vacation begins'),
+
+    // ── June 2027 ──────────────────────────────────────────────────────────
+    _h('Summer Vacation End', '2027-06-01', end: '2027-06-14',
+        desc: 'Summer vacation continues'),
+    _c('New Academic Year Opening', '2027-06-15',
+        desc: 'School reopens – new academic year 2027-28 begins',
+        type: 'academic'),
+
+    // ── Academic Calendar Events (across the year) ─────────────────────────
+    _c('Orientation Day', '2026-06-17',
+        desc: 'Student orientation & school opening day',
+        type: 'academic'),
+    _c('Unit Test 1', '2026-07-20', end: '2026-07-25',
+        desc: 'First unit test across all classes',
+        type: 'academic'),
+    _c('PTM Round 1', '2026-08-08',
+        desc: 'First Parent-Teacher Meeting of the year',
+        type: 'academic'),
+    _c('Half-Yearly Exams', '2026-09-21', end: '2026-09-30',
+        desc: 'Mid-year (half-yearly) examinations',
+        type: 'academic'),
+    _c('Half-Yearly Results', '2026-10-10',
+        desc: 'Half-yearly examination results declaration',
+        type: 'academic'),
+    _c('PTM Round 2', '2026-10-17',
+        desc: 'Second Parent-Teacher Meeting',
+        type: 'academic'),
+    _c('Unit Test 2', '2026-11-16', end: '2026-11-21',
+        desc: 'Second unit test across all classes',
+        type: 'academic'),
+    _c('PTM Round 3', '2026-12-05',
+        desc: 'Third Parent-Teacher Meeting',
+        type: 'academic'),
+    _c('Unit Test 3', '2027-01-18', end: '2027-01-23',
+        desc: 'Third unit test across all classes',
+        type: 'academic'),
+    _c('PTM Round 4', '2027-02-06',
+        desc: 'Fourth Parent-Teacher Meeting',
+        type: 'academic'),
+    _c('Pre-Board Exams', '2027-02-10', end: '2027-02-22',
+        desc: 'Pre-board / mock examinations for senior classes',
+        type: 'academic'),
+    _c('Annual Exams', '2027-03-01', end: '2027-03-20',
+        desc: 'Annual / year-end examinations for all classes',
+        type: 'academic'),
+    _c('Annual Exam Results', '2027-04-01',
+        desc: 'Annual examination results declaration',
+        type: 'academic'),
+    _c('Final PTM / Report Cards', '2027-04-10',
+        desc: 'Final Parent-Teacher Meeting & report card distribution',
+        type: 'academic'),
+
+    // ── School Events / Celebrations ───────────────────────────────────────
+    _c('Diwali Celebrations', '2026-11-05',
+        desc: 'School Diwali celebration & cultural programme'),
+    _c('Christmas Celebrations', '2026-12-20',
+        desc: 'School Christmas programme & carol singing'),
+    _c('Talent Show', '2026-12-10',
+        desc: 'Inter-class talent show & cultural festival',
+        type: 'cultural'),
+    _c('Republic Day Celebrations', '2027-01-26',
+        desc: 'Republic Day flag hoisting & cultural programme'),
+    _c('Environment Day', '2027-06-05',
+        desc: 'World Environment Day – tree plantation drive',
+        type: 'academic'),
+  ];
 }

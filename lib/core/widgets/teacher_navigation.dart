@@ -115,6 +115,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherTimetable,
             ),
             SchoolDeskNavigationItem(
+              index: 30,
+              icon: Icons.event_note_outlined,
+              activeIcon: Icons.event_note_rounded,
+              label: 'School Calendar',
+              route: AppRoutes.teacherCalendar,
+            ),
+            SchoolDeskNavigationItem(
               index: 14,
               icon: Icons.qr_code_scanner_outlined,
               activeIcon: Icons.qr_code_scanner_rounded,

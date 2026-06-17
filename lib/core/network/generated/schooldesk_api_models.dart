@@ -550,3 +550,48 @@ abstract class MessageDto with _$MessageDto {
   factory MessageDto.fromJson(Map<String, dynamic> json) =>
       _$MessageDtoFromJson(json);
 }
+
+@freezed
+abstract class PrePrimaryTimetableTemplateDto
+    with _$PrePrimaryTimetableTemplateDto {
+  const factory PrePrimaryTimetableTemplateDto({
+    String? id,
+    @JsonKey(name: 'school_id') String? schoolId,
+    @JsonKey(name: 'academic_year_id') String? academicYearId,
+    String? name,
+    @Default(<PrePrimaryTimetableDayDto>[])
+    List<PrePrimaryTimetableDayDto> days,
+  }) = _PrePrimaryTimetableTemplateDto;
+
+  factory PrePrimaryTimetableTemplateDto.fromJson(Map<String, dynamic> json) =>
+      _$PrePrimaryTimetableTemplateDtoFromJson(json);
+}
+
+@freezed
+abstract class PrePrimaryTimetableDayDto with _$PrePrimaryTimetableDayDto {
+  const factory PrePrimaryTimetableDayDto({
+    String? id,
+    @JsonKey(name: 'template_id') String? templateId,
+    @JsonKey(name: 'day_of_week') int? dayOfWeek,
+    @Default(<PrePrimaryTimetableSlotDto>[])
+    List<PrePrimaryTimetableSlotDto> slots,
+  }) = _PrePrimaryTimetableDayDto;
+
+  factory PrePrimaryTimetableDayDto.fromJson(Map<String, dynamic> json) =>
+      _$PrePrimaryTimetableDayDtoFromJson(json);
+}
+
+@freezed
+abstract class PrePrimaryTimetableSlotDto with _$PrePrimaryTimetableSlotDto {
+  const factory PrePrimaryTimetableSlotDto({
+    String? id,
+    @JsonKey(name: 'day_id') String? dayId,
+    @JsonKey(name: 'start_time') String? startTime,
+    @JsonKey(name: 'end_time') String? endTime,
+    @JsonKey(name: 'activity_name') String? activityName,
+    @JsonKey(name: 'is_break') bool? isBreak,
+  }) = _PrePrimaryTimetableSlotDto;
+
+  factory PrePrimaryTimetableSlotDto.fromJson(Map<String, dynamic> json) =>
+      _$PrePrimaryTimetableSlotDtoFromJson(json);
+}

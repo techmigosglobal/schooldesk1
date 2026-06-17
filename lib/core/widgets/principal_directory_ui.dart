@@ -26,6 +26,8 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
   final Widget? emptyState;
   final bool isEmpty;
 
+  final List<Widget>? secondaryActions;
+
   const PrincipalDirectoryScaffold({
     super.key,
     required this.title,
@@ -41,6 +43,7 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
     this.controller,
     this.emptyState,
     this.isEmpty = false,
+    this.secondaryActions,
   });
 
   @override
@@ -75,6 +78,7 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
                   title: title,
                   subtitle: subtitle,
                   onRefresh: onRefresh,
+                  actions: secondaryActions ?? const [],
                 ),
               ),
               SliverToBoxAdapter(child: filters),

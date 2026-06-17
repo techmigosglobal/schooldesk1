@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -128,21 +127,7 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
             classLabel: teacherCurrentClassLabel(),
             subject: RoleAccessService.teacherSubject,
             timeLabel: '${_students.length} students',
-            actions: [
-              TeacherFlowAction(
-                label: 'Enter Marks',
-                icon: Icons.edit_note_rounded,
-                filled: true,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherMarkEntry),
-              ),
-              TeacherFlowAction(
-                label: 'Student Notes',
-                icon: Icons.note_add_rounded,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherStudentNotes),
-              ),
-            ],
+            actions: const [],
           ),
           const SizedBox(height: 18),
           TeacherFlowMetricGrid(
@@ -254,15 +239,6 @@ class _TeacherPerformanceScreenState extends State<TeacherPerformanceScreen> {
           const SizedBox(height: 10),
           TeacherFlowActionWrap(
             actions: [
-              TeacherFlowAction(
-                label: 'Add Note',
-                icon: Icons.note_add_rounded,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.teacherStudentNotes,
-                  arguments: {'student_id': row.id, 'student_name': row.name},
-                ),
-              ),
               TeacherFlowAction(
                 label: 'Grade ${row.grade}',
                 icon: Icons.grade_rounded,

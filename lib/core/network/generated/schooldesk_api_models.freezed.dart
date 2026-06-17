@@ -8233,4 +8233,841 @@ as dynamic,
 
 }
 
+
+/// @nodoc
+mixin _$PrePrimaryTimetableTemplateDto {
+
+ String? get id;@JsonKey(name: 'school_id') String? get schoolId;@JsonKey(name: 'academic_year_id') String? get academicYearId; String? get name; List<PrePrimaryTimetableDayDto> get days;
+/// Create a copy of PrePrimaryTimetableTemplateDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PrePrimaryTimetableTemplateDtoCopyWith<PrePrimaryTimetableTemplateDto> get copyWith => _$PrePrimaryTimetableTemplateDtoCopyWithImpl<PrePrimaryTimetableTemplateDto>(this as PrePrimaryTimetableTemplateDto, _$identity);
+
+  /// Serializes this PrePrimaryTimetableTemplateDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableTemplateDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other.days, days));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,schoolId,academicYearId,name,const DeepCollectionEquality().hash(days));
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableTemplateDto(id: $id, schoolId: $schoolId, academicYearId: $academicYearId, name: $name, days: $days)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PrePrimaryTimetableTemplateDtoCopyWith<$Res>  {
+  factory $PrePrimaryTimetableTemplateDtoCopyWith(PrePrimaryTimetableTemplateDto value, $Res Function(PrePrimaryTimetableTemplateDto) _then) = _$PrePrimaryTimetableTemplateDtoCopyWithImpl;
+@useResult
+$Res call({
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'academic_year_id') String? academicYearId, String? name, List<PrePrimaryTimetableDayDto> days
+});
+
+
+
+
+}
+/// @nodoc
+class _$PrePrimaryTimetableTemplateDtoCopyWithImpl<$Res>
+    implements $PrePrimaryTimetableTemplateDtoCopyWith<$Res> {
+  _$PrePrimaryTimetableTemplateDtoCopyWithImpl(this._self, this._then);
+
+  final PrePrimaryTimetableTemplateDto _self;
+  final $Res Function(PrePrimaryTimetableTemplateDto) _then;
+
+/// Create a copy of PrePrimaryTimetableTemplateDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? name = freezed,Object? days = null,}) {
+  return _then(_self.copyWith(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
+as String?,academicYearId: freezed == academicYearId ? _self.academicYearId : academicYearId // ignore: cast_nullable_to_non_nullable
+as String?,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String?,days: null == days ? _self.days : days // ignore: cast_nullable_to_non_nullable
+as List<PrePrimaryTimetableDayDto>,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [PrePrimaryTimetableTemplateDto].
+extension PrePrimaryTimetableTemplateDtoPatterns on PrePrimaryTimetableTemplateDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _PrePrimaryTimetableTemplateDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _PrePrimaryTimetableTemplateDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _PrePrimaryTimetableTemplateDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'academic_year_id')  String? academicYearId,  String? name,  List<PrePrimaryTimetableDayDto> days)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto() when $default != null:
+return $default(_that.id,_that.schoolId,_that.academicYearId,_that.name,_that.days);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'academic_year_id')  String? academicYearId,  String? name,  List<PrePrimaryTimetableDayDto> days)  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto():
+return $default(_that.id,_that.schoolId,_that.academicYearId,_that.name,_that.days);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'academic_year_id')  String? academicYearId,  String? name,  List<PrePrimaryTimetableDayDto> days)?  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableTemplateDto() when $default != null:
+return $default(_that.id,_that.schoolId,_that.academicYearId,_that.name,_that.days);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _PrePrimaryTimetableTemplateDto implements PrePrimaryTimetableTemplateDto {
+  const _PrePrimaryTimetableTemplateDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'academic_year_id') this.academicYearId, this.name, final  List<PrePrimaryTimetableDayDto> days = const <PrePrimaryTimetableDayDto>[]}): _days = days;
+  factory _PrePrimaryTimetableTemplateDto.fromJson(Map<String, dynamic> json) => _$PrePrimaryTimetableTemplateDtoFromJson(json);
+
+@override final  String? id;
+@override@JsonKey(name: 'school_id') final  String? schoolId;
+@override@JsonKey(name: 'academic_year_id') final  String? academicYearId;
+@override final  String? name;
+ final  List<PrePrimaryTimetableDayDto> _days;
+@override@JsonKey() List<PrePrimaryTimetableDayDto> get days {
+  if (_days is EqualUnmodifiableListView) return _days;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_days);
+}
+
+
+/// Create a copy of PrePrimaryTimetableTemplateDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$PrePrimaryTimetableTemplateDtoCopyWith<_PrePrimaryTimetableTemplateDto> get copyWith => __$PrePrimaryTimetableTemplateDtoCopyWithImpl<_PrePrimaryTimetableTemplateDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$PrePrimaryTimetableTemplateDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableTemplateDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.academicYearId, academicYearId) || other.academicYearId == academicYearId)&&(identical(other.name, name) || other.name == name)&&const DeepCollectionEquality().equals(other._days, _days));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,schoolId,academicYearId,name,const DeepCollectionEquality().hash(_days));
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableTemplateDto(id: $id, schoolId: $schoolId, academicYearId: $academicYearId, name: $name, days: $days)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$PrePrimaryTimetableTemplateDtoCopyWith<$Res> implements $PrePrimaryTimetableTemplateDtoCopyWith<$Res> {
+  factory _$PrePrimaryTimetableTemplateDtoCopyWith(_PrePrimaryTimetableTemplateDto value, $Res Function(_PrePrimaryTimetableTemplateDto) _then) = __$PrePrimaryTimetableTemplateDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'academic_year_id') String? academicYearId, String? name, List<PrePrimaryTimetableDayDto> days
+});
+
+
+
+
+}
+/// @nodoc
+class __$PrePrimaryTimetableTemplateDtoCopyWithImpl<$Res>
+    implements _$PrePrimaryTimetableTemplateDtoCopyWith<$Res> {
+  __$PrePrimaryTimetableTemplateDtoCopyWithImpl(this._self, this._then);
+
+  final _PrePrimaryTimetableTemplateDto _self;
+  final $Res Function(_PrePrimaryTimetableTemplateDto) _then;
+
+/// Create a copy of PrePrimaryTimetableTemplateDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? schoolId = freezed,Object? academicYearId = freezed,Object? name = freezed,Object? days = null,}) {
+  return _then(_PrePrimaryTimetableTemplateDto(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
+as String?,academicYearId: freezed == academicYearId ? _self.academicYearId : academicYearId // ignore: cast_nullable_to_non_nullable
+as String?,name: freezed == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String?,days: null == days ? _self._days : days // ignore: cast_nullable_to_non_nullable
+as List<PrePrimaryTimetableDayDto>,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$PrePrimaryTimetableDayDto {
+
+ String? get id;@JsonKey(name: 'template_id') String? get templateId;@JsonKey(name: 'day_of_week') int? get dayOfWeek; List<PrePrimaryTimetableSlotDto> get slots;
+/// Create a copy of PrePrimaryTimetableDayDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PrePrimaryTimetableDayDtoCopyWith<PrePrimaryTimetableDayDto> get copyWith => _$PrePrimaryTimetableDayDtoCopyWithImpl<PrePrimaryTimetableDayDto>(this as PrePrimaryTimetableDayDto, _$identity);
+
+  /// Serializes this PrePrimaryTimetableDayDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableDayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.templateId, templateId) || other.templateId == templateId)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&const DeepCollectionEquality().equals(other.slots, slots));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,templateId,dayOfWeek,const DeepCollectionEquality().hash(slots));
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableDayDto(id: $id, templateId: $templateId, dayOfWeek: $dayOfWeek, slots: $slots)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PrePrimaryTimetableDayDtoCopyWith<$Res>  {
+  factory $PrePrimaryTimetableDayDtoCopyWith(PrePrimaryTimetableDayDto value, $Res Function(PrePrimaryTimetableDayDto) _then) = _$PrePrimaryTimetableDayDtoCopyWithImpl;
+@useResult
+$Res call({
+ String? id,@JsonKey(name: 'template_id') String? templateId,@JsonKey(name: 'day_of_week') int? dayOfWeek, List<PrePrimaryTimetableSlotDto> slots
+});
+
+
+
+
+}
+/// @nodoc
+class _$PrePrimaryTimetableDayDtoCopyWithImpl<$Res>
+    implements $PrePrimaryTimetableDayDtoCopyWith<$Res> {
+  _$PrePrimaryTimetableDayDtoCopyWithImpl(this._self, this._then);
+
+  final PrePrimaryTimetableDayDto _self;
+  final $Res Function(PrePrimaryTimetableDayDto) _then;
+
+/// Create a copy of PrePrimaryTimetableDayDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? templateId = freezed,Object? dayOfWeek = freezed,Object? slots = null,}) {
+  return _then(_self.copyWith(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,templateId: freezed == templateId ? _self.templateId : templateId // ignore: cast_nullable_to_non_nullable
+as String?,dayOfWeek: freezed == dayOfWeek ? _self.dayOfWeek : dayOfWeek // ignore: cast_nullable_to_non_nullable
+as int?,slots: null == slots ? _self.slots : slots // ignore: cast_nullable_to_non_nullable
+as List<PrePrimaryTimetableSlotDto>,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [PrePrimaryTimetableDayDto].
+extension PrePrimaryTimetableDayDtoPatterns on PrePrimaryTimetableDayDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _PrePrimaryTimetableDayDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _PrePrimaryTimetableDayDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _PrePrimaryTimetableDayDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'template_id')  String? templateId, @JsonKey(name: 'day_of_week')  int? dayOfWeek,  List<PrePrimaryTimetableSlotDto> slots)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto() when $default != null:
+return $default(_that.id,_that.templateId,_that.dayOfWeek,_that.slots);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'template_id')  String? templateId, @JsonKey(name: 'day_of_week')  int? dayOfWeek,  List<PrePrimaryTimetableSlotDto> slots)  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto():
+return $default(_that.id,_that.templateId,_that.dayOfWeek,_that.slots);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'template_id')  String? templateId, @JsonKey(name: 'day_of_week')  int? dayOfWeek,  List<PrePrimaryTimetableSlotDto> slots)?  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableDayDto() when $default != null:
+return $default(_that.id,_that.templateId,_that.dayOfWeek,_that.slots);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _PrePrimaryTimetableDayDto implements PrePrimaryTimetableDayDto {
+  const _PrePrimaryTimetableDayDto({this.id, @JsonKey(name: 'template_id') this.templateId, @JsonKey(name: 'day_of_week') this.dayOfWeek, final  List<PrePrimaryTimetableSlotDto> slots = const <PrePrimaryTimetableSlotDto>[]}): _slots = slots;
+  factory _PrePrimaryTimetableDayDto.fromJson(Map<String, dynamic> json) => _$PrePrimaryTimetableDayDtoFromJson(json);
+
+@override final  String? id;
+@override@JsonKey(name: 'template_id') final  String? templateId;
+@override@JsonKey(name: 'day_of_week') final  int? dayOfWeek;
+ final  List<PrePrimaryTimetableSlotDto> _slots;
+@override@JsonKey() List<PrePrimaryTimetableSlotDto> get slots {
+  if (_slots is EqualUnmodifiableListView) return _slots;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_slots);
+}
+
+
+/// Create a copy of PrePrimaryTimetableDayDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$PrePrimaryTimetableDayDtoCopyWith<_PrePrimaryTimetableDayDto> get copyWith => __$PrePrimaryTimetableDayDtoCopyWithImpl<_PrePrimaryTimetableDayDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$PrePrimaryTimetableDayDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableDayDto&&(identical(other.id, id) || other.id == id)&&(identical(other.templateId, templateId) || other.templateId == templateId)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&const DeepCollectionEquality().equals(other._slots, _slots));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,templateId,dayOfWeek,const DeepCollectionEquality().hash(_slots));
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableDayDto(id: $id, templateId: $templateId, dayOfWeek: $dayOfWeek, slots: $slots)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$PrePrimaryTimetableDayDtoCopyWith<$Res> implements $PrePrimaryTimetableDayDtoCopyWith<$Res> {
+  factory _$PrePrimaryTimetableDayDtoCopyWith(_PrePrimaryTimetableDayDto value, $Res Function(_PrePrimaryTimetableDayDto) _then) = __$PrePrimaryTimetableDayDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String? id,@JsonKey(name: 'template_id') String? templateId,@JsonKey(name: 'day_of_week') int? dayOfWeek, List<PrePrimaryTimetableSlotDto> slots
+});
+
+
+
+
+}
+/// @nodoc
+class __$PrePrimaryTimetableDayDtoCopyWithImpl<$Res>
+    implements _$PrePrimaryTimetableDayDtoCopyWith<$Res> {
+  __$PrePrimaryTimetableDayDtoCopyWithImpl(this._self, this._then);
+
+  final _PrePrimaryTimetableDayDto _self;
+  final $Res Function(_PrePrimaryTimetableDayDto) _then;
+
+/// Create a copy of PrePrimaryTimetableDayDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? templateId = freezed,Object? dayOfWeek = freezed,Object? slots = null,}) {
+  return _then(_PrePrimaryTimetableDayDto(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,templateId: freezed == templateId ? _self.templateId : templateId // ignore: cast_nullable_to_non_nullable
+as String?,dayOfWeek: freezed == dayOfWeek ? _self.dayOfWeek : dayOfWeek // ignore: cast_nullable_to_non_nullable
+as int?,slots: null == slots ? _self._slots : slots // ignore: cast_nullable_to_non_nullable
+as List<PrePrimaryTimetableSlotDto>,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$PrePrimaryTimetableSlotDto {
+
+ String? get id;@JsonKey(name: 'day_id') String? get dayId;@JsonKey(name: 'start_time') String? get startTime;@JsonKey(name: 'end_time') String? get endTime;@JsonKey(name: 'activity_name') String? get activityName;@JsonKey(name: 'is_break') bool? get isBreak;
+/// Create a copy of PrePrimaryTimetableSlotDto
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PrePrimaryTimetableSlotDtoCopyWith<PrePrimaryTimetableSlotDto> get copyWith => _$PrePrimaryTimetableSlotDtoCopyWithImpl<PrePrimaryTimetableSlotDto>(this as PrePrimaryTimetableSlotDto, _$identity);
+
+  /// Serializes this PrePrimaryTimetableSlotDto to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PrePrimaryTimetableSlotDto&&(identical(other.id, id) || other.id == id)&&(identical(other.dayId, dayId) || other.dayId == dayId)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.activityName, activityName) || other.activityName == activityName)&&(identical(other.isBreak, isBreak) || other.isBreak == isBreak));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,dayId,startTime,endTime,activityName,isBreak);
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableSlotDto(id: $id, dayId: $dayId, startTime: $startTime, endTime: $endTime, activityName: $activityName, isBreak: $isBreak)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PrePrimaryTimetableSlotDtoCopyWith<$Res>  {
+  factory $PrePrimaryTimetableSlotDtoCopyWith(PrePrimaryTimetableSlotDto value, $Res Function(PrePrimaryTimetableSlotDto) _then) = _$PrePrimaryTimetableSlotDtoCopyWithImpl;
+@useResult
+$Res call({
+ String? id,@JsonKey(name: 'day_id') String? dayId,@JsonKey(name: 'start_time') String? startTime,@JsonKey(name: 'end_time') String? endTime,@JsonKey(name: 'activity_name') String? activityName,@JsonKey(name: 'is_break') bool? isBreak
+});
+
+
+
+
+}
+/// @nodoc
+class _$PrePrimaryTimetableSlotDtoCopyWithImpl<$Res>
+    implements $PrePrimaryTimetableSlotDtoCopyWith<$Res> {
+  _$PrePrimaryTimetableSlotDtoCopyWithImpl(this._self, this._then);
+
+  final PrePrimaryTimetableSlotDto _self;
+  final $Res Function(PrePrimaryTimetableSlotDto) _then;
+
+/// Create a copy of PrePrimaryTimetableSlotDto
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? dayId = freezed,Object? startTime = freezed,Object? endTime = freezed,Object? activityName = freezed,Object? isBreak = freezed,}) {
+  return _then(_self.copyWith(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,dayId: freezed == dayId ? _self.dayId : dayId // ignore: cast_nullable_to_non_nullable
+as String?,startTime: freezed == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
+as String?,endTime: freezed == endTime ? _self.endTime : endTime // ignore: cast_nullable_to_non_nullable
+as String?,activityName: freezed == activityName ? _self.activityName : activityName // ignore: cast_nullable_to_non_nullable
+as String?,isBreak: freezed == isBreak ? _self.isBreak : isBreak // ignore: cast_nullable_to_non_nullable
+as bool?,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [PrePrimaryTimetableSlotDto].
+extension PrePrimaryTimetableSlotDtoPatterns on PrePrimaryTimetableSlotDto {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _PrePrimaryTimetableSlotDto value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _PrePrimaryTimetableSlotDto value)  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _PrePrimaryTimetableSlotDto value)?  $default,){
+final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'day_id')  String? dayId, @JsonKey(name: 'start_time')  String? startTime, @JsonKey(name: 'end_time')  String? endTime, @JsonKey(name: 'activity_name')  String? activityName, @JsonKey(name: 'is_break')  bool? isBreak)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto() when $default != null:
+return $default(_that.id,_that.dayId,_that.startTime,_that.endTime,_that.activityName,_that.isBreak);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'day_id')  String? dayId, @JsonKey(name: 'start_time')  String? startTime, @JsonKey(name: 'end_time')  String? endTime, @JsonKey(name: 'activity_name')  String? activityName, @JsonKey(name: 'is_break')  bool? isBreak)  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto():
+return $default(_that.id,_that.dayId,_that.startTime,_that.endTime,_that.activityName,_that.isBreak);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'day_id')  String? dayId, @JsonKey(name: 'start_time')  String? startTime, @JsonKey(name: 'end_time')  String? endTime, @JsonKey(name: 'activity_name')  String? activityName, @JsonKey(name: 'is_break')  bool? isBreak)?  $default,) {final _that = this;
+switch (_that) {
+case _PrePrimaryTimetableSlotDto() when $default != null:
+return $default(_that.id,_that.dayId,_that.startTime,_that.endTime,_that.activityName,_that.isBreak);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _PrePrimaryTimetableSlotDto implements PrePrimaryTimetableSlotDto {
+  const _PrePrimaryTimetableSlotDto({this.id, @JsonKey(name: 'day_id') this.dayId, @JsonKey(name: 'start_time') this.startTime, @JsonKey(name: 'end_time') this.endTime, @JsonKey(name: 'activity_name') this.activityName, @JsonKey(name: 'is_break') this.isBreak});
+  factory _PrePrimaryTimetableSlotDto.fromJson(Map<String, dynamic> json) => _$PrePrimaryTimetableSlotDtoFromJson(json);
+
+@override final  String? id;
+@override@JsonKey(name: 'day_id') final  String? dayId;
+@override@JsonKey(name: 'start_time') final  String? startTime;
+@override@JsonKey(name: 'end_time') final  String? endTime;
+@override@JsonKey(name: 'activity_name') final  String? activityName;
+@override@JsonKey(name: 'is_break') final  bool? isBreak;
+
+/// Create a copy of PrePrimaryTimetableSlotDto
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$PrePrimaryTimetableSlotDtoCopyWith<_PrePrimaryTimetableSlotDto> get copyWith => __$PrePrimaryTimetableSlotDtoCopyWithImpl<_PrePrimaryTimetableSlotDto>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$PrePrimaryTimetableSlotDtoToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _PrePrimaryTimetableSlotDto&&(identical(other.id, id) || other.id == id)&&(identical(other.dayId, dayId) || other.dayId == dayId)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime)&&(identical(other.activityName, activityName) || other.activityName == activityName)&&(identical(other.isBreak, isBreak) || other.isBreak == isBreak));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,id,dayId,startTime,endTime,activityName,isBreak);
+
+@override
+String toString() {
+  return 'PrePrimaryTimetableSlotDto(id: $id, dayId: $dayId, startTime: $startTime, endTime: $endTime, activityName: $activityName, isBreak: $isBreak)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$PrePrimaryTimetableSlotDtoCopyWith<$Res> implements $PrePrimaryTimetableSlotDtoCopyWith<$Res> {
+  factory _$PrePrimaryTimetableSlotDtoCopyWith(_PrePrimaryTimetableSlotDto value, $Res Function(_PrePrimaryTimetableSlotDto) _then) = __$PrePrimaryTimetableSlotDtoCopyWithImpl;
+@override @useResult
+$Res call({
+ String? id,@JsonKey(name: 'day_id') String? dayId,@JsonKey(name: 'start_time') String? startTime,@JsonKey(name: 'end_time') String? endTime,@JsonKey(name: 'activity_name') String? activityName,@JsonKey(name: 'is_break') bool? isBreak
+});
+
+
+
+
+}
+/// @nodoc
+class __$PrePrimaryTimetableSlotDtoCopyWithImpl<$Res>
+    implements _$PrePrimaryTimetableSlotDtoCopyWith<$Res> {
+  __$PrePrimaryTimetableSlotDtoCopyWithImpl(this._self, this._then);
+
+  final _PrePrimaryTimetableSlotDto _self;
+  final $Res Function(_PrePrimaryTimetableSlotDto) _then;
+
+/// Create a copy of PrePrimaryTimetableSlotDto
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? dayId = freezed,Object? startTime = freezed,Object? endTime = freezed,Object? activityName = freezed,Object? isBreak = freezed,}) {
+  return _then(_PrePrimaryTimetableSlotDto(
+id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as String?,dayId: freezed == dayId ? _self.dayId : dayId // ignore: cast_nullable_to_non_nullable
+as String?,startTime: freezed == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
+as String?,endTime: freezed == endTime ? _self.endTime : endTime // ignore: cast_nullable_to_non_nullable
+as String?,activityName: freezed == activityName ? _self.activityName : activityName // ignore: cast_nullable_to_non_nullable
+as String?,isBreak: freezed == isBreak ? _self.isBreak : isBreak // ignore: cast_nullable_to_non_nullable
+as bool?,
+  ));
+}
+
+
+}
+
 // dart format on

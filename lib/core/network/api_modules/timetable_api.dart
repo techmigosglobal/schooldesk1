@@ -327,4 +327,23 @@ extension BackendTimetableApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  Future<PrePrimaryTimetableTemplateDto> getPrePrimaryTimetableBySection({
+    required String sectionId,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/timetable/pre-primary/section/$sectionId',
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return PrePrimaryTimetableTemplateDto.fromJson(_asMap(data['data']));
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get pre-primary timetable',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

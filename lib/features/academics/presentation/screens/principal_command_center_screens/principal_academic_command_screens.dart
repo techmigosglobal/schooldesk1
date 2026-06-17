@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
@@ -53,6 +54,9 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
   Map<String, dynamic>? _selectedPeriod;
   bool _routeArgsRead = false;
   String _requestedSectionId = '';
+  PrePrimaryTimetableTemplateDto? _prePrimaryData;
+  bool _loadingPrePrimary = false;
+  String? _prePrimaryError;
 
   @override
   void initState() {
@@ -560,6 +564,9 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
   Widget _buildClassDayView() {
     final row = _selectedClass;
     if (row == null) return _buildHomeView();
+    if (_isPrePrimary(row)) {
+      return _buildPrePrimaryClassDayView();
+    }
     final periods = _periodsForClass(_text(row['section_id']), _selectedDay);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -599,6 +606,9 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
   Widget _buildClassWeekView() {
     final row = _selectedClass;
     if (row == null) return _buildHomeView();
+    if (_isPrePrimary(row)) {
+      return _buildPrePrimaryClassWeekView();
+    }
     final sectionId = _text(row['section_id']);
     final periods = _periodsForClass(sectionId, null);
     return Column(
@@ -636,6 +646,247 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
           icon: const Icon(Icons.calendar_today_outlined),
           label: const Text('View Day Schedule'),
         ),
+      ],
+    );
+  }
+
+  Widget _buildPrePrimaryClassDayView() {
+    final row = _selectedClass;
+    if (row == null) return _buildHomeView();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildClassSummary(row),
+        const SizedBox(height: 14),
+        _buildDayChips(),
+        const SizedBox(height: 14),
+        if (_loadingPrePrimary)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_prePrimaryError != null)
+          _buildClassEmptyState(row)
+        else if (_prePrimaryData == null || _prePrimaryData!.days.isEmpty)
+          _buildClassEmptyState(row)
+        else
+          _buildPrePrimarySchedulePanel(),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: () =>
+              setState(() => _detailMode = _TimetableDetailMode.classWeek),
+          icon: const Icon(Icons.calendar_view_week_rounded),
+          label: const Text('View Full Week'),
+        ),
+        const SizedBox(height: 10),
+        _buildOwnershipNotice(compact: true),
+      ],
+    );
+  }
+
+  Widget _buildPrePrimaryClassWeekView() {
+    final row = _selectedClass;
+    if (row == null) return _buildHomeView();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildClassSummary(row),
+        const SizedBox(height: 14),
+        _buildDayChips(),
+        const SizedBox(height: 14),
+        if (_loadingPrePrimary)
+          const Padding(
+            padding: EdgeInsets.all(32),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_prePrimaryError != null)
+          _buildClassEmptyState(row)
+        else if (_prePrimaryData == null || _prePrimaryData!.days.isEmpty)
+          _buildClassEmptyState(row)
+        else
+          _buildPrePrimaryWeekGrid(),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: () =>
+              setState(() => _detailMode = _TimetableDetailMode.classDay),
+          icon: const Icon(Icons.calendar_today_outlined),
+          label: const Text('View Day Schedule'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrePrimarySchedulePanel() {
+    final dayData = _prePrimaryData!.days.firstWhere(
+      (d) => d.dayOfWeek == _selectedDay,
+      orElse: () => PrePrimaryTimetableDayDto(dayOfWeek: _selectedDay),
+    );
+    final slots = dayData.slots;
+
+    if (slots.isEmpty) {
+      return _buildClassEmptyState(_selectedClass!);
+    }
+
+    return Container(
+      decoration: _panelDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: context.appTheme.outline.withValues(alpha: 0.1),
+                ),
+              ),
+            ),
+            child: Text(
+              '${_dayLabel(_selectedDay)} Activities',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: principalDirectoryText,
+              ),
+            ),
+          ),
+          for (final slot in slots)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: slot.isBreak == true
+                    ? context.appTheme.surfaceVariant
+                        .withValues(alpha: 0.3)
+                    : null,
+                border: Border(
+                  bottom: BorderSide(
+                    color: context.appTheme.outline.withValues(alpha: 0.05),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 100,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.appTheme.primaryContainer
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${slot.startTime} - ${slot.endTime}',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: context.appTheme.primary,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      slot.activityName ?? '',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: slot.isBreak == true
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: slot.isBreak == true
+                                ? principalDirectoryMuted
+                                : principalDirectoryText,
+                            fontStyle: slot.isBreak == true
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrePrimaryWeekGrid() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final day in _prePrimaryData!.days)
+          if (day.slots.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: _panelDecoration(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: context.appTheme.surfaceVariant
+                          .withValues(alpha: 0.3),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: context.appTheme.outline.withValues(alpha: 0.1),
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      _dayLabel(day.dayOfWeek ?? 1),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: principalDirectoryText,
+                          ),
+                    ),
+                  ),
+                  for (final slot in day.slots)
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: context.appTheme.outline.withValues(alpha: 0.05),
+                          ),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              '${slot.startTime} - ${slot.endTime}',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: principalDirectoryMuted,
+                                  ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              slot.activityName ?? '',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                    color: slot.isBreak == true
+                                        ? principalDirectoryMuted
+                                        : principalDirectoryText,
+                                    fontStyle: slot.isBreak == true
+                                        ? FontStyle.italic
+                                        : FontStyle.normal,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
       ],
     );
   }
@@ -1554,13 +1805,54 @@ class _PrincipalTimetableScreenState extends State<PrincipalTimetableScreen> {
     );
   }
 
+  bool _isPrePrimary(Map<String, dynamic> row) {
+    final name = _text(row['class_name']).toLowerCase();
+    return name.contains('playgroup') ||
+        name.contains('nursery') ||
+        name.contains('pp1') ||
+        name.contains('pp2') ||
+        name.contains('lkg') ||
+        name.contains('ukg') ||
+        name.contains('kg') ||
+        name.contains('pre-primary');
+  }
+
+  Future<void> _loadPrePrimaryData(String sectionId) async {
+    setState(() {
+      _loadingPrePrimary = true;
+      _prePrimaryError = null;
+    });
+    try {
+      final data = await BackendApiClient.instance
+          .getPrePrimaryTimetableBySection(sectionId: sectionId);
+      if (!mounted) return;
+      setState(() {
+        _prePrimaryData = data;
+        _loadingPrePrimary = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _prePrimaryError = 'Failed to load pre-primary timetable: $e';
+        _loadingPrePrimary = false;
+      });
+    }
+  }
+
   void _openClass(Map<String, dynamic> row) {
     setState(() {
       _homeMode = _TimetableHomeMode.classes;
       _selectedClass = row;
       _selectedPeriod = null;
       _detailMode = _TimetableDetailMode.classDay;
+      _prePrimaryData = null;
+      _prePrimaryError = null;
+      _loadingPrePrimary = false;
     });
+
+    if (_isPrePrimary(row)) {
+      _loadPrePrimaryData(_text(row['section_id']));
+    }
   }
 
   void _openTeacher(Map<String, dynamic> row) {

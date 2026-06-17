@@ -23,6 +23,7 @@ class PrincipalDashboardScreen extends StatefulWidget {
 
 class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   bool _loading = true;
+  bool _setupLoading = false;
   String? _error;
   int _selectedTab = 0;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
@@ -41,11 +42,49 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
     try {
       final api = BackendApiClient.instance;
+
+      // ── Phase 1: Critical data ──────────────────────────────────────────────
+      // Only 3 calls needed to paint the dashboard. Render immediately.
       final criticalResults = await Future.wait<Object>([
         api.getDashboard('principal'),
         api.getCurrentSchool(),
         api.getProfile(),
       ]);
+
+      final dashboard = Map<String, dynamic>.from(criticalResults[0] as Map);
+      final school = Map<String, dynamic>.from(criticalResults[1] as Map);
+      final profile = criticalResults[2] as UserResponse;
+
+      if (!mounted) return;
+      setState(() {
+        _data = _PrincipalHomeData.fromCritical(
+          dashboard: dashboard,
+          school: school,
+          profile: profile,
+        );
+        _loading = false;
+        _setupLoading = true; // Setup section shows a spinner until phase 2 is done
+      });
+
+      // ── Phase 2: Optional data ──────────────────────────────────────────────
+      // Fires in background after the UI is visible. Does not block rendering.
+      _loadSetupData(api, dashboard, school, profile);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadSetupData(
+    BackendApiClient api,
+    Map<String, dynamic> dashboard,
+    Map<String, dynamic> school,
+    UserResponse profile,
+  ) async {
+    try {
       final optionalResults = await Future.wait<Object>([
         _loadOptional(
           label: 'academic years',
@@ -104,9 +143,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         ),
       ]);
 
-      final dashboard = Map<String, dynamic>.from(criticalResults[0] as Map);
-      final school = Map<String, dynamic>.from(criticalResults[1] as Map);
-      final profile = criticalResults[2] as UserResponse;
+      if (!mounted) return;
+
       final academicYears = optionalResults[0] as List<AcademicYearModel>;
       final grades = optionalResults[1] as List<GradeModel>;
       final sections = optionalResults[2] as List<SectionModel>;
@@ -117,12 +155,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       final timetableSlots = optionalResults[7] as List<Map<String, dynamic>>;
       final notifications = optionalResults[8] as List<Map<String, dynamic>>;
 
-      if (!mounted) return;
       setState(() {
-        _data = _PrincipalHomeData.fromBackend(
+        _data = _data.withSetupData(
           dashboard: dashboard,
           school: school,
-          profile: profile,
           academicYears: academicYears,
           grades: grades,
           sections: sections,
@@ -131,18 +167,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           studentsTotal: students.total,
           feeStructures: feeStructures,
           timetableSlots: timetableSlots,
-          unreadNotifications: notifications
-              .where((row) => row['is_read'] != true)
-              .length,
+          unreadNotifications:
+              notifications.where((row) => row['is_read'] != true).length,
         );
-        _loading = false;
+        _setupLoading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
+      setState(() => _setupLoading = false);
     }
   }
 
@@ -218,13 +250,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               _DashboardSearchBar(
                 onTap: () =>
                     _open(AppRoutes.globalSearch, arguments: 'principal'),
-              ),
-              const SizedBox(height: 18),
-              _OperationalGapsPanel(
-                gaps: _data.operationalGaps,
-                criticalCount: _data.criticalGapCount,
-                warningCount: _data.warningGapCount,
-                onGapTap: _openOperationalGap,
               ),
               const SizedBox(height: 22),
               _SectionTitle('Academics'),
@@ -355,19 +380,31 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               const SizedBox(height: 22),
               _SectionTitle('School Setup'),
               const SizedBox(height: 10),
-              _SetupPreviewPanel(
-                progress: completedSetup / setupTotal,
-                completed: completedSetup,
-                total: setupTotal,
-                steps: _data.setupSteps,
-                onStepTap: (step) {
-                  if (step.route == null) {
-                    _showGoLiveStatus();
-                    return;
-                  }
-                  _open(step.route!);
-                },
-              ),
+              if (_setupLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else
+                _SetupPreviewPanel(
+                  progress: completedSetup / setupTotal,
+                  completed: completedSetup,
+                  total: setupTotal,
+                  steps: _data.setupSteps,
+                  onStepTap: (step) {
+                    if (step.route == null) {
+                      _showGoLiveStatus();
+                      return;
+                    }
+                    _open(step.route!);
+                  },
+                ),
             ],
           ),
         ),
@@ -394,22 +431,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   void _open(String route, {Object? arguments}) {
     Navigator.pushNamed(context, route, arguments: arguments);
-  }
-
-  void _openOperationalGap(_OperationalGap gap) {
-    final route = switch (gap.route) {
-      'guardianDirectory' => AppRoutes.guardianDirectory,
-      'principalClasses' => AppRoutes.principalClasses,
-      'feeMonitoring' => AppRoutes.feeMonitoring,
-      'principalSubjects' => AppRoutes.principalSubjects,
-      'principalTimetable' => AppRoutes.principalTimetable,
-      'staffManagement' => AppRoutes.staffManagement,
-      'principalExams' => AppRoutes.principalExams,
-      'principalAttendance' => AppRoutes.principalAttendance,
-      _ => AppRoutes.principalDashboard,
-    };
-    if (route == AppRoutes.principalDashboard) return;
-    _open(route);
   }
 
   void _showGoLiveStatus() {
@@ -445,9 +466,6 @@ class _PrincipalHomeData {
   final double collectionPct;
   final double totalPaid;
   final int unreadNotifications;
-  final int criticalGapCount;
-  final int warningGapCount;
-  final List<_OperationalGap> operationalGaps;
   final List<_SetupStep> setupSteps;
 
   const _PrincipalHomeData({
@@ -466,9 +484,6 @@ class _PrincipalHomeData {
     required this.collectionPct,
     required this.totalPaid,
     required this.unreadNotifications,
-    required this.criticalGapCount,
-    required this.warningGapCount,
-    required this.operationalGaps,
     required this.setupSteps,
   });
 
@@ -489,17 +504,60 @@ class _PrincipalHomeData {
       collectionPct: 0,
       totalPaid: 0,
       unreadNotifications: 0,
-      criticalGapCount: 0,
-      warningGapCount: 0,
-      operationalGaps: [],
       setupSteps: [],
     );
   }
 
-  factory _PrincipalHomeData.fromBackend({
+  /// Builds essential dashboard data from the 3 fast critical API calls.
+  /// Does not include setup steps — those are loaded separately.
+  factory _PrincipalHomeData.fromCritical({
     required Map<String, dynamic> dashboard,
     required Map<String, dynamic> school,
     required UserResponse profile,
+  }) {
+    final metrics = Map<String, dynamic>.from(
+      dashboard['metrics'] as Map? ?? {},
+    );
+    final fees = Map<String, dynamic>.from(dashboard['fees'] as Map? ?? {});
+    final attendance = Map<String, dynamic>.from(
+      dashboard['today_attendance'] as Map? ?? {},
+    );
+    final schoolName = _text(school['name'], fallback: 'School');
+    final board = _schoolDescriptor(
+      _text(school['affiliation_board']),
+      _text(school['school_type']),
+    );
+
+    return _PrincipalHomeData(
+      principalName: profile.name.trim().isEmpty
+          ? 'School Principal'
+          : profile.name.trim(),
+      schoolName: schoolName,
+      schoolBoard: board.isEmpty ? 'School setup' : board,
+      schoolLogoUrl: _assetUrl(_text(school['logo_url'])),
+      schoolBannerUrl: _assetUrl(
+        _text(
+          school['banner_url'] ?? school['cover_url'] ?? school['image_url'],
+        ),
+      ),
+      totalStudents: _intValue(metrics['total_students'], 0),
+      totalStaff: _intValue(metrics['total_staff'], 0),
+      totalClasses: _intValue(metrics['total_classes'], 0),
+      pendingApprovals: _intValue(metrics['pending_approvals'], 0),
+      attendancePct: _doubleValue(attendance['attendance_pct']),
+      attendancePresent: _doubleValue(attendance['present']).round(),
+      attendanceMarked: _doubleValue(attendance['marked']).round(),
+      collectionPct: _doubleValue(fees['collection_pct']),
+      totalPaid: _doubleValue(fees['total_paid']),
+      unreadNotifications: 0,
+      setupSteps: const [],
+    );
+  }
+
+  /// Merges in background setup data and returns a new instance.
+  _PrincipalHomeData withSetupData({
+    required Map<String, dynamic> dashboard,
+    required Map<String, dynamic> school,
     required List<AcademicYearModel> academicYears,
     required List<GradeModel> grades,
     required List<SectionModel> sections,
@@ -510,24 +568,7 @@ class _PrincipalHomeData {
     required List<Map<String, dynamic>> timetableSlots,
     required int unreadNotifications,
   }) {
-    final metrics = Map<String, dynamic>.from(
-      dashboard['metrics'] as Map? ?? {},
-    );
-    final fees = Map<String, dynamic>.from(dashboard['fees'] as Map? ?? {});
-    final attendance = Map<String, dynamic>.from(
-      dashboard['today_attendance'] as Map? ?? {},
-    );
-    final operationalGapSummary = Map<String, dynamic>.from(
-      dashboard['operational_gaps'] as Map? ?? {},
-    );
-    final operationalGaps = _OperationalGap.listFrom(
-      operationalGapSummary['items'],
-    );
     final schoolName = _text(school['name'], fallback: 'School');
-    final board = _schoolDescriptor(
-      _text(school['affiliation_board']),
-      _text(school['school_type']),
-    );
     final registered =
         _text(school['id']).isNotEmpty ||
         _text(school['registration_number']).isNotEmpty;
@@ -552,33 +593,28 @@ class _PrincipalHomeData {
       hasStudents,
       hasFees,
       hasTimetable,
-    ].every((value) => value);
+    ].every((v) => v);
+
+    final metrics = Map<String, dynamic>.from(
+      dashboard['metrics'] as Map? ?? {},
+    );
 
     return _PrincipalHomeData(
-      principalName: profile.name.trim().isEmpty
-          ? 'School Principal'
-          : profile.name.trim(),
-      schoolName: schoolName,
-      schoolBoard: board.isEmpty ? 'School setup' : board,
-      schoolLogoUrl: _assetUrl(_text(school['logo_url'])),
-      schoolBannerUrl: _assetUrl(
-        _text(
-          school['banner_url'] ?? school['cover_url'] ?? school['image_url'],
-        ),
-      ),
+      principalName: principalName,
+      schoolName: this.schoolName,
+      schoolBoard: schoolBoard,
+      schoolLogoUrl: schoolLogoUrl,
+      schoolBannerUrl: schoolBannerUrl,
       totalStudents: _intValue(metrics['total_students'], studentsTotal),
       totalStaff: _intValue(metrics['total_staff'], staffTotal),
       totalClasses: _intValue(metrics['total_classes'], sections.length),
-      pendingApprovals: _intValue(metrics['pending_approvals'], 0),
-      attendancePct: _doubleValue(attendance['attendance_pct']),
-      attendancePresent: _doubleValue(attendance['present']).round(),
-      attendanceMarked: _doubleValue(attendance['marked']).round(),
-      collectionPct: _doubleValue(fees['collection_pct']),
-      totalPaid: _doubleValue(fees['total_paid']),
+      pendingApprovals: pendingApprovals,
+      attendancePct: attendancePct,
+      attendancePresent: attendancePresent,
+      attendanceMarked: attendanceMarked,
+      collectionPct: collectionPct,
+      totalPaid: totalPaid,
       unreadNotifications: unreadNotifications,
-      criticalGapCount: _intValue(operationalGapSummary['critical'], 0),
-      warningGapCount: _intValue(operationalGapSummary['warning'], 0),
-      operationalGaps: operationalGaps,
       setupSteps: [
         _SetupStep(
           title: 'School Registration',
@@ -690,55 +726,6 @@ class _SetupStep {
   final bool isComplete;
 
   const _SetupStep({required this.title, this.route, required this.isComplete});
-}
-
-class _OperationalGap {
-  final String category;
-  final String severity;
-  final String title;
-  final String message;
-  final String actionLabel;
-  final String route;
-  final String entityLabel;
-  final int count;
-
-  const _OperationalGap({
-    required this.category,
-    required this.severity,
-    required this.title,
-    required this.message,
-    required this.actionLabel,
-    required this.route,
-    required this.entityLabel,
-    required this.count,
-  });
-
-  factory _OperationalGap.fromJson(Map<String, dynamic> json) {
-    return _OperationalGap(
-      category: _PrincipalHomeData._text(json['category'], fallback: 'Setup'),
-      severity: _PrincipalHomeData._text(json['severity'], fallback: 'warning'),
-      title: _PrincipalHomeData._text(json['title'], fallback: 'Gap found'),
-      message: _PrincipalHomeData._text(
-        json['message'],
-        fallback: 'Review this setup gap.',
-      ),
-      actionLabel: _PrincipalHomeData._text(
-        json['action_label'],
-        fallback: 'Review',
-      ),
-      route: _PrincipalHomeData._text(json['route']),
-      entityLabel: _PrincipalHomeData._text(json['entity_label']),
-      count: _PrincipalHomeData._intValue(json['count'], 1),
-    );
-  }
-
-  static List<_OperationalGap> listFrom(Object? value) {
-    if (value is! List) return const [];
-    return value
-        .whereType<Map>()
-        .map((row) => _OperationalGap.fromJson(Map<String, dynamic>.from(row)))
-        .toList(growable: false);
-  }
 }
 
 class _PrincipalHomePattern extends StatelessWidget {
@@ -1289,212 +1276,6 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _OperationalGapsPanel extends StatelessWidget {
-  final List<_OperationalGap> gaps;
-  final int criticalCount;
-  final int warningCount;
-  final ValueChanged<_OperationalGap> onGapTap;
-
-  const _OperationalGapsPanel({
-    required this.gaps,
-    required this.criticalCount,
-    required this.warningCount,
-    required this.onGapTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final total = gaps.length;
-    final visible = gaps.take(4).toList();
-    return Material(
-      color: context.appTheme.surface,
-      borderRadius: BorderRadius.circular(16),
-      elevation: 3,
-      shadowColor: const Color(0x160F172A),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: total == 0
-                ? Color(0xFFD1FAE5)
-                : Color(0xFFFED7AA),
-          ),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: total == 0
-                ? [context.appTheme.surface, Color(0xFFF0FDF4)]
-                : [context.appTheme.surface, Color(0xFFFFF7ED)],
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: total == 0
-                        ? const Color(0xFFDCFCE7)
-                        : const Color(0xFFFFEDD5),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: Icon(
-                    total == 0
-                        ? Icons.verified_rounded
-                        : Icons.warning_amber_rounded,
-                    color: total == 0
-                        ? const Color(0xFF16A34A)
-                        : const Color(0xFFF97316),
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        total == 0 ? 'No Operational Gaps' : 'Gaps to Fill',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: const Color(0xFF0F172A),
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        total == 0
-                            ? 'Core class, fee, guardian, subject, and timetable links look complete.'
-                            : '$total active gap${total == 1 ? '' : 's'}: $criticalCount critical, $warningCount warning.',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF64748B),
-                          fontWeight: FontWeight.w600,
-                          height: 1.25,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (visible.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              for (final gap in visible) ...[
-                _OperationalGapRow(gap: gap, onTap: () => onGapTap(gap)),
-                if (gap != visible.last) const SizedBox(height: 8),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OperationalGapRow extends StatelessWidget {
-  final _OperationalGap gap;
-  final VoidCallback onTap;
-
-  const _OperationalGapRow({required this.gap, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = switch (gap.severity) {
-      'critical' => const Color(0xFFDC2626),
-      'info' => const Color(0xFF2563EB),
-      _ => const Color(0xFFF97316),
-    };
-    final icon = switch (gap.category) {
-      'Guardians' => Icons.family_restroom_rounded,
-      'Classes' => Icons.maps_home_work_rounded,
-      'Fees' => Icons.account_balance_wallet_rounded,
-      'Subjects' => Icons.menu_book_rounded,
-      'Timetable' => Icons.calendar_month_rounded,
-      'Staff' => Icons.co_present_rounded,
-      'Exams' => Icons.assignment_rounded,
-      'Attendance' => Icons.how_to_reg_rounded,
-      _ => Icons.task_alt_rounded,
-    };
-    return Material(
-      color: const Color(0xFFF8FAFC),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      gap.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF0F172A),
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      gap.message,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF64748B),
-                        fontWeight: FontWeight.w600,
-                        height: 1.25,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      gap.actionLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Icon(Icons.chevron_right_rounded, color: color, size: 22),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _AcademicModuleGrid extends StatelessWidget {
   final List<_AcademicModuleItem> items;
