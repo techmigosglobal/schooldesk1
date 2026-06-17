@@ -13,7 +13,7 @@ FROM alpine:3.21
 WORKDIR /app
 RUN apk add --no-cache ca-certificates curl tzdata
 RUN addgroup -S app && adduser -S app -G app
-RUN mkdir -p /app/uploads/avatars /app/uploads/schools /app/uploads/exports && chown -R app:app /app/uploads
+RUN mkdir -p /app/data /app/uploads/avatars /app/uploads/schools /app/uploads/exports && chown -R app:app /app
 COPY --from=builder --chown=app:app /out/main /app/main
 COPY --from=builder --chown=app:app /out/seed /app/seed
 USER app
