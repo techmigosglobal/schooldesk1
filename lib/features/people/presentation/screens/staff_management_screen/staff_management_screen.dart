@@ -656,7 +656,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
@@ -1149,8 +1151,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       entityId: staffId,
       status: 'draft',
       payload: afterSnapshot,
-      beforeSnapshot:
-          _staffById(staffId)?.toMap() ?? const <String, dynamic>{},
+      beforeSnapshot: _staffById(staffId)?.toMap() ?? const <String, dynamic>{},
       afterSnapshot: afterSnapshot,
     );
     await _submitCreatedApprovalRequest(request);
@@ -1387,9 +1388,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          _isAdminOwner
-              ? 'Submit Staff Removal for Approval'
-              : 'Remove Staff',
+          _isAdminOwner ? 'Submit Staff Removal for Approval' : 'Remove Staff',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w900),
         ),
         content: Text(
@@ -1404,7 +1403,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: Text(_isAdminOwner ? 'Submit for Approval' : 'Remove'),
           ),
         ],
@@ -1842,7 +1843,6 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   static const List<String> _designations = [
     'Teacher',
     'Co Teacher',
-    'Admin',
     'Staff',
     'Support Staff',
     'PE',
@@ -2790,9 +2790,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
   }
 
   List<String> get _roleOptions {
-    final options = _isAdminOwner
-        ? <String>['Teacher']
-        : <String>['Teacher', 'Admin'];
+    final options = <String>['Teacher'];
     if (_accountRole.trim().isNotEmpty && !options.contains(_accountRole)) {
       options.add(_accountRole);
     }
@@ -3526,8 +3524,11 @@ class _DetailChipSection extends StatelessWidget {
                 .map(
                   (value) => Chip(
                     label: Text(value, overflow: TextOverflow.ellipsis),
-                    backgroundColor: context.appTheme.primaryContainer.withAlpha(90),
-                    side: BorderSide(color: context.appTheme.primary.withAlpha(50)),
+                    backgroundColor: context.appTheme.primaryContainer
+                        .withAlpha(90),
+                    side: BorderSide(
+                      color: context.appTheme.primary.withAlpha(50),
+                    ),
                   ),
                 )
                 .toList(),

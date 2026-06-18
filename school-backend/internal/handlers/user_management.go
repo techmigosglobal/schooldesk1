@@ -56,7 +56,7 @@ func (h *UserManagementHandler) CreateUser(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "failed to hash password")
 		return
 	}
-	requestApproval := req.RequestPrincipalApproval && strings.EqualFold(c.GetString("role_name"), "Admin")
+	requestApproval := false
 	isActive := !requestApproval
 	var user models.User
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {

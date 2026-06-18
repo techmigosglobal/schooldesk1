@@ -141,7 +141,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       floatingActionButton: DashboardFabWidget(
         role: widget.ownerRole == 'principal' 
             ? DashboardRole.principal 
-            : DashboardRole.admin,
+            : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: SingleChildScrollView(

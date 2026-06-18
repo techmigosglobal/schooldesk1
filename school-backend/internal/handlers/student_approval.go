@@ -26,9 +26,6 @@ func (h *StudentApprovalHandler) List(c *gin.Context) {
 	query := database.DB.
 		Where("school_id = ? AND resource = ?", scopedSchoolID(c), studentApprovalResource).
 		Order("created_at DESC")
-	if strings.EqualFold(c.GetString("role_name"), "Admin") {
-		query = query.Where("created_by = ?", c.GetString("user_id"))
-	}
 	if err := query.Find(&rows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load student approvals")
 		return

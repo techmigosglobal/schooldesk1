@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -81,7 +80,11 @@ class BulkCsvImportService {
     final schema = _schema(target);
     await Clipboard.setData(ClipboardData(text: schema.template));
     if (context.mounted) {
-      _snack(context, '${schema.label} CSV template copied.', context.appTheme.success);
+      _snack(
+        context,
+        '${schema.label} CSV template copied.',
+        context.appTheme.success,
+      );
     }
   }
 
@@ -318,27 +321,12 @@ class BulkCsvImportService {
       }
     }
 
-    if (target == BulkCsvImportTarget.classes && created > 0) {
-      warnings.add(
-        'Class, subject, and fee data was imported. Timetable slots are not generated from the Principal class import because timetable writes are Admin-owned.',
-      );
-      suggestions.add(
-        'Ask an Admin to open Timetable Builder and upload this same all-features class CSV with Generate from class CSV.',
-      );
-    }
-
     final actions = <_BulkImportAction>[
       if (target == BulkCsvImportTarget.classTimetables && created > 0)
         const _BulkImportAction(
           label: 'Open timetable grid',
           route: AppRoutes.adminTimetable,
           icon: Icons.calendar_view_week_rounded,
-        )
-      else if (target == BulkCsvImportTarget.classes && created > 0)
-        const _BulkImportAction(
-          label: 'Review timetables',
-          route: AppRoutes.principalTimetable,
-          icon: Icons.fact_check_outlined,
         ),
     ];
 
@@ -1233,23 +1221,13 @@ class BulkCsvImportService {
         'Fix the highlighted CSV rows and run the Class Hub dry-run again.',
       if (importedRows > 0)
         'Review Class Hub, Subjects, and Fees; all three now read the imported backend setup.',
-      if (importedRows > 0)
-        'Timetable generation remains on the Admin timetable path because timetable writes are Admin-owned.',
     ];
     return _BulkImportResult(
       created: importedRows,
       failures: failures,
       warnings: _unique(warnings),
       suggestions: _unique(suggestions),
-      actions: importedRows > 0
-          ? const [
-              _BulkImportAction(
-                label: 'Review timetables',
-                route: AppRoutes.principalTimetable,
-                icon: Icons.fact_check_outlined,
-              ),
-            ]
-          : const [],
+      actions: const [],
     );
   }
 

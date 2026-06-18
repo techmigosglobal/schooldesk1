@@ -32,9 +32,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   final List<Map<String, dynamic>> _users = [];
   final List<Map<String, dynamic>> _activities = [];
 
-  List<String> get _manageableRoles => widget.ownerRole == 'principal'
-      ? ['Admin', 'Teacher', 'Parent']
-      : ['Teacher', 'Parent'];
+  List<String> get _manageableRoles => const ['Teacher', 'Parent'];
 
   bool get _isPrincipalOwner => widget.ownerRole == 'principal';
 
@@ -49,17 +47,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       'Approvals',
       'Communication',
       'All Access',
-    ],
-    'Admin': [
-      'Dashboard',
-      'Students',
-      'Teachers',
-      'Fees',
-      'Attendance',
-      'Exams',
-      'Notices',
-      'Reports',
-      'Documents',
     ],
     'Teacher': [
       'Dashboard',
@@ -193,7 +180,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           : 'Provision teacher and parent accounts from backend users',
       drawer: drawer,
       floatingActionButton: DashboardFabWidget(
-        role: _isPrincipalOwner ? DashboardRole.principal : DashboardRole.admin,
+        role: _isPrincipalOwner
+            ? DashboardRole.principal
+            : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
@@ -254,7 +243,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 12),
               ElevatedButton(onPressed: _loadUsers, child: const Text('Retry')),
@@ -379,7 +371,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
                   ? 'Deactivated accounts move to the Inactive filter.'
                   : 'Change the filters to review another account set.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),
@@ -408,7 +403,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Create Admin, Teacher, and Parent login accounts here, or open Staff to create a full staff profile with login credentials.',
+              'Create Teacher and Parent login accounts here, or open Staff to create a full staff profile with login credentials.',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 height: 1.35,
@@ -430,7 +425,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     };
     final roleColors = {
       'Principal': Color(0xFF6C3483),
-      'Admin': context.appTheme.primary,
       'Teacher': context.appTheme.success,
       'Parent': context.appTheme.warning,
     };
@@ -763,7 +757,10 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       return Center(
         child: Text(
           'No user activity yet',
-          style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            color: context.appTheme.muted,
+          ),
         ),
       );
     }
@@ -926,7 +923,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(active ? 'Account activated' : 'Account deactivated'),
-          backgroundColor: active ? context.appTheme.success : context.appTheme.warning,
+          backgroundColor: active
+              ? context.appTheme.success
+              : context.appTheme.warning,
         ),
       );
     } catch (e) {

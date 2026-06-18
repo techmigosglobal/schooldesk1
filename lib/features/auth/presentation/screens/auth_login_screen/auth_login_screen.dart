@@ -88,8 +88,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     switch (roleName.trim().toLowerCase()) {
       case AppConstants.rolePrincipal:
         return AppRoutes.principalDashboard;
-      case AppConstants.roleAdmin:
-        return AppRoutes.adminDashboard;
       case AppConstants.roleTeacher:
         return AppRoutes.teacherDashboard;
       case AppConstants.roleParent:
@@ -182,7 +180,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           runSpacing: 8,
           children: const [
             _RoleChip(label: 'Principal', icon: Icons.account_balance_rounded),
-            _RoleChip(label: 'Admin', icon: Icons.manage_accounts_rounded),
             _RoleChip(label: 'Teacher', icon: Icons.cast_for_education_rounded),
             _RoleChip(label: 'Parent', icon: Icons.family_restroom_rounded),
           ],

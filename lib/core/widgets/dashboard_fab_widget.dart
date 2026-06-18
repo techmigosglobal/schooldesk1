@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 /// Role identifiers for the dashboard FAB
-enum DashboardRole { principal, admin, teacher, parent }
+enum DashboardRole { principal, teacher, parent }
 
 /// A small floating action button that navigates back to the role dashboard.
 /// Place this as the [floatingActionButton] on any non-dashboard screen.
@@ -28,8 +28,6 @@ class DashboardFabWidget extends StatelessWidget {
     switch (role) {
       case DashboardRole.principal:
         return '/principal-dashboard-screen';
-      case DashboardRole.admin:
-        return '/admin-dashboard-screen';
       case DashboardRole.teacher:
         return '/teacher-dashboard-screen';
       case DashboardRole.parent:
@@ -41,8 +39,6 @@ class DashboardFabWidget extends StatelessWidget {
     switch (role) {
       case DashboardRole.principal:
         return context.appTheme.primary;
-      case DashboardRole.admin:
-        return const Color(0xFF0D3B6E);
       case DashboardRole.teacher:
         return const Color(0xFF1A5276);
       case DashboardRole.parent:

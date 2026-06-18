@@ -188,7 +188,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
       title: 'ID Cards',
       subtitle: 'Generate and print student ID cards',
       drawer: AdminDrawer(selectedIndex: 12, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         if (_selectedIds.isNotEmpty)

@@ -89,7 +89,7 @@ class _AdminDrawerState extends State<AdminDrawer> {
   @override
   Widget build(BuildContext context) {
     return SchoolDeskNavigationDrawer(
-      role: SchoolDeskRole.admin,
+      role: SchoolDeskRole.principal,
       portalLabel: 'Admin Portal',
       organizationName: _schoolName,
       organizationSubtitle: _schoolSubtitle,

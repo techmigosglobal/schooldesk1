@@ -18,8 +18,6 @@ func canonicalActorRole(role string) string {
 func canActorManageRole(actorRole, targetRole string) bool {
 	switch canonicalActorRole(actorRole) {
 	case "principal":
-		return targetRole == "Admin" || targetRole == "Teacher" || targetRole == "Parent"
-	case "admin":
 		return targetRole == "Teacher" || targetRole == "Parent"
 	default:
 		return false

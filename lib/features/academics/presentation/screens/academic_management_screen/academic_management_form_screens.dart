@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -84,6 +86,7 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
   late final TextEditingController _startController;
   late final TextEditingController _endController;
   late bool _isCurrent;
+  String _status = 'active';
   bool _saving = false;
 
   @override
@@ -94,12 +97,19 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
       text: _textValue(year['name'] ?? year['year_label']),
     );
     _startController = TextEditingController(
-      text: _dateText(year['start_date'] ?? year['start'], '2026-04-01'),
+      text: _dateText(year['start_date'] ?? year['start'], '2026-06-01'),
     );
     _endController = TextEditingController(
-      text: _dateText(year['end_date'] ?? year['end'], '2027-03-31'),
+      text: _dateText(year['end_date'] ?? year['end'], '2027-04-30'),
     );
     _isCurrent = year['is_current'] == true || year['status'] == 'active';
+    _status = _textValue(
+      year['status'],
+      fallback: _isCurrent ? 'active' : 'upcoming',
+    ).toLowerCase();
+    if (!const ['active', 'upcoming', 'closed'].contains(_status)) {
+      _status = _isCurrent ? 'active' : 'upcoming';
+    }
   }
 
   @override
@@ -112,65 +122,206 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return _AcademicFormScaffold(
-      ownerRole: widget.args.ownerRole,
-      title: widget.args.isEditing ? 'Edit Academic Year' : 'Add Academic Year',
-      subtitle: 'Create or update the backend academic-year record',
-      saving: _saving,
-      saveLabel: widget.args.isEditing ? 'Save year' : 'Create year',
-      onSave: _save,
-      child: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            TextFormField(
-              controller: _nameController,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Year name',
-                hintText: 'Example: 2026-2027',
-              ),
-              validator: (value) => _required(value, 'Enter academic year.'),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7FBFF),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              children: [
+                Container(
+                  height: 88,
+                  color: const Color(0xFF105DDF),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.maybePop(context),
+                        icon: const Icon(
+                          Icons.chevron_left_rounded,
+                          color: Colors.white,
+                          size: 42,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          widget.args.isEditing
+                              ? 'Edit Academic Year'
+                              : 'Create Academic Year',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.dmSans(
+                            color: Colors.white,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 58),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              color: Color(0xFF105DDF),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                'Add a new academic year with start and end dates.',
+                                style: GoogleFonts.dmSans(
+                                  color: const Color(0xFF60708C),
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 30),
+                        _YearTextField(
+                          label: 'Academic Year Name',
+                          required: true,
+                          controller: _nameController,
+                          enabled: !_saving,
+                          hint: '2026 - 2027',
+                          validator: (value) =>
+                              _required(value, 'Enter academic year.'),
+                          helper:
+                              'Use a clear and unique name for the academic year.',
+                        ),
+                        const SizedBox(height: 24),
+                        _YearDateField(
+                          label: 'Start Date',
+                          controller: _startController,
+                          helper: 'Select the first day of the academic year.',
+                          enabled: !_saving,
+                          onTap: () => _pickDate(_startController),
+                        ),
+                        const SizedBox(height: 24),
+                        _YearDateField(
+                          label: 'End Date',
+                          controller: _endController,
+                          helper: 'Select the last day of the academic year.',
+                          enabled: !_saving,
+                          onTap: () => _pickDate(_endController),
+                        ),
+                        const SizedBox(height: 24),
+                        _YearStatusField(
+                          value: _status,
+                          enabled: !_saving,
+                          onChanged: (value) => setState(() {
+                            _status = value ?? 'active';
+                            _isCurrent = _status == 'active'
+                                ? _isCurrent
+                                : false;
+                          }),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFDCE7F5)),
+                          ),
+                          child: Row(
+                            children: [
+                              const CircleAvatar(
+                                radius: 28,
+                                backgroundColor: Color(0xFFE7F0FF),
+                                child: Icon(
+                                  Icons.verified_user_outlined,
+                                  color: Color(0xFF105DDF),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Mark as current academic year',
+                                      style: GoogleFonts.dmSans(
+                                        color: const Color(0xFF08142F),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      'This will set this academic year as the current active year in the system.',
+                                      style: GoogleFonts.dmSans(
+                                        color: const Color(0xFF60708C),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _isCurrent,
+                                activeColor: Colors.white,
+                                activeTrackColor: const Color(0xFF105DDF),
+                                onChanged: _saving
+                                    ? null
+                                    : (value) => setState(() {
+                                        _isCurrent = value;
+                                        if (value) _status = 'active';
+                                      }),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          height: 58,
+                          child: ElevatedButton(
+                            onPressed: _saving ? null : _save,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF105DDF),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(13),
+                              ),
+                            ),
+                            child: _saving
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    'Save Academic Year',
+                                    style: GoogleFonts.dmSans(
+                                      color: Colors.white,
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _startController,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'Start date',
-                helperText: 'YYYY-MM-DD',
-              ),
-              keyboardType: TextInputType.datetime,
-              validator: _dateValidator,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _endController,
-              enabled: !_saving,
-              decoration: const InputDecoration(
-                labelText: 'End date',
-                helperText: 'YYYY-MM-DD',
-              ),
-              keyboardType: TextInputType.datetime,
-              validator: _dateValidator,
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _isCurrent,
-              title: Text(
-                'Set as current year',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                'The active year drives classes, fees, attendance, and events.',
-                style: GoogleFonts.dmSans(fontSize: 12),
-              ),
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() => _isCurrent = value),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -186,19 +337,24 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
     }
     setState(() => _saving = true);
     try {
-      final storage = await BackendDataService.getInstance();
-      await storage.saveAcademicYearRecord({
-        ...?widget.args.year,
-        'id':
-            widget.args.year?['id'] ??
-            'ay${DateTime.now().millisecondsSinceEpoch}',
-        'name': _nameController.text.trim(),
-        'year_label': _nameController.text.trim(),
-        'start_date': _startController.text.trim(),
-        'end_date': _endController.text.trim(),
-        'is_current': _isCurrent,
-        'status': _isCurrent ? 'active' : 'upcoming',
-      });
+      final api = BackendApiClient.instance;
+      final yearId = _textValue(widget.args.year?['id']);
+      if (widget.args.isEditing && yearId.isNotEmpty) {
+        await api.updateAcademicYear(
+          yearId,
+          yearLabel: _nameController.text.trim(),
+          startDate: _startController.text.trim(),
+          endDate: _endController.text.trim(),
+          isCurrent: _isCurrent || _status == 'active',
+        );
+      } else {
+        await api.createAcademicYear(
+          yearLabel: _nameController.text.trim(),
+          startDate: _startController.text.trim(),
+          endDate: _endController.text.trim(),
+          isCurrent: _isCurrent || _status == 'active',
+        );
+      }
       if (!mounted) return;
       Navigator.pop(
         context,
@@ -214,7 +370,204 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final seed = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: seed,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked == null) return;
+    controller.text = DateFormat('yyyy-MM-dd').format(picked);
+  }
 }
+
+class _YearTextField extends StatelessWidget {
+  final String label;
+  final bool required;
+  final TextEditingController controller;
+  final bool enabled;
+  final String hint;
+  final String helper;
+  final String? Function(String?) validator;
+
+  const _YearTextField({
+    required this.label,
+    required this.required,
+    required this.controller,
+    required this.enabled,
+    required this.hint,
+    required this.helper,
+    required this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _YearFieldLabel(label: label, required: required),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: controller,
+          enabled: enabled,
+          validator: validator,
+          style: GoogleFonts.dmSans(
+            color: const Color(0xFF08142F),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+          decoration: _yearInputDecoration(hint: hint),
+        ),
+        const SizedBox(height: 8),
+        Text(helper, style: _yearHelperStyle()),
+      ],
+    );
+  }
+}
+
+class _YearDateField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final String helper;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _YearDateField({
+    required this.label,
+    required this.controller,
+    required this.helper,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _YearFieldLabel(label: label, required: true),
+        const SizedBox(height: 10),
+        TextFormField(
+          controller: controller,
+          readOnly: true,
+          enabled: enabled,
+          validator: _dateValidator,
+          onTap: enabled ? onTap : null,
+          style: GoogleFonts.dmSans(
+            color: const Color(0xFF08142F),
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+          decoration: _yearInputDecoration(
+            prefix: Icons.calendar_today_outlined,
+            suffix: Icons.keyboard_arrow_down_rounded,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(helper, style: _yearHelperStyle()),
+      ],
+    );
+  }
+}
+
+class _YearStatusField extends StatelessWidget {
+  final String value;
+  final bool enabled;
+  final ValueChanged<String?> onChanged;
+
+  const _YearStatusField({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _YearFieldLabel(label: 'Status', required: true),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          onChanged: enabled ? onChanged : null,
+          decoration: _yearInputDecoration(prefix: Icons.circle),
+          items: const [
+            DropdownMenuItem(value: 'active', child: Text('Active')),
+            DropdownMenuItem(value: 'upcoming', child: Text('Upcoming')),
+            DropdownMenuItem(value: 'closed', child: Text('Closed')),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text('Set the academic year status.', style: _yearHelperStyle()),
+      ],
+    );
+  }
+}
+
+class _YearFieldLabel extends StatelessWidget {
+  final String label;
+  final bool required;
+
+  const _YearFieldLabel({required this.label, required this.required});
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        text: label,
+        style: GoogleFonts.dmSans(
+          color: const Color(0xFF08142F),
+          fontSize: 16,
+          fontWeight: FontWeight.w900,
+        ),
+        children: [
+          if (required)
+            const TextSpan(
+              text: ' *',
+              style: TextStyle(color: Color(0xFFDC3B12)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+InputDecoration _yearInputDecoration({
+  String? hint,
+  IconData? prefix,
+  IconData? suffix,
+}) {
+  return InputDecoration(
+    hintText: hint,
+    prefixIcon: prefix == null ? null : Icon(prefix, color: Color(0xFF60708C)),
+    suffixIcon: suffix == null ? null : Icon(suffix, color: Color(0xFF60708C)),
+    filled: true,
+    fillColor: Colors.white,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFDCE7F5)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFFDCE7F5)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: Color(0xFF105DDF), width: 1.4),
+    ),
+  );
+}
+
+TextStyle _yearHelperStyle() => GoogleFonts.dmSans(
+  color: const Color(0xFF60708C),
+  fontSize: 14,
+  fontWeight: FontWeight.w600,
+);
 
 class AcademicSubjectFormScreen extends StatefulWidget {
   final AcademicSubjectFormArgs args;
@@ -795,7 +1148,7 @@ class _AcademicFormScaffold extends StatelessWidget {
           ? AdminDrawer(selectedIndex: 15, onDestinationSelected: (_) {})
           : PrincipalDrawer(selectedIndex: 12, onDestinationSelected: (_) {}),
       floatingActionButton: DashboardFabWidget(
-        role: _isAdminOwner ? DashboardRole.admin : DashboardRole.principal,
+        role: _isAdminOwner ? DashboardRole.principal : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: ListView(

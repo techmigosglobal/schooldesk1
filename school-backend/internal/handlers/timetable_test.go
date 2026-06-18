@@ -137,6 +137,64 @@ func TestCreateTimetableSlotRejectsRoomOverlap(t *testing.T) {
 	}
 }
 
+func TestApplyPrePrimaryClassScheduleCreatesSubjectsMappingsAndSlots(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	assert.NoError(t, database.SetupTestDB())
+	now := time.Date(2026, 6, 1, 9, 0, 0, 0, time.UTC)
+	school := models.School{BaseModel: models.BaseModel{ID: "school-pre-primary"}, Name: "Pre Primary School", SchoolType: "preschool"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-pre-primary"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: now, EndDate: now.AddDate(1, 0, 0), IsCurrent: true, Status: "active"}
+	term := models.Term{BaseModel: models.BaseModel{ID: "term-pre-primary"}, AcademicYearID: year.ID, TermNumber: 1, TermName: "Term 1", StartDate: now, EndDate: now.AddDate(0, 6, 0), IsCurrent: true}
+	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-pre-primary"}, SchoolID: school.ID, GradeName: "Nursery", GradeNumber: 0}
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-pre-primary"}, SchoolID: school.ID, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 30}
+	staff := models.Staff{BaseModel: models.BaseModel{ID: "staff-pre-primary"}, SchoolID: school.ID, StaffCode: "PP-1", FirstName: "Class", LastName: "Teacher", Status: "active"}
+	for _, seed := range []any{&school, &year, &term, &grade, &section, &staff} {
+		assert.NoError(t, database.DB.Create(seed).Error)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"section_id":       section.ID,
+		"academic_year_id": year.ID,
+		"term_id":          term.ID,
+		"staff_id":         staff.ID,
+		"schedule_type":    "nursery",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/timetable/pre-primary/apply", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("school_id", school.ID)
+		c.Set("role_name", "Principal")
+		c.Set("user_id", "principal-pre-primary")
+		c.Next()
+	})
+	r.POST("/timetable/pre-primary/apply", NewTimetableHandler().ApplyPrePrimaryClassSchedule)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("apply pre-primary status=%d body=%s", w.Code, w.Body.String())
+	}
+	var slotCount int64
+	assert.NoError(t, database.DB.Model(&models.TimetableSlot{}).Where("section_id = ?", section.ID).Count(&slotCount).Error)
+	assert.EqualValues(t, 45, slotCount)
+
+	var mappedCount int64
+	assert.NoError(t, database.DB.Model(&models.StaffSubject{}).Where("staff_id = ? AND grade_id = ? AND section_id = ?", staff.ID, grade.ID, section.ID).Count(&mappedCount).Error)
+	assert.EqualValues(t, 9, mappedCount)
+
+	var updatedSection models.Section
+	assert.NoError(t, database.DB.First(&updatedSection, "id = ?", section.ID).Error)
+	if updatedSection.ClassTeacherID == nil || *updatedSection.ClassTeacherID != staff.ID {
+		t.Fatalf("class teacher id=%v, want %s", updatedSection.ClassTeacherID, staff.ID)
+	}
+
+	var firstSlot models.TimetableSlot
+	assert.NoError(t, database.DB.Preload("Subject").First(&firstSlot, "section_id = ? AND day_of_week = ? AND period_number = ?", section.ID, 1, 1).Error)
+	if firstSlot.Subject == nil || firstSlot.Subject.SubjectName != "Welcome" {
+		t.Fatalf("first slot subject=%v, want Welcome", firstSlot.Subject)
+	}
+}
+
 func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -39,10 +39,12 @@ class _AdminPaymentRequestDecisionScreenState
   Widget build(BuildContext context) {
     final request = widget.args.request;
     return SchoolDeskModuleScaffold(
-      title: 'Submit Payment Decision',
-      subtitle: 'Prepare a payment decision for Principal approval',
-      drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      title: 'Payment Decision',
+      subtitle: 'Approve or reject parent-submitted fee payments',
+      drawer: PrincipalDrawer(selectedIndex: 7, onDestinationSelected: (_) {}),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: Form(
         child: ListView(
@@ -59,8 +61,8 @@ class _AdminPaymentRequestDecisionScreenState
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: _decision == 'approved'
-                    ? 'Approval recommendation note'
-                    : 'Rejection recommendation reason',
+                    ? 'Approval note'
+                    : 'Rejection reason',
                 alignLabelWithHint: true,
               ),
             ),
@@ -82,7 +84,7 @@ class _AdminPaymentRequestDecisionScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : 'Submit ${_title(_decision)} for Principal Approval',
+                    : '${_title(_decision)} Payment Request',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -224,7 +226,9 @@ class _AdminPaymentRequestDecisionScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment decision submitted for Principal approval.'),
+          content: Text(
+            'Payment request ${_decision == 'approved' ? 'approved' : 'rejected'}.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );

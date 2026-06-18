@@ -975,7 +975,7 @@ class _ExamFormScaffold extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       drawer: AdminDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: ListView(
         padding: const EdgeInsets.all(16),

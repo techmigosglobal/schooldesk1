@@ -1449,7 +1449,9 @@ class _SubjectsTabState extends State<_SubjectsTab> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],
@@ -1884,7 +1886,9 @@ class _CurriculumCard extends StatelessWidget {
                             ? Icons.visibility_rounded
                             : Icons.visibility_off_outlined,
                         size: 14,
-                        color: isPublished ? context.appTheme.success : context.appTheme.muted,
+                        color: isPublished
+                            ? context.appTheme.success
+                            : context.appTheme.muted,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -2603,21 +2607,21 @@ class _AcademicClassCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    SizedBox(width: compact ? 8 : 10),
-                    Expanded(
-                      child: _AcademicClassActionButton(
-                        icon: Icons.calendar_month_outlined,
-                        label: 'Timetable',
-                        color: const Color(0xFFFF6E1F),
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          role == 'admin'
-                              ? AppRoutes.adminTimetable
-                              : AppRoutes.principalTimetable,
-                          arguments: args,
+                    if (role == 'admin') ...[
+                      SizedBox(width: compact ? 8 : 10),
+                      Expanded(
+                        child: _AcademicClassActionButton(
+                          icon: Icons.calendar_month_outlined,
+                          label: 'Timetable',
+                          color: const Color(0xFFFF6E1F),
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.adminTimetable,
+                            arguments: args,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ],
@@ -3181,7 +3185,9 @@ Future<bool?> _confirmAcademicDelete(
         ),
         FilledButton.icon(
           onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+          style: FilledButton.styleFrom(
+            backgroundColor: context.appTheme.error,
+          ),
           icon: const Icon(Icons.delete_outline_rounded, size: 18),
           label: const Text('Delete'),
         ),

@@ -72,9 +72,6 @@ class SchoolDeskUiIllustrations {
   static const principalGuardians = 'assets/images/ui/principal-guardians.svg';
   static const principalClasses = 'assets/images/ui/principal-classes.svg';
   static const principalSubjects = 'assets/images/ui/principal-subjects.svg';
-  static const principalTimetable = 'assets/images/ui/principal-timetable.svg';
-  static const principalExams = 'assets/images/ui/principal-exams.svg';
-  static const principalResults = 'assets/images/ui/principal-results.svg';
   static const principalFees = 'assets/images/ui/principal-fees.svg';
   static const principalEvents = 'assets/images/ui/principal-events.svg';
 }

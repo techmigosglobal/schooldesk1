@@ -54,7 +54,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
       BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
 
   bool get _hasRoleShell =>
-      const {'principal', 'admin', 'teacher', 'parent'}.contains(_role);
+      const {'principal', 'teacher', 'parent'}.contains(_role);
 
   @override
   void initState() {
@@ -220,7 +220,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
 
   void _navigateGlobal(String route, {Object? arguments}) {
     final navigator = Navigator.of(context);
-    final role = _role.isEmpty ? 'admin' : _role;
+    final role = _role.isEmpty ? 'principal' : _role;
     final target = route == AppRoutes.initial
         ? RouteAccessGuard.dashboardForRole(role) ?? AppRoutes.landingPage
         : route;

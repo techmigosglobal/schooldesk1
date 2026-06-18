@@ -253,9 +253,13 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               icon: const Icon(Icons.calendar_month_rounded, size: 20),
             ),
           PopupMenuButton<String>(
-            tooltip: 'Admin timetable tools',
+            tooltip: 'Principal timetable tools',
             onSelected: _handleAdminTool,
             itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'pre_primary',
+                child: Text('Apply preschool schedule'),
+              ),
               PopupMenuItem(
                 value: 'generate',
                 child: Text('Generate Timetable'),
@@ -349,7 +353,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           constraints: const BoxConstraints(minHeight: 50),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF0877D8) : context.appTheme.surface,
+            color: selected
+                ? const Color(0xFF0877D8)
+                : context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
@@ -368,7 +374,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w900,
-                  color: selected ? context.appTheme.surface : const Color(0xFF172B3A),
+                  color: selected
+                      ? context.appTheme.surface
+                      : const Color(0xFF172B3A),
                 ),
               ),
             ],
@@ -635,7 +643,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Make timetable changes from Classes Hub > Step 3 (Timetable) or Admin timetable tools.',
+          'Make timetable changes from Classes Hub > Step 3 (Timetable) or Principal timetable tools.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: const Color(0xFF667989),
@@ -1247,6 +1255,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         runSpacing: 8,
         children: [
           _ActionChipButton(
+            icon: Icons.child_care_rounded,
+            label: 'Preschool Schedule',
+            onTap: _openPrePrimaryScheduleSheet,
+          ),
+          _ActionChipButton(
             icon: Icons.auto_awesome_rounded,
             label: 'Generate Timetable',
             onTap: _openGenerateTimetableForm,
@@ -1513,6 +1526,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   void _handleAdminTool(String value) {
     switch (value) {
+      case 'pre_primary':
+        _openPrePrimaryScheduleSheet();
       case 'generate':
         _openGenerateTimetableForm();
       case 'import':
@@ -1608,6 +1623,261 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       BulkCsvImportTarget.classTimetables,
     );
     if (imported && mounted) await _loadBackendTimetable();
+  }
+
+  Future<void> _openPrePrimaryScheduleSheet() async {
+    final section = _selectedSection;
+    final year = _currentAcademicYear;
+    if (section == null || year == null) {
+      _showSnack('Select a class and academic year before applying schedule.');
+      return;
+    }
+    if (_currentTermId.isEmpty) {
+      _showSnack(
+        'Create a term for this academic year before applying schedule.',
+      );
+      return;
+    }
+    if (_staff.isEmpty) {
+      _showSnack('Create an active teacher before applying schedule.');
+      return;
+    }
+
+    var scheduleType = _defaultPrePrimaryScheduleType(section);
+    var teacherId = section.classTeacherId.trim().isNotEmpty
+        ? section.classTeacherId.trim()
+        : _staff.first.id;
+    var saving = false;
+
+    final result = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final preset = _prePrimaryPresetPreview(scheduleType);
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  18,
+                  8,
+                  18,
+                  18 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Apply Preschool Schedule',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Close',
+                            onPressed: saving
+                                ? null
+                                : () => Navigator.pop(sheetContext),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        _selectedClassLabel,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF667989),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        initialValue: scheduleType,
+                        decoration: const InputDecoration(
+                          labelText: 'Schedule type',
+                          prefixIcon: Icon(Icons.child_care_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'playgroup',
+                            child: Text('Playgroup'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'nursery',
+                            child: Text('Nursery'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'junior_kg',
+                            child: Text('Junior KG'),
+                          ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) => setSheetState(
+                                () => scheduleType = value ?? scheduleType,
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue:
+                            _staff.any((staff) => staff.id == teacherId)
+                            ? teacherId
+                            : _staff.first.id,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Class teacher for all periods',
+                          prefixIcon: Icon(Icons.person_pin_outlined),
+                        ),
+                        items: [
+                          for (final staff in _staff)
+                            DropdownMenuItem(
+                              value: staff.id,
+                              child: Text(_staffLabel(staff)),
+                            ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) => setSheetState(
+                                () => teacherId = value ?? teacherId,
+                              ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6FAFF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFDDE7F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Monday-Friday preview',
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(fontWeight: FontWeight.w900),
+                            ),
+                            const SizedBox(height: 8),
+                            for (final slot in preset)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 92,
+                                      child: Text(
+                                        '${slot.$1}-${slot.$2}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                              color: const Color(0xFF667989),
+                                            ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        slot.$3,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        'This replaces existing Monday-Friday periods for this class and maps every activity to the selected teacher.',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: const Color(0xFF667989),
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                setSheetState(() => saving = true);
+                                try {
+                                  final data = await BackendApiClient.instance
+                                      .applyPrePrimaryClassSchedule(
+                                        sectionId: section.id,
+                                        academicYearId: year.id,
+                                        termId: _currentTermId,
+                                        staffId: teacherId,
+                                        scheduleType: scheduleType,
+                                      );
+                                  if (sheetContext.mounted) {
+                                    Navigator.pop(sheetContext, data);
+                                  }
+                                } catch (error) {
+                                  setSheetState(() => saving = false);
+                                  if (sheetContext.mounted) {
+                                    ScaffoldMessenger.of(
+                                      sheetContext,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Unable to apply schedule: $error',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        icon: saving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.done_all_rounded),
+                        label: Text(saving ? 'Applying...' : 'Apply to Class'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+    await _loadBackendTimetable();
+    if (!mounted) return;
+    final slots = _int(result['total_slots']);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Preschool schedule applied: $slots periods linked to teacher and class.',
+        ),
+        backgroundColor: context.appTheme.success,
+      ),
+    );
   }
 
   Future<void> _openAddPeriodForm() async {
@@ -2456,6 +2726,60 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     return cleaned.isEmpty ? 'timetable' : cleaned;
   }
 
+  String _defaultPrePrimaryScheduleType(SectionModel section) {
+    final label = '${section.gradeName} ${section.sectionName}'.toLowerCase();
+    if (label.contains('nursery')) return 'nursery';
+    if (label.contains('junior') ||
+        label.contains('kg') ||
+        label.contains('lkg')) {
+      return 'junior_kg';
+    }
+    if (label.contains('play')) return 'playgroup';
+    return 'playgroup';
+  }
+
+  List<(String, String, String)> _prePrimaryPresetPreview(String scheduleType) {
+    switch (scheduleType) {
+      case 'nursery':
+        return const [
+          ('09:00', '09:20', 'Welcome'),
+          ('09:20', '09:50', 'Circle Time'),
+          ('09:50', '10:10', 'IGNITE Activity Room'),
+          ('10:10', '10:30', 'Snack Time'),
+          ('10:30', '11:00', 'Story Time'),
+          ('11:00', '11:20', 'IGNITE Math'),
+          ('11:20', '11:50', 'Fit & Fabulous'),
+          ('11:50', '12:10', 'IGNITE Lang'),
+          ('12:10', '12:30', 'Recall & Dispersal'),
+        ];
+      case 'junior_kg':
+        return const [
+          ('09:00', '09:20', 'Welcome'),
+          ('09:20', '09:50', 'Circle Time'),
+          ('09:50', '10:10', 'IGNITE Lang'),
+          ('10:10', '10:30', 'Snack Time'),
+          ('10:30', '11:00', 'IGNITE Activity Room'),
+          ('11:00', '11:20', 'IGNITE Life Skill'),
+          ('11:20', '11:50', 'Fit & Fabulous'),
+          ('11:50', '12:10', 'IGNITE Math'),
+          ('12:10', '12:30', 'Recall & Dispersal'),
+        ];
+      case 'playgroup':
+      default:
+        return const [
+          ('09:00', '09:20', 'Welcome'),
+          ('09:20', '09:50', 'Circle Time'),
+          ('09:50', '10:10', 'Snack Time'),
+          ('10:10', '10:30', 'IGNITE Math'),
+          ('10:30', '11:00', 'Fit & Fabulous'),
+          ('11:00', '11:20', 'IGNITE Activity Room'),
+          ('11:20', '11:50', 'IGNITE Lang'),
+          ('11:50', '12:10', 'Story Time / Rhymes'),
+          ('12:10', '12:30', 'Recall & Dispersal'),
+        ];
+    }
+  }
+
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -2682,8 +3006,12 @@ class _ChoiceChipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = selected ? const Color(0xFF0877D8) : context.appTheme.surface;
-    final foreground = selected ? context.appTheme.surface : const Color(0xFF172B3A);
+    final background = selected
+        ? const Color(0xFF0877D8)
+        : context.appTheme.surface;
+    final foreground = selected
+        ? context.appTheme.surface
+        : const Color(0xFF172B3A);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),

@@ -8,49 +8,6 @@ import 'backend_route_sources.dart';
 import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
 
 void main() {
-  test('principal timetable route delegates to read-only command screen', () {
-    final wrapper = File(
-      'lib/features/academics/presentation/screens/timetable_management_screen/timetable_management_screen.dart',
-    ).readAsStringSync();
-    final source = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
-    ).readAsStringSync();
-
-    expect(wrapper, contains('PrincipalTimetableScreen'));
-    expect(wrapper, isNot(contains('createRaw')));
-    expect(source, contains('getPrincipalTimetableOverview'));
-    expect(source, contains('didChangeDependencies'));
-    expect(source, contains('_requestedSectionId'));
-    expect(source, contains('_TimetableDetailMode.classDay'));
-    expect(source, contains('_TimetableHomeMode.classes'));
-    expect(source, contains('_TimetableHomeMode.teachers'));
-    expect(source, contains('_TimetableHomeMode.rooms'));
-    expect(source, contains('_buildOwnershipNotice'));
-    expect(
-      source,
-      contains('Only live backend timetable rows are shown here.'),
-    );
-  });
-
-  test('principal timetable routes setup changes to Classes Hub', () {
-    final source = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
-    ).readAsStringSync();
-    final wrapper = File(
-      'lib/features/academics/presentation/screens/timetable_management_screen/timetable_management_screen.dart',
-    ).readAsStringSync();
-
-    expect(source, contains('Go to Classes Hub'));
-    expect(source, contains("class_hub_action': 'timetable'"));
-    expect(source, contains("source': 'principal_timetable'"));
-    expect(source, isNot(contains('createPrincipalTimetableAction')));
-    expect(source, isNot(contains('Timetable review saved')));
-    expect(wrapper, isNot(contains('Add Period')));
-    expect(wrapper, isNot(contains('_openAddPeriodForm')));
-    expect(wrapper, isNot(contains('_openEditPeriodForm')));
-    expect(wrapper, isNot(contains('_deletePeriod')));
-  });
-
   test('fee monitoring concession cards use backend field names safely', () {
     final source = File(
       'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
@@ -199,13 +156,12 @@ void main() {
     expect(screen, contains('Create Class'));
     expect(screen, contains('Classes Setup'));
     expect(screen, contains('Subjects creation and assigning teachers'));
-    expect(screen, contains('Timetable setup'));
     expect(screen, contains('Fee setup'));
     expect(screen, contains('Review'));
-    expect(
-      screen.indexOf('Timetable setup'),
-      lessThan(screen.indexOf('Fee setup')),
-    );
+    expect(screen, isNot(contains("value: 'setup_timetable'")));
+    expect(screen, isNot(contains("value: 'view_timetables'")));
+    expect(screen, isNot(contains("AppRoutes.principalTimetable")));
+    expect(screen, isNot(contains("label: 'Timetable\\nSetup'")));
     expect(screen, contains('Save & Continue'));
     expect(screen, contains('Assign Subjects'));
     expect(screen, contains('Class Details'));
@@ -226,29 +182,12 @@ void main() {
     expect(screen, contains('Available Subjects'));
     expect(screen, contains("Can't find the subject?"));
     expect(screen, contains('Subject Color'));
-    expect(screen, contains('Continue Setup'));
-    expect(screen, contains('Timetable Setup'));
-    expect(screen, contains('Generate class timetable'));
-    expect(screen, contains('Preview Timetable'));
-    expect(screen, contains('Generate Timetable'));
-    expect(screen, contains('Schedule pattern'));
-    expect(screen, contains('Breaks'));
-    expect(screen, contains('Add breaks'));
-    expect(screen, contains('Prepare default term'));
-    expect(screen, contains('_ensureDefaultTerm'));
-    expect(screen, contains('_TimetableSetupSection'));
-    expect(screen, contains('View timetables'));
-    expect(screen, contains('Setup timetable'));
-    expect(screen, contains('_openTimetableSetup'));
-    expect(screen, contains('Open timetable'));
     expect(screen, contains('Continue to fees'));
+    expect(screen, isNot(contains('View timetables')));
+    expect(screen, isNot(contains('Setup timetable')));
+    expect(screen, isNot(contains('_openTimetableSetup')));
+    expect(screen, isNot(contains('Open timetable')));
     expect(screen, isNot(contains('Save & Publish')));
-    expect(screen, contains('Create period manually'));
-    expect(screen, contains('_ManualTimetableSlotPanel'));
-    expect(screen, contains('_manualSlotOptions'));
-    expect(screen, contains('createTimetableSlot'));
-    expect(screen, contains('previewSmartTimetable'));
-    expect(screen, contains('generateSmartTimetable'));
     expect(screen, isNot(contains('saveTimetableTemplate')));
     expect(screen, contains('Fees Setup'));
     expect(screen, contains('Step 4 of 5'));
@@ -456,7 +395,10 @@ void main() {
     expect(source, isNot(contains("label: 'Staff Management'")));
     expect(source, isNot(contains("label: 'Student Management'")));
     expect(source, isNot(contains("label: 'User Management'")));
-    expect(source, contains('label: SchoolDeskGlossary.timetableRecords'));
+    expect(
+      source,
+      isNot(contains('label: SchoolDeskGlossary.timetableRecords')),
+    );
     expect(source, contains('label: SchoolDeskGlossary.academicManagement'));
     expect(source, contains('route: AppRoutes.academicManagement'));
     expect(registry, contains('feature: SchoolDeskFeature.syllabusRecords'));
@@ -506,9 +448,9 @@ void main() {
     expect(dashboard, contains("label: 'Attendance'"));
     expect(dashboard, contains('route: AppRoutes.principalAttendance'));
     expect(dashboard, contains("label: 'Subjects'"));
-    expect(dashboard, contains("label: 'Timetable'"));
-    expect(dashboard, contains("label: 'Exam Timetable'"));
-    expect(dashboard, contains("label: 'Results'"));
+    expect(dashboard, isNot(contains("label: 'Timetable'")));
+    expect(dashboard, isNot(contains("label: 'Exam Timetable'")));
+    expect(dashboard, isNot(contains("label: 'Results'")));
     expect(dashboard, contains("label: 'Fees'"));
     expect(dashboard, contains("label: 'Chat Communications'"));
     expect(dashboard, contains('route: AppRoutes.principalChatCommunications'));
@@ -525,9 +467,6 @@ void main() {
       'assets/images/ui/principal-guardians.svg',
       'assets/images/ui/principal-classes.svg',
       'assets/images/ui/principal-subjects.svg',
-      'assets/images/ui/principal-timetable.svg',
-      'assets/images/ui/principal-exams.svg',
-      'assets/images/ui/principal-results.svg',
       'assets/images/ui/principal-fees.svg',
       'assets/images/ui/principal-events.svg',
     ]) {
@@ -560,22 +499,12 @@ void main() {
         contains("AppRoutes.principalChatCommunications: {'principal'}"),
       );
 
-      expect(
-        routes,
-        contains(
-          'principalTimetable: (context) => const PrincipalTimetableScreen()',
-        ),
-      );
-      expect(
-        routes,
-        contains('principalExams: (context) => const PrincipalExamsScreen()'),
-      );
-      expect(
-        routes,
-        contains(
-          'principalResults: (context) => const PrincipalResultsScreen()',
-        ),
-      );
+      expect(routes, isNot(contains('static const String principalTimetable')));
+      expect(routes, isNot(contains('static const String principalExams')));
+      expect(routes, isNot(contains('static const String principalResults')));
+      expect(routes, isNot(contains('PrincipalTimetableScreen()')));
+      expect(routes, isNot(contains('PrincipalExamsScreen()')));
+      expect(routes, isNot(contains('PrincipalResultsScreen()')));
 
       expect(dashboard, contains('AppRoutes.principalAttendance'));
       expect(routes, contains('static const String principalAttendance'));
@@ -590,9 +519,9 @@ void main() {
         'principalExams',
         'principalResults',
       ]) {
-        expect(dashboard, contains('AppRoutes.$route'));
-        expect(routes, contains('static const String $route'));
-        expect(guard, contains("AppRoutes.$route: {'principal'}"));
+        expect(dashboard, isNot(contains('AppRoutes.$route')));
+        expect(routes, isNot(contains('static const String $route')));
+        expect(guard, isNot(contains('AppRoutes.$route')));
       }
 
       expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
@@ -927,166 +856,18 @@ void main() {
     expect(crud, contains('validateGradeSubjectPolicy'));
   });
 
-  test('principal timetable exams and results are command centers', () {
-    final screen = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
-    ).readAsStringSync();
-    final examReview = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_exam_review_screen.dart',
-    ).readAsStringSync();
-    final examMetricTile = examReview
-        .split('class _ExamMetricTile')
-        .last
-        .split('class _ExamIconBadge')
-        .first;
+  test('principal timetable exams and results are not exposed', () {
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final drawer = File(
       'lib/core/widgets/app_navigation.dart',
     ).readAsStringSync();
-    final client = readBackendApiSources();
-    final backendRoutes = readBackendRouteSources();
-    final backend = File(
-      'school-backend/internal/handlers/principal_academic_command.go',
-    ).readAsStringSync();
-    final examHandler = File(
-      'school-backend/internal/handlers/exam.go',
-    ).readAsStringSync();
-    final examModels = File(
-      'school-backend/internal/models/exam.go',
-    ).readAsStringSync();
 
-    expect(routes, contains('PrincipalTimetableScreen'));
-    expect(routes, contains('PrincipalExamsScreen'));
-    expect(routes, contains('PrincipalResultsScreen'));
-    expect(drawer, contains('route: AppRoutes.principalTimetable'));
-    expect(drawer, contains('route: AppRoutes.principalExams'));
-    expect(drawer, contains('route: AppRoutes.principalResults'));
-
-    expect(screen, contains('View and explore live timetables'));
-    expect(screen, contains('_TimetableHomeMode.classes'));
-    expect(screen, contains('_TimetableHomeMode.teachers'));
-    expect(screen, contains('_TimetableHomeMode.rooms'));
-    expect(screen, contains("label: 'Classes'"));
-    expect(screen, contains("label: 'Teachers'"));
-    expect(screen, contains("label: 'Conflicts'"));
-    expect(screen, contains('Class Timetable'));
-    expect(screen, contains('Teacher Timetable'));
-    expect(screen, contains('Room Timetable'));
-    expect(screen, contains('Filter Timetable'));
-    expect(
-      screen,
-      contains('Edit generated class periods from the Action column'),
-    );
-    expect(screen, contains("class_hub_action': 'timetable'"));
-    expect(screen, contains("source': 'principal_timetable'"));
-    expect(screen, contains('final tableWidth = constraints.maxWidth < 650'));
-    expect(screen, contains('width: tableWidth'));
-    expect(
-      screen,
-      isNot(contains('constraints: const BoxConstraints(minWidth: 650)')),
-    );
-    expect(screen, isNot(contains('createPrincipalTimetableAction')));
-
-    expect(screen, contains("import 'principal_exam_review_screen.dart';"));
-    expect(screen, contains('PrincipalExamReviewScreen.examsHome'));
-    expect(screen, contains('PrincipalExamReviewScreen.results'));
-    expect(examReview, contains('enum _PrincipalExamView'));
-    expect(examReview, contains('_PrincipalExamView.home'));
-    expect(examReview, contains('_PrincipalExamView.examinations'));
-    expect(examReview, contains('_PrincipalExamView.examDetails'));
-    expect(examReview, contains('_PrincipalExamView.schedule'));
-    expect(examReview, contains('_PrincipalExamView.results'));
-    expect(examReview, contains('_PrincipalExamView.resultDetails'));
-    expect(examReview, contains('_PrincipalExamView.subjectResults'));
-    expect(examReview, contains('_PrincipalExamView.studentResult'));
-    expect(examReview, contains('_PrincipalExamView.gradeSetup'));
-    expect(examReview, contains('_PrincipalExamView.reports'));
-    expect(examReview, contains('PopScope('));
-    expect(examReview, contains('canPop: _history.isEmpty'));
-    expect(examReview, contains('if (!didPop) _goBack();'));
-    expect(examReview, contains("_buildHeader(\n        'Exam Timetable'"));
-    expect(
-      examReview,
-      contains(
-        'Create exams, schedule classwise papers, and publish timetables',
-      ),
-    );
-    expect(examReview, contains('Total Exams'));
-    expect(examReview, contains('Upcoming'));
-    expect(examReview, contains('Completed'));
-    expect(examReview, contains('Total Subjects'));
-    expect(examReview, contains('Total Students'));
-    expect(examReview, contains('Results Published'));
-    expect(examReview, contains('Create Exam'));
-    expect(examReview, contains('Create Classwise Exam Timetable'));
-    expect(examReview, contains('Examination List'));
-    expect(examReview, contains('Classwise Timetable'));
-    expect(examReview, contains('Results'));
-    expect(examReview, contains('Grade Setup'));
-    expect(examReview, contains('Exam Reports'));
-    expect(
-      examReview,
-      contains('Use Create Exam first, then Create Classwise Exam Timetable'),
-    );
-    expect(
-      examReview,
-      contains('Publish the timetable when every paper is scheduled'),
-    );
-    expect(examReview, contains('Publish Exam Timetable'));
-    expect(examReview, contains('Edit Exam'));
-    expect(examReview, contains('Unpublish Exam Timetable'));
-    expect(examReview, contains('AdminExamFormArgs('));
-    expect(examReview, contains("'exam_name': _examTitle(exam)"));
-    expect(examReview, contains('setExamPublished('));
-    expect(examReview, contains("actionType: 'publish_exam_timetable'"));
-    expect(examReview, contains("actionType: 'publish_results'"));
-    expect(examReview, contains("actionType: 'hold_results'"));
-    expect(examReview, contains("getRawList('/exams/grading-scale')"));
-    expect(examReview, contains("getRawList('/exams/report-cards')"));
-    expect(examReview, contains("'/exams/report-cards/exports'"));
-    expect(examReview, contains('createReportExport('));
-    expect(examReview, contains('Subject Wise Results'));
-    expect(examReview, contains('Student Result'));
-    expect(examReview, contains('Download Marksheet'));
-    expect(examReview, contains('Go to Classes Hub'));
-    expect(examReview, contains("class_hub_action': 'exams'"));
-    expect(examReview, contains("selectedStep': 'exam_setup'"));
-    expect(examReview, contains("source': 'principal_exams'"));
-    expect(examReview, contains('Step 5 (Exams)'));
-    expect(examReview, contains('childAspectRatio: 1.35'));
-    expect(examMetricTile, contains('mainAxisSize: MainAxisSize.min'));
-    expect(examMetricTile, contains('FittedBox('));
-    expect(
-      examMetricTile,
-      isNot(contains('mainAxisAlignment: MainAxisAlignment.spaceBetween')),
-    );
-    expect(examReview, isNot(contains("createRaw('/exams'")));
-    expect(examReview, isNot(contains("createRaw('/exams/schedules'")));
-    expect(examReview, isNot(contains('PrincipalInputPage')));
-
-    expect(client, contains('getPrincipalTimetableOverview'));
-    expect(client, contains('getPrincipalExamsOverview'));
-    expect(client, contains('createPrincipalExamAction'));
-    expect(client, contains('getPrincipalResultsOverview'));
-    expect(client, contains('createPrincipalResultAction'));
-
-    expect(backendRoutes, contains('principal.GET("/timetable"'));
-    expect(backendRoutes, contains('principal.GET("/exams"'));
-    expect(backendRoutes, contains('principal.GET("/results"'));
-    expect(backend, contains('principalTimetableActionsResource'));
-    expect(backend, contains('principalExamActionsResource'));
-    expect(backend, contains('principalResultActionsResource'));
-    expect(backend, contains('timetableConflictAlerts'));
-    expect(backend, contains('examEvaluationRows'));
-    expect(backend, contains('schedule_details'));
-    expect(backend, contains('examScheduleDetailRows'));
-    expect(backend, contains('class_names'));
-    expect(backend, contains('subject_names'));
-    expect(backend, contains('"syllabus"'));
-    expect(backend, contains('weakStudentRows'));
-    expect(examHandler, contains('Syllabus  string `json:"syllabus"`'));
-    expect(examHandler, contains('Syllabus:  strings.TrimSpace(req.Syllabus)'));
-    expect(examModels, contains('Syllabus     string'));
+    expect(routes, isNot(contains('PrincipalTimetableScreen')));
+    expect(routes, isNot(contains('PrincipalExamsScreen')));
+    expect(routes, isNot(contains('PrincipalResultsScreen')));
+    expect(drawer, isNot(contains('route: AppRoutes.principalTimetable')));
+    expect(drawer, isNot(contains('route: AppRoutes.principalExams')));
+    expect(drawer, isNot(contains('route: AppRoutes.principalResults')));
   });
 
   test('app uses controlled text scale instead of system display text scale', () {
@@ -1300,79 +1081,6 @@ void main() {
     expect(backend, contains('receiver_role does not match receiver user'));
   });
 
-  test('principal timetable supports dropdown-only manual slot edits', () {
-    final wrapper = File(
-      'lib/features/academics/presentation/screens/timetable_management_screen/timetable_management_screen.dart',
-    ).readAsStringSync();
-    final source = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
-    ).readAsStringSync();
-    final backendRoutes = readBackendRouteSources();
-
-    expect(wrapper, contains('PrincipalTimetableScreen'));
-    expect(wrapper, isNot(contains('AdminTimetablePeriodFormScreen')));
-    expect(wrapper, isNot(contains('AdminTimetableGenerationFormScreen')));
-    expect(wrapper, isNot(contains("deleteRaw('/timetable/slots/")));
-    expect(source, contains('_openEditPeriodForm'));
-    expect(source, contains("'/timetable/slots/\$id'"));
-    expect(source, contains('Edit timetable slot'));
-    expect(source, contains("labelText: 'Day'"));
-    expect(source, contains("labelText: 'Period / time'"));
-    expect(source, contains("labelText: 'Subject'"));
-    expect(source, contains("labelText: 'Teacher'"));
-    expect(source, contains("labelText: 'Room'"));
-    expect(source, isNot(contains('Delete timetable slot')));
-    expect(source, contains('getPrincipalTimetableOverview'));
-    expect(source, contains("class_hub_action': 'timetable'"));
-    expect(source, contains("source': 'principal_timetable'"));
-    expect(source, isNot(contains('createPrincipalTimetableAction')));
-    expect(source, isNot(contains('Timetable review saved')));
-    expect(
-      backendRoutes,
-      contains(
-        'timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal")',
-      ),
-    );
-    expect(
-      backendRoutes,
-      contains(
-        'timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal")',
-      ),
-    );
-    expect(
-      backendRoutes,
-      contains(
-        'timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin")',
-      ),
-    );
-    expect(
-      backendRoutes,
-      contains(
-        'timetable.POST("/smart/preview", middleware.RBACMiddleware("Admin", "Principal")',
-      ),
-    );
-    expect(
-      backendRoutes,
-      contains(
-        'timetable.POST("/smart/generate", middleware.RBACMiddleware("Admin", "Principal")',
-      ),
-    );
-    expect(backendRoutes, contains('principal.GET("/timetable"'));
-  });
-
-  test('principal timetable wrapper removes stale substitution writer UI', () {
-    final source = File(
-      'lib/features/academics/presentation/screens/timetable_management_screen/timetable_management_screen.dart',
-    ).readAsStringSync();
-
-    expect(source, contains('PrincipalTimetableScreen'));
-    expect(source, isNot(contains('String _staffLabel(dynamic value')));
-    expect(source, isNot(contains("s['original_staff']")));
-    expect(source, isNot(contains("s['substitute_staff']")));
-    expect(source, isNot(contains("Text(\n                  s['teacher']")));
-    expect(source, isNot(contains("\${s['date']} · \${s['periods']}")));
-  });
-
   test(
     'principal academics expose academic year setup without broad create workflows',
     () {
@@ -1386,7 +1094,10 @@ void main() {
 
       expect(exams, isNot(contains('Add New Exam')));
       expect(exams, isNot(contains('Save Changes')));
-      expect(routes, contains("role == 'principal' ? 'principal' : 'admin'"));
+      expect(
+        routes,
+        contains("AcademicManagementScreen(ownerRole: 'principal')"),
+      );
       expect(academics, contains('Configure academic years'));
       expect(academics, contains('canManageAcademicYears'));
       expect(academics, contains("ownerRole.toLowerCase() == 'principal'"));

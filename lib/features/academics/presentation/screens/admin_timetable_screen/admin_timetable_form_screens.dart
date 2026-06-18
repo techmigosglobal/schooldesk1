@@ -846,7 +846,7 @@ class _TimetableFormScaffold extends StatelessWidget {
           ? PrincipalDrawer(selectedIndex: 4, onDestinationSelected: (_) {})
           : AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
       floatingActionButton: DashboardFabWidget(
-        role: isPrincipal ? DashboardRole.principal : DashboardRole.admin,
+        role: isPrincipal ? DashboardRole.principal : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: ListView(

@@ -31,9 +31,6 @@ func (h *ApprovalRequestHandler) List(c *gin.Context) {
 	query := database.DB.
 		Where("school_id = ? AND resource = ?", scopedSchoolID(c), approvalRequestResource).
 		Order("created_at DESC")
-	if strings.EqualFold(c.GetString("role_name"), "Admin") {
-		query = query.Where("created_by = ?", c.GetString("user_id"))
-	}
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
 		query = query.Where("payload LIKE ?", "%\"status\":\""+strings.ToLower(status)+"\"%")
 	}
@@ -454,9 +451,6 @@ func (h *ApprovalRequestHandler) loadScopedRecord(c *gin.Context) (models.Fronte
 		scopedSchoolID(c),
 		approvalRequestResource,
 	)
-	if strings.EqualFold(c.GetString("role_name"), "Admin") {
-		query = query.Where("created_by = ?", c.GetString("user_id"))
-	}
 	if err := query.First(&row).Error; err != nil {
 		fail(c, http.StatusNotFound, "Approval request not found")
 		return models.FrontendRecord{}, false

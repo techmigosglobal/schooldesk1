@@ -255,7 +255,7 @@ func (h *StaffHandler) CreateStaff(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
-	requestApproval := req.RequestPrincipalApproval && strings.EqualFold(c.GetString("role_name"), "Admin")
+	requestApproval := false
 	staffCode := strings.TrimSpace(req.StaffCode)
 	if staffCode == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "employee ID is required"})
@@ -459,13 +459,8 @@ func (h *StaffHandler) createStaffUser(tx *gorm.DB, schoolID string, staff model
 func normalizeStaffAccountRole(accountRole string, designation string) string {
 	role := strings.ToLower(strings.TrimSpace(accountRole))
 	switch role {
-	case "admin":
-		return "Admin"
 	case "teacher":
 		return "Teacher"
-	}
-	if strings.Contains(strings.ToLower(designation), "admin") {
-		return "Admin"
 	}
 	return "Teacher"
 }

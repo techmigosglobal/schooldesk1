@@ -730,16 +730,6 @@ func seedData() error {
 	}
 	DB.Create(&enrollment)
 
-	roleAdminID := "110e8400-e29b-41d4-a716-446655440001"
-	roleAdmin := models.Role{
-		BaseModel:    models.BaseModel{ID: roleAdminID},
-		SchoolID:     schoolID,
-		RoleName:     "Admin",
-		Description:  "School Administrator",
-		IsSystemRole: true,
-	}
-	DB.Create(&roleAdmin)
-
 	roleTeacherID := "110e8400-e29b-41d4-a716-446655440002"
 	roleTeacher := models.Role{
 		BaseModel:    models.BaseModel{ID: roleTeacherID},
@@ -780,7 +770,7 @@ func seedData() error {
 	}
 	DB.Create(&roleKiosk)
 
-	seedRolePermissions(roleAdminID, rolePrincipalID, roleTeacherID, roleParentID)
+	seedRolePermissions(rolePrincipalID, roleTeacherID, roleParentID)
 	if err := ensureDefaultKioskUser(schoolID, roleKioskID); err != nil {
 		return err
 	}
@@ -824,13 +814,12 @@ func seedData() error {
 	return nil
 }
 
-func seedRolePermissions(adminRoleID, principalRoleID, teacherRoleID, parentRoleID string) {
+func seedRolePermissions(principalRoleID, teacherRoleID, parentRoleID string) {
 	modules := permissionModules()
 	createPermission := func(roleID, module string, read, create, update, delete, export bool) {
 		upsertPermission(roleID, module, read, create, update, delete, export)
 	}
 	for _, module := range modules {
-		createPermission(adminRoleID, module, true, true, true, true, true)
 		createPermission(principalRoleID, module, true, true, true, module != "audit_logs", true)
 
 		teacherRead := inList(module, "dashboard", "guardians", "medical_records", "student_documents", "staff_subjects", "staff_qualifications", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
@@ -896,21 +885,20 @@ func EnsureDefaultRolePermissions() error {
 	if err := ensureKioskRolesAndUsers(); err != nil {
 		return err
 	}
-	if err := DB.Where("LOWER(role_name) IN ?", []string{"admin", "principal", "teacher", "parent"}).Find(&roles).Error; err != nil {
+	if err := DB.Where("LOWER(role_name) IN ?", []string{"principal", "teacher", "parent"}).Find(&roles).Error; err != nil {
 		return err
 	}
 	roleIDs := map[string]string{}
 	for _, role := range roles {
 		roleIDs[strings.ToLower(strings.TrimSpace(role.RoleName))] = role.ID
 	}
-	adminRoleID, okAdmin := roleIDs["admin"]
 	principalRoleID, okPrincipal := roleIDs["principal"]
 	teacherRoleID, okTeacher := roleIDs["teacher"]
 	parentRoleID, okParent := roleIDs["parent"]
-	if !okAdmin || !okPrincipal || !okTeacher || !okParent {
+	if !okPrincipal || !okTeacher || !okParent {
 		return nil
 	}
-	seedRolePermissions(adminRoleID, principalRoleID, teacherRoleID, parentRoleID)
+	seedRolePermissions(principalRoleID, teacherRoleID, parentRoleID)
 	return removeDuplicatePermissions()
 }
 

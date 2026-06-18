@@ -49,8 +49,8 @@ func (h *SchoolSetupHandler) Setup(c *gin.Context) {
 
 	schoolName := strings.TrimSpace(req.SchoolName)
 	adminRoleName := titleRole(firstNonEmpty(req.AdminRole, "Principal"))
-	if adminRoleName != "Principal" && adminRoleName != "Admin" {
-		fail(c, http.StatusBadRequest, "admin_role must be Principal or Admin")
+	if adminRoleName != "Principal" {
+		fail(c, http.StatusBadRequest, "admin_role must be Principal")
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *SchoolSetupHandler) Setup(c *gin.Context) {
 
 func createSetupRoles(tx *gorm.DB, schoolID string) (map[string]models.Role, error) {
 	roles := map[string]models.Role{}
-	for _, roleName := range []string{"Principal", "Admin", "Teacher", "Parent", "Kiosk"} {
+	for _, roleName := range []string{"Principal", "Teacher", "Parent", "Kiosk"} {
 		role := models.Role{
 			SchoolID:     schoolID,
 			RoleName:     roleName,
@@ -199,9 +199,6 @@ func createSetupRolePermissions(tx *gorm.DB, roles map[string]models.Role) error
 		"audit_logs",
 	}
 	for _, module := range modules {
-		if err := createSetupPermission(tx, roles["Admin"].ID, module, true, true, true, true, true); err != nil {
-			return err
-		}
 		canPrincipalDelete := module != "audit_logs"
 		if err := createSetupPermission(tx, roles["Principal"].ID, module, true, true, true, canPrincipalDelete, true); err != nil {
 			return err

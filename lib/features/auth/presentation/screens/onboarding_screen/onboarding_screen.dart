@@ -106,8 +106,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     switch (roleName.trim().toLowerCase()) {
       case 'principal':
         return AppRoutes.principalDashboard;
-      case 'admin':
-        return AppRoutes.adminDashboard;
       default:
         return AppRoutes.principalDashboard;
     }
@@ -251,18 +249,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 value: _adminRole,
                 decoration: const InputDecoration(
                   labelText: 'Account role',
-                  prefixIcon: Icon(Icons.admin_panel_settings_rounded),
+                  prefixIcon: Icon(Icons.account_balance_rounded),
                 ),
                 items: const [
                   DropdownMenuItem(
                     value: 'Principal',
                     child: Text('Principal'),
                   ),
-                  DropdownMenuItem(value: 'Admin', child: Text('Admin')),
                 ],
                 onChanged: _saving
                     ? null
-                    : (value) => setState(() => _adminRole = value!),
+                    : (value) =>
+                          setState(() => _adminRole = value ?? 'Principal'),
               ),
               const SizedBox(height: 12),
               _field(
@@ -395,7 +393,11 @@ class _IntroPanel extends StatelessWidget {
             color: context.appTheme.primary.withAlpha(18),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(Icons.school_rounded, size: 42, color: context.appTheme.primary),
+          child: Icon(
+            Icons.school_rounded,
+            size: 42,
+            color: context.appTheme.primary,
+          ),
         ),
         const SizedBox(height: 24),
         Text(
@@ -499,7 +501,11 @@ class _ErrorBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline_rounded, color: context.appTheme.error, size: 20),
+          Icon(
+            Icons.error_outline_rounded,
+            color: context.appTheme.error,
+            size: 20,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

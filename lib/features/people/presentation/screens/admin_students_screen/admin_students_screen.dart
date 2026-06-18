@@ -224,7 +224,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           : 'Prepare, assign, and submit student record changes for Principal approval',
       drawer: drawer,
       floatingActionButton: DashboardFabWidget(
-        role: _isPrincipal ? DashboardRole.principal : DashboardRole.admin,
+        role: _isPrincipal ? DashboardRole.principal : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [

@@ -58,12 +58,9 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   bool get _isPrincipalOwner => widget.args.isPrincipalOwner;
   bool get _isEdit => widget.args.isEdit;
 
-  List<String> get _manageableRoles => _isPrincipalOwner
-      ? const ['Admin', 'Teacher', 'Parent']
-      : const ['Teacher', 'Parent'];
+  List<String> get _manageableRoles => const ['Teacher', 'Parent'];
 
-  bool _isStaffManagedRole(String role) =>
-      role == 'Teacher' || (_isPrincipalOwner && role == 'Admin');
+  bool _isStaffManagedRole(String role) => role == 'Teacher';
 
   @override
   void initState() {
@@ -115,7 +112,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
       title: title,
       subtitle: _isPrincipalOwner
           ? 'Principal-managed account provisioning'
-          : 'Admin account request sent through Principal approval',
+          : 'Teacher and parent account request',
       drawer: drawer,
       bodyIsScrollable: true,
       actions: [

@@ -1,16 +1,15 @@
 export 'presentation/screens/academic_info_screen/academic_info_screen.dart';
 export 'presentation/screens/academic_management_screen/academic_management_form_screens.dart';
 export 'presentation/screens/academic_management_screen/academic_management_screen.dart';
+export 'presentation/screens/academic_management_screen/principal_academic_years_screen.dart';
 export 'presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart';
 export 'presentation/screens/admin_timetable_screen/admin_timetable_screen.dart';
 export 'presentation/screens/parent_diary_screen/parent_diary_screen.dart';
 export 'presentation/screens/parent_lesson_planner_screen/parent_lesson_planner_screen.dart';
 export 'presentation/screens/parent_timetable_screen/parent_timetable_screen.dart';
 export 'presentation/screens/principal_classes_screen/principal_classes_screen.dart';
-export 'presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart';
 export 'presentation/screens/principal_subjects_screen/principal_subjects_screen.dart';
 export 'presentation/screens/teacher_classes_screen/teacher_classes_screen.dart';
 export 'presentation/screens/teacher_diary_screen/teacher_diary_screen.dart';
 export 'presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart';
-export 'presentation/screens/timetable_management_screen/timetable_management_screen.dart';
 export 'presentation/screens/lesson_planner_screen.dart';

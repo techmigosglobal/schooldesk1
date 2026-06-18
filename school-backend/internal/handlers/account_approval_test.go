@@ -26,7 +26,7 @@ func setupAccountApprovalDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(&models.Role{}, &models.User{}, &models.FrontendRecord{}, &models.Staff{}, &models.LeaveApplication{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	for _, roleName := range []string{"Principal", "Admin", "Teacher", "Parent"} {
+	for _, roleName := range []string{"Principal", "Teacher", "Parent"} {
 		if err := db.Create(&models.Role{
 			SchoolID: "school-test",
 			RoleName: roleName,
@@ -37,7 +37,7 @@ func setupAccountApprovalDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestCreateUserWithPrincipalApprovalCreatesInactiveParentAndApprovalRecord(t *testing.T) {
+func TestAdminCannotCreateManagedAccounts(t *testing.T) {
 	db := setupAccountApprovalDB(t)
 
 	router := gin.New()
@@ -59,30 +59,16 @@ func TestCreateUserWithPrincipalApprovalCreatesInactiveParentAndApprovalRecord(t
 	)
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(response, request)
-	if response.Code != http.StatusCreated {
+	if response.Code != http.StatusForbidden {
 		t.Fatalf("create status = %d body=%s", response.Code, response.Body.String())
 	}
-	if !strings.Contains(response.Body.String(), `"approval_status":"pending"`) {
-		t.Fatalf("response missing approval status: %s", response.Body.String())
-	}
 
-	var user models.User
-	if err := db.First(&user, "email = ?", "parent@example.test").Error; err != nil {
-		t.Fatalf("load user: %v", err)
+	var userCount int64
+	if err := db.Model(&models.User{}).Where("email = ?", "parent@example.test").Count(&userCount).Error; err != nil {
+		t.Fatalf("count user: %v", err)
 	}
-	if user.IsActive {
-		t.Fatalf("pending approval user should be inactive")
-	}
-
-	var records []models.FrontendRecord
-	if err := db.Where("resource = ?", "account-approvals").Find(&records).Error; err != nil {
-		t.Fatalf("load approvals: %v", err)
-	}
-	if len(records) != 1 {
-		t.Fatalf("expected 1 account approval, got %d", len(records))
-	}
-	if !strings.Contains(records[0].Payload, `"target_email":"parent@example.test"`) {
-		t.Fatalf("approval payload missing target email: %s", records[0].Payload)
+	if userCount != 0 {
+		t.Fatalf("admin-created user should not be persisted, got %d", userCount)
 	}
 }
 

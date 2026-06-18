@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum SchoolDeskRole { principal, admin, teacher, parent, student }
+enum SchoolDeskRole { principal, teacher, parent, student }
 
 @immutable
 class SchoolDeskSpacing {
@@ -372,7 +372,6 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       motion: SchoolDeskMotion.standard,
       roleColors: const {
         SchoolDeskRole.principal: Color(0xFF2457D6),
-        SchoolDeskRole.admin: Color(0xFF0E9384),
         SchoolDeskRole.teacher: Color(0xFF7C3AED),
         SchoolDeskRole.parent: Color(0xFF1A6B4A),
         SchoolDeskRole.student: Color(0xFFEA580C),
@@ -387,33 +386,49 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       focusRing: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
       primary: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
       primaryLight: const Color(0xFF7EA2FF),
-      primaryContainer: isDark ? const Color(0xFF1A3A5C) : const Color(0xFFE6EDFF),
+      primaryContainer: isDark
+          ? const Color(0xFF1A3A5C)
+          : const Color(0xFFE6EDFF),
       onPrimary: const Color(0xFFFFFFFF),
       secondary: const Color(0xFF0E9384),
-      secondaryContainer: isDark ? const Color(0xFF4A2E00) : const Color(0xFFDDFCF6),
+      secondaryContainer: isDark
+          ? const Color(0xFF4A2E00)
+          : const Color(0xFFDDFCF6),
       onSecondary: const Color(0xFFFFFFFF),
       accent: const Color(0xFF16A34A),
       success: const Color(0xFF15803D),
-      successContainer: isDark ? const Color(0xFF14301B) : const Color(0xFFDCFCE7),
+      successContainer: isDark
+          ? const Color(0xFF14301B)
+          : const Color(0xFFDCFCE7),
       warning: const Color(0xFFB45309),
-      warningContainer: isDark ? const Color(0xFF4A2A04) : const Color(0xFFFEF3C7),
+      warningContainer: isDark
+          ? const Color(0xFF4A2A04)
+          : const Color(0xFFFEF3C7),
       error: const Color(0xFFE57373),
-      errorContainer: isDark ? const Color(0xFF4A1515) : const Color(0xFFFEE4E2),
+      errorContainer: isDark
+          ? const Color(0xFF4A1515)
+          : const Color(0xFFFEE4E2),
       info: const Color(0xFF2563EB),
       infoContainer: isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE0EAFF),
       surface: isDark ? const Color(0xFF1E2530) : const Color(0xFFFFFFFF),
-      surfaceVariant: isDark ? const Color(0xFF252D3A) : const Color(0xFFF6F8FB),
+      surfaceVariant: isDark
+          ? const Color(0xFF252D3A)
+          : const Color(0xFFF6F8FB),
       background: isDark ? const Color(0xFF151C26) : const Color(0xFFF3F6FA),
       outline: isDark ? const Color(0xFF455A64) : const Color(0xFFCBD5E1),
-      outlineVariant: isDark ? const Color(0xFF2D3748) : const Color(0xFFE2E8F0),
+      outlineVariant: isDark
+          ? const Color(0xFF2D3748)
+          : const Color(0xFFE2E8F0),
       onSurface: isDark ? const Color(0xFFE8EDF2) : const Color(0xFF101828),
-      onSurfaceVariant: isDark ? const Color(0xFFB0BEC5) : const Color(0xFF475467),
+      onSurfaceVariant: isDark
+          ? const Color(0xFFB0BEC5)
+          : const Color(0xFF475467),
       muted: isDark ? const Color(0xFF90A4AE) : const Color(0xFF667085),
     );
   }
 
   Color roleColor(SchoolDeskRole role) {
-    return roleColors[role] ?? roleColors[SchoolDeskRole.admin]!;
+    return roleColors[role] ?? roleColors[SchoolDeskRole.principal]!;
   }
 
   @override
@@ -522,16 +537,32 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       focusRing: Color.lerp(focusRing, other.focusRing, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
       primaryLight: Color.lerp(primaryLight, other.primaryLight, t)!,
-      primaryContainer: Color.lerp(primaryContainer, other.primaryContainer, t)!,
+      primaryContainer: Color.lerp(
+        primaryContainer,
+        other.primaryContainer,
+        t,
+      )!,
       onPrimary: Color.lerp(onPrimary, other.onPrimary, t)!,
       secondary: Color.lerp(secondary, other.secondary, t)!,
-      secondaryContainer: Color.lerp(secondaryContainer, other.secondaryContainer, t)!,
+      secondaryContainer: Color.lerp(
+        secondaryContainer,
+        other.secondaryContainer,
+        t,
+      )!,
       onSecondary: Color.lerp(onSecondary, other.onSecondary, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       success: Color.lerp(success, other.success, t)!,
-      successContainer: Color.lerp(successContainer, other.successContainer, t)!,
+      successContainer: Color.lerp(
+        successContainer,
+        other.successContainer,
+        t,
+      )!,
       warning: Color.lerp(warning, other.warning, t)!,
-      warningContainer: Color.lerp(warningContainer, other.warningContainer, t)!,
+      warningContainer: Color.lerp(
+        warningContainer,
+        other.warningContainer,
+        t,
+      )!,
       error: Color.lerp(error, other.error, t)!,
       errorContainer: Color.lerp(errorContainer, other.errorContainer, t)!,
       info: Color.lerp(info, other.info, t)!,
@@ -542,7 +573,11 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       outline: Color.lerp(outline, other.outline, t)!,
       outlineVariant: Color.lerp(outlineVariant, other.outlineVariant, t)!,
       onSurface: Color.lerp(onSurface, other.onSurface, t)!,
-      onSurfaceVariant: Color.lerp(onSurfaceVariant, other.onSurfaceVariant, t)!,
+      onSurfaceVariant: Color.lerp(
+        onSurfaceVariant,
+        other.onSurfaceVariant,
+        t,
+      )!,
       muted: Color.lerp(muted, other.muted, t)!,
     );
   }

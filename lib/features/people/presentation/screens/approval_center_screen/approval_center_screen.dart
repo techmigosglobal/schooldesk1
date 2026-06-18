@@ -147,6 +147,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   List<ApprovalModel> _allApprovals = [];
   bool _loading = true;
   String? _error;
+  List<String> _sourceErrors = const [];
   final Set<String> _actionLoadingIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _statusFilter = 'pending';
@@ -175,80 +176,101 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   }
 
   Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _sourceErrors = const [];
+    });
     try {
-      final leaves = await BackendApiClient.instance.getLeaveApplications();
-      final approvals = <Map<String, dynamic>>[];
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/account-approvals',
-          type: 'account',
+      final sources = await Future.wait([
+        _loadApprovalSource('Staff leave', () async {
+          final leaves = await BackendApiClient.instance.getLeaveApplications();
+          return leaves
+              .map(
+                (l) => {
+                  'id': l.id,
+                  'type': 'leave',
+                  'requesterName': l.staffId,
+                  'requesterRole': 'Teacher',
+                  'requesterClass': 'Dept: School',
+                  'submittedDate': l.fromDate.split('T').first,
+                  'summary':
+                      '${l.leaveTypeId} - ${l.totalDays.toStringAsFixed(1)} day(s)',
+                  'details':
+                      'From: ${l.fromDate.split('T').first}\nTo: ${l.toDate.split('T').first}\nReason: ${l.reason ?? ''}',
+                  'status': l.status,
+                  'remarks': l.rejectionReason,
+                  'actionDate': null,
+                  'decisionPath': null,
+                },
+              )
+              .toList();
+        }),
+        _loadApprovalSource(
+          'Account approvals',
+          () => _loadGenericApprovals(
+            path: '/account-approvals',
+            type: 'account',
+          ),
         ),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(path: '/approvals', type: 'approval'),
-      );
-      approvals.addAll(
-        leaves
-            .map(
-              (l) => {
-                'id': l.id,
-                'type': 'leave',
-                'requesterName': l.staffId,
-                'requesterRole': 'Teacher',
-                'requesterClass': 'Dept: School',
-                'submittedDate': l.fromDate.split('T').first,
-                'summary':
-                    '${l.leaveTypeId} — ${l.totalDays.toStringAsFixed(1)} day(s)',
-                'details':
-                    'From: ${l.fromDate.split('T').first}\nTo: ${l.toDate.split('T').first}\nReason: ${l.reason ?? ''}',
-                'status': l.status,
-                'remarks': l.rejectionReason,
-                'actionDate': null,
-                'decisionPath': null,
-              },
-            )
-            .toList(),
-      );
-      approvals.addAll(await _loadStudentLeaveApprovals());
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/admissions/applications',
-          type: 'admission',
+        _loadApprovalSource(
+          'Admin submissions',
+          () => _loadGenericApprovals(path: '/approvals', type: 'approval'),
         ),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/fees/concessions',
-          type: 'fee_concession',
+        _loadApprovalSource('Student leave', _loadStudentLeaveApprovals),
+        _loadApprovalSource(
+          'Admissions',
+          () => _loadGenericApprovals(
+            path: '/admissions/applications',
+            type: 'admission',
+          ),
         ),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/certificates/transfer-requests',
-          type: 'tc',
+        _loadApprovalSource(
+          'Fee concessions',
+          () => _loadGenericApprovals(
+            path: '/fees/concessions',
+            type: 'fee_concession',
+          ),
         ),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(path: '/class-approvals', type: 'class'),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/student-approvals',
-          type: 'student',
+        _loadApprovalSource(
+          'Transfer certificates',
+          () => _loadGenericApprovals(
+            path: '/certificates/transfer-requests',
+            type: 'tc',
+          ),
         ),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(path: '/events/approvals', type: 'event'),
-      );
-      approvals.addAll(
-        await _loadGenericApprovals(
-          path: '/timetable/approvals',
-          type: 'timetable',
+        _loadApprovalSource(
+          'Classes',
+          () => _loadGenericApprovals(path: '/class-approvals', type: 'class'),
         ),
-      );
+        _loadApprovalSource(
+          'Students',
+          () => _loadGenericApprovals(
+            path: '/student-approvals',
+            type: 'student',
+          ),
+        ),
+        _loadApprovalSource(
+          'Events',
+          () => _loadGenericApprovals(path: '/events/approvals', type: 'event'),
+        ),
+        _loadApprovalSource(
+          'Timetable',
+          () => _loadGenericApprovals(
+            path: '/timetable/approvals',
+            type: 'timetable',
+          ),
+        ),
+      ]);
+      final approvals = sources.expand((source) => source.rows).toList();
+      final sourceErrors = sources
+          .where((source) => source.errorMessage != null)
+          .map((source) => '${source.label}: ${source.errorMessage}')
+          .toList();
       if (!mounted) return;
       setState(() {
         _allApprovals = approvals.map(ApprovalModel.fromMap).toList();
+        _sourceErrors = sourceErrors;
         _loading = false;
         _error = null;
       });
@@ -265,23 +287,27 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     required String path,
     required String type,
   }) async {
-    try {
-      final rows = await BackendApiClient.instance.getRawList(path);
-      return rows
-          .map((row) => _genericApprovalFromRow(row, type, path))
-          .toList();
-    } catch (_) {
-      return const <Map<String, dynamic>>[];
-    }
+    final rows = await BackendApiClient.instance.getRawList(path);
+    return rows.map((row) => _genericApprovalFromRow(row, type, path)).toList();
   }
 
   Future<List<Map<String, dynamic>>> _loadStudentLeaveApprovals() async {
+    final rows = await BackendApiClient.instance.getStudentLeaveApplications();
+    return rows.map(_studentLeaveApprovalFromRow).toList();
+  }
+
+  Future<_ApprovalSourceResult> _loadApprovalSource(
+    String label,
+    Future<List<Map<String, dynamic>>> Function() loader,
+  ) async {
     try {
-      final rows = await BackendApiClient.instance
-          .getStudentLeaveApplications();
-      return rows.map(_studentLeaveApprovalFromRow).toList();
-    } catch (_) {
-      return const <Map<String, dynamic>>[];
+      return _ApprovalSourceResult(label: label, rows: await loader());
+    } catch (error) {
+      return _ApprovalSourceResult(
+        label: label,
+        rows: const [],
+        errorMessage: _friendlyError(error),
+      );
     }
   }
 
@@ -767,6 +793,13 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     return text;
   }
 
+  String _friendlyError(Object error) {
+    final raw = error.toString().trim();
+    if (raw.isEmpty) return 'Unable to load';
+    final compact = raw.replaceAll(RegExp(r'\s+'), ' ');
+    return compact.length > 90 ? '${compact.substring(0, 90)}...' : compact;
+  }
+
   String _dateOnly(Object? value) {
     final text = _text(value);
     if (text.isEmpty) return '';
@@ -800,14 +833,34 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         title: 'Approval Center',
         subtitle: 'Review pending operational requests and audit decisions',
         drawer: drawer,
-        body: Center(child: Text(_error!)),
+        actions: [
+          IconButton(
+            tooltip: 'Retry approvals',
+            onPressed: _loadData,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+        body: Center(
+          child: EmptyStateWidget(
+            icon: Icons.cloud_off_rounded,
+            title: 'Approval center unavailable',
+            description: _error!,
+          ),
+        ),
       );
     }
     return SchoolDeskModuleScaffold(
       title: 'Approval Center',
       subtitle: '$pendingCount items pending your action',
       drawer: drawer,
-      actions: [_PendingApprovalBadge(pendingCount: pendingCount)],
+      actions: [
+        IconButton(
+          tooltip: 'Refresh approval queue',
+          onPressed: _loading ? null : _loadData,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+        _PendingApprovalBadge(pendingCount: pendingCount),
+      ],
       bottom: TabBar(
         controller: _tabController,
         isScrollable: true,
@@ -859,11 +912,16 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           _ApprovalQueueToolbar(
             allItems: allTypeItems,
             visibleCount: items.length,
+            sourceErrorCount: _sourceErrors.length,
             selectedStatus: _statusFilter,
             searchController: _searchController,
             onStatusChanged: (value) => setState(() => _statusFilter = value),
             onSearchChanged: (_) => setState(() {}),
           ),
+          if (_sourceErrors.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _ApprovalSourceHealthBanner(errors: _sourceErrors),
+          ],
           const SizedBox(height: 16),
           if (items.isEmpty)
             Padding(
@@ -898,7 +956,11 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             const SizedBox(height: 16),
           ],
           if (resolved.isNotEmpty) ...[
-            _buildSectionHeader('Resolved', resolved.length, context.appTheme.muted),
+            _buildSectionHeader(
+              'Resolved',
+              resolved.length,
+              context.appTheme.muted,
+            ),
             const SizedBox(height: 8),
             ...resolved.map(
               (a) => Padding(
@@ -982,9 +1044,76 @@ class _PendingApprovalBadge extends StatelessWidget {
   }
 }
 
+class _ApprovalSourceResult {
+  final String label;
+  final List<Map<String, dynamic>> rows;
+  final String? errorMessage;
+
+  const _ApprovalSourceResult({
+    required this.label,
+    required this.rows,
+    this.errorMessage,
+  });
+}
+
+class _ApprovalSourceHealthBanner extends StatelessWidget {
+  final List<String> errors;
+
+  const _ApprovalSourceHealthBanner({required this.errors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.warningContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.warning.withAlpha(70)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.sync_problem_rounded,
+            color: context.appTheme.warning,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${errors.length} approval source${errors.length == 1 ? '' : 's'} need attention',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: context.appTheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  errors.take(3).join('\n'),
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 12,
+                    height: 1.35,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ApprovalQueueToolbar extends StatelessWidget {
   final List<ApprovalModel> allItems;
   final int visibleCount;
+  final int sourceErrorCount;
   final String selectedStatus;
   final TextEditingController searchController;
   final ValueChanged<String> onStatusChanged;
@@ -993,6 +1122,7 @@ class _ApprovalQueueToolbar extends StatelessWidget {
   const _ApprovalQueueToolbar({
     required this.allItems,
     required this.visibleCount,
+    required this.sourceErrorCount,
     required this.selectedStatus,
     required this.searchController,
     required this.onStatusChanged,
@@ -1042,6 +1172,16 @@ class _ApprovalQueueToolbar extends StatelessWidget {
             value: visibleCount,
             color: context.appTheme.primary,
             icon: Icons.filter_alt_rounded,
+          ),
+          _ApprovalMetricChip(
+            label: 'Source issues',
+            value: sourceErrorCount,
+            color: sourceErrorCount == 0
+                ? context.appTheme.success
+                : context.appTheme.warning,
+            icon: sourceErrorCount == 0
+                ? Icons.cloud_done_rounded
+                : Icons.cloud_sync_rounded,
           ),
         ];
 
@@ -1279,7 +1419,9 @@ class _ApprovalStatusFilterChip extends StatelessWidget {
       labelStyle: GoogleFonts.ibmPlexSans(
         fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: selected ? context.appTheme.primary : context.appTheme.onSurfaceVariant,
+        color: selected
+            ? context.appTheme.primary
+            : context.appTheme.onSurfaceVariant,
       ),
       side: BorderSide(
         color: selected

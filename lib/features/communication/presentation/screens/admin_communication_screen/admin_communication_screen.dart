@@ -196,7 +196,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
       title: 'Communication Management',
       subtitle: 'Publish role-wise notices and review delivery history',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(

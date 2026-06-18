@@ -121,7 +121,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         subtitle: 'Approve requests, generate certificates, and track records',
         drawer: drawer,
         floatingActionButton: const DashboardFabWidget(
-          role: DashboardRole.admin,
+          role: DashboardRole.principal,
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         body: const Center(child: CircularProgressIndicator()),
@@ -133,7 +133,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         subtitle: 'Approve requests, generate certificates, and track records',
         drawer: drawer,
         floatingActionButton: const DashboardFabWidget(
-          role: DashboardRole.admin,
+          role: DashboardRole.principal,
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         body: Center(
@@ -158,7 +158,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       title: 'Documents',
       subtitle: 'Approve requests, generate certificates, and track records',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(

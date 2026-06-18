@@ -253,7 +253,7 @@ class _DashboardContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
-    final adminColor = tokens.roleColor(SchoolDeskRole.admin);
+    final adminColor = tokens.roleColor(SchoolDeskRole.principal);
     final compact = MediaQuery.sizeOf(context).width < 700;
 
     if (compact) {

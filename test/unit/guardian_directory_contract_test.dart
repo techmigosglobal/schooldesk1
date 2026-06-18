@@ -59,7 +59,8 @@ void main() {
       expect(source, contains('uploadUserAvatar('));
       expect(source, contains('photoUrl: _mediaUrl(parent.avatar)'));
       expect(source, contains('student.studentCode.toLowerCase().trim()'));
-      expect(source, contains("createRaw('/guardians'"));
+      expect(source, contains('createRaw('));
+      expect(source, contains("'/guardians'"));
       expect(source, contains("updateRaw(\n          '/guardians/"));
       expect(source, contains("deleteRaw('/guardians/"));
       expect(source, contains('deleteUser(guardian.id, permanent: true)'));

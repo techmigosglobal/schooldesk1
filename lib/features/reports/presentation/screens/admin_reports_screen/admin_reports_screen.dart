@@ -126,7 +126,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       subtitle:
           'Generate operational, finance, attendance, and compliance outputs',
       drawer: AdminDrawer(selectedIndex: 11, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottom: TabBar(
         controller: _tabController,

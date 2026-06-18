@@ -37,8 +37,6 @@ void main() {
     expect(importer, contains('long_break_end_time'));
     expect(importer, contains('Lunch Break'));
     expect(importer, contains("route: AppRoutes.adminTimetable"));
-    expect(importer, contains('timetable writes are Admin-owned'));
-    expect(importer, contains('all-features class CSV'));
     expect(importer, contains('getTerms(year.id)'));
     expect(importer, contains('section.academicYearId != academicYearId'));
     expect(importer, contains('working_days'));
@@ -64,13 +62,13 @@ void main() {
 
     expect(principalClasses, contains('BulkCsvImportTarget.classes'));
     expect(principalClasses, contains("label: 'Room Number'"));
-    expect(principalClasses, contains("label: 'Short break period'"));
-    expect(principalClasses, contains("label: 'Short break start'"));
-    expect(principalClasses, contains("label: 'Short break end'"));
-    expect(principalClasses, contains("label: 'Long break period'"));
-    expect(principalClasses, contains("label: 'Long break start'"));
-    expect(principalClasses, contains("label: 'Long break end'"));
-    expect(principalClasses, contains('breaks: _breakRows'));
+    expect(principalClasses, isNot(contains("label: 'Short break period'")));
+    expect(principalClasses, isNot(contains("label: 'Short break start'")));
+    expect(principalClasses, isNot(contains("label: 'Short break end'")));
+    expect(principalClasses, isNot(contains("label: 'Long break period'")));
+    expect(principalClasses, isNot(contains("label: 'Long break start'")));
+    expect(principalClasses, isNot(contains("label: 'Long break end'")));
+    expect(principalClasses, isNot(contains('breaks: _breakRows')));
     expect(
       principalClasses,
       isNot(contains('BulkCsvImportTarget.classTimetables')),
@@ -84,9 +82,6 @@ void main() {
     final teacherTimetable = File(
       'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
     ).readAsStringSync();
-    final principalTimetable = File(
-      'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
-    ).readAsStringSync();
 
     expect(timetableApi, contains('staff_id'));
     expect(timetableApi, contains('/timetable/slots'));
@@ -96,7 +91,5 @@ void main() {
     expect(teacherTimetable, contains('RoleAccessService.teacherSubjectIds'));
     expect(teacherTimetable, isNot(contains('Quick Actions')));
     expect(teacherTimetable, isNot(contains('_buildQuickActions')));
-    expect(principalTimetable, contains('_TimetableHomeMode.teachers'));
-    expect(principalTimetable, contains('Teacher Timetable'));
   });
 }

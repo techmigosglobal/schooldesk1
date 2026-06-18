@@ -90,7 +90,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.appTheme.background,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       appBar: AppBar(
         backgroundColor: context.appTheme.surface,

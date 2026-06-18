@@ -180,13 +180,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalClasses,
             ),
             SchoolDeskNavigationItem(
-              index: 4,
-              icon: Icons.calendar_view_week_outlined,
-              activeIcon: Icons.calendar_view_week_rounded,
-              label: SchoolDeskGlossary.timetableRecords,
-              route: AppRoutes.principalTimetable,
-            ),
-            SchoolDeskNavigationItem(
               index: 5,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,

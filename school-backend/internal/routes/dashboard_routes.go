@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"time"
-
 	"school-backend/internal/config"
 	"school-backend/internal/handlers"
 	"school-backend/internal/middleware"
@@ -17,16 +15,6 @@ func registerDashboardRoutes(
 ) {
 	dashboard := api.Group("/dashboard")
 	dashboard.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
-	dashboard.GET(
-		"/admin",
-		middleware.RBACMiddleware("Admin"),
-		middleware.PermissionMiddleware("dashboard", "read"),
-		middleware.CacheMiddleware(
-			"dashboard_admin",
-			time.Duration(cfg.CacheTTLSeconds)*time.Second,
-		),
-		dashboardHandler.Admin,
-	)
 	dashboard.GET(
 		"/principal",
 		middleware.RBACMiddleware("Principal"),

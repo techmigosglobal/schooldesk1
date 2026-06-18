@@ -86,7 +86,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
         subtitle: 'Track parent tickets, escalations, and resolution health',
         drawer: drawer,
         floatingActionButton: const DashboardFabWidget(
-          role: DashboardRole.admin,
+          role: DashboardRole.principal,
         ),
         floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
         body: const Center(child: CircularProgressIndicator()),
@@ -96,7 +96,7 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
       title: 'Parent Support / Helpdesk',
       subtitle: 'Track parent tickets, escalations, and resolution health',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(

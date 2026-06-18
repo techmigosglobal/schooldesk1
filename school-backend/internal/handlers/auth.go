@@ -63,6 +63,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is deactivated"})
 		return
 	}
+	if strings.EqualFold(user.Role.RoleName, "Admin") || strings.EqualFold(user.RoleSlug, "admin") {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin role is no longer supported"})
+		return
+	}
 
 	jti := uuid.NewString()
 	tokenTTL := 15 * time.Minute
@@ -200,6 +204,11 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	var user models.User
 	if err := database.DB.First(&user, "id = ?", payload["user_id"]).Error; err != nil || !user.IsActive {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		return
+	}
+	if strings.EqualFold(payload["role_name"], "Admin") || strings.EqualFold(user.RoleSlug, "admin") {
+		_ = services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin role is no longer supported"})
 		return
 	}
 	if !refreshTokenIssuedAfterInvalidation(payload["issued_at"], user.AuthInvalidatedAt) {

@@ -14,7 +14,6 @@ import 'package:schooldesk1/features/shell/shell.dart';
 import 'package:schooldesk1/features/homework/homework.dart';
 import 'package:schooldesk1/features/leave/leave.dart';
 import 'package:schooldesk1/features/profile/profile.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
@@ -23,14 +22,6 @@ import 'package:schooldesk1/features/communication/presentation/screens/event_po
 import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/admin_exams_screen/admin_exams_screen.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart';
-import 'package:schooldesk1/features/operations/presentation/screens/admin_helpdesk_screen/admin_helpdesk_screen.dart';
-import 'package:schooldesk1/features/reports/presentation/screens/admin_reports_screen/admin_reports_screen.dart';
 import 'package:schooldesk1/features/reports/presentation/screens/report_card_generator_screen/report_card_generator_screen.dart';
 
 class AppRoutes {
@@ -46,7 +37,6 @@ class AppRoutes {
   static const String studentOversight = '/student-oversight-screen';
   static const String approvalCenter = '/approval-center-screen';
   static const String feeMonitoring = '/fee-monitoring-screen';
-  static const String timetableManagement = '/timetable-management-screen';
   static const String communicationCenter = '/communication-center-screen';
   static const String principalChatCommunications =
       '/principal-chat-communications-screen';
@@ -54,6 +44,14 @@ class AppRoutes {
   static const String eventsCalendar = '/events-calendar-screen';
   static const String reportsAnalytics = '/reports-analytics-screen';
   static const String academicManagement = '/academic-management-screen';
+  static const String academicYearDetail =
+      '/academic-management-screen/year/detail';
+  static const String academicYearClasswiseExport =
+      '/academic-management-screen/year/classwise-export';
+  static const String academicYearUsersExport =
+      '/academic-management-screen/year/users-export';
+  static const String academicYearFeesExport =
+      '/academic-management-screen/year/fees-export';
   static const String academicYearForm = '/academic-management-screen/year';
   static const String academicSubjectForm =
       '/academic-management-screen/subject';
@@ -68,7 +66,6 @@ class AppRoutes {
   static const String principalClasses = '/principal-classes-screen';
   static const String principalAttendance = '/principal-attendance-screen';
   static const String principalSubjects = '/principal-subjects-screen';
-  static const String principalTimetable = '/principal-timetable-screen';
   static const String principalAccountCreate =
       '/principal-user-management-screen/create';
   static const String principalAccountEdit =
@@ -80,10 +77,8 @@ class AppRoutes {
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
 
-  // Admin Login (backend compat)
-  static const String adminLogin = '/admin-login-screen';
-
-  // Admin Module Routes
+  // Legacy operation route constants retained only for Principal-owned
+  // implementation internals. They are not registered as app routes.
   static const String adminAccountCreate =
       '/admin-user-management-screen/create';
   static const String adminAccountEdit = '/admin-user-management-screen/edit';
@@ -123,10 +118,6 @@ class AppRoutes {
       '/admin-timetable-screen/period';
   static const String adminTimetableSubstitutionForm =
       '/admin-timetable-screen/substitution';
-
-  // Principal Sub-Module Routes
-  static const String principalExams = '/principal-exams-screen';
-  static const String principalResults = '/principal-results-screen';
 
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
@@ -203,15 +194,27 @@ class AppRoutes {
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
     feeMonitoring: (context) => const FeeMonitoringScreen(),
-    timetableManagement: (context) => const PrincipalTimetableScreen(),
+    adminPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
+    adminPaymentRequestDecision: (context) => AdminPaymentRequestDecisionScreen(
+      args: _adminPaymentRequestDecisionArgs(context),
+    ),
     communicationCenter: (context) => const CommunicationCenterScreen(),
     principalChatCommunications: (context) =>
         const PrincipalChatCommunicationsScreen(),
     complaintManagement: (context) => const ComplaintManagementScreen(),
     eventsCalendar: (context) => const EventsCalendarScreen(),
     reportsAnalytics: (context) => const ReportsAnalyticsScreen(),
-    academicManagement: (context) =>
-        const AcademicManagementScreen(ownerRole: 'principal'),
+    academicManagement: (context) => const PrincipalAcademicYearsScreen(),
+    academicYearDetail: (context) => PrincipalAcademicYearDetailScreen(
+      args: _academicYearRouteArgs(context),
+    ),
+    academicYearClasswiseExport: (context) => AcademicYearClasswiseExportScreen(
+      args: _academicYearRouteArgs(context),
+    ),
+    academicYearUsersExport: (context) =>
+        AcademicYearUsersExportScreen(args: _academicYearRouteArgs(context)),
+    academicYearFeesExport: (context) =>
+        AcademicYearFeesExportScreen(args: _academicYearRouteArgs(context)),
     academicYearForm: (context) =>
         AcademicYearFormScreen(args: _academicYearFormArgs(context)),
     academicSubjectForm: (context) =>
@@ -233,7 +236,6 @@ class AppRoutes {
     principalClasses: (context) => const PrincipalClassesScreen(),
     principalAttendance: (context) => const PrincipalAttendanceScreen(),
     principalSubjects: (context) => const PrincipalSubjectsScreen(),
-    principalTimetable: (context) => const PrincipalTimetableScreen(),
     principalAccountCreate: (context) =>
         AccountAccessFormScreen(args: _accountFormArgs(context, 'principal')),
     principalAccountEdit: (context) =>
@@ -244,67 +246,8 @@ class AppRoutes {
     principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
     principalAnalytics: (context) => PrincipalAnalyticsScreen(),
 
-    // Admin Module
-    adminDashboard: (context) => const AdminDashboardScreen(),
-    adminStudents: (context) => const AdminStudentsScreen(),
-    adminTeachers: (context) => const AdminTeachersScreen(),
-    adminAttendance: (context) => const AdminAttendanceScreen(),
-    adminFees: (context) => const AdminFeesScreen(),
-    adminTimetable: (context) => const AdminTimetableScreen(),
-    adminExams: (context) => const AdminExamsScreen(),
-    adminCommunication: (context) => const AdminCommunicationScreen(),
-    adminHelpdesk: (context) => const AdminHelpdeskScreen(),
-    adminDocuments: (context) => const AdminDocumentsScreen(),
-    adminUserAccess: (context) => const AdminUserAccessScreen(),
-    adminAccountCreate: (context) =>
-        AccountAccessFormScreen(args: _accountFormArgs(context, 'admin')),
-    adminAccountEdit: (context) =>
-        AccountAccessFormScreen(args: _accountFormArgs(context, 'admin')),
-    adminParentChildAssignment: (context) => AccountChildAssignmentScreen(
-      args: _childAssignmentArgs(context, 'admin'),
-    ),
-    adminReports: (context) => const AdminReportsScreen(),
-    adminAcademicInfo: (context) => AcademicInfoScreen(
-      role: 'admin',
-      drawer: AdminDrawer(selectedIndex: 14, onDestinationSelected: (_) {}),
-      drawerIndex: 14,
-    ),
     idCardGeneration: (context) => const IdCardGenerationScreen(),
     reportCardGenerator: (context) => const ReportCardGeneratorScreen(),
-    adminExamForm: (context) =>
-        AdminExamFormScreen(args: _adminExamFormArgs(context)),
-    adminExamScheduleForm: (context) =>
-        AdminExamScheduleFormScreen(args: _adminExamScheduleFormArgs(context)),
-    adminFeeStructureForm: (context) =>
-        AdminFeeStructureFormScreen(args: _adminFeeStructureFormArgs(context)),
-    adminInvoiceGenerationForm: (context) => AdminInvoiceGenerationFormScreen(
-      args: _adminInvoiceGenerationFormArgs(context),
-    ),
-    adminPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
-      args: _adminPaymentRecordFormArgs(context),
-    ),
-    adminPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
-    adminPaymentRequestDecision: (context) => AdminPaymentRequestDecisionScreen(
-      args: _adminPaymentRequestDecisionArgs(context),
-    ),
-    adminTimetableGenerationForm: (context) =>
-        AdminTimetableGenerationFormScreen(
-          args: _adminTimetableGenerationFormArgs(context),
-        ),
-    adminTimetablePeriodForm: (context) => AdminTimetablePeriodFormScreen(
-      args: _adminTimetablePeriodFormArgs(context),
-    ),
-    adminTimetableSubstitutionForm: (context) =>
-        AdminTimetableSubstitutionFormScreen(
-          args: _adminTimetableSubstitutionFormArgs(context),
-        ),
-
-    // Principal Sub-Module
-    principalExams: (context) => const PrincipalExamsScreen(),
-    principalResults: (context) => const PrincipalResultsScreen(),
-
-    // Admin Login (backend compat)
-    adminLogin: (context) => const AuthLoginScreen(),
 
     // Teacher
     teacherLogin: (context) => const AuthLoginScreen(),
@@ -330,7 +273,8 @@ class AppRoutes {
     teacherPTM: (context) => const TeacherParentInteractionScreen(),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
-    teacherCalendar: (context) => const TeacherCalendarScreen(),
+    teacherCalendar: (context) =>
+        const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),
 
     // Parent
     parentLogin: (context) => const AuthLoginScreen(),
@@ -363,7 +307,8 @@ class AppRoutes {
     parentLeave: (context) => const ParentLeaveScreen(),
     parentLeaveRequestForm: (context) =>
         ParentLeaveRequestFormScreen(args: _parentLeaveFormArgs(context)),
-    parentCalendar: (context) => const ParentCalendarScreen(),
+    parentCalendar: (context) =>
+        const EventsCalendarScreen(portal: SchoolCalendarPortal.parent),
     parentDocuments: (context) => const ParentDocumentsScreen(),
     parentDiary: (context) => const ParentDiaryScreen(),
     parentTimetable: (context) => const ParentTimetableScreen(),
@@ -463,6 +408,12 @@ class AppRoutes {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is AcademicYearFormArgs) return args;
     return const AcademicYearFormArgs(ownerRole: 'principal');
+  }
+
+  static AcademicYearRouteArgs _academicYearRouteArgs(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is AcademicYearRouteArgs) return args;
+    return const AcademicYearRouteArgs(year: <String, dynamic>{});
   }
 
   static AcademicSubjectFormArgs _academicSubjectFormArgs(
@@ -570,112 +521,15 @@ class AppRoutes {
     return const ParentPaymentSelectionArgs(fees: []);
   }
 
-  static AdminExamFormArgs _adminExamFormArgs(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminExamFormArgs) return args;
-    return const AdminExamFormArgs(academicYears: [], examTypes: []);
-  }
-
-  static AdminExamScheduleFormArgs _adminExamScheduleFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminExamScheduleFormArgs) return args;
-    return const AdminExamScheduleFormArgs(
-      exams: [],
-      grades: [],
-      sections: [],
-      subjects: [],
-    );
-  }
-
-  static AdminFeeStructureFormArgs _adminFeeStructureFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminFeeStructureFormArgs) return args;
-    return const AdminFeeStructureFormArgs(
-      academicYears: [],
-      grades: [],
-      feeCategories: [],
-    );
-  }
-
-  static AdminInvoiceGenerationFormArgs _adminInvoiceGenerationFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminInvoiceGenerationFormArgs) return args;
-    return const AdminInvoiceGenerationFormArgs(
-      academicYears: [],
-      grades: [],
-      sections: [],
-      students: [],
-      feeStructures: [],
-    );
-  }
-
-  static AdminPaymentRecordFormArgs _adminPaymentRecordFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminPaymentRecordFormArgs) return args;
-    return const AdminPaymentRecordFormArgs(pendingDues: []);
-  }
-
   static AdminPaymentRequestDecisionArgs _adminPaymentRequestDecisionArgs(
     BuildContext context,
   ) {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is AdminPaymentRequestDecisionArgs) return args;
-    return const AdminPaymentRequestDecisionArgs(request: {});
-  }
-
-  static AdminTimetableGenerationFormArgs _adminTimetableGenerationFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminTimetableGenerationFormArgs) return args;
-    return const AdminTimetableGenerationFormArgs(
-      classLabel: '',
-      section: null,
-      academicYear: null,
-      termId: '',
-      dayLabel: 'Monday',
-      dayNumber: 1,
-    );
-  }
-
-  static AdminTimetablePeriodFormArgs _adminTimetablePeriodFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminTimetablePeriodFormArgs) return args;
-    return const AdminTimetablePeriodFormArgs(
-      classLabel: '',
-      section: null,
-      academicYear: null,
-      termId: '',
-      dayLabel: 'Monday',
-      dayNumber: 1,
-      nextPeriodNumber: 1,
-      subjects: [],
-      staff: [],
-      rooms: [],
-    );
-  }
-
-  static AdminTimetableSubstitutionFormArgs _adminTimetableSubstitutionFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AdminTimetableSubstitutionFormArgs) return args;
-    return const AdminTimetableSubstitutionFormArgs(
-      classLabel: '',
-      dayLabel: 'Monday',
-      periods: [],
-      staff: [],
-    );
+    if (args is Map<String, dynamic>) {
+      return AdminPaymentRequestDecisionArgs(request: args);
+    }
+    return const AdminPaymentRequestDecisionArgs(request: <String, dynamic>{});
   }
 }
 

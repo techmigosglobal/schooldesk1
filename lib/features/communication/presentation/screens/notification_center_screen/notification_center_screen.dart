@@ -28,20 +28,29 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   late TabController _tabController;
   NotificationService? _service;
   bool _loading = true;
+  String? _error;
   String _parentFilter = 'all';
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: widget.role == 'teacher' ? 2 : 5, vsync: this);
+    _tabController = TabController(
+      length: widget.role == 'teacher' ? 2 : 5,
+      vsync: this,
+    );
     _init();
   }
 
-  Future<void> _init() async {
+  Future<void> _init({bool forceRefresh = false}) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       _service = await NotificationService.getInstance();
-    } catch (_) {
-      // Keep the notification center usable even if the backend is temporarily unavailable.
+      if (forceRefresh) await _service?.refresh();
+    } catch (error) {
+      _error = error.toString();
     }
     if (mounted) setState(() => _loading = false);
   }
@@ -76,17 +85,25 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     final mutedColor = isDark
         ? const Color(0xFF90A4AE)
         : context.appTheme.muted;
+    final unreadCount = _service?.getUnreadCountForRole(widget.role) ?? 0;
 
     return SchoolDeskModuleScaffold(
       title: 'Notifications',
       subtitle: '${_roleLabel(widget.role)} alerts and updates',
       drawer: _drawerForRole(),
       actions: [
+        IconButton(
+          tooltip: 'Refresh notifications',
+          onPressed: _loading ? null : () => _init(forceRefresh: true),
+          icon: const Icon(Icons.refresh_rounded),
+        ),
         TextButton.icon(
-          onPressed: () async {
-            await _service?.markAllAsRead(widget.role);
-            if (mounted) setState(() {});
-          },
+          onPressed: unreadCount == 0
+              ? null
+              : () async {
+                  await _service?.markAllAsRead(widget.role);
+                  if (mounted) setState(() {});
+                },
           icon: const Icon(Icons.done_all_rounded, size: 18),
           label: const Text('Mark all read'),
         ),
@@ -103,10 +120,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         unselectedLabelColor: mutedColor,
         indicatorColor: context.appTheme.primary,
         tabs: widget.role == 'teacher'
-            ? const [
-                Tab(text: 'All'),
-                Tab(text: 'Circulars'),
-              ]
+            ? const [Tab(text: 'All'), Tab(text: 'Circulars')]
             : const [
                 Tab(text: 'All'),
                 Tab(text: 'Approvals'),
@@ -123,15 +137,57 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                 controller: _tabController,
                 children: widget.role == 'teacher'
                     ? [
-                        _buildList(null, bgColor, surfaceColor, onSurfaceColor, mutedColor),
-                        _buildList(NotificationCategory.general, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(
+                          null,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.general,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
                       ]
                     : [
-                        _buildList(null, bgColor, surfaceColor, onSurfaceColor, mutedColor),
-                        _buildList(NotificationCategory.pendingApproval, bgColor, surfaceColor, onSurfaceColor, mutedColor),
-                        _buildList(NotificationCategory.feeDue, bgColor, surfaceColor, onSurfaceColor, mutedColor),
-                        _buildList(NotificationCategory.examReminder, bgColor, surfaceColor, onSurfaceColor, mutedColor),
-                        _buildList(NotificationCategory.general, bgColor, surfaceColor, onSurfaceColor, mutedColor),
+                        _buildList(
+                          null,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.pendingApproval,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.feeDue,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.examReminder,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.general,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
                       ],
               ),
       ),
@@ -251,21 +307,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         haystack.contains('exam');
   }
 
-  Future<void> _openNotification(AppNotification notif) async {
-    await _service?.markAsRead(notif.id);
-    if (mounted) setState(() {});
-    if (!mounted) return;
-    final target = NotificationRouteResolver.resolve(
-      data: notif.routingData,
-      currentRole: widget.role,
-    );
-    if (target.route != AppRoutes.notificationCenter) {
-      await Navigator.of(
-        context,
-      ).pushNamed(target.route, arguments: target.arguments);
-    }
-  }
-
   IconData _parentNotificationIcon(AppNotification item) {
     final text = '${item.title} ${item.body}'.toLowerCase();
     if (item.category == NotificationCategory.feeDue || text.contains('fee')) {
@@ -324,32 +365,117 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     Color mutedColor,
   ) {
     final items = _filtered(category);
-    if (items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.notifications_none_rounded, size: 48, color: mutedColor),
+    return RefreshIndicator(
+      onRefresh: () => _init(forceRefresh: true),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        children: [
+          _NotificationSummaryPanel(
+            allCount: _filtered(null).length,
+            visibleCount: items.length,
+            unreadCount: _service?.getUnreadCountForRole(widget.role) ?? 0,
+            categoryLabel: _categoryLabel(category),
+            hasBackendIssue: _error != null,
+          ),
+          if (_error != null) ...[
             const SizedBox(height: 12),
-            Text(
-              'No notifications',
-              style: GoogleFonts.dmSans(
-                fontSize: 15,
-                color: mutedColor,
-                fontWeight: FontWeight.w500,
+            _NotificationIssueBanner(message: _error!),
+          ],
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 36),
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.appTheme.outlineVariant),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.notifications_none_rounded,
+                    size: 48,
+                    color: mutedColor,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No notifications',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      color: mutedColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _error == null
+                        ? 'New alerts from the backend will appear here.'
+                        : 'Refresh after the notification service is reachable.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.dmSans(fontSize: 12, color: mutedColor),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildNotifCard(
+                  item,
+                  surfaceColor,
+                  onSurfaceColor,
+                  mutedColor,
+                ),
               ),
             ),
-          ],
-        ),
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) =>
-          _buildNotifCard(items[i], surfaceColor, onSurfaceColor, mutedColor),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
+  }
+
+  String _categoryLabel(String? category) {
+    switch (category) {
+      case NotificationCategory.pendingApproval:
+        return 'Approvals';
+      case NotificationCategory.feeDue:
+        return 'Fees';
+      case NotificationCategory.examReminder:
+        return 'Exams';
+      case NotificationCategory.general:
+        return 'Circulars';
+      default:
+        return 'All';
+    }
+  }
+
+  Future<void> _openNotification(AppNotification notif) async {
+    try {
+      await _service?.markAsRead(notif.id);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not mark notification as read: $error'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() {});
+    if (!mounted) return;
+    final target = NotificationRouteResolver.resolve(
+      data: notif.routingData,
+      currentRole: widget.role,
+    );
+    if (target.route != AppRoutes.notificationCenter) {
+      await Navigator.of(
+        context,
+      ).pushNamed(target.route, arguments: target.arguments);
+    }
   }
 
   Widget _buildNotifCard(
@@ -368,99 +494,105 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         ? const Color(0xFF2D3748)
         : context.appTheme.outlineVariant;
 
-    return GestureDetector(
-      onTap: () async {
-        await _service?.markAsRead(notif.id);
-        if (mounted) setState(() {});
-        if (!mounted) return;
-        final target = NotificationRouteResolver.resolve(
-          data: notif.routingData,
-          currentRole: widget.role,
-        );
-        if (target.route != AppRoutes.notificationCenter) {
-          await Navigator.of(
-            context,
-          ).pushNamed(target.route, arguments: target.arguments);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: notif.isRead ? surfaceColor : unreadBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: notif.isRead
-                ? outlineColor
-                : context.appTheme.primaryLight.withAlpha(80),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _openNotification(notif),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: notif.isRead ? surfaceColor : unreadBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: notif.isRead
+                  ? outlineColor
+                  : context.appTheme.primaryLight.withAlpha(80),
+            ),
           ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: categoryColor.withAlpha(30),
-                borderRadius: BorderRadius.circular(10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: categoryColor.withAlpha(30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(categoryIcon, color: categoryColor, size: 20),
               ),
-              child: Icon(categoryIcon, color: categoryColor, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          notif.title,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            notif.title,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              fontWeight: notif.isRead
+                                  ? FontWeight.w500
+                                  : FontWeight.w700,
+                              color: onSurfaceColor,
+                            ),
+                          ),
+                        ),
+                        if (!notif.isRead)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: categoryColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      notif.body,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        color: mutedColor,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _buildPriorityChip(notif.priority),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _categoryLabel(notif.category),
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              color: mutedColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          _formatTime(notif.timestamp),
                           style: GoogleFonts.dmSans(
-                            fontSize: 13,
-                            fontWeight: notif.isRead
-                                ? FontWeight.w500
-                                : FontWeight.w700,
-                            color: onSurfaceColor,
+                            fontSize: 11,
+                            color: mutedColor,
                           ),
                         ),
-                      ),
-                      if (!notif.isRead)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: categoryColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    notif.body,
-                    style: GoogleFonts.dmSans(fontSize: 12, color: mutedColor),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      _buildPriorityChip(notif.priority),
-                      const Spacer(),
-                      Text(
-                        _formatTime(notif.timestamp),
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          color: mutedColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -530,6 +662,168 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return DateFormat('dd MMM').format(dt);
+  }
+}
+
+class _NotificationSummaryPanel extends StatelessWidget {
+  final int allCount;
+  final int visibleCount;
+  final int unreadCount;
+  final String categoryLabel;
+  final bool hasBackendIssue;
+
+  const _NotificationSummaryPanel({
+    required this.allCount,
+    required this.visibleCount,
+    required this.unreadCount,
+    required this.categoryLabel,
+    required this.hasBackendIssue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          _NotificationMetricPill(
+            label: 'Inbox',
+            value: allCount,
+            icon: Icons.notifications_active_rounded,
+            color: context.appTheme.primary,
+          ),
+          _NotificationMetricPill(
+            label: categoryLabel,
+            value: visibleCount,
+            icon: Icons.filter_alt_rounded,
+            color: context.appTheme.info,
+          ),
+          _NotificationMetricPill(
+            label: 'Unread',
+            value: unreadCount,
+            icon: Icons.mark_email_unread_rounded,
+            color: unreadCount == 0
+                ? context.appTheme.success
+                : context.appTheme.warning,
+          ),
+          _NotificationMetricPill(
+            label: 'Backend',
+            value: hasBackendIssue ? 1 : 0,
+            icon: hasBackendIssue
+                ? Icons.cloud_off_rounded
+                : Icons.cloud_done_rounded,
+            color: hasBackendIssue
+                ? context.appTheme.error
+                : context.appTheme.success,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationMetricPill extends StatelessWidget {
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  const _NotificationMetricPill({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 108),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withAlpha(22),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(50)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$value',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: context.appTheme.onSurface,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationIssueBanner extends StatelessWidget {
+  final String message;
+
+  const _NotificationIssueBanner({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.errorContainer,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.error.withAlpha(70)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, color: context.appTheme.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                height: 1.35,
+                color: context.appTheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

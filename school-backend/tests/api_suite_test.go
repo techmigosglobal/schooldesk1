@@ -115,43 +115,40 @@ func TestCompleteAPISuite(t *testing.T) {
 		},
 	}
 
-	s.login("Admin", "admin@suite.test", pass)
 	s.login("Principal", "principal@suite.test", pass)
 	s.login("Teacher", "teacher@suite.test", pass)
 	s.login("Parent", "parent@suite.test", pass)
 
-	s.expect("Admin dashboard metrics", "GET", "/dashboard/admin", "Admin", "Admin", nil, http.StatusOK)
 	s.expect("Principal dashboard metrics", "GET", "/dashboard/principal", "Principal", "Principal", nil, http.StatusOK)
 	s.expect("Teacher dashboard metrics", "GET", "/dashboard/teacher", "Teacher", "Teacher", nil, http.StatusOK)
 	s.expect("Parent dashboard metrics", "GET", "/dashboard/parent", "Parent", "Parent", nil, http.StatusOK)
-	s.expect("Parent forbidden admin dashboard", "GET", "/dashboard/admin", "Parent", "Parent", nil, http.StatusForbidden)
 
 	s.expect("Unauthorized students list", "GET", "/students", "", "Anonymous", nil, http.StatusUnauthorized)
 	s.expect("Parent forbidden create student", "POST", "/students", "Parent", "Parent", map[string]any{"first_name": "No", "last_name": "Access", "date_of_birth": "2015-01-01", "gender": "male"}, http.StatusForbidden)
 
-	s.expectDataID("Admin create student", "POST", "/students", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal create student", "POST", "/students", "Principal", "Principal", map[string]any{
 		"first_name": "Runtime", "last_name": "Student", "date_of_birth": "2015-01-01", "gender": "female",
 		"admission_number": "RT-001", "student_code": "RT-001", "current_section_id": s.ids["section"],
 	}, http.StatusCreated, "new_student")
-	s.expectDataID("Admin assign enrollment", "POST", "/students/enrollments", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal assign enrollment", "POST", "/students/enrollments", "Principal", "Principal", map[string]any{
 		"student_id": s.ids["new_student"], "section_id": s.ids["section"], "academic_year_id": s.ids["year"], "roll_number": "77", "enrollment_date": "2026-05-01",
 	}, http.StatusCreated, "new_enrollment")
-	s.expect("Admin link parent to new student", "POST", "/parents/user-parent-suite/students", "Admin", "Admin", map[string]any{
+	s.expect("Principal link parent to new student", "POST", "/parents/user-parent-suite/students", "Principal", "Principal", map[string]any{
 		"admission_numbers": []string{"RT-001"},
 	}, http.StatusOK)
-	s.expectDataID("Admin create invoice", "POST", "/fees/invoices", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal create invoice", "POST", "/fees/invoices", "Principal", "Principal", map[string]any{
 		"student_id": s.ids["new_student"], "academic_year_id": s.ids["year"], "invoice_number": "RT-INV-001", "invoice_date": "2026-05-01", "due_date": "2026-05-10",
 		"total_amount": 1000, "discount_amount": 0, "net_amount": 1000,
 		"items": []map[string]any{{"fee_category_id": s.ids["fee_category"], "amount": 1000, "description": "Tuition"}},
 	}, http.StatusCreated, "invoice")
-	s.expectDataID("Admin create exam type", "POST", "/exams/types", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal create exam type", "POST", "/exams/types", "Principal", "Principal", map[string]any{
 		"school_id": s.ids["school"], "name": "Runtime Type", "weightage_percent": 10,
 	}, http.StatusCreated, "exam_type")
-	s.expectDataID("Admin create exam", "POST", "/exams", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal create exam", "POST", "/exams", "Principal", "Principal", map[string]any{
 		"school_id": s.ids["school"], "academic_year_id": s.ids["year"], "term_id": s.ids["term"], "exam_type_id": s.ids["exam_type"],
 		"exam_name": "Runtime Exam", "start_date": "2026-05-15", "end_date": "2026-05-16",
 	}, http.StatusCreated, "exam")
-	s.expectDataID("Admin create exam schedule", "POST", "/exams/schedules", "Admin", "Admin", map[string]any{
+	s.expectDataID("Principal create exam schedule", "POST", "/exams/schedules", "Principal", "Principal", map[string]any{
 		"exam_id": s.ids["exam"], "grade_id": s.ids["grade"], "section_id": s.ids["section"], "subject_id": s.ids["subject"],
 		"exam_date": "2026-05-15", "start_time": "09:00", "end_time": "10:00", "max_marks": 100, "pass_marks": 35,
 	}, http.StatusCreated, "schedule")
@@ -206,19 +203,18 @@ func TestCompleteAPISuite(t *testing.T) {
 	}, http.StatusCreated, "announcement")
 	s.expect("Principal analytics students", "GET", "/students", "Principal", "Principal", nil, http.StatusOK)
 	s.expect("Principal monitoring audit logs", "GET", "/audit-logs", "Principal", "Principal", nil, http.StatusOK)
-	s.expect("Admin fetch audit logs", "GET", "/audit-logs", "Admin", "Admin", nil, http.StatusOK)
-	s.expectAuditContains("Audit attendance marking", "Admin", "attendance", "update", "student_attendances", s.ids["attendance_session"], "Teacher")
-	s.expectAuditContains("Audit exam marks entry", "Admin", "exams", "create", "student_marks", "", "Teacher")
-	s.expectAuditContains("Audit leave approval", "Admin", "leave", "update", "leave_applications", s.ids["leave"], "Principal")
-	s.expectAuditContains("Audit message conversation", "Admin", "message_conversations", "create", "message_conversations", s.ids["conversation"], "Parent")
-	s.expectAuditContains("Audit message reply", "Admin", "messages", "create", "messages", s.ids["message"], "Parent")
+	s.expectAuditContains("Audit attendance marking", "Principal", "attendance", "update", "student_attendances", s.ids["attendance_session"], "Teacher")
+	s.expectAuditContains("Audit exam marks entry", "Principal", "exams", "create", "student_marks", "", "Teacher")
+	s.expectAuditContains("Audit leave approval", "Principal", "leave", "update", "leave_applications", s.ids["leave"], "Principal")
+	s.expectAuditContains("Audit message conversation", "Principal", "message_conversations", "create", "message_conversations", s.ids["conversation"], "Parent")
+	s.expectAuditContains("Audit message reply", "Principal", "messages", "create", "messages", s.ids["message"], "Parent")
 
-	s.expect("Admin record fee payment", "POST", "/fees/payments", "Admin", "Admin", map[string]any{
+	s.expect("Principal record fee payment", "POST", "/fees/payments", "Principal", "Principal", map[string]any{
 		"invoice_id": s.ids["invoice"], "receipt_number": "RT-RCPT-001", "amount_paid": 1000, "payment_date": "2026-05-01", "payment_mode": "cash",
 	}, http.StatusOK)
-	s.expectAuditContains("Audit fee payment", "Admin", "fees", "create", "payments", "", "Admin")
-	s.expect("Admin verify paid invoice", "GET", "/fees/invoices?student_id="+s.ids["new_student"], "Admin", "Admin", nil, http.StatusOK)
-	s.expect("Admin verify marks", "GET", "/students/"+s.ids["new_student"]+"/marks?exam_id="+s.ids["exam"], "Admin", "Admin", nil, http.StatusOK)
+	s.expectAuditContains("Audit fee payment", "Principal", "fees", "create", "payments", "", "Principal")
+	s.expect("Principal verify paid invoice", "GET", "/fees/invoices?student_id="+s.ids["new_student"], "Principal", "Principal", nil, http.StatusOK)
+	s.expect("Principal verify marks", "GET", "/students/"+s.ids["new_student"]+"/marks?exam_id="+s.ids["exam"], "Principal", "Principal", nil, http.StatusOK)
 
 	rep := s.buildReport()
 	if err := writeReports(root, rep); err != nil {
@@ -255,7 +251,7 @@ func seedFixtures() error {
 	schoolID, yearID, termID := "school-suite", "year-suite", "term-suite-1"
 	gradeID, sectionID, subjectID, deptID := "grade-suite-10", "section-suite-a", "subject-suite-math", "dept-suite"
 	staffID, studentID, otherStudentID, outsideStudentID, enrollmentID := "staff-suite-teacher", "student-suite-linked", "student-suite-other", "student-suite-outside", "enrollment-suite-linked"
-	roles := map[string]string{"Admin": "role-admin-suite", "Principal": "role-principal-suite", "Teacher": "role-teacher-suite", "Parent": "role-parent-suite"}
+	roles := map[string]string{"Principal": "role-principal-suite", "Teacher": "role-teacher-suite", "Parent": "role-parent-suite"}
 	if err := create(&models.School{BaseModel: models.BaseModel{ID: schoolID}, Name: "Suite School", SchoolType: "cbse", Timezone: "Asia/Kolkata", Currency: "INR"}); err != nil {
 		return err
 	}
@@ -295,7 +291,6 @@ func seedFixtures() error {
 		}
 	}
 	users := []models.User{
-		{BaseModel: models.BaseModel{ID: "user-admin-suite"}, SchoolID: schoolID, Email: "admin@suite.test", PasswordHash: hash, RoleID: roles["Admin"], LinkedType: "staff", IsActive: true, IsVerified: true},
 		{BaseModel: models.BaseModel{ID: "user-principal-suite"}, SchoolID: schoolID, Email: "principal@suite.test", PasswordHash: hash, RoleID: roles["Principal"], LinkedType: "staff", IsActive: true, IsVerified: true},
 		{BaseModel: models.BaseModel{ID: "user-teacher-suite"}, SchoolID: schoolID, Email: "teacher@suite.test", PasswordHash: hash, RoleID: roles["Teacher"], LinkedType: "staff", LinkedID: &staffID, IsActive: true, IsVerified: true},
 		{BaseModel: models.BaseModel{ID: "user-parent-suite"}, SchoolID: schoolID, Email: "parent@suite.test", PasswordHash: hash, RoleID: roles["Parent"], LinkedType: "guardian", IsActive: true, IsVerified: true},

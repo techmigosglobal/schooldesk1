@@ -144,7 +144,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       drawer: drawer,
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(

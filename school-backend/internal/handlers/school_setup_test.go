@@ -72,8 +72,8 @@ func TestSchoolSetupCreatesSchoolRolesPermissionsAndPrincipalSession(t *testing.
 	if err := db.Model(&models.Role{}).Where("school_id = ?", school.ID).Count(&roleCount).Error; err != nil {
 		t.Fatalf("count roles: %v", err)
 	}
-	if roleCount != 5 {
-		t.Fatalf("role count=%d, want 5", roleCount)
+	if roleCount != 4 {
+		t.Fatalf("role count=%d, want 4", roleCount)
 	}
 	var kiosk models.User
 	if err := db.Preload("Role").First(&kiosk, "school_id = ? AND username = ?", school.ID, "kiosk").Error; err != nil {

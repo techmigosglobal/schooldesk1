@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
+import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _EventFilter {
@@ -19,8 +22,15 @@ enum _EventFilter {
 
 enum _EventsDisplayMode { calendar, list }
 
+enum SchoolCalendarPortal { principal, teacher, parent }
+
 class EventsCalendarScreen extends StatefulWidget {
-  const EventsCalendarScreen({super.key});
+  final SchoolCalendarPortal portal;
+
+  const EventsCalendarScreen({
+    super.key,
+    this.portal = SchoolCalendarPortal.principal,
+  });
 
   @override
   State<EventsCalendarScreen> createState() => _EventsCalendarScreenState();
@@ -81,6 +91,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   bool get _canManageEvents {
+    if (widget.portal != SchoolCalendarPortal.principal) return false;
     final role = BackendApiClient.instance.currentRoleName
         ?.trim()
         .toLowerCase();
@@ -89,6 +100,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         role == 'admin' ||
         role == 'principal';
   }
+
+  bool get _isPrincipalPortal =>
+      widget.portal == SchoolCalendarPortal.principal;
 
   List<_PrincipalEvent> get _visibleEvents {
     final now = DateTime.now();
@@ -253,7 +267,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Remove'),
           ),
@@ -491,7 +507,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         content: Text(
           'School calendar loaded: $done added'
           '${skipped > 0 ? ', $skipped skipped' : ''}'
-          '${failed > 0 ? ', $failed failed' : ''}.'
+          '${failed > 0 ? ', $failed failed' : ''}.',
         ),
         duration: const Duration(seconds: 5),
         behavior: SnackBarBehavior.floating,
@@ -502,10 +518,16 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_isPrincipalPortal) return _buildReadOnlyCalendar();
+
+    return _buildPrincipalCalendar();
+  }
+
+  Widget _buildPrincipalCalendar() {
     final visible = _visibleEvents;
     final showList = _displayMode == _EventsDisplayMode.list;
     return PrincipalDirectoryScaffold(
-      title: 'Events Directory',
+      title: 'School Calendar',
       subtitle:
           'Live school calendar for events, holidays, PTMs, and approvals',
       loading: _loading,
@@ -561,8 +583,8 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 label: 'Holidays',
                 value: '$_holidayCount',
                 icon: Icons.celebration_rounded,
-                color: Colors.green,
-                tone: const Color(0xFFEAFBF0),
+                color: Colors.red,
+                tone: const Color(0xFFFFEBEE),
               ),
               PrincipalDirectoryMetric(
                 label: 'Approvals',
@@ -596,6 +618,129 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ),
       ],
     );
+  }
+
+  Widget _buildReadOnlyCalendar() {
+    final visible = _visibleEvents;
+    final showList = _displayMode == _EventsDisplayMode.list;
+    return SchoolDeskModuleScaffold(
+      title: 'School Calendar',
+      subtitle: 'Holidays, events, PTMs, and school milestones',
+      drawer: _schoolCalendarDrawer(),
+      actions: [
+        IconButton(
+          tooltip: 'Refresh calendar',
+          onPressed: _loading ? null : _loadData,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(child: _buildFilters()),
+            if (_loading)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: EmptyStateWidget(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Unable to load calendar',
+                    description: _error!,
+                  ),
+                ),
+              )
+            else ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: PrincipalDirectoryMetricStrip(
+                    metrics: [
+                      PrincipalDirectoryMetric(
+                        label: _monthName(_selectedMonth),
+                        value: '$_selectedMonthCount',
+                        icon: Icons.calendar_month_rounded,
+                        color: principalDirectoryAccent,
+                        tone: const Color(0xFFEAF4FF),
+                      ),
+                      PrincipalDirectoryMetric(
+                        label: 'Today',
+                        value: '$_todayCount',
+                        icon: Icons.today_rounded,
+                        color: Colors.teal,
+                        tone: const Color(0xFFE4FAF6),
+                      ),
+                      PrincipalDirectoryMetric(
+                        label: 'Upcoming',
+                        value: '$_upcomingCount',
+                        icon: Icons.upcoming_rounded,
+                        color: Colors.indigo,
+                        tone: const Color(0xFFEAF0FF),
+                      ),
+                      PrincipalDirectoryMetric(
+                        label: 'Holidays',
+                        value: '$_holidayCount',
+                        icon: Icons.celebration_rounded,
+                        color: Colors.red,
+                        tone: const Color(0xFFFFEBEE),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (showList && visible.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: EmptyStateWidget(
+                      icon: Icons.event_busy_rounded,
+                      title: 'No events found',
+                      description: _events.isEmpty
+                          ? 'The school calendar has not been published yet.'
+                          : 'Adjust search, month, or filters to see more events.',
+                    ),
+                  ),
+                )
+              else if (_displayMode == _EventsDisplayMode.calendar)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  sliver: SliverList.separated(
+                    itemCount: visible.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _EventDirectoryCard(
+                      event: visible[index],
+                      onTap: () => _openDetails(visible[index]),
+                      canManage: false,
+                      onAction: (_) async => false,
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _schoolCalendarDrawer() {
+    switch (widget.portal) {
+      case SchoolCalendarPortal.teacher:
+        return TeacherDrawer(selectedIndex: 30, onDestinationSelected: (_) {});
+      case SchoolCalendarPortal.parent:
+        return ParentDrawer(selectedIndex: 8, onDestinationSelected: (_) {});
+      case SchoolCalendarPortal.principal:
+        return const SizedBox.shrink();
+    }
   }
 
   Widget _buildCalendarMonth() {
@@ -972,6 +1117,7 @@ class _EventCalendarDayCell extends StatelessWidget {
     final isToday = DateUtils.isSameDay(day, now);
     final hasEvents = events.isNotEmpty;
     final firstEvent = hasEvents ? events.first : null;
+    final accent = firstEvent?.typeColor ?? principalDirectoryAccent;
 
     return Material(
       color: Colors.transparent,
@@ -984,14 +1130,14 @@ class _EventCalendarDayCell extends StatelessWidget {
             color: isToday
                 ? const Color(0xFFEAF4FF)
                 : hasEvents
-                ? const Color(0xFFF7FBFF)
+                ? firstEvent!.calendarTone
                 : const Color(0xFFF9FBFE),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isToday
                   ? principalDirectoryAccent.withAlpha(120)
                   : hasEvents
-                  ? firstEvent!.statusColor.withAlpha(90)
+                  ? accent.withAlpha(110)
                   : const Color(0xFFE4ECF5),
             ),
           ),
@@ -1046,7 +1192,7 @@ class _EventCalendarDayCell extends StatelessWidget {
                         height: 5,
                         margin: const EdgeInsets.only(right: 3),
                         decoration: BoxDecoration(
-                          color: event.statusColor,
+                          color: event.typeColor,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -1776,6 +1922,7 @@ class _PrincipalEvent {
         _parseDateAndTime(
           row['end_date'] ?? row['start_date'],
           row['end_time'],
+          endOfDay: true,
         ) ??
         start.add(const Duration(hours: 1));
     final type = _clean(row['event_type'], fallback: 'event').toLowerCase();
@@ -1864,6 +2011,34 @@ class _PrincipalEvent {
       _ => principalDirectoryAccent,
     };
   }
+
+  Color get typeColor {
+    if (isHoliday) return Colors.red;
+    return switch (type) {
+      'meeting' => Colors.teal,
+      'ptm' => const Color(0xFF1B4F72),
+      'exam' => const Color(0xFFD35400),
+      'academic' => const Color(0xFF2563EB),
+      'sports' => const Color(0xFF16A34A),
+      'cultural' => const Color(0xFF8E44AD),
+      'staff' => const Color(0xFF4F46E5),
+      'health' => const Color(0xFF0E9384),
+      _ => principalDirectoryAccent,
+    };
+  }
+
+  Color get calendarTone {
+    if (isHoliday) return const Color(0xFFFFF1F2);
+    return switch (type) {
+      'exam' => const Color(0xFFFFF4E5),
+      'academic' => const Color(0xFFEAF4FF),
+      'sports' => const Color(0xFFE9F9EF),
+      'cultural' => const Color(0xFFF3ECFF),
+      'ptm' || 'meeting' => const Color(0xFFEAF0FF),
+      'health' => const Color(0xFFE7FAF6),
+      _ => const Color(0xFFF7FBFF),
+    };
+  }
 }
 
 String _clean(Object? value, {String fallback = ''}) {
@@ -1878,10 +2053,14 @@ DateTime? _parseDateTime(Object? value) {
   return DateTime.tryParse(text);
 }
 
-DateTime? _parseDateAndTime(Object? date, Object? time) {
+DateTime? _parseDateAndTime(
+  Object? date,
+  Object? time, {
+  bool endOfDay = false,
+}) {
   final dateText = _clean(date);
   if (dateText.isEmpty) return null;
-  final timeText = _clean(time, fallback: '00:00:00');
+  final timeText = _clean(time, fallback: endOfDay ? '23:59:59' : '00:00:00');
   return DateTime.tryParse('${dateText.split('T').first}T$timeText');
 }
 
@@ -1969,16 +2148,15 @@ abstract final class _SchoolCalendarData {
     String start, {
     String? end,
     String desc = '',
-  }) =>
-      _SchoolCalendarEntry(
-        title: title,
-        startDate: start,
-        endDate: end ?? start,
-        eventType: 'holiday',
-        description: desc.isEmpty ? title : desc,
-        isHoliday: true,
-        audienceType: 'all',
-      );
+  }) => _SchoolCalendarEntry(
+    title: title,
+    startDate: start,
+    endDate: end ?? start,
+    eventType: 'holiday',
+    description: desc.isEmpty ? title : desc,
+    isHoliday: true,
+    audienceType: 'all',
+  );
 
   // Cultural / celebration
   static _SchoolCalendarEntry _c(
@@ -1987,191 +2165,355 @@ abstract final class _SchoolCalendarData {
     String? end,
     String desc = '',
     String type = 'cultural',
-  }) =>
-      _SchoolCalendarEntry(
-        title: title,
-        startDate: start,
-        endDate: end ?? start,
-        eventType: type,
-        description: desc.isEmpty ? title : desc,
-        isHoliday: false,
-        audienceType: 'all',
-      );
+  }) => _SchoolCalendarEntry(
+    title: title,
+    startDate: start,
+    endDate: end ?? start,
+    eventType: type,
+    description: desc.isEmpty ? title : desc,
+    isHoliday: false,
+    audienceType: 'all',
+  );
 
   static final List<_SchoolCalendarEntry> all = [
     // ── June 2026 ──────────────────────────────────────────────────────────
-    _h('Muharram', '2026-06-26',
-        desc: 'Islamic New Year – public holiday'),
+    _h('Muharram', '2026-06-26', desc: 'Islamic New Year – public holiday'),
 
     // ── August 2026 ────────────────────────────────────────────────────────
-    _h('Bonalu Festival', '2026-08-10',
-        desc: 'Bonalu Festival – Telangana public holiday'),
-    _h('Independence Day', '2026-08-15',
-        desc: 'India Independence Day – national holiday'),
-    _c('Varalakshmi Vratam', '2026-08-21',
-        desc: 'Varalakshmi Vratam celebration'),
+    _h(
+      'Bonalu Festival',
+      '2026-08-10',
+      desc: 'Bonalu Festival – Telangana public holiday',
+    ),
+    _h(
+      'Independence Day',
+      '2026-08-15',
+      desc: 'India Independence Day – national holiday',
+    ),
+    _c(
+      'Varalakshmi Vratam',
+      '2026-08-21',
+      desc: 'Varalakshmi Vratam celebration',
+    ),
     _c('Onam', '2026-08-26', desc: 'Onam harvest festival'),
-    _c('Raksha Bandhan', '2026-08-28',
-        desc: 'Raksha Bandhan – sibling bonding celebration'),
+    _c(
+      'Raksha Bandhan',
+      '2026-08-28',
+      desc: 'Raksha Bandhan – sibling bonding celebration',
+    ),
 
     // ── September 2026 ─────────────────────────────────────────────────────
-    _c('Janmashtami', '2026-09-04',
-        desc: 'Janmashtami – Krishna Jayanti celebration'),
-    _c("Teacher's Day", '2026-09-05',
-        desc: "Teacher's Day celebration – Dr Sarvepalli Radhakrishnan",
-        type: 'academic'),
-    _h("Milad-un-Nabi / Eid-e-Milad", '2026-09-14',
-        desc: 'Prophet Muhammad\'s Birthday – public holiday'),
-    _c('Vinayaka Chaturthi', '2026-09-16',
-        desc: 'Ganesh Chaturthi – 10-day festival'),
-    _c("Pitra Paksha / Mahalaya", '2026-10-01',
-        desc: 'Mahalaya – beginning of Durga Puja period'),
+    _c(
+      'Janmashtami',
+      '2026-09-04',
+      desc: 'Janmashtami – Krishna Jayanti celebration',
+    ),
+    _c(
+      "Teacher's Day",
+      '2026-09-05',
+      desc: "Teacher's Day celebration – Dr Sarvepalli Radhakrishnan",
+      type: 'academic',
+    ),
+    _h(
+      "Milad-un-Nabi / Eid-e-Milad",
+      '2026-09-14',
+      desc: 'Prophet Muhammad\'s Birthday – public holiday',
+    ),
+    _c(
+      'Vinayaka Chaturthi',
+      '2026-09-16',
+      desc: 'Ganesh Chaturthi – 10-day festival',
+    ),
+    _c(
+      "Pitra Paksha / Mahalaya",
+      '2026-10-01',
+      desc: 'Mahalaya – beginning of Durga Puja period',
+    ),
 
     // ── October 2026 ───────────────────────────────────────────────────────
-    _h('Gandhi Jayanti', '2026-10-02',
-        desc: 'Gandhi Jayanti – national holiday'),
-    _c('Navratri Begin', '2026-10-07',
-        desc: 'Navratri festival begins – 9 days of celebration'),
-    _h('Dussehra (Vijayadashami)', '2026-10-15', end: '2026-10-16',
-        desc: 'Dussehra / Vijayadashami – public holiday'),
-    _c('Navratri End', '2026-10-15',
-        desc: 'Navratri concludes with Vijayadashami'),
+    _h(
+      'Gandhi Jayanti',
+      '2026-10-02',
+      desc: 'Gandhi Jayanti – national holiday',
+    ),
+    _c(
+      'Navratri Begin',
+      '2026-10-07',
+      desc: 'Navratri festival begins – 9 days of celebration',
+    ),
+    _h(
+      'Dussehra (Vijayadashami)',
+      '2026-10-15',
+      end: '2026-10-16',
+      desc: 'Dussehra / Vijayadashami – public holiday',
+    ),
+    _c(
+      'Navratri End',
+      '2026-10-15',
+      desc: 'Navratri concludes with Vijayadashami',
+    ),
 
     // ── November 2026 ──────────────────────────────────────────────────────
-    _h('Diwali', '2026-11-08', end: '2026-11-10',
-        desc: 'Diwali festival holidays'),
-    _c('Bhai Dooj', '2026-11-10',
-        desc: 'Bhai Dooj – sibling celebration after Diwali'),
-    _h('Guru Nanak Jayanti', '2026-11-25',
-        desc: 'Guru Nanak Jayanti – public holiday'),
-    _c('Constitution Day', '2026-11-26',
-        desc: 'Constitution Day of India', type: 'academic'),
+    _h(
+      'Diwali',
+      '2026-11-08',
+      end: '2026-11-10',
+      desc: 'Diwali festival holidays',
+    ),
+    _c(
+      'Bhai Dooj',
+      '2026-11-10',
+      desc: 'Bhai Dooj – sibling celebration after Diwali',
+    ),
+    _h(
+      'Guru Nanak Jayanti',
+      '2026-11-25',
+      desc: 'Guru Nanak Jayanti – public holiday',
+    ),
+    _c(
+      'Constitution Day',
+      '2026-11-26',
+      desc: 'Constitution Day of India',
+      type: 'academic',
+    ),
 
     // ── December 2026 ──────────────────────────────────────────────────────
-    _c('Christmas Week', '2026-12-21', end: '2026-12-31',
-        desc: 'Winter holiday / Christmas break'),
-    _h('Christmas Day', '2026-12-25',
-        desc: 'Christmas Day – public holiday'),
+    _c(
+      'Christmas Week',
+      '2026-12-21',
+      end: '2026-12-31',
+      desc: 'Winter holiday / Christmas break',
+    ),
+    _h('Christmas Day', '2026-12-25', desc: 'Christmas Day – public holiday'),
 
     // ── January 2027 ───────────────────────────────────────────────────────
-    _c('Winter Holiday', '2027-01-01', end: '2027-01-02',
-        desc: 'New Year winter break continues'),
-    _h('Makara Sankranti', '2027-01-14', end: '2027-01-16',
-        desc: 'Makara Sankranti / Pongal – harvest festival holidays'),
-    _h('Pongal', '2027-01-15',
-        desc: 'Pongal – Tamil harvest festival'),
-    _h('Republic Day', '2027-01-26',
-        desc: 'Republic Day – national holiday'),
+    _c(
+      'Winter Holiday',
+      '2027-01-01',
+      end: '2027-01-02',
+      desc: 'New Year winter break continues',
+    ),
+    _h(
+      'Makara Sankranti',
+      '2027-01-14',
+      end: '2027-01-16',
+      desc: 'Makara Sankranti / Pongal – harvest festival holidays',
+    ),
+    _h('Pongal', '2027-01-15', desc: 'Pongal – Tamil harvest festival'),
+    _h('Republic Day', '2027-01-26', desc: 'Republic Day – national holiday'),
 
     // ── February 2027 ──────────────────────────────────────────────────────
-    _c('Saraswati Puja', '2027-02-01',
-        desc: 'Saraswati Puja – Vasant Panchami'),
-    _c("Children's Science Congress", '2027-02-05',
-        desc: "Children's Science Congress / Science Day",
-        type: 'academic'),
-    _c('Shivaji Jayanti', '2027-02-19',
-        desc: 'Chhatrapati Shivaji Maharaj Jayanti'),
+    _c(
+      'Saraswati Puja',
+      '2027-02-01',
+      desc: 'Saraswati Puja – Vasant Panchami',
+    ),
+    _c(
+      "Children's Science Congress",
+      '2027-02-05',
+      desc: "Children's Science Congress / Science Day",
+      type: 'academic',
+    ),
+    _c(
+      'Shivaji Jayanti',
+      '2027-02-19',
+      desc: 'Chhatrapati Shivaji Maharaj Jayanti',
+    ),
 
     // ── March 2027 ─────────────────────────────────────────────────────────
-    _h('Maha Shivaratri', '2027-02-26',
-        desc: 'Maha Shivaratri – public holiday'),
-    _c('Holi', '2027-03-01', end: '2027-03-02',
-        desc: 'Holi festival of colors'),
-    _h('Holi (main)', '2027-03-02',
-        desc: 'Holi – public holiday'),
-    _c('Annual Day / Sports Day', '2027-03-15',
-        desc: 'School Annual Day & Sports Day celebration',
-        type: 'sports'),
+    _h(
+      'Maha Shivaratri',
+      '2027-02-26',
+      desc: 'Maha Shivaratri – public holiday',
+    ),
+    _c(
+      'Holi',
+      '2027-03-01',
+      end: '2027-03-02',
+      desc: 'Holi festival of colors',
+    ),
+    _h('Holi (main)', '2027-03-02', desc: 'Holi – public holiday'),
+    _c(
+      'Annual Day / Sports Day',
+      '2027-03-15',
+      desc: 'School Annual Day & Sports Day celebration',
+      type: 'sports',
+    ),
 
     // ── April 2027 ─────────────────────────────────────────────────────────
-    _h('Good Friday', '2027-04-02',
-        desc: 'Good Friday – public holiday'),
-    _h('Ram Navami', '2027-04-06',
-        desc: 'Ram Navami – public holiday'),
-    _h('Dr Ambedkar Jayanti', '2027-04-14',
-        desc: 'Dr B R Ambedkar Jayanti – national holiday'),
+    _h('Good Friday', '2027-04-02', desc: 'Good Friday – public holiday'),
+    _h('Ram Navami', '2027-04-06', desc: 'Ram Navami – public holiday'),
+    _h(
+      'Dr Ambedkar Jayanti',
+      '2027-04-14',
+      desc: 'Dr B R Ambedkar Jayanti – national holiday',
+    ),
     _c('Vishu', '2027-04-14', desc: 'Vishu – Kerala New Year celebration'),
-    _h('Ugadi / Telugu New Year', '2027-04-14',
-        desc: 'Ugadi / Telugu New Year – public holiday'),
-    _h('Eid-ul-Fitr', '2027-04-21',
-        desc: 'Eid-ul-Fitr – public holiday'),
+    _h(
+      'Ugadi / Telugu New Year',
+      '2027-04-14',
+      desc: 'Ugadi / Telugu New Year – public holiday',
+    ),
+    _h('Eid-ul-Fitr', '2027-04-21', desc: 'Eid-ul-Fitr – public holiday'),
 
     // ── May 2027 ───────────────────────────────────────────────────────────
-    _h('Maharashtra Day / May Day', '2027-05-01',
-        desc: 'Maharashtra Foundation Day & International Labour Day'),
-    _c("Buddha Purnima", '2027-05-12',
-        desc: 'Buddha Purnima / Vesak celebration'),
-    _c("Mother's Day", '2027-05-09',
-        desc: "Mother's Day school celebration"),
-    _c('Farewell / Valedictory', '2027-05-15',
-        desc: 'Farewell ceremony for graduating students',
-        type: 'academic'),
-    _h('Summer Vacation Begin', '2027-05-16', end: '2027-05-31',
-        desc: 'Summer vacation begins'),
+    _h(
+      'Maharashtra Day / May Day',
+      '2027-05-01',
+      desc: 'Maharashtra Foundation Day & International Labour Day',
+    ),
+    _c(
+      "Buddha Purnima",
+      '2027-05-12',
+      desc: 'Buddha Purnima / Vesak celebration',
+    ),
+    _c("Mother's Day", '2027-05-09', desc: "Mother's Day school celebration"),
+    _c(
+      'Farewell / Valedictory',
+      '2027-05-15',
+      desc: 'Farewell ceremony for graduating students',
+      type: 'academic',
+    ),
+    _h(
+      'Summer Vacation Begin',
+      '2027-05-16',
+      end: '2027-05-31',
+      desc: 'Summer vacation begins',
+    ),
 
     // ── June 2027 ──────────────────────────────────────────────────────────
-    _h('Summer Vacation End', '2027-06-01', end: '2027-06-14',
-        desc: 'Summer vacation continues'),
-    _c('New Academic Year Opening', '2027-06-15',
-        desc: 'School reopens – new academic year 2027-28 begins',
-        type: 'academic'),
+    _h(
+      'Summer Vacation End',
+      '2027-06-01',
+      end: '2027-06-14',
+      desc: 'Summer vacation continues',
+    ),
+    _c(
+      'New Academic Year Opening',
+      '2027-06-15',
+      desc: 'School reopens – new academic year 2027-28 begins',
+      type: 'academic',
+    ),
 
     // ── Academic Calendar Events (across the year) ─────────────────────────
-    _c('Orientation Day', '2026-06-17',
-        desc: 'Student orientation & school opening day',
-        type: 'academic'),
-    _c('Unit Test 1', '2026-07-20', end: '2026-07-25',
-        desc: 'First unit test across all classes',
-        type: 'academic'),
-    _c('PTM Round 1', '2026-08-08',
-        desc: 'First Parent-Teacher Meeting of the year',
-        type: 'academic'),
-    _c('Half-Yearly Exams', '2026-09-21', end: '2026-09-30',
-        desc: 'Mid-year (half-yearly) examinations',
-        type: 'academic'),
-    _c('Half-Yearly Results', '2026-10-10',
-        desc: 'Half-yearly examination results declaration',
-        type: 'academic'),
-    _c('PTM Round 2', '2026-10-17',
-        desc: 'Second Parent-Teacher Meeting',
-        type: 'academic'),
-    _c('Unit Test 2', '2026-11-16', end: '2026-11-21',
-        desc: 'Second unit test across all classes',
-        type: 'academic'),
-    _c('PTM Round 3', '2026-12-05',
-        desc: 'Third Parent-Teacher Meeting',
-        type: 'academic'),
-    _c('Unit Test 3', '2027-01-18', end: '2027-01-23',
-        desc: 'Third unit test across all classes',
-        type: 'academic'),
-    _c('PTM Round 4', '2027-02-06',
-        desc: 'Fourth Parent-Teacher Meeting',
-        type: 'academic'),
-    _c('Pre-Board Exams', '2027-02-10', end: '2027-02-22',
-        desc: 'Pre-board / mock examinations for senior classes',
-        type: 'academic'),
-    _c('Annual Exams', '2027-03-01', end: '2027-03-20',
-        desc: 'Annual / year-end examinations for all classes',
-        type: 'academic'),
-    _c('Annual Exam Results', '2027-04-01',
-        desc: 'Annual examination results declaration',
-        type: 'academic'),
-    _c('Final PTM / Report Cards', '2027-04-10',
-        desc: 'Final Parent-Teacher Meeting & report card distribution',
-        type: 'academic'),
+    _c(
+      'Orientation Day',
+      '2026-06-17',
+      desc: 'Student orientation & school opening day',
+      type: 'academic',
+    ),
+    _c(
+      'Unit Test 1',
+      '2026-07-20',
+      end: '2026-07-25',
+      desc: 'First unit test across all classes',
+      type: 'academic',
+    ),
+    _c(
+      'PTM Round 1',
+      '2026-08-08',
+      desc: 'First Parent-Teacher Meeting of the year',
+      type: 'academic',
+    ),
+    _c(
+      'Half-Yearly Exams',
+      '2026-09-21',
+      end: '2026-09-30',
+      desc: 'Mid-year (half-yearly) examinations',
+      type: 'academic',
+    ),
+    _c(
+      'Half-Yearly Results',
+      '2026-10-10',
+      desc: 'Half-yearly examination results declaration',
+      type: 'academic',
+    ),
+    _c(
+      'PTM Round 2',
+      '2026-10-17',
+      desc: 'Second Parent-Teacher Meeting',
+      type: 'academic',
+    ),
+    _c(
+      'Unit Test 2',
+      '2026-11-16',
+      end: '2026-11-21',
+      desc: 'Second unit test across all classes',
+      type: 'academic',
+    ),
+    _c(
+      'PTM Round 3',
+      '2026-12-05',
+      desc: 'Third Parent-Teacher Meeting',
+      type: 'academic',
+    ),
+    _c(
+      'Unit Test 3',
+      '2027-01-18',
+      end: '2027-01-23',
+      desc: 'Third unit test across all classes',
+      type: 'academic',
+    ),
+    _c(
+      'PTM Round 4',
+      '2027-02-06',
+      desc: 'Fourth Parent-Teacher Meeting',
+      type: 'academic',
+    ),
+    _c(
+      'Pre-Board Exams',
+      '2027-02-10',
+      end: '2027-02-22',
+      desc: 'Pre-board / mock examinations for senior classes',
+      type: 'academic',
+    ),
+    _c(
+      'Annual Exams',
+      '2027-03-01',
+      end: '2027-03-20',
+      desc: 'Annual / year-end examinations for all classes',
+      type: 'academic',
+    ),
+    _c(
+      'Annual Exam Results',
+      '2027-04-01',
+      desc: 'Annual examination results declaration',
+      type: 'academic',
+    ),
+    _c(
+      'Final PTM / Report Cards',
+      '2027-04-10',
+      desc: 'Final Parent-Teacher Meeting & report card distribution',
+      type: 'academic',
+    ),
 
     // ── School Events / Celebrations ───────────────────────────────────────
-    _c('Diwali Celebrations', '2026-11-05',
-        desc: 'School Diwali celebration & cultural programme'),
-    _c('Christmas Celebrations', '2026-12-20',
-        desc: 'School Christmas programme & carol singing'),
-    _c('Talent Show', '2026-12-10',
-        desc: 'Inter-class talent show & cultural festival',
-        type: 'cultural'),
-    _c('Republic Day Celebrations', '2027-01-26',
-        desc: 'Republic Day flag hoisting & cultural programme'),
-    _c('Environment Day', '2027-06-05',
-        desc: 'World Environment Day – tree plantation drive',
-        type: 'academic'),
+    _c(
+      'Diwali Celebrations',
+      '2026-11-05',
+      desc: 'School Diwali celebration & cultural programme',
+    ),
+    _c(
+      'Christmas Celebrations',
+      '2026-12-20',
+      desc: 'School Christmas programme & carol singing',
+    ),
+    _c(
+      'Talent Show',
+      '2026-12-10',
+      desc: 'Inter-class talent show & cultural festival',
+      type: 'cultural',
+    ),
+    _c(
+      'Republic Day Celebrations',
+      '2027-01-26',
+      desc: 'Republic Day flag hoisting & cultural programme',
+    ),
+    _c(
+      'Environment Day',
+      '2027-06-05',
+      desc: 'World Environment Day – tree plantation drive',
+      type: 'academic',
+    ),
   ];
 }

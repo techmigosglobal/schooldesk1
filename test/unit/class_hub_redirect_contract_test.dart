@@ -7,8 +7,6 @@ void main() {
     const files = {
       'subjects':
           'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
-      'timetable':
-          'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
       'fees':
           'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
       'attendance':
@@ -30,10 +28,6 @@ void main() {
         );
       }
     }
-
-    final timetable = File(files['timetable']!).readAsStringSync();
-    expect(timetable, contains("'academicYearId'"));
-    expect(timetable, contains("'classId'"));
 
     final subjects = File(files['subjects']!).readAsStringSync();
     expect(subjects, contains("'classId'"));

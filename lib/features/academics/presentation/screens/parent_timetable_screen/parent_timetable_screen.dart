@@ -277,7 +277,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'Check other days or contact school admin.',
+            'Check other days or contact the school principal.',
             style: GoogleFonts.dmSans(
               fontSize: 12,
               color: context.appTheme.muted,

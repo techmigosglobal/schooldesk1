@@ -83,7 +83,7 @@ class _AdminExamsScreenState extends State<AdminExamsScreen> {
       drawer: AdminDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.admin),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(

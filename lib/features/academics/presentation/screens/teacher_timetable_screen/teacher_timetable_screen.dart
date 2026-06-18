@@ -98,7 +98,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
-      subtitle: 'Read-only schedule from Principal/Admin timetable setup',
+      subtitle: 'Read-only schedule from Principal timetable setup',
       selectedIndex: 1,
       loading: _loading,
       error: _error,
@@ -110,7 +110,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
               icon: Icons.class_outlined,
               title: 'No class assigned yet.',
               subtitle:
-                  'Your assignment will appear after Admin/Principal assigns you.',
+                  'Your assignment will appear after Principal assigns you.',
             )
           else ...[
             // ── Card 1: Today's Full-Day Assigned Class ──────────────────
@@ -129,7 +129,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
                 icon: Icons.calendar_month_outlined,
                 title: 'No timetable published yet.',
                 subtitle:
-                    'Ask Admin/Principal to assign subjects, staff, and timetable slots for your staff profile.',
+                    'Ask Principal to assign subjects, staff, and timetable slots for your staff profile.',
               )
             else
               ...List.generate(6, (index) => index + 1).map(

@@ -19,25 +19,16 @@ func TestTimetableRouteOwnershipAllowsPrincipalSmartGenerationAndManualSlotEdits
 	principalRoutes := string(principalSource)
 
 	for _, expected := range []string{
-		`timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin")`,
-		`timetable.POST("/slots", middleware.RBACMiddleware("Admin", "Principal")`,
-		`timetable.PUT("/slots/:id", middleware.RBACMiddleware("Admin", "Principal")`,
-		`timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin")`,
-		`timetable.PUT("/templates", middleware.RBACMiddleware("Admin")`,
-		`timetable.POST("/smart/preview", middleware.RBACMiddleware("Admin", "Principal")`,
-		`timetable.POST("/smart/generate", middleware.RBACMiddleware("Admin", "Principal")`,
+		`timetable.POST("/slots/generate", middleware.RBACMiddleware("Principal")`,
+		`timetable.POST("/slots", middleware.RBACMiddleware("Principal")`,
+		`timetable.PUT("/slots/:id", middleware.RBACMiddleware("Principal")`,
+		`timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Principal")`,
+		`timetable.PUT("/templates", middleware.RBACMiddleware("Principal")`,
+		`timetable.POST("/smart/preview", middleware.RBACMiddleware("Principal")`,
+		`timetable.POST("/smart/generate", middleware.RBACMiddleware("Principal")`,
 	} {
 		if !strings.Contains(routes, expected) {
 			t.Fatalf("routes.go missing timetable route ownership %q", expected)
-		}
-	}
-	for _, forbidden := range []string{
-		`timetable.POST("/slots/generate", middleware.RBACMiddleware("Admin", "Principal")`,
-		`timetable.DELETE("/slots/:id", middleware.RBACMiddleware("Admin", "Principal")`,
-		`timetable.PUT("/templates", middleware.RBACMiddleware("Admin", "Principal")`,
-	} {
-		if strings.Contains(routes, forbidden) {
-			t.Fatalf("routes.go still permits Principal timetable write route %q", forbidden)
 		}
 	}
 	if !strings.Contains(principalRoutes, `principal.GET("/timetable"`) {

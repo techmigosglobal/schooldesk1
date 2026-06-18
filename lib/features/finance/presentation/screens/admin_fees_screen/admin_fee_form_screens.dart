@@ -1224,7 +1224,7 @@ Widget _financeDrawer(String ownerRole) {
 DashboardRole _dashboardRole(String ownerRole) {
   return _isPrincipalOwner(ownerRole)
       ? DashboardRole.principal
-      : DashboardRole.admin;
+      : DashboardRole.principal;
 }
 
 bool _isPrincipalOwner(String ownerRole) =>

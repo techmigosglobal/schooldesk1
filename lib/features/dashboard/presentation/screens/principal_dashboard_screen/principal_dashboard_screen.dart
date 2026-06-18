@@ -63,7 +63,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           profile: profile,
         );
         _loading = false;
-        _setupLoading = true; // Setup section shows a spinner until phase 2 is done
+        _setupLoading =
+            true; // Setup section shows a spinner until phase 2 is done
       });
 
       // ── Phase 2: Optional data ──────────────────────────────────────────────
@@ -132,11 +133,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           fallback: <Map<String, dynamic>>[],
         ),
         _loadOptional(
-          label: 'timetable slots',
-          request: api.getTimetableSlots(),
-          fallback: <Map<String, dynamic>>[],
-        ),
-        _loadOptional(
           label: 'notifications',
           request: api.getNotifications(),
           fallback: <Map<String, dynamic>>[],
@@ -152,8 +148,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       final staff = optionalResults[4] as PaginatedList<StaffModel>;
       final students = optionalResults[5] as PaginatedList<StudentModel>;
       final feeStructures = optionalResults[6] as List<Map<String, dynamic>>;
-      final timetableSlots = optionalResults[7] as List<Map<String, dynamic>>;
-      final notifications = optionalResults[8] as List<Map<String, dynamic>>;
+      final notifications = optionalResults[7] as List<Map<String, dynamic>>;
 
       setState(() {
         _data = _data.withSetupData(
@@ -166,9 +161,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           staffTotal: staff.total,
           studentsTotal: students.total,
           feeStructures: feeStructures,
-          timetableSlots: timetableSlots,
-          unreadNotifications:
-              notifications.where((row) => row['is_read'] != true).length,
+          unreadNotifications: notifications
+              .where((row) => row['is_read'] != true)
+              .length,
         );
         _setupLoading = false;
       });
@@ -312,30 +307,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     fallbackIcon: Icons.menu_book_rounded,
                     accent: const Color(0xFF06B6D4),
                     cardColor: const Color(0xFFE8FAFC),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Timetable',
-                    route: AppRoutes.principalTimetable,
-                    illustration: SchoolDeskUiIllustrations.principalTimetable,
-                    fallbackIcon: Icons.calendar_month_rounded,
-                    accent: const Color(0xFFF59E0B),
-                    cardColor: const Color(0xFFFFF1DF),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Exam Timetable',
-                    route: AppRoutes.principalExams,
-                    illustration: SchoolDeskUiIllustrations.principalExams,
-                    fallbackIcon: Icons.assignment_rounded,
-                    accent: const Color(0xFFEF4444),
-                    cardColor: const Color(0xFFFFEFF0),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Results',
-                    route: AppRoutes.principalResults,
-                    illustration: SchoolDeskUiIllustrations.principalResults,
-                    fallbackIcon: Icons.workspace_premium_rounded,
-                    accent: const Color(0xFF22C55E),
-                    cardColor: const Color(0xFFEAFBF0),
                   ),
                   _AcademicModuleItem(
                     label: 'Fees',
@@ -565,7 +536,6 @@ class _PrincipalHomeData {
     required int staffTotal,
     required int studentsTotal,
     required List<Map<String, dynamic>> feeStructures,
-    required List<Map<String, dynamic>> timetableSlots,
     required int unreadNotifications,
   }) {
     final schoolName = _text(school['name'], fallback: 'School');
@@ -582,7 +552,6 @@ class _PrincipalHomeData {
     final hasTeachers = staffTotal > 0;
     final hasStudents = studentsTotal > 0;
     final hasFees = feeStructures.isNotEmpty;
-    final hasTimetable = timetableSlots.isNotEmpty;
     final goLiveReady = [
       registered,
       profileReady,
@@ -592,7 +561,6 @@ class _PrincipalHomeData {
       hasTeachers,
       hasStudents,
       hasFees,
-      hasTimetable,
     ].every((v) => v);
 
     final metrics = Map<String, dynamic>.from(
@@ -655,11 +623,6 @@ class _PrincipalHomeData {
           title: 'Fee Structure Setup',
           route: AppRoutes.principalClasses,
           isComplete: hasFees,
-        ),
-        _SetupStep(
-          title: 'Timetable Setup',
-          route: AppRoutes.principalClasses,
-          isComplete: hasTimetable,
         ),
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),
       ],
@@ -819,7 +782,9 @@ class _PrincipalAppHeader extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              border: Border.all(color: context.appTheme.surface.withOpacity(0.10)),
+              border: Border.all(
+                color: context.appTheme.surface.withOpacity(0.10),
+              ),
               boxShadow: const [
                 BoxShadow(
                   color: Color(0x220F172A),
@@ -871,7 +836,9 @@ class _PrincipalAppHeader extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleSmall?.copyWith(
-                                    color: context.appTheme.surface.withOpacity(0.90),
+                                    color: context.appTheme.surface.withOpacity(
+                                      0.90,
+                                    ),
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0,
                                     height: 1.05,
@@ -1055,7 +1022,9 @@ class _HeaderNotificationButton extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.appTheme.surface.withOpacity(0.20)),
+                  border: Border.all(
+                    color: context.appTheme.surface.withOpacity(0.20),
+                  ),
                 ),
                 child: const Icon(
                   Icons.notifications_none_rounded,
@@ -1076,7 +1045,10 @@ class _HeaderNotificationButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.appTheme.surface, width: 1.5),
+                  border: Border.all(
+                    color: context.appTheme.surface,
+                    width: 1.5,
+                  ),
                 ),
                 child: Text(
                   badgeText,
@@ -1275,7 +1247,6 @@ class _SectionTitle extends StatelessWidget {
     );
   }
 }
-
 
 class _AcademicModuleGrid extends StatelessWidget {
   final List<_AcademicModuleItem> items;

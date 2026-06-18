@@ -54,8 +54,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   bool get _isAdminOwner => widget.args.isAdminOwner;
   bool get _isEdit => widget.args.isEdit;
 
-  List<String> get _allowedAccountRoles =>
-      _isAdminOwner ? const ['Teacher'] : const ['Teacher', 'Admin'];
+  List<String> get _allowedAccountRoles => const ['Teacher'];
 
   @override
   void initState() {

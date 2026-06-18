@@ -33,7 +33,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/principal-login-screen',
-        '/admin-login-screen',
         '/teacher-login-screen',
         '/parent-login-screen',
       },
@@ -58,7 +57,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/principal-dashboard-screen',
-        '/admin-dashboard-screen',
         '/teacher-dashboard-screen',
         '/parent-dashboard-screen',
       },
@@ -75,7 +73,6 @@ class SchoolDeskModuleRegistry {
         '/staff-management-screen',
         '/student-oversight-screen',
         '/guardian-directory-screen',
-        '/admin-user-access-screen',
       },
     ),
     SchoolDeskModuleDefinition(
@@ -90,9 +87,6 @@ class SchoolDeskModuleRegistry {
         '/academic-management-screen',
         '/principal-classes-screen',
         '/principal-subjects-screen',
-        '/principal-timetable-screen',
-        '/principal-exams-screen',
-        '/principal-results-screen',
       },
     ),
     SchoolDeskModuleDefinition(
@@ -105,7 +99,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/principal-attendance-screen',
-        '/admin-attendance-screen',
         '/teacher-attendance-screen',
         '/teacher-my-attendance-screen',
         '/parent-attendance-screen',
@@ -129,11 +122,7 @@ class SchoolDeskModuleRegistry {
         SchoolDeskModuleLayer.domain,
         SchoolDeskModuleLayer.presentation,
       },
-      ownerRoutes: {
-        '/admin-documents-screen',
-        '/parent-documents-screen',
-        '/id-card-generation-screen',
-      },
+      ownerRoutes: {'/parent-documents-screen', '/id-card-generation-screen'},
     ),
     SchoolDeskModuleDefinition(
       name: 'Finance',
@@ -145,7 +134,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/fee-monitoring-screen',
-        '/admin-fees-screen',
         '/parent-fees-screen',
         '/fee-payment-receipt-screen',
       },
@@ -205,7 +193,7 @@ class SchoolDeskModuleRegistry {
         SchoolDeskModuleLayer.domain,
         SchoolDeskModuleLayer.presentation,
       },
-      ownerRoutes: {'/admin-helpdesk-screen'},
+      ownerRoutes: {},
     ),
     SchoolDeskModuleDefinition(
       name: 'Reports',
@@ -217,7 +205,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/reports-analytics-screen',
-        '/admin-reports-screen',
         '/teacher-reports-screen',
         '/report-card-generator-screen',
         '/principal-analytics-screen',

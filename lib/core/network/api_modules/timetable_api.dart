@@ -260,6 +260,34 @@ extension BackendTimetableApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> applyPrePrimaryClassSchedule({
+    required String sectionId,
+    required String academicYearId,
+    required String termId,
+    required String staffId,
+    required String scheduleType,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/timetable/pre-primary/apply',
+        data: {
+          'section_id': sectionId.trim(),
+          'academic_year_id': academicYearId.trim(),
+          if (termId.trim().isNotEmpty) 'term_id': termId.trim(),
+          if (staffId.trim().isNotEmpty) 'staff_id': staffId.trim(),
+          'schedule_type': scheduleType.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to apply pre-primary timetable',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> _smartTimetable({
     required String path,
     required String sectionId,
