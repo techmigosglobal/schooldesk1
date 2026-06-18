@@ -176,20 +176,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherLessonPlanner,
             ),
             const SchoolDeskNavigationItem(
-              index: 25,
-              icon: Icons.library_books_outlined,
-              activeIcon: Icons.library_books_rounded,
-              label: 'Study Materials',
-              route: AppRoutes.teacherStudyMaterials,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 27,
-              icon: Icons.rule_folder_outlined,
-              activeIcon: Icons.rule_folder_rounded,
-              label: 'Syllabus',
-              route: AppRoutes.teacherSyllabus,
-            ),
-            const SchoolDeskNavigationItem(
               index: 24,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,

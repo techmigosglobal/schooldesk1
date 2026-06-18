@@ -32,7 +32,6 @@ void main() {
       'Class Teacher — 5-A',
       'badgeCount: 3',
       'badgeCount: 2',
-      'BackendDataService.kTeacherSyllabus',
       'BackendDataService.kTeacherWeeklyPlan',
       'BackendDataService.kTeacherNotes',
       'BackendDataService.kSharedPtmMeetings',

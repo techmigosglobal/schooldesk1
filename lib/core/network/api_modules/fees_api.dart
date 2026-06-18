@@ -57,6 +57,21 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> getPaymentConfig() async {
+    try {
+      final response = await _dio.get('/fees/payment-config');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load payment configuration',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getParentPaymentRequests({
     String? studentId,
     String? invoiceId,

@@ -96,7 +96,7 @@ class _PaymentHistoryTile extends StatelessWidget {
     final status = _text(payment['status'], fallback: 'success');
     final amount = _amountFromPaise(payment['amount']);
     final paidAt = _formatDate(_text(payment['paid_at']));
-    final mode = _text(payment['payment_mode'], fallback: 'Razorpay');
+    final mode = _text(payment['payment_mode'], fallback: 'UPI');
     final isSuccess = status.toLowerCase() == 'success';
 
     return DecoratedBox(

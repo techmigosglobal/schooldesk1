@@ -16,11 +16,79 @@ class _AuthInterceptor extends Interceptor {
   }
 }
 
+// ─── Read Cache Interceptor ───────────────────────────────────────────────────
+
+class _ReadCacheOptionsInterceptor extends Interceptor {
+  final BackendApiClient _client;
+
+  _ReadCacheOptionsInterceptor(this._client);
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final cacheOptions = _client._cacheOptions;
+    if (cacheOptions == null ||
+        !_client.isAuthenticated ||
+        options.method.toUpperCase() != 'GET' ||
+        !_isCacheablePath(options.path)) {
+      handler.next(options);
+      return;
+    }
+
+    options.extra.addAll(
+      cacheOptions
+          .copyWith(maxStale: Nullable(_ttlForPath(options.path)))
+          .toExtra(),
+    );
+    handler.next(options);
+  }
+
+  bool _isCacheablePath(String path) {
+    final clean = path.toLowerCase();
+    if (clean.contains('/auth/') ||
+        clean.contains('/uploads') ||
+        clean.contains('/payment-requests') ||
+        clean.contains('/payments') ||
+        clean.contains('/attendance/sessions') ||
+        clean.contains('/attendance/staff/qr-token')) {
+      return false;
+    }
+    return clean.contains('/dashboard/') ||
+        clean.contains('/students') ||
+        clean.contains('/staff') ||
+        clean.contains('/schools') ||
+        clean.contains('/academic-years') ||
+        clean.contains('/grades') ||
+        clean.contains('/sections') ||
+        clean.contains('/subjects') ||
+        clean.contains('/timetable') ||
+        clean.contains('/homework') ||
+        clean.contains('/lesson-planners') ||
+        clean.contains('/fees/invoices') ||
+        clean.contains('/fees/structures') ||
+        clean.contains('/fees/categories') ||
+        clean.contains('/fees/payment-config');
+  }
+
+  Duration _ttlForPath(String path) {
+    final clean = path.toLowerCase();
+    if (clean.contains('/academic-years') ||
+        clean.contains('/grades') ||
+        clean.contains('/sections') ||
+        clean.contains('/subjects') ||
+        clean.contains('/fees/payment-config')) {
+      return const Duration(hours: 6);
+    }
+    if (clean.contains('/dashboard/')) return const Duration(minutes: 2);
+    return const Duration(minutes: 5);
+  }
+}
+
 // ─── Logging Interceptor ──────────────────────────────────────────────────────
 
 class _LoggingInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra['requestStartedAt'] = DateTime.now().microsecondsSinceEpoch;
     if (EnvConfig.enableLogging) {
       developer.log(
         '[API] ${options.method} ${options.path}',
@@ -32,24 +100,39 @@ class _LoggingInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final elapsed = _elapsedMs(response.requestOptions);
     if (EnvConfig.enableLogging) {
       developer.log(
-        '[API] ${response.statusCode} ${response.requestOptions.path}',
+        '[API] ${response.statusCode} ${response.requestOptions.path} ${elapsed}ms',
         name: 'BackendApiClient',
       );
+      if (elapsed >= 1200) {
+        developer.log(
+          '[API SLOW] ${response.requestOptions.method} '
+          '${response.requestOptions.path} took ${elapsed}ms',
+          name: 'BackendApiClient',
+        );
+      }
     }
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
+    final elapsed = _elapsedMs(err.requestOptions);
     if (EnvConfig.enableLogging) {
       developer.log(
-        '[API ERROR] ${err.response?.statusCode} ${err.message}',
+        '[API ERROR] ${err.response?.statusCode} ${err.requestOptions.path} ${elapsed}ms ${err.message}',
         name: 'BackendApiClient',
       );
     }
     handler.next(err);
+  }
+
+  int _elapsedMs(RequestOptions options) {
+    final started = options.extra['requestStartedAt'];
+    if (started is! int) return 0;
+    return ((DateTime.now().microsecondsSinceEpoch - started) / 1000).round();
   }
 }
 

@@ -47,7 +47,6 @@ class StorageKeys {
   // Teacher
   static const String teacherAttendance = 'teacher_attendance';
   static const String teacherHomework = 'teacher_homework';
-  static const String teacherSyllabus = 'teacher_syllabus';
   static const String teacherWeeklyPlan = 'teacher_weekly_plan';
   static const String teacherNotes = 'teacher_notes';
   static const String teacherLeaveRequests = 'teacher_leave_requests';

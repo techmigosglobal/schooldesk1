@@ -39,7 +39,6 @@ class BackendDataService {
   static const String kAdminSeatings = 'admin_seatings';
   static const String kTeacherAttendance = 'teacher_attendance';
   static const String kTeacherHomework = 'teacher_homework';
-  static const String kTeacherSyllabus = 'teacher_syllabus';
   static const String kTeacherWeeklyPlan = 'teacher_weekly_plan';
   static const String kTeacherNotes = 'teacher_notes';
   static const String kParentChildren = 'parent_children';

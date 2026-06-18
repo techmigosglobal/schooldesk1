@@ -1113,6 +1113,7 @@ class PaymentRequest {
   final String paymentDate;
   final String paymentMode;
   final String? transactionId;
+  final String? proofUrl;
 
   const PaymentRequest({
     required this.invoiceId,
@@ -1121,6 +1122,7 @@ class PaymentRequest {
     required this.paymentDate,
     required this.paymentMode,
     this.transactionId,
+    this.proofUrl,
   });
 
   Map<String, dynamic> toJson() => {
@@ -1130,6 +1132,7 @@ class PaymentRequest {
     'payment_date': paymentDate,
     'payment_mode': paymentMode,
     if (transactionId != null) 'transaction_id': transactionId,
+    if (proofUrl != null) 'proof_url': proofUrl,
   };
 
   Map<String, dynamic> toParentPaymentRequestJson() => {
@@ -1139,6 +1142,7 @@ class PaymentRequest {
     'payment_date': paymentDate,
     'payment_mode': paymentMode,
     if (transactionId != null) 'transaction_id': transactionId,
+    if (proofUrl != null) 'proof_url': proofUrl,
   };
 }
 

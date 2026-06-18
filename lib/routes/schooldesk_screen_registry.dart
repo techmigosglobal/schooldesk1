@@ -534,18 +534,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-study-materials-screen',
-      title: 'Study Materials',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-study-materials-screen/form',
-      title: 'Study Material Form',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-performance-screen',
       title: 'Student Performance',
       module: 'Academics',
@@ -613,13 +601,6 @@ class SchoolDeskScreenRegistry {
       module: 'Communication',
       portal: 'teacher',
       feature: SchoolDeskFeature.teacherParentMeetings,
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-syllabus-screen',
-      title: 'Syllabus',
-      module: 'Academics',
-      portal: 'teacher',
-      feature: SchoolDeskFeature.syllabusRecords,
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-dashboard-screen',

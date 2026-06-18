@@ -51,6 +51,15 @@ void main() {
     expect(teacherForms, contains('TeacherHomeworkSubmissionsScreen'));
     expect(teacherForms, contains('createHomework('));
     expect(teacherForms, contains('updateHomework('));
+    expect(
+      teacherForms,
+      contains("import 'package:file_picker/file_picker.dart';"),
+    );
+    expect(teacherForms, contains("import 'package:dio/dio.dart';"));
+    expect(teacherForms, contains("'/uploads'"));
+    expect(teacherForms, contains('attachmentUrl: _attachmentUrl'));
+    expect(teacherForms, contains('attachment_url'));
+    expect(teacherForms, contains('Pick attachment'));
     expect(teacherForms, contains("createRaw('/diary-entries'"));
     expect(teacherForms, contains("'entry_type': 'homework'"));
     expect(teacherForms, contains('Future<void> _writeDiaryEntry()'));
@@ -88,6 +97,8 @@ void main() {
     expect(api, contains('Future<List<Map<String, dynamic>>> getHomework'));
     expect(api, contains('Future<Map<String, dynamic>> createHomework'));
     expect(api, contains('Future<Map<String, dynamic>> updateHomework'));
+    expect(api, contains('String attachmentUrl ='));
+    expect(api, contains('attachmentUrl: attachmentUrl'));
     expect(
       api,
       contains('Future<Map<String, dynamic>> getHomeworkSubmissions'),

@@ -11,9 +11,6 @@ export 'presentation/screens/principal_command_center_screens/principal_academic
 export 'presentation/screens/principal_subjects_screen/principal_subjects_screen.dart';
 export 'presentation/screens/teacher_classes_screen/teacher_classes_screen.dart';
 export 'presentation/screens/teacher_diary_screen/teacher_diary_screen.dart';
-export 'presentation/screens/teacher_syllabus_screen/teacher_syllabus_screen.dart';
-export 'presentation/screens/teacher_study_materials_screen/teacher_study_material_form_screen.dart';
-export 'presentation/screens/teacher_study_materials_screen/teacher_study_materials_screen.dart';
 export 'presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart';
 export 'presentation/screens/timetable_management_screen/timetable_management_screen.dart';
 export 'presentation/screens/lesson_planner_screen.dart';

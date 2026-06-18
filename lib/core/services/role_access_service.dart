@@ -9,6 +9,7 @@ class RoleAccessService {
   static List<Map<String, dynamic>> _teachers = [];
   static List<Map<String, dynamic>> _parentChildren = [];
   static List<Map<String, dynamic>> _todayTimetable = [];
+  static List<Map<String, dynamic>> _teacherTimetable = [];
   static List<Map<String, dynamic>> _invoices = [];
   static Map<String, dynamic> _activeTeacher = const {};
   static Map<String, dynamic> _teacherDashboard = const {};
@@ -33,7 +34,9 @@ class RoleAccessService {
     final teacherStaffId = _text(_teacherDashboard['staff_id']);
     final classTeacherRow = _teacherAssignedClasses.firstWhere(
       (row) => row['is_class_teacher'] == true,
-      orElse: () => _teacherAssignedClasses.isNotEmpty ? _teacherAssignedClasses.first : const {},
+      orElse: () => _teacherAssignedClasses.isNotEmpty
+          ? _teacherAssignedClasses.first
+          : const {},
     );
     final teacherSectionId = _text(classTeacherRow['id']);
 
@@ -95,6 +98,7 @@ class RoleAccessService {
     final timetableRows = timetable ?? [];
     final assignedSubject = _subjectFromTimetable(timetableRows);
     _parentChildren = parentChildren ?? [];
+    _teacherTimetable = timetableRows;
     _todayTimetable = _filterTodayTimetable(timetableRows);
     _invoices = invoices ?? [];
 
@@ -268,7 +272,7 @@ class RoleAccessService {
         }
       }
     }
-    for (final slot in _todayTimetable) {
+    for (final slot in _teacherTimetable) {
       final id = _text(slot['subject_id']);
       if (id.isNotEmpty) ids.add(id);
     }
@@ -430,6 +434,7 @@ class RoleAccessService {
     _teachers = [];
     _parentChildren = [];
     _todayTimetable = [];
+    _teacherTimetable = [];
     _invoices = [];
     _activeTeacher = const {};
     _teacherDashboard = const {};

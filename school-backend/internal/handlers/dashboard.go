@@ -30,6 +30,7 @@ type feeSummary struct {
 
 type teacherClassSummary struct {
 	ID             string `json:"id"`
+	GradeID        string `json:"grade_id"`
 	SectionName    string `json:"section_name"`
 	GradeName      string `json:"grade_name"`
 	IsClassTeacher bool   `json:"is_class_teacher"`
@@ -774,6 +775,7 @@ func teacherAssignedClassesSQL() string {
 		FROM (
 			SELECT DISTINCT
 				sections.id,
+				grades.id AS grade_id,
 				sections.section_name,
 				grades.grade_name,
 				grades.grade_number,

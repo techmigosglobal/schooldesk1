@@ -218,14 +218,11 @@ void main() {
         AppRoutes.teacherHomework,
         AppRoutes.teacherHomeworkForm,
         AppRoutes.teacherHomeworkSubmissions,
-        AppRoutes.teacherStudyMaterials,
-        AppRoutes.teacherStudyMaterialForm,
         AppRoutes.teacherCommunication,
         AppRoutes.teacherLeave,
         AppRoutes.teacherLeaveRequestForm,
         AppRoutes.teacherReports,
         AppRoutes.teacherDiary,
-        AppRoutes.teacherSyllabus,
         AppRoutes.teacherEventPosts,
         AppRoutes.teacherLessonPlanner,
         AppRoutes.schoolGallery,
@@ -253,22 +250,44 @@ void main() {
       }
     });
 
+    test('teacher study materials and syllabus routes are removed', () {
+      expect(
+        AppRoutes.routes.containsKey('/teacher-study-materials-screen'),
+        isFalse,
+      );
+      expect(
+        AppRoutes.routes.containsKey('/teacher-study-materials-screen/form'),
+        isFalse,
+      );
+      expect(AppRoutes.routes.containsKey('/teacher-syllabus-screen'), isFalse);
+      expect(
+        RouteAccessGuard.allowedRolesFor('/teacher-study-materials-screen'),
+        isEmpty,
+      );
+      expect(
+        RouteAccessGuard.allowedRolesFor(
+          '/teacher-study-materials-screen/form',
+        ),
+        isEmpty,
+      );
+      expect(
+        RouteAccessGuard.allowedRolesFor('/teacher-syllabus-screen'),
+        isEmpty,
+      );
+    });
+
     test('removed teacher support routes are not teacher reachable', () {
       for (final route in [
-        AppRoutes.teacherStudentNotes,
-        AppRoutes.teacherDiscipline,
+        '/teacher-student-notes-screen',
+        '/teacher-discipline-screen',
         AppRoutes.teacherParentInteraction,
-        AppRoutes.teacherPTM,
-        AppRoutes.teacherPerformance,
-        AppRoutes.teacherMarkEntry,
+        '/teacher-performance-screen',
+        '/teacher-mark-entry-screen',
       ]) {
+        expect(AppRoutes.routes.containsKey(route), isFalse);
         expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Teacher',
-          ),
-          AppRoutes.teacherDashboard,
+          RouteAccessGuard.allowedRolesFor(route),
+          isNot(contains('teacher')),
           reason: '$route should no longer be reachable for Teacher',
         );
       }

@@ -1,13 +1,6 @@
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/features/finance/data/models/payment_models.dart';
 
 abstract class ParentFeesRemoteDataSource {
-  Future<CreateRazorpayOrderResponse> createRazorpayOrder(
-    CreateRazorpayOrderRequest request,
-  );
-  Future<Map<String, dynamic>> verifyRazorpayPayment(
-    VerifyRazorpayPaymentRequest request,
-  );
   Future<Map<String, dynamic>> getPaymentConfig();
   Future<List<Map<String, dynamic>>> getPaymentHistory();
   Future<Map<String, dynamic>> getReceipt(String receiptId);
@@ -15,28 +8,6 @@ abstract class ParentFeesRemoteDataSource {
 
 class ParentFeesRemoteDataSourceImpl implements ParentFeesRemoteDataSource {
   ParentFeesRemoteDataSourceImpl();
-
-  @override
-  Future<CreateRazorpayOrderResponse> createRazorpayOrder(
-    CreateRazorpayOrderRequest request,
-  ) async {
-    final response = await BackendApiClient.instance.dio.post(
-      '/parents/fees/payment-orders',
-      data: request.toJson(),
-    );
-    return CreateRazorpayOrderResponse.fromJson(response.data['data']);
-  }
-
-  @override
-  Future<Map<String, dynamic>> verifyRazorpayPayment(
-    VerifyRazorpayPaymentRequest request,
-  ) async {
-    final response = await BackendApiClient.instance.dio.post(
-      '/parents/fees/verify-payment',
-      data: request.toJson(),
-    );
-    return Map<String, dynamic>.from(response.data['data'] ?? {});
-  }
 
   @override
   Future<Map<String, dynamic>> getPaymentConfig() async {

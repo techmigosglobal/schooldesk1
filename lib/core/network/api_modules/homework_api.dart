@@ -45,6 +45,7 @@ extension BackendHomeworkApi on BackendApiClient {
     required String dueDate,
     String studentId = '',
     String status = 'pending',
+    String attachmentUrl = '',
   }) async {
     try {
       final response = await SchoolDeskApi.instance.client.createHomework(
@@ -57,6 +58,7 @@ extension BackendHomeworkApi on BackendApiClient {
           studentId: studentId,
           description: description,
           submissionDate: dueDate,
+          attachmentUrl: attachmentUrl,
           status: status,
         ),
       );
@@ -80,6 +82,7 @@ extension BackendHomeworkApi on BackendApiClient {
     required String dueDate,
     String studentId = '',
     String status = 'pending',
+    String attachmentUrl = '',
   }) async {
     try {
       final response = await SchoolDeskApi.instance.client.updateHomework(
@@ -93,6 +96,7 @@ extension BackendHomeworkApi on BackendApiClient {
           studentId: studentId,
           description: description,
           submissionDate: dueDate,
+          attachmentUrl: attachmentUrl,
           status: status,
         ),
       );

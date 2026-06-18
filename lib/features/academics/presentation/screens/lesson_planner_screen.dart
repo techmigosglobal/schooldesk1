@@ -62,7 +62,9 @@ class _TeacherLessonPlannerScreenState
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final xfile = await picker.pickImage(
-        source: ImageSource.gallery, imageQuality: 85);
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
     if (xfile == null) return;
     await _uploadFile(xfile.path, xfile.name);
   }
@@ -86,9 +88,9 @@ class _TeacherLessonPlannerScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -104,18 +106,21 @@ class _TeacherLessonPlannerScreenState
     });
     try {
       await RoleAccessService.initialize();
-      final response = await BackendApiClient.instance.dio
-          .get('/lesson-planners/teacher');
+      final response = await BackendApiClient.instance.dio.get(
+        '/lesson-planners/teacher',
+      );
       if (!mounted) return;
-      final classTeacherRows = RoleAccessService.teacherClassTeacherClasses;
-      final classes = classTeacherRows.isNotEmpty
-          ? [classTeacherRows.first]
-          : (RoleAccessService.teacherAssignedClasses.isNotEmpty
-                ? [RoleAccessService.teacherAssignedClasses.first]
-                : const <Map<String, dynamic>>[]);
+      final classes = RoleAccessService.teacherAssignedClasses
+          .where(
+            (row) => _sectionId(row).isNotEmpty && _gradeId(row).isNotEmpty,
+          )
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
       setState(() {
         _classes = classes;
-        _selectedSectionId = classes.isNotEmpty ? _sectionId(classes.first) : null;
+        _selectedSectionId = classes.isNotEmpty
+            ? _sectionId(classes.first)
+            : null;
         _planners = response.data['data'] ?? [];
         _loading = false;
       });
@@ -133,8 +138,9 @@ class _TeacherLessonPlannerScreenState
     final sectionId = _sectionId(selectedClass);
     final gradeId = _gradeId(selectedClass);
     if (sectionId.isEmpty || gradeId.isEmpty) {
-      setState(() => _error =
-          'No class assigned. Please contact Admin/Principal.');
+      setState(
+        () => _error = 'No class assigned. Please contact Admin/Principal.',
+      );
       return;
     }
     setState(() {
@@ -151,18 +157,16 @@ class _TeacherLessonPlannerScreenState
               ? DateTime.now().toIso8601String()
               : '${_startDateController.text.trim()}T00:00:00Z',
           'week_end_date': _endDateController.text.trim().isEmpty
-              ? DateTime.now()
-                  .add(const Duration(days: 6))
-                  .toIso8601String()
+              ? DateTime.now().add(const Duration(days: 6)).toIso8601String()
               : '${_endDateController.text.trim()}T23:59:59Z',
           'attachment_url': _attachmentUrl ?? '',
           'note': _noteController.text.trim(),
         },
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lesson Plan uploaded!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Lesson Plan uploaded!')));
       _startDateController.clear();
       _endDateController.clear();
       _noteController.clear();
@@ -183,12 +187,11 @@ class _TeacherLessonPlannerScreenState
   Future<void> _markComplete(String id) async {
     setState(() => _loading = true);
     try {
-      await BackendApiClient.instance.dio
-          .post('/lesson-planners/$id/complete');
+      await BackendApiClient.instance.dio.post('/lesson-planners/$id/complete');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Marked as completed!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Marked as completed!')));
       await _loadPlanners();
     } catch (e) {
       if (!mounted) return;
@@ -200,9 +203,9 @@ class _TeacherLessonPlannerScreenState
   }
 
   Map<String, dynamic> get _selectedClass => _classes.firstWhere(
-        (row) => _sectionId(row) == _selectedSectionId,
-        orElse: () => _classes.isNotEmpty ? _classes.first : const {},
-      );
+    (row) => _sectionId(row) == _selectedSectionId,
+    orElse: () => _classes.isNotEmpty ? _classes.first : const {},
+  );
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -221,35 +224,37 @@ class _TeacherLessonPlannerScreenState
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
-                    color: Theme.of(context).colorScheme.outlineVariant),
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Upload Weekly Lesson Plan',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Upload Weekly Lesson Plan',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     if (_error != null)
                       Container(
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .error
-                              .withOpacity(0.1),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.error.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(_error!,
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .error)),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
                       ),
                     // Class selector
                     DropdownButtonFormField<String>(
@@ -259,10 +264,12 @@ class _TeacherLessonPlannerScreenState
                         border: OutlineInputBorder(),
                       ),
                       items: _classes
-                          .map((row) => DropdownMenuItem<String>(
-                                value: _sectionId(row),
-                                child: Text(_classLabel(row)),
-                              ))
+                          .map(
+                            (row) => DropdownMenuItem<String>(
+                              value: _sectionId(row),
+                              child: Text(_classLabel(row)),
+                            ),
+                          )
                           .where((item) => item.value?.isNotEmpty == true)
                           .toList(),
                       onChanged: _classes.length > 1
@@ -297,11 +304,12 @@ class _TeacherLessonPlannerScreenState
                     ),
                     const SizedBox(height: 20),
                     // ── Attachment ───────────────────────────────────
-                    Text('Lesson Plan Attachment',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Lesson Plan Attachment',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       children: [
@@ -313,8 +321,10 @@ class _TeacherLessonPlannerScreenState
                         const SizedBox(width: 10),
                         OutlinedButton.icon(
                           onPressed: _uploading ? null : _pickAttachment,
-                          icon: const Icon(Icons.picture_as_pdf_outlined,
-                              size: 18),
+                          icon: const Icon(
+                            Icons.picture_as_pdf_outlined,
+                            size: 18,
+                          ),
                           label: const Text('PDF / Doc'),
                         ),
                         if (_uploading) ...[
@@ -330,8 +340,11 @@ class _TeacherLessonPlannerScreenState
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          const Icon(Icons.check_circle,
-                              color: Colors.green, size: 18),
+                          const Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -370,11 +383,12 @@ class _TeacherLessonPlannerScreenState
               ),
             ),
             const SizedBox(height: 28),
-            Text('Uploaded Plans',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              'Uploaded Plans',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 14),
             if (_loading && _planners.isEmpty)
               const Center(child: CircularProgressIndicator())
@@ -387,9 +401,11 @@ class _TeacherLessonPlannerScreenState
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
                     title: Text(
-                        'Week: ${_shortDate(p['week_start_date'])} → ${_shortDate(p['week_end_date'])}'),
+                      'Week: ${_shortDate(p['week_start_date'])} → ${_shortDate(p['week_end_date'])}',
+                    ),
                     subtitle: Text(
-                        '${_plannerClassLabel(p)}${(p['note'] ?? '').isNotEmpty ? '\n${p['note']}' : ''}'),
+                      '${_plannerClassLabel(p)}${(p['note'] ?? '').isNotEmpty ? '\n${p['note']}' : ''}',
+                    ),
                     isThreeLine: (p['note'] ?? '').isNotEmpty,
                     trailing: isCompleted
                         ? const Chip(
@@ -398,8 +414,7 @@ class _TeacherLessonPlannerScreenState
                             labelStyle: TextStyle(color: Colors.white),
                           )
                         : FilledButton.icon(
-                            onPressed: () =>
-                                _markComplete(p['id'].toString()),
+                            onPressed: () => _markComplete(p['id'].toString()),
                             icon: const Icon(Icons.check, size: 16),
                             label: const Text('Complete'),
                           ),
@@ -455,7 +470,6 @@ String _classLabel(Map<String, dynamic> row) {
   final grade =
       (row['grade_name'] ?? row['class_name'] ?? row['name'] ?? 'Class')
           .toString();
-  final section =
-      (row['section_name'] ?? row['section'] ?? '').toString();
+  final section = (row['section_name'] ?? row['section'] ?? '').toString();
   return section.trim().isEmpty ? grade : '$grade - $section';
 }

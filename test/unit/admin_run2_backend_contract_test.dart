@@ -164,12 +164,12 @@ void main() {
     expect(paymentForm, isNot(contains('showDialog(')));
     expect(routes, contains('parentPaymentRequestForm'));
     expect(routes, contains('parentPaymentSelection'));
-    expect(routes, contains('parentPaymentProcessing'));
+    expect(routes, isNot(contains('parentPaymentProcessing')));
     expect(routes, contains('ParentPaymentRequestFormScreen'));
     expect(guard, contains('AppRoutes.parentPaymentRequestForm: {\'parent\'}'));
     expect(registry, contains('/parent-fees-screen/payment'));
     expect(registry, contains('/parent-fees-screen/payment-selection'));
-    expect(registry, contains('/parent-fees-screen/payment-processing'));
+    expect(registry, isNot(contains('/parent-fees-screen/payment-processing')));
   });
 
   test('admin timetable mutations persist through backend slot APIs', () {

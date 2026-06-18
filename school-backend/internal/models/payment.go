@@ -15,8 +15,8 @@ type PaymentOrder struct {
 	StudentID        string                   `gorm:"type:uuid;not null;index" json:"student_id"`
 	Amount           float64                  `json:"amount"`
 	Currency         string                   `gorm:"default:INR" json:"currency"`
-	Gateway          string                   `gorm:"default:razorpay" json:"gateway"`
-	RazorpayOrderID  string                   `gorm:"size:255;index" json:"razorpay_order_id"`
+	Gateway          string                   `gorm:"default:upi" json:"gateway"`
+	ExternalOrderID  string                   `gorm:"size:255;index" json:"external_order_id"`
 	ReceiptNo        string                   `gorm:"size:100;unique" json:"receipt_no"`
 	Status           string                   `gorm:"type:text;default:'created';index" json:"status"` // created, attempted, paid, failed, expired, cancelled
 	InvoiceIDs       datatypes.JSON           `gorm:"type:jsonb" json:"invoice_ids"`                   // JSON array of invoice IDs
@@ -35,9 +35,9 @@ type PaymentTransaction struct {
 	PaymentOrderID    string         `gorm:"type:uuid;not null;index" json:"payment_order_id"`
 	ParentID          string         `gorm:"type:uuid;not null;index" json:"parent_id"`
 	StudentID         string         `gorm:"type:uuid;not null;index" json:"student_id"`
-	RazorpayOrderID   string         `gorm:"size:255;index" json:"razorpay_order_id"`
-	RazorpayPaymentID string         `gorm:"size:255;index" json:"razorpay_payment_id"`
-	RazorpaySignature string         `gorm:"size:255" json:"razorpay_signature"`
+	ExternalOrderID   string         `gorm:"size:255;index" json:"external_order_id"`
+	ExternalPaymentID string         `gorm:"size:255;index" json:"external_payment_id"`
+	GatewaySignature  string         `gorm:"size:255" json:"gateway_signature"`
 	Amount            float64        `json:"amount"`
 	Currency          string         `gorm:"default:INR" json:"currency"`
 	PaymentMethod     *string        `gorm:"type:text" json:"payment_method"`                 // upi, card, netbanking, etc.
@@ -85,16 +85,16 @@ type PaymentOrderInvoiceMap struct {
 // PaymentWebhookEvent stores raw webhook events for audit
 type PaymentWebhookEvent struct {
 	BaseModel
-	EventID         string         `gorm:"size:255;unique" json:"event_id"`
-	EventType       string         `gorm:"type:text;index" json:"event_type"`
-	PaymentOrderID  *string        `gorm:"type:uuid" json:"payment_order_id"`
-	RazorpayOrderID *string        `gorm:"size:255" json:"razorpay_order_id"`
-	PaymentID       *string        `gorm:"size:255" json:"payment_id"`
-	Payload         datatypes.JSON `gorm:"type:jsonb" json:"payload"`
-	Processed       bool           `gorm:"default:false" json:"processed"`
-	ProcessedAt     *time.Time     `json:"processed_at"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
+	EventID        string         `gorm:"size:255;unique" json:"event_id"`
+	EventType      string         `gorm:"type:text;index" json:"event_type"`
+	PaymentOrderID *string        `gorm:"type:uuid" json:"payment_order_id"`
+	GatewayOrderID *string        `gorm:"size:255" json:"gateway_order_id"`
+	PaymentID      *string        `gorm:"size:255" json:"payment_id"`
+	Payload        datatypes.JSON `gorm:"type:jsonb" json:"payload"`
+	Processed      bool           `gorm:"default:false" json:"processed"`
+	ProcessedAt    *time.Time     `json:"processed_at"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 // TableName specifies table names for GORM

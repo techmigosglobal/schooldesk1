@@ -136,6 +136,8 @@ class _AdminPaymentRequestDecisionScreenState
           _detailRow('Mode', _text(request['payment_mode'], fallback: '-')),
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
+          if (_text(request['proof_url']).isNotEmpty)
+            _detailRow('Proof upload', _text(request['proof_url'])),
           if (_text(request['remarks']).isNotEmpty)
             _detailRow('Parent note', _text(request['remarks'])),
         ],
@@ -181,7 +183,10 @@ class _AdminPaymentRequestDecisionScreenState
             width: 104,
             child: Text(
               label,
-              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                color: context.appTheme.muted,
+              ),
             ),
           ),
           Expanded(
@@ -219,9 +224,7 @@ class _AdminPaymentRequestDecisionScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Payment decision submitted for Principal approval.',
-          ),
+          content: Text('Payment decision submitted for Principal approval.'),
           behavior: SnackBarBehavior.floating,
         ),
       );

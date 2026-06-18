@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 
 class TeacherTimetableScreen extends StatefulWidget {
   const TeacherTimetableScreen({super.key});
@@ -50,19 +49,25 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     }
   }
 
-  /// Slots for today only
-  List<Map<String, dynamic>> get _todaySlots {
-    final today = DateTime.now().weekday;
-    return _slots
-        .where((s) => teacherFlowInt(s['day_of_week']) == today)
-        .toList()
-      ..sort((a, b) => teacherFlowInt(a['period_number'])
-          .compareTo(teacherFlowInt(b['period_number'])));
+  Map<int, List<Map<String, dynamic>>> get _slotsByDay {
+    final grouped = <int, List<Map<String, dynamic>>>{};
+    for (final slot in _slots) {
+      final day = teacherFlowInt(slot['day_of_week']);
+      if (day < 1 || day > 7) continue;
+      grouped.putIfAbsent(day, () => <Map<String, dynamic>>[]).add(slot);
+    }
+    for (final rows in grouped.values) {
+      rows.sort(
+        (a, b) => teacherFlowInt(
+          a['period_number'],
+        ).compareTo(teacherFlowInt(b['period_number'])),
+      );
+    }
+    return grouped;
   }
 
-  /// Unique subjects from today's slots
-  List<String> get _todaySubjects {
-    return _todaySlots
+  List<String> get _weeklySubjects {
+    return _slots
         .map((s) {
           final sub = teacherFlowMap(s['subject']);
           return teacherFlowText(
@@ -76,8 +81,8 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   }
 
   String get _assignedClass {
-    if (_todaySlots.isNotEmpty) {
-      final section = teacherFlowMap(_todaySlots.first['section']);
+    if (_slots.isNotEmpty) {
+      final section = teacherFlowMap(_slots.first['section']);
       final grade = teacherFlowText(section['grade_name']);
       final sec = teacherFlowText(section['section_name']);
       if (grade.isNotEmpty) return sec.isEmpty ? grade : '$grade - $sec';
@@ -87,13 +92,13 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final today = _todaySlots;
-    final subjects = _todaySubjects;
+    final slotsByDay = _slotsByDay;
+    final subjects = _weeklySubjects;
     final classLabel = _assignedClass;
 
     return TeacherFlowScaffold(
-      title: 'Timetable',
-      subtitle: 'Full-day class assignment',
+      title: 'Weekly Timetable',
+      subtitle: 'Read-only schedule from Principal/Admin timetable setup',
       selectedIndex: 1,
       loading: _loading,
       error: _error,
@@ -104,100 +109,39 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
             const TeacherFlowCard(
               icon: Icons.class_outlined,
               title: 'No class assigned yet.',
-              subtitle: 'Your assignment will appear after Admin/Principal assigns you.',
+              subtitle:
+                  'Your assignment will appear after Admin/Principal assigns you.',
             )
           else ...[
             // ── Card 1: Today's Full-Day Assigned Class ──────────────────
             _FullDayClassCard(
               classLabel: classLabel,
               subjects: subjects,
-              date: _todayLabel(),
+              date: _weekLabel(),
+              mappedSubjects: RoleAccessService.teacherSubjectIds.length,
             ),
             const SizedBox(height: 16),
 
-            // ── Card 2: Quick Actions ────────────────────────────────────
-            _buildQuickActions(context),
-            const SizedBox(height: 16),
-
-            // ── Card 3: Today's Periods (read-only list) ─────────────────
-            TeacherFlowSectionHeader(title: 'Today\'s Periods'),
+            TeacherFlowSectionHeader(title: 'Weekly Timetable'),
             const SizedBox(height: 8),
-            if (today.isEmpty)
+            if (_slots.isEmpty)
               const TeacherFlowCard(
                 icon: Icons.calendar_month_outlined,
-                title: 'No periods for today.',
-                subtitle: 'Your timetable is empty for today.',
+                title: 'No timetable published yet.',
+                subtitle:
+                    'Ask Admin/Principal to assign subjects, staff, and timetable slots for your staff profile.',
               )
             else
-              ...today.map(
-                (slot) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: TeacherFlowCard(
-                    icon: Icons.schedule_rounded,
-                    title: _slotSubject(slot),
-                    subtitle: _slotTime(slot),
-                    status: 'Period ${teacherFlowInt(slot['period_number'])}',
-                    statusColor: teacherFlowAccent,
-                  ),
+              ...List.generate(6, (index) => index + 1).map(
+                (day) => _DayScheduleCard(
+                  dayName: _dayName(day),
+                  slots: slotsByDay[day] ?? const [],
+                  slotSubject: _slotSubject,
+                  slotTime: _slotTime,
                 ),
               ),
           ],
         ],
-      ),
-    );
-  }
-
-  Widget _buildQuickActions(BuildContext context) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Quick Actions',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _ActionChip(
-                  label: 'Attendance',
-                  icon: Icons.how_to_reg_rounded,
-                  onTap: () =>
-                      Navigator.pushNamed(context, AppRoutes.teacherAttendance),
-                ),
-                _ActionChip(
-                  label: 'Homework',
-                  icon: Icons.menu_book_outlined,
-                  onTap: () =>
-                      Navigator.pushNamed(context, AppRoutes.teacherHomework),
-                ),
-                _ActionChip(
-                  label: 'Lesson Planner',
-                  icon: Icons.auto_stories_outlined,
-                  onTap: () => Navigator.pushNamed(
-                      context, AppRoutes.teacherLessonPlanner),
-                ),
-                _ActionChip(
-                  label: 'Event Post',
-                  icon: Icons.post_add_outlined,
-                  onTap: () =>
-                      Navigator.pushNamed(context, AppRoutes.teacherEventPosts),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -213,15 +157,29 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   String _slotTime(Map<String, dynamic> slot) {
     final start = teacherFlowText(slot['start_time']);
     final end = teacherFlowText(slot['end_time']);
-    if (start.isEmpty && end.isEmpty) return 'Period ${teacherFlowInt(slot['period_number'])}';
+    if (start.isEmpty && end.isEmpty) {
+      return 'Period ${teacherFlowInt(slot['period_number'])}';
+    }
     return [start, end].where((p) => p.isNotEmpty).join(' – ');
   }
 
-  String _todayLabel() {
-    final days = ['', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  String _weekLabel() {
     final now = DateTime.now();
-    final dayName = days[now.weekday];
-    return '$dayName, ${now.day}/${now.month}/${now.year}';
+    return 'Week of ${now.day}/${now.month}/${now.year}';
+  }
+
+  String _dayName(int day) {
+    const days = [
+      '',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return day >= 1 && day < days.length ? days[day] : 'Day $day';
   }
 }
 
@@ -231,11 +189,13 @@ class _FullDayClassCard extends StatelessWidget {
   final String classLabel;
   final List<String> subjects;
   final String date;
+  final int mappedSubjects;
 
   const _FullDayClassCard({
     required this.classLabel,
     required this.subjects,
     required this.date,
+    required this.mappedSubjects,
   });
 
   @override
@@ -260,8 +220,11 @@ class _FullDayClassCard extends StatelessWidget {
                   color: teacherFlowAccent.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.class_rounded,
-                    color: teacherFlowAccent, size: 26),
+                child: const Icon(
+                  Icons.class_rounded,
+                  color: teacherFlowAccent,
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -290,11 +253,14 @@ class _FullDayClassCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(
             children: [
-              const Icon(Icons.calendar_today_outlined,
-                  size: 15, color: teacherFlowAccent),
+              const Icon(
+                Icons.calendar_today_outlined,
+                size: 15,
+                color: teacherFlowAccent,
+              ),
               const SizedBox(width: 6),
               Text(
-                date,
+                '$date · $mappedSubjects mapped subjects',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -319,14 +285,18 @@ class _FullDayClassCard extends StatelessWidget {
                     (s) => Chip(
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       padding: EdgeInsets.zero,
-                      label: Text(s,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          )),
-                      backgroundColor:
-                          teacherFlowAccent.withValues(alpha: 0.12),
+                      label: Text(
+                        s,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      backgroundColor: teacherFlowAccent.withValues(
+                        alpha: 0.12,
+                      ),
                       side: BorderSide(
-                          color: teacherFlowAccent.withValues(alpha: 0.25)),
+                        color: teacherFlowAccent.withValues(alpha: 0.25),
+                      ),
                     ),
                   )
                   .toList(),
@@ -338,30 +308,57 @@ class _FullDayClassCard extends StatelessWidget {
   }
 }
 
-// ── Action Chip ───────────────────────────────────────────────────────────────
+class _DayScheduleCard extends StatelessWidget {
+  final String dayName;
+  final List<Map<String, dynamic>> slots;
+  final String Function(Map<String, dynamic>) slotSubject;
+  final String Function(Map<String, dynamic>) slotTime;
 
-class _ActionChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _ActionChip({
-    required this.label,
-    required this.icon,
-    required this.onTap,
+  const _DayScheduleCard({
+    required this.dayName,
+    required this.slots,
+    required this.slotSubject,
+    required this.slotTime,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      avatar: Icon(icon, size: 18, color: teacherFlowAccent),
-      label: Text(label),
-      onPressed: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: teacherFlowAccent.withValues(alpha: 0.35)),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TeacherFlowCard(
+        icon: Icons.calendar_view_week_rounded,
+        title: dayName,
+        subtitle: slots.isEmpty
+            ? 'No periods assigned'
+            : '${slots.length} period${slots.length == 1 ? '' : 's'} assigned',
+        body: slots.isEmpty
+            ? null
+            : Column(
+                children: slots
+                    .map(
+                      (slot) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: teacherFlowAccent.withValues(
+                            alpha: 0.12,
+                          ),
+                          child: Text(
+                            '${teacherFlowInt(slot['period_number'])}',
+                            style: const TextStyle(
+                              color: teacherFlowAccent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        title: Text(slotSubject(slot)),
+                        subtitle: Text(slotTime(slot)),
+                      ),
+                    )
+                    .toList(),
+              ),
       ),
-      backgroundColor: teacherFlowAccent.withValues(alpha: 0.08),
     );
   }
 }

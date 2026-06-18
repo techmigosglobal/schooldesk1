@@ -91,7 +91,7 @@ class _ReceiptBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final receiptNo = _text(receipt['receipt_no'], fallback: transactionId);
     final amount = _amount(receipt['amount']);
-    final mode = _text(receipt['payment_mode'], fallback: 'Razorpay');
+    final mode = _text(receipt['payment_mode'], fallback: 'UPI');
     final paidAt = _formatDateTime(_text(receipt['paid_at']));
 
     return SingleChildScrollView(

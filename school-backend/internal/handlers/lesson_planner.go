@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"school-backend/internal/database"
@@ -46,6 +47,10 @@ func (h *LessonPlannerHandler) CreateLessonPlanner(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "Teacher profile not linked")
 		return
 	}
+	if !teacherOwnsLessonPlannerSection(teacherID, req.SectionID, req.GradeID, schoolID) {
+		fail(c, http.StatusForbidden, "Lesson planner section is not assigned to this teacher")
+		return
+	}
 
 	planner := models.LessonPlanner{
 		SchoolID:      schoolID,
@@ -70,6 +75,29 @@ func (h *LessonPlannerHandler) CreateLessonPlanner(c *gin.Context) {
 	database.DB.Preload("Teacher").First(&planner, "id = ?", planner.ID)
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: planner})
+}
+
+func teacherOwnsLessonPlannerSection(teacherID, sectionID, gradeID, schoolID string) bool {
+	teacherID = strings.TrimSpace(teacherID)
+	sectionID = strings.TrimSpace(sectionID)
+	gradeID = strings.TrimSpace(gradeID)
+	schoolID = strings.TrimSpace(schoolID)
+	if teacherID == "" || sectionID == "" || schoolID == "" {
+		return false
+	}
+	query := database.DB.Table("sections").
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		Joins("LEFT JOIN timetable_slots ON timetable_slots.section_id = sections.id").
+		Where("grades.school_id = ? AND sections.id = ?", schoolID, sectionID).
+		Where("(sections.class_teacher_id = ? OR timetable_slots.staff_id = ?)", teacherID, teacherID)
+	if gradeID != "" {
+		query = query.Where("grades.id = ?", gradeID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 // Teacher List

@@ -35,9 +35,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     try {
       await RoleAccessService.initialize();
       final staffId = RoleAccessService.teacherStaffId;
-      final sectionId = RoleAccessService.teacherClassId;
       final rows = await BackendApiClient.instance.getHomework(
-        sectionId: sectionId.isEmpty ? null : sectionId,
         teacherId: staffId.isEmpty ? null : staffId,
       );
       final counts = <String, int>{};
@@ -74,10 +72,8 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
         defaultClassName: RoleAccessService.teacherClassName,
         defaultSubject: RoleAccessService.teacherSubject,
         assignedClasses: RoleAccessService.teacherClassTeacherClasses.isNotEmpty
-            ? [RoleAccessService.teacherClassTeacherClasses.first]
-            : (RoleAccessService.teacherAssignedClasses.isNotEmpty
-                  ? [RoleAccessService.teacherAssignedClasses.first]
-                  : const []),
+            ? RoleAccessService.teacherClassTeacherClasses
+            : RoleAccessService.teacherAssignedClasses,
         students: RoleAccessService.teacherClassStudents,
         homework: homework,
       ),
@@ -306,7 +302,8 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   bool _isHomeworkSubmittedToday() {
     final today = DateTime.now();
     for (final row in _homework) {
-      final dateStr = row['created_at'] ?? row['homework_date'] ?? row['due_date'];
+      final dateStr =
+          row['created_at'] ?? row['homework_date'] ?? row['due_date'];
       final date = DateTime.tryParse(teacherFlowDateOnly(dateStr));
       if (date != null &&
           date.year == today.year &&

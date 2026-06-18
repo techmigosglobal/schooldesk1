@@ -4,15 +4,16 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"school-backend/internal/database"
 	"school-backend/internal/models"
 	"school-backend/internal/policy"
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type FeeHandler struct{}
@@ -834,6 +835,7 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 		PaymentDate      string  `json:"payment_date" binding:"required"`
 		PaymentMode      string  `json:"payment_mode" binding:"required"`
 		TransactionID    string  `json:"transaction_id"`
+		ProofURL         string  `json:"proof_url"`
 		Remarks          string  `json:"remarks"`
 		RequestReference string  `json:"request_reference"`
 	}
@@ -844,6 +846,19 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 	if req.Amount <= 0 {
 		fail(c, http.StatusBadRequest, "payment request amount must be greater than zero")
 		return
+	}
+	paymentMode := strings.ToLower(strings.TrimSpace(req.PaymentMode))
+	transactionID := strings.TrimSpace(req.TransactionID)
+	proofURL := strings.TrimSpace(req.ProofURL)
+	if paymentMode == "upi" {
+		if transactionID == "" {
+			fail(c, http.StatusBadRequest, "transaction_id is required for UPI payment requests")
+			return
+		}
+		if proofURL == "" {
+			fail(c, http.StatusBadRequest, "proof_url is required for UPI payment requests")
+			return
+		}
 	}
 	paymentDate, err := parseDate(req.PaymentDate)
 	if err != nil {
@@ -889,10 +904,13 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 		RequestReference: reference,
 		Amount:           req.Amount,
 		PaymentDate:      paymentDate,
-		PaymentMode:      strings.TrimSpace(req.PaymentMode),
-		TransactionID:    strings.TrimSpace(req.TransactionID),
+		PaymentMode:      paymentMode,
+		TransactionID:    transactionID,
 		Status:           "pending",
 		Remarks:          strings.TrimSpace(req.Remarks),
+	}
+	if proofURL != "" {
+		paymentRequest.ProofURL = &proofURL
 	}
 	if err := database.DB.Create(&paymentRequest).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to create payment request")
@@ -989,6 +1007,7 @@ func (h *FeeHandler) createPaymentDecisionApproval(c *gin.Context, status, remar
 			"amount":             paymentRequest.Amount,
 			"payment_mode":       paymentRequest.PaymentMode,
 			"transaction_id":     paymentRequest.TransactionID,
+			"proof_url":          paymentRequest.ProofURL,
 			"request_reference":  paymentRequest.RequestReference,
 		},
 	}
@@ -1250,13 +1269,20 @@ func normalizeInvoiceSegment(value string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// GetPaymentConfig returns the payment gateway configuration for the frontend.
+// GetPaymentConfig returns the UPI payment configuration for the frontend.
 func (h *FeeHandler) GetPaymentConfig(c *gin.Context) {
+	upiID := strings.TrimSpace(os.Getenv("UPI_ID"))
+	payeeName := strings.TrimSpace(os.Getenv("UPI_PAYEE_NAME"))
+	merchantCode := strings.TrimSpace(os.Getenv("UPI_MERCHANT_CODE"))
+	qrNote := strings.TrimSpace(os.Getenv("UPI_QR_NOTE"))
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
 		Data: gin.H{
-			"razorpay_enabled": false,
-			"razorpay_key_id":  "",
+			"upi_enabled":   upiID != "",
+			"upi_id":        upiID,
+			"payee_name":    payeeName,
+			"merchant_code": merchantCode,
+			"qr_note":       qrNote,
 		},
 	})
 }

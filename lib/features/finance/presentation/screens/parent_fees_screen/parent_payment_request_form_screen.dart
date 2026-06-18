@@ -1,12 +1,15 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
-import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
 class ParentPaymentRequestFormArgs {
@@ -40,14 +43,17 @@ class ParentPaymentRequestFormScreen extends StatefulWidget {
 class _ParentPaymentRequestFormScreenState
     extends State<ParentPaymentRequestFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _referenceController;
+  late final TextEditingController _utrController;
   late final TextEditingController _paymentDateController;
   final _remarksController = TextEditingController();
-  String _paymentMode = 'cash';
-  bool _submitting = false;
-  int _selectedNavIndex = 6;
 
-  static const _paymentModes = [('cash', 'Cash', Icons.money_rounded)];
+  bool _loadingConfig = true;
+  bool _uploadingProof = false;
+  bool _submitting = false;
+  String? _proofUrl;
+  String? _proofName;
+  String? _configError;
+  Map<String, dynamic> _paymentConfig = const {};
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -63,35 +69,70 @@ class _ParentPaymentRequestFormScreenState
     (sum, fee) => sum + ((fee['amount'] as num?)?.toDouble() ?? 0),
   );
 
+  String get _upiId => _text(_paymentConfig['upi_id']);
+  String get _payeeName =>
+      _text(_paymentConfig['payee_name'], fallback: 'School');
+  bool get _upiEnabled =>
+      _paymentConfig['upi_enabled'] == true && _upiId.isNotEmpty;
+
+  String get _upiUri {
+    final params = {
+      'pa': _upiId,
+      'pn': _payeeName,
+      'am': _totalAmount.toStringAsFixed(2),
+      'cu': 'INR',
+      'tn': _text(_paymentConfig['qr_note'], fallback: 'School fee payment'),
+    };
+    final query = params.entries
+        .map((entry) => '${entry.key}=${Uri.encodeComponent(entry.value)}')
+        .join('&');
+    return 'upi://pay?$query';
+  }
+
   @override
   void initState() {
     super.initState();
     final now = DateTime.now();
-    _referenceController = TextEditingController(
-      text:
-          'PARENT-${now.year}${_two(now.month)}${_two(now.day)}-${now.millisecondsSinceEpoch.toString().substring(8)}',
-    );
+    _utrController = TextEditingController();
     _paymentDateController = TextEditingController(text: _dateInput(now));
+    _loadPaymentConfig();
   }
 
   @override
   void dispose() {
-    _referenceController.dispose();
+    _utrController.dispose();
     _paymentDateController.dispose();
     _remarksController.dispose();
     super.dispose();
   }
 
+  Future<void> _loadPaymentConfig() async {
+    setState(() {
+      _loadingConfig = true;
+      _configError = null;
+    });
+    try {
+      final config = await BackendApiClient.instance.getPaymentConfig();
+      if (!mounted) return;
+      setState(() {
+        _paymentConfig = config;
+        _loadingConfig = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _configError = error.toString();
+        _loadingConfig = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final drawer = ParentDrawer(
-      selectedIndex: _selectedNavIndex,
-      onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
-    );
     return SchoolDeskModuleScaffold(
-      title: 'Submit Payment Request',
-      subtitle: 'Send payment details to the school office for verification',
-      drawer: drawer,
+      title: 'Pay by UPI',
+      subtitle: 'Scan, pay, and upload proof for school verification',
+      drawer: ParentDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
@@ -105,9 +146,11 @@ class _ParentPaymentRequestFormScreenState
             const SizedBox(height: 14),
             _buildFeeBreakdown(),
             const SizedBox(height: 14),
+            _buildUpiPanel(),
+            const SizedBox(height: 14),
             _buildReferenceFields(),
             const SizedBox(height: 14),
-            _buildPaymentModePicker(),
+            _buildProofUpload(),
             const SizedBox(height: 14),
             TextFormField(
               controller: _remarksController,
@@ -116,13 +159,15 @@ class _ParentPaymentRequestFormScreenState
               maxLines: 5,
               decoration: const InputDecoration(
                 labelText: 'Notes for school office',
-                hintText: 'Optional transaction note or payer details',
+                hintText: 'Optional payer details or bank note',
                 alignLabelWithHint: true,
               ),
             ),
+            const SizedBox(height: 12),
+            _buildVerificationNotice(),
             const SizedBox(height: 20),
             FilledButton.icon(
-              onPressed: _submitting || _fees.isEmpty ? null : _submit,
+              onPressed: _canSubmit ? _submit : null,
               icon: _submitting
                   ? const SizedBox(
                       width: 16,
@@ -133,7 +178,7 @@ class _ParentPaymentRequestFormScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : 'Submit Cash ₹${_totalAmount.toStringAsFixed(0)}',
+                    : 'Submit UPI Proof INR ${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -151,6 +196,13 @@ class _ParentPaymentRequestFormScreenState
       ),
     );
   }
+
+  bool get _canSubmit =>
+      !_submitting &&
+      !_loadingConfig &&
+      _upiEnabled &&
+      _fees.isNotEmpty &&
+      _proofUrl != null;
 
   Widget _buildStudentSummary() {
     final student = widget.args.student ?? const <String, dynamic>{};
@@ -207,7 +259,10 @@ class _ParentPaymentRequestFormScreenState
       return _panel(
         child: Text(
           'No pending invoice is available for payment request.',
-          style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
+          style: GoogleFonts.dmSans(
+            fontSize: 13,
+            color: context.appTheme.error,
+          ),
         ),
       );
     }
@@ -249,7 +304,7 @@ class _ParentPaymentRequestFormScreenState
           Row(
             children: [
               Text(
-                'Total request amount',
+                'Total UPI amount',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
@@ -267,20 +322,85 @@ class _ParentPaymentRequestFormScreenState
     );
   }
 
+  Widget _buildUpiPanel() {
+    if (_loadingConfig) {
+      return _panel(child: const Center(child: CircularProgressIndicator()));
+    }
+    if (_configError != null || !_upiEnabled) {
+      return _panel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'UPI payment is not configured',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _configError ?? 'Please contact the school office before paying.',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.error,
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loadPaymentConfig,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            'Scan this QR in any UPI app',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          QrImageView(data: _upiUri, version: QrVersions.auto, size: 190),
+          const SizedBox(height: 12),
+          SelectableText(
+            _upiId,
+            style: GoogleFonts.dmSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _upiId));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text('UPI ID copied')));
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: const Text('Copy UPI ID'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReferenceFields() {
     return _panel(
       child: Column(
         children: [
           TextFormField(
-            controller: _referenceController,
+            controller: _utrController,
             enabled: !_submitting,
             decoration: const InputDecoration(
-              labelText: 'Payment reference',
-              hintText: 'Transaction ID or receipt reference',
+              labelText: 'UTR / transaction reference',
+              hintText: 'Enter UTR after successful UPI payment',
             ),
             validator: (value) {
-              if ((value ?? '').trim().length < 3) {
-                return 'Enter a payment reference';
+              if ((value ?? '').trim().length < 6) {
+                return 'Enter a valid UTR / transaction reference';
               }
               return null;
             },
@@ -310,73 +430,93 @@ class _ParentPaymentRequestFormScreenState
     );
   }
 
-  Widget _buildPaymentModePicker() {
+  Widget _buildProofUpload() {
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Payment Method',
+            'Upload payment screenshot',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Upload the UPI success screenshot so the school can verify the transaction.',
             style: GoogleFonts.dmSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: context.appTheme.muted,
             ),
           ),
-          const SizedBox(height: 10),
-          ..._paymentModes.map((mode) {
-            final selected = _paymentMode == mode.$1;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: InkWell(
-                onTap: _submitting
-                    ? null
-                    : () => setState(() => _paymentMode = mode.$1),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 11,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? context.appTheme.primary.withAlpha(16)
-                        : context.appTheme.surface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: selected
-                          ? context.appTheme.primary
-                          : context.appTheme.outlineVariant,
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _uploadingProof || _submitting ? null : _pickProof,
+            icon: _uploadingProof
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.upload_file_rounded, size: 18),
+            label: Text(_uploadingProof ? 'Uploading...' : 'Upload Screenshot'),
+          ),
+          if (_proofUrl != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 18,
+                  color: context.appTheme.success,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _proofName ?? 'Payment proof uploaded',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        mode.$3,
-                        size: 18,
-                        color: selected ? context.appTheme.primary : context.appTheme.muted,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          mode.$2,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (selected)
-                        Icon(
-                          Icons.check_circle_rounded,
-                          size: 18,
-                          color: context.appTheme.primary,
-                        ),
-                    ],
-                  ),
                 ),
+                IconButton(
+                  tooltip: 'Remove proof',
+                  onPressed: _submitting
+                      ? null
+                      : () => setState(() {
+                          _proofUrl = null;
+                          _proofName = null;
+                        }),
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerificationNotice() {
+    return _panel(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            color: context.appTheme.primary,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Fees will be updated in 12-24 hrs after Principal verification.',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
-            );
-          }),
+            ),
+          ),
         ],
       ),
     );
@@ -394,8 +534,62 @@ class _ParentPaymentRequestFormScreenState
     );
   }
 
+  Future<void> _pickProof() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'pdf'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final path = file.path;
+    if (path == null || path.isEmpty) return;
+    setState(() => _uploadingProof = true);
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(path, filename: file.name),
+      });
+      final response = await BackendApiClient.instance.dio.post(
+        '/uploads',
+        data: formData,
+      );
+      final responseData = response.data;
+      final data = responseData is Map ? responseData['data'] : null;
+      final url =
+          '${responseData is Map ? responseData['url'] : ''}'.trim().isNotEmpty
+          ? '${responseData['url']}'.trim()
+          : '${data is Map ? data['url'] : ''}'.trim();
+      if (url.isEmpty) throw Exception('Upload did not return a proof URL');
+      if (!mounted) return;
+      setState(() {
+        _proofUrl = url;
+        _proofName = file.name;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Proof upload failed: $error'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _uploadingProof = false);
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_proofUrl == null || _proofUrl!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Upload payment screenshot before submitting.'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     setState(() => _submitting = true);
     final references = <String>[];
     try {
@@ -404,10 +598,12 @@ class _ParentPaymentRequestFormScreenState
             .submitParentPaymentRequest(
               PaymentRequest(
                 invoiceId: '${fee['id']}',
-                receiptNumber: _referenceController.text.trim(),
+                receiptNumber: _utrController.text.trim(),
                 amountPaid: (fee['amount'] as num?)?.toDouble() ?? 0,
                 paymentDate: _paymentDateController.text.trim(),
-                paymentMode: 'cash',
+                paymentMode: 'upi',
+                transactionId: _utrController.text.trim(),
+                proofUrl: _proofUrl,
               ),
               remarks: _remarksController.text.trim(),
             );
@@ -417,7 +613,9 @@ class _ParentPaymentRequestFormScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment request submitted for school verification'),
+          content: Text(
+            'Payment proof submitted. Fees will be updated in 12-24 hrs.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -448,13 +646,18 @@ class _ParentPaymentRequestFormScreenState
         .trim();
   }
 
+  String _text(dynamic value, {String fallback = ''}) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
   bool _isIsoDate(String raw) {
     final match = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw);
     return match && DateTime.tryParse(raw) != null;
   }
-
-  String _dateInput(DateTime date) =>
-      '${date.year}-${_two(date.month)}-${_two(date.day)}';
-
-  String _two(int value) => value.toString().padLeft(2, '0');
 }
+
+String _dateInput(DateTime dt) =>
+    '${dt.year}-${_two(dt.month)}-${_two(dt.day)}';
+
+String _two(int value) => value.toString().padLeft(2, '0');

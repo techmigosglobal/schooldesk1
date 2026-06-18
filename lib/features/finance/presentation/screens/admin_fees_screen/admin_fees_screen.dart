@@ -328,15 +328,21 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         final query = _paymentSearchQuery.toLowerCase();
         if (!name.contains(query) && !txId.contains(query)) return false;
       }
-      if (_paymentModeFilter != 'All' && _textValue(payment['mode']) != _paymentModeFilter) {
+      if (_paymentModeFilter != 'All' &&
+          _textValue(payment['mode']) != _paymentModeFilter) {
         return false;
       }
-      if (_paymentStatusFilter != 'All' && _textValue(payment['status'], fallback: 'completed') != _paymentStatusFilter) {
+      if (_paymentStatusFilter != 'All' &&
+          _textValue(payment['status'], fallback: 'completed') !=
+              _paymentStatusFilter) {
         return false;
       }
       if (_paymentDateFilter != null) {
         final date = DateTime.tryParse(_textValue(payment['date']));
-        if (date == null || date.year != _paymentDateFilter!.year || date.month != _paymentDateFilter!.month || date.day != _paymentDateFilter!.day) {
+        if (date == null ||
+            date.year != _paymentDateFilter!.year ||
+            date.month != _paymentDateFilter!.month ||
+            date.day != _paymentDateFilter!.day) {
           return false;
         }
       }
@@ -363,27 +369,31 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               message: 'No payments match the current filters.',
             )
           else
-            ...filteredPayments.take(20).map((payment) => OpsListRow(
-                  icon: Icons.payments_outlined,
-                  title: _textValue(payment['name'], fallback: 'Payment'),
-                  subtitle:
-                      'Txn: ${_textValue(payment['transaction_id'], fallback: 'N/A')} | ${_textValue(payment['mode'], fallback: 'Mode pending')} | ${_dateLabel(payment['date'])} | Status: ${_textValue(payment['status'], fallback: 'Completed')}',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => _previewReceipt(payment),
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: Text(_money(_numValue(payment['amount']))),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.download_outlined),
-                        tooltip: 'Export Receipt',
-                        onPressed: () => _exportReceipt(payment),
-                      ),
-                    ],
+            ...filteredPayments
+                .take(20)
+                .map(
+                  (payment) => OpsListRow(
+                    icon: Icons.payments_outlined,
+                    title: _textValue(payment['name'], fallback: 'Payment'),
+                    subtitle:
+                        'Txn: ${_textValue(payment['transaction_id'], fallback: 'N/A')} | ${_textValue(payment['mode'], fallback: 'Mode pending')} | ${_dateLabel(payment['date'])} | Status: ${_textValue(payment['status'], fallback: 'Completed')}',
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _previewReceipt(payment),
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: Text(_money(_numValue(payment['amount']))),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.download_outlined),
+                          tooltip: 'Export Receipt',
+                          onPressed: () => _exportReceipt(payment),
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
         ],
       ),
     );
@@ -413,20 +423,28 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             items: ['All', 'Cash', 'Card', 'UPI', 'Netbanking'].map((mode) {
               return DropdownMenuItem(value: mode, child: Text(mode));
             }).toList(),
-            onChanged: (value) => setState(() => _paymentModeFilter = value ?? 'All'),
+            onChanged: (value) =>
+                setState(() => _paymentModeFilter = value ?? 'All'),
             hint: const Text('Mode'),
           ),
           DropdownButton<String>(
             value: _paymentStatusFilter,
-            items: ['All', 'completed', 'pending', 'failed', 'refunded'].map((status) {
+            items: ['All', 'completed', 'pending', 'failed', 'refunded'].map((
+              status,
+            ) {
               return DropdownMenuItem(value: status, child: Text(status));
             }).toList(),
-            onChanged: (value) => setState(() => _paymentStatusFilter = value ?? 'All'),
+            onChanged: (value) =>
+                setState(() => _paymentStatusFilter = value ?? 'All'),
             hint: const Text('Status'),
           ),
           OutlinedButton.icon(
             icon: const Icon(Icons.calendar_today),
-            label: Text(_paymentDateFilter == null ? 'Select Date' : _dateLabel(_paymentDateFilter!.toIso8601String())),
+            label: Text(
+              _paymentDateFilter == null
+                  ? 'Select Date'
+                  : _dateLabel(_paymentDateFilter!.toIso8601String()),
+            ),
             onPressed: () async {
               final date = await showDatePicker(
                 context: context,
@@ -439,7 +457,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               }
             },
           ),
-          if (_paymentSearchQuery.isNotEmpty || _paymentModeFilter != 'All' || _paymentStatusFilter != 'All' || _paymentDateFilter != null)
+          if (_paymentSearchQuery.isNotEmpty ||
+              _paymentModeFilter != 'All' ||
+              _paymentStatusFilter != 'All' ||
+              _paymentDateFilter != null)
             TextButton(
               onPressed: () => setState(() {
                 _paymentSearchQuery = '';
@@ -620,7 +641,8 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     try {
       await BackendApiClient.instance.createReportExport(
         '/fees/reports/exports',
-        reportTitle: 'Receipt Export - ${_textValue(payment['transaction_id'])}',
+        reportTitle:
+            'Receipt Export - ${_textValue(payment['transaction_id'])}',
         reportType: 'receipt_export',
         format: 'pdf',
         parameters: {
@@ -730,7 +752,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         'date': row['payment_date'] ?? row['created_at'],
         'receipt': row['receipt_number'] ?? row['receipt'],
         'status': _textValue(row['status'], fallback: 'completed'),
-        'transaction_id': _textValue(row['transaction_id'] ?? row['razorpay_payment_id'], fallback: 'N/A'),
+        'transaction_id': _textValue(row['transaction_id'], fallback: 'N/A'),
       };
     });
   }
@@ -755,7 +777,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
+        backgroundColor: success
+            ? context.appTheme.success
+            : context.appTheme.error,
       ),
     );
   }

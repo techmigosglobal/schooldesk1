@@ -435,7 +435,7 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 	createReq := httptest.NewRequest(
 		http.MethodPost,
 		"/fees/payment-requests",
-		strings.NewReader(`{"invoice_id":"invoice-linked-payment","amount":300,"payment_date":"2026-05-16","payment_mode":"upi","transaction_id":"UTR-001"}`),
+		strings.NewReader(`{"invoice_id":"invoice-linked-payment","amount":300,"payment_date":"2026-05-16","payment_mode":"upi","transaction_id":"UTR-001","proof_url":"https://cdn.example.test/proof.png"}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createResp := httptest.NewRecorder()
@@ -452,6 +452,9 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 	if created.Data.Status != "pending" || created.Data.ParentUserID != parent.ID || created.Data.StudentID != linkedStudent.ID {
 		t.Fatalf("unexpected payment request: %+v", created.Data)
 	}
+	if created.Data.ProofURL == nil || *created.Data.ProofURL != "https://cdn.example.test/proof.png" {
+		t.Fatalf("upi payment request should persist proof_url: %+v", created.Data)
+	}
 	var invoice models.FeeInvoice
 	if err := db.First(&invoice, "id = ?", "invoice-linked-payment").Error; err != nil {
 		t.Fatalf("reload invoice: %v", err)
@@ -463,7 +466,7 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 	otherReq := httptest.NewRequest(
 		http.MethodPost,
 		"/fees/payment-requests",
-		strings.NewReader(`{"invoice_id":"invoice-other-payment","amount":100,"payment_date":"2026-05-16","payment_mode":"upi"}`),
+		strings.NewReader(`{"invoice_id":"invoice-other-payment","amount":100,"payment_date":"2026-05-16","payment_mode":"upi","transaction_id":"UTR-OTHER","proof_url":"https://cdn.example.test/other.png"}`),
 	)
 	otherReq.Header.Set("Content-Type", "application/json")
 	otherResp := httptest.NewRecorder()
@@ -475,13 +478,25 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 	overpayReq := httptest.NewRequest(
 		http.MethodPost,
 		"/fees/payment-requests",
-		strings.NewReader(`{"invoice_id":"invoice-linked-payment","amount":800,"payment_date":"2026-05-16","payment_mode":"upi"}`),
+		strings.NewReader(`{"invoice_id":"invoice-linked-payment","amount":800,"payment_date":"2026-05-16","payment_mode":"upi","transaction_id":"UTR-OVER","proof_url":"https://cdn.example.test/over.png"}`),
 	)
 	overpayReq.Header.Set("Content-Type", "application/json")
 	overpayResp := httptest.NewRecorder()
 	parentRouter.ServeHTTP(overpayResp, overpayReq)
 	if overpayResp.Code != http.StatusBadRequest {
 		t.Fatalf("overpay after pending request should fail, status=%d body=%s", overpayResp.Code, overpayResp.Body.String())
+	}
+
+	missingProofReq := httptest.NewRequest(
+		http.MethodPost,
+		"/fees/payment-requests",
+		strings.NewReader(`{"invoice_id":"invoice-linked-payment","amount":50,"payment_date":"2026-05-16","payment_mode":"upi","transaction_id":"UTR-NOPROOF"}`),
+	)
+	missingProofReq.Header.Set("Content-Type", "application/json")
+	missingProofResp := httptest.NewRecorder()
+	parentRouter.ServeHTTP(missingProofResp, missingProofReq)
+	if missingProofResp.Code != http.StatusBadRequest {
+		t.Fatalf("upi payment without proof should fail, status=%d body=%s", missingProofResp.Code, missingProofResp.Body.String())
 	}
 
 	adminRouter := gin.New()

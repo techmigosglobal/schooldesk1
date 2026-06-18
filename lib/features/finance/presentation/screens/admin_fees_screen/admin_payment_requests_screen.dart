@@ -265,6 +265,8 @@ class _AdminPaymentRequestsScreenState
           _detailRow('Mode', _text(request['payment_mode'], fallback: '-')),
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
+          if (_text(request['proof_url']).isNotEmpty)
+            _detailRow('Proof upload', _text(request['proof_url'])),
           if (_text(request['admin_remarks']).isNotEmpty)
             _detailRow('Remarks', _text(request['admin_remarks'])),
           const SizedBox(height: 10),
@@ -308,7 +310,10 @@ class _AdminPaymentRequestsScreenState
             width: 92,
             child: Text(
               label,
-              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                color: context.appTheme.muted,
+              ),
             ),
           ),
           Expanded(

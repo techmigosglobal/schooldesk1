@@ -81,6 +81,9 @@ void main() {
     final timetableApi = File(
       'lib/core/network/api_modules/timetable_api.dart',
     ).readAsStringSync();
+    final teacherTimetable = File(
+      'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
+    ).readAsStringSync();
     final principalTimetable = File(
       'lib/features/academics/presentation/screens/principal_command_center_screens/principal_academic_command_screens.dart',
     ).readAsStringSync();
@@ -88,6 +91,11 @@ void main() {
     expect(timetableApi, contains('staff_id'));
     expect(timetableApi, contains('/timetable/slots'));
     expect(timetableApi, contains('/timetable/smart/generate'));
+    expect(teacherTimetable, contains('Weekly Timetable'));
+    expect(teacherTimetable, contains('_slotsByDay'));
+    expect(teacherTimetable, contains('RoleAccessService.teacherSubjectIds'));
+    expect(teacherTimetable, isNot(contains('Quick Actions')));
+    expect(teacherTimetable, isNot(contains('_buildQuickActions')));
     expect(principalTimetable, contains('_TimetableHomeMode.teachers'));
     expect(principalTimetable, contains('Teacher Timetable'));
   });

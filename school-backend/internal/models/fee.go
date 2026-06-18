@@ -108,6 +108,7 @@ type ParentPaymentRequest struct {
 	PaymentDate      time.Time   `json:"payment_date"`
 	PaymentMode      string      `gorm:"type:text;not null" json:"payment_mode"`
 	TransactionID    string      `gorm:"size:255" json:"transaction_id"`
+	ProofURL         *string     `gorm:"type:text" json:"proof_url,omitempty"`
 	Status           string      `gorm:"type:text;default:'pending';index" json:"status"`
 	Remarks          string      `gorm:"type:text" json:"remarks"`
 	AdminRemarks     string      `gorm:"type:text" json:"admin_remarks"`

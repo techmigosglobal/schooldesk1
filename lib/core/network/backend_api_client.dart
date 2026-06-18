@@ -3,6 +3,10 @@ import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
+import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
@@ -35,6 +39,8 @@ part 'api_modules/approval_requests_api.dart';
 class BackendApiClient {
   static BackendApiClient? _instance;
   late final Dio _dio;
+  CacheOptions? _cacheOptions;
+  bool _cacheInstalled = false;
   Completer<bool>? _refreshCompleter;
 
   BackendApiClient._() {
@@ -52,6 +58,7 @@ class BackendApiClient {
 
     _dio.interceptors.addAll([
       _AuthInterceptor(this),
+      _ReadCacheOptionsInterceptor(this),
       _LoggingInterceptor(),
       _ErrorInterceptor(this),
     ]);
@@ -64,6 +71,7 @@ class BackendApiClient {
 
   static Future<void> initialize() async {
     final client = instance;
+    await client.installPersistentCache();
     final access = await TokenStorageService.getAccessToken();
     if (access != null && access.isNotEmpty) {
       client.setAuthToken(access);
@@ -96,6 +104,30 @@ class BackendApiClient {
   }
 
   bool get isAuthenticated => _authToken != null;
+
+  Future<void> installPersistentCache() async {
+    if (_cacheInstalled) return;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final store = HiveCacheStore(p.join(dir.path, 'schooldesk_http_cache'));
+      _cacheOptions = CacheOptions(
+        store: store,
+        policy: CachePolicy.forceCache,
+        hitCacheOnErrorExcept: const [401, 403],
+        maxStale: const Duration(minutes: 5),
+        allowPostMethod: false,
+      );
+      _dio.interceptors.add(DioCacheInterceptor(options: _cacheOptions!));
+      _cacheInstalled = true;
+    } catch (error) {
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          '[API CACHE] Persistent cache disabled: $error',
+          name: 'BackendApiClient',
+        );
+      }
+    }
+  }
 
   List<Map<String, dynamic>> _asListMap(dynamic value) {
     if (value is! List) return [];

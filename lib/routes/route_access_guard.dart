@@ -29,7 +29,6 @@ class RouteAccessGuard {
     AppRoutes.homeworkMessaging,
   };
 
-
   static const Map<String, Set<String>> _routeRoles = {
     // Admin routes (principal manages admin module)
     AppRoutes.adminDashboard: {'principal'},
@@ -104,14 +103,11 @@ class RouteAccessGuard {
     AppRoutes.teacherHomework: {'teacher'},
     AppRoutes.teacherHomeworkForm: {'teacher'},
     AppRoutes.teacherHomeworkSubmissions: {'teacher'},
-    AppRoutes.teacherStudyMaterials: {'teacher'},
-    AppRoutes.teacherStudyMaterialForm: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
     AppRoutes.teacherReports: {'teacher'},
     AppRoutes.teacherDiary: {'teacher'},
-    AppRoutes.teacherSyllabus: {'teacher'},
     AppRoutes.teacherEventPosts: {'teacher'},
     AppRoutes.teacherLessonPlanner: {'teacher'},
     AppRoutes.teacherPTM: {'teacher'},
