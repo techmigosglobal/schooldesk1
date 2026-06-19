@@ -7,7 +7,6 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
-
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
   final List<Map<String, dynamic>> initialTimetable;
@@ -24,6 +23,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _loading = false;
+  late bool _roleScopeLoaded;
   String? _error;
   String _teacherName = 'Teacher';
   String _assignedClass = 'Not assigned';
@@ -40,6 +40,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _roleScopeLoaded = false;
     _timetable = widget.initialTimetable
         .map((entry) => Map<String, dynamic>.from(entry))
         .toList();
@@ -67,13 +68,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _roleScopeLoaded = true;
         _teacherName = RoleAccessService.teacherName;
         _assignedClass = RoleAccessService.teacherClassName;
         _assignedSubject = RoleAccessService.teacherSubject;
         _timetable = RoleAccessService.teacherTimetableToday;
-        _assignedClasses = RoleAccessService.teacherClassTeacherClasses.isNotEmpty
-            ? 1
-            : 0;
+        _assignedClasses =
+            RoleAccessService.teacherClassTeacherClasses.isNotEmpty ? 1 : 0;
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
@@ -92,6 +93,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
+        _roleScopeLoaded = true;
         _loading = false;
         _error = 'Unable to load teacher dashboard from backend.';
       });
@@ -173,13 +175,13 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ],
       child: TeacherFlowScrollView(
         children: [
-          if (!RoleAccessService.hasTeacherStaffLink)
+          if (_roleScopeLoaded && !RoleAccessService.hasTeacherStaffLink)
             const TeacherFlowCard(
               icon: Icons.badge_outlined,
               title: 'Your teacher account is not linked to a staff profile.',
               subtitle: 'Please contact Admin/Principal.',
             )
-          else if (!RoleAccessService.hasAssignedClasses)
+          else if (_roleScopeLoaded && !RoleAccessService.hasAssignedClasses)
             const TeacherFlowCard(
               icon: Icons.class_outlined,
               title: 'No classes assigned yet.',
@@ -364,8 +366,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ),
       );
     } else {
-      final uniqueSubjects = _timetable.map((row) => teacherFlowText(row['subject'])).toSet().toList();
-      final classLabel = teacherFlowText(_timetable.first['class'], fallback: 'Class');
+      final uniqueSubjects = _timetable
+          .map((row) => teacherFlowText(row['subject']))
+          .toSet()
+          .toList();
+      final classLabel = teacherFlowText(
+        _timetable.first['class'],
+        fallback: 'Class',
+      );
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 10),

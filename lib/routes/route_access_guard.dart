@@ -79,6 +79,7 @@ class RouteAccessGuard {
     AppRoutes.teacherHomeworkForm: {'teacher'},
     AppRoutes.teacherHomeworkSubmissions: {'teacher'},
     AppRoutes.teacherCommunication: {'teacher'},
+    AppRoutes.teacherParentInteraction: {'teacher'},
     AppRoutes.teacherLeave: {'teacher'},
     AppRoutes.teacherLeaveRequestForm: {'teacher'},
     AppRoutes.teacherReports: {'teacher'},

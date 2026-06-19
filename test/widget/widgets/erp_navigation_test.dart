@@ -15,18 +15,18 @@ void main() {
       MaterialApp(
         theme: AppTheme.lightTheme,
         routes: {
-          AppRoutes.adminStudents: (_) =>
+          AppRoutes.studentOversight: (_) =>
               const Scaffold(body: Text('Students page')),
         },
         home: Scaffold(
           drawer: SchoolDeskNavigationDrawer(
-            role: SchoolDeskRole.admin,
-            portalLabel: 'Admin Portal',
+            role: SchoolDeskRole.principal,
+            portalLabel: 'Principal Portal',
             organizationName: 'Public School',
             organizationSubtitle: 'Operations',
-            userName: 'Admin User',
-            userSubtitle: 'Administrator',
-            initials: 'AD',
+            userName: 'Principal User',
+            userSubtitle: 'Principal',
+            initials: 'PR',
             portalIcon: Icons.manage_accounts_rounded,
             selectedIndex: 0,
             onDestinationSelected: (index) => selectedIndex = index,
@@ -39,14 +39,14 @@ void main() {
                     icon: Icons.dashboard_outlined,
                     activeIcon: Icons.dashboard_rounded,
                     label: 'Dashboard',
-                    route: AppRoutes.adminDashboard,
+                    route: AppRoutes.principalDashboard,
                   ),
                   SchoolDeskNavigationItem(
                     index: 1,
                     icon: Icons.school_outlined,
                     activeIcon: Icons.school_rounded,
                     label: 'Students',
-                    route: AppRoutes.adminStudents,
+                    route: AppRoutes.studentOversight,
                   ),
                 ],
               ),
@@ -65,7 +65,7 @@ void main() {
     await tester.tap(find.text('Open drawer'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Admin Portal'), findsOneWidget);
+    expect(find.text('Principal Portal'), findsOneWidget);
     expect(find.text('Dashboard'), findsOneWidget);
     expect(
       tester.getSemantics(find.text('Dashboard')),

@@ -50,7 +50,7 @@ void main() {
     expect(light.sizing.bottomSheetMaxWidth, 720);
     expect(light.radius.card, 8);
     expect(light.motion.fast, const Duration(milliseconds: 140));
-    expect(light.roleColor(SchoolDeskRole.admin), isA<Color>());
+    expect(light.roleColor(SchoolDeskRole.principal), isA<Color>());
     expect(light.roleColor(SchoolDeskRole.teacher), isA<Color>());
     expect(dark.isDark, isTrue);
   });

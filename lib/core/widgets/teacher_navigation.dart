@@ -195,6 +195,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherCommunication,
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
+            const SchoolDeskNavigationItem(
+              index: 21,
+              icon: Icons.event_available_outlined,
+              activeIcon: Icons.event_available_rounded,
+              label: 'PTM Slots',
+              route: AppRoutes.teacherParentInteraction,
+            ),
             SchoolDeskNavigationItem(
               index: 16,
               icon: Icons.feedback_outlined,

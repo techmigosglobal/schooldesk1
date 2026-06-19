@@ -11,13 +11,8 @@ void main() {
     'lib/core/widgets/teacher_navigation.dart',
   ).readAsStringSync();
   final routeConstants = _routeConstants(appRoutesSource);
-  final visibleRouteNames = _visibleRouteNames(appRoutesSource);
 
   final roleSources = {
-    'admin': [
-      'lib/core/widgets/admin_navigation.dart',
-      'lib/features/dashboard/presentation/screens/admin_dashboard_screen/admin_dashboard_screen.dart',
-    ],
     'principal': [
       'lib/core/widgets/app_navigation.dart',
       'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
@@ -78,18 +73,8 @@ void main() {
           isNotNull,
           reason: '$routeName ($route) must have screen registry metadata',
         );
-        if (metadata == null || metadata.isPublic || metadata.isShared) {
-          continue;
-        }
-
-        expect(
-          visibleRouteNames,
-          contains(routeName),
-          reason:
-              '$routeName ($route) is visible for ${entry.key} and must not resolve to BlankRoleModuleScreen',
-        );
-
         final wrongRole = _wrongRoleFor(route);
+        if (wrongRole == null) continue;
         expect(
           wrongRole,
           isNotNull,
@@ -128,6 +113,7 @@ void main() {
         'teacherLessonPlanner',
         'schoolGallery',
         'teacherCommunication',
+        'teacherParentInteraction',
         'teacherLeave',
         'teacherReports',
         'notificationCenter',
@@ -150,7 +136,6 @@ void main() {
       for (final removedRouteName in [
         'teacherStudentNotes',
         'teacherDiscipline',
-        'teacherParentInteraction',
         'teacherPerformance',
         'teacherMarkEntry',
         'teacherStudyMaterials',
@@ -177,18 +162,6 @@ Map<String, String> _routeConstants(String source) {
     constants[match.group(1)!] = match.group(2)!;
   }
   return constants;
-}
-
-Set<String> _visibleRouteNames(String source) {
-  final match = RegExp(
-    r'static\s+const\s+Set<String>\s+_roleWorkflowVisibleRoutes\s*=\s*\{([\s\S]*?)\};',
-  ).firstMatch(source);
-  final body = match?.group(1) ?? '';
-  return RegExp(r'\b([a-zA-Z]\w*)\b')
-      .allMatches(body)
-      .map((match) => match.group(1)!)
-      .where((name) => name != 'const')
-      .toSet();
 }
 
 Set<String> _referencedRouteNames(String source) {

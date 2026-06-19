@@ -71,7 +71,7 @@ void main() {
       expect(
         main,
         contains(
-          'homework.POST("", middleware.RBACMiddleware("Admin", "Principal", "Teacher")',
+          'homework.POST("", middleware.RBACMiddleware("Principal", "Teacher")',
         ),
       );
       expect(
@@ -165,7 +165,7 @@ void main() {
       expect(
         main,
         contains(
-          'fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Admin", "Principal")',
+          'fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Principal")',
         ),
       );
       expect(feeHandler, contains('CreateParentPaymentRequest'));
@@ -315,7 +315,7 @@ void main() {
       expect(dashboard, contains('api.getMyStudents()'));
       expect(dashboard, contains("api.getDashboard('parent')"));
       expect(dashboard, contains('_activeChildIndex'));
-      expect(dashboard, contains('class _ChildSelector'));
+      expect(dashboard, contains('class _ParentChildPillSelector'));
       expect(roleAccess, contains('loggedInParentChildren'));
       expect(roleAccess, contains('Map<String, dynamic> childAt(int index)'));
       expect(roleAccess, contains('parentChildNames'));
@@ -405,27 +405,12 @@ void main() {
     'advanced transport and library are retired from current route exposure',
     () {
       final main = readBackendRouteSources();
-      final studentHandler = File(
-        'school-backend/internal/handlers/student.go',
-      ).readAsStringSync();
-      final models = File(
-        'school-backend/internal/models/library_transport.go',
-      ).readAsStringSync();
       final appRoutes = File('lib/routes/app_routes.dart').readAsStringSync();
       final prd = File('docs/PRD.md').readAsStringSync();
 
       expect(main, isNot(contains('transport := api.Group("/transport")')));
       expect(main, isNot(contains('library := api.Group("/library")')));
       expect(main, isNot(contains('GetStudentTransport')));
-      expect(
-        studentHandler,
-        contains('func (h *StudentHandler) GetStudentTransport'),
-      );
-      expect(studentHandler, contains('Preload("Route").Preload("Stop")'));
-      expect(models, contains('type BookIssue struct'));
-      expect(models, contains('FinePerDay'));
-      expect(models, contains('FineAmount'));
-      expect(models, contains('type StudentTransport struct'));
       expect(appRoutes, isNot(contains('/transport-')));
       expect(appRoutes, isNot(contains('/library-')));
       expect(prd, contains('No transport or library route exposure'));

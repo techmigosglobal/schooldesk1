@@ -84,7 +84,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
     return SchoolDeskModuleScaffold(
       title: 'Analytics',
       subtitle: 'Monitor attendance, fee collection, staff signals, and alerts',
-      drawer: PrincipalDrawer(selectedIndex: 11, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(selectedIndex: 13, onDestinationSelected: (_) {}),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.principal,
       ),

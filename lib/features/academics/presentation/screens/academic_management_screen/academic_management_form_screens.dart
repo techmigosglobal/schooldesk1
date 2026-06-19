@@ -1146,7 +1146,7 @@ class _AcademicFormScaffold extends StatelessWidget {
       subtitle: subtitle,
       drawer: _isAdminOwner
           ? AdminDrawer(selectedIndex: 15, onDestinationSelected: (_) {})
-          : PrincipalDrawer(selectedIndex: 12, onDestinationSelected: (_) {}),
+          : PrincipalDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
       floatingActionButton: DashboardFabWidget(
         role: _isAdminOwner ? DashboardRole.principal : DashboardRole.principal,
       ),

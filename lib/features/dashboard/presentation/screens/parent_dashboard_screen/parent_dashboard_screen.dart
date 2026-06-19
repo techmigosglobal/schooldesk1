@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -21,6 +22,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   int _activeChildIndex = 0;
   bool _loading = true;
   String? _error;
+  Map<String, dynamic> _dashboard = const {};
   List<Map<String, dynamic>> _children = const [];
   List<dynamic> _eventPosts = [];
 
@@ -37,10 +39,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     });
     try {
       final api = BackendApiClient.instance;
-      // Only load what the parent feed actually shows: linked students and
-      // school event/activity posts. Homework and lesson planner data are
-      // available from their dedicated parent screens, not this feed.
       final results = await Future.wait([
+        api.getDashboard('parent'),
         api.getMyStudents(),
         api.dio
             .get('/event-posts/home-feed')
@@ -53,14 +53,24 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       ]);
 
       if (!mounted) return;
-      final children = (results[0] as List)
+      final dashboard = Map<String, dynamic>.from(results[0] as Map);
+      final dashboardChildren =
+          (dashboard['children'] as List?)
+              ?.whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList() ??
+          const <Map<String, dynamic>>[];
+      final linkedChildren = (results[1] as List)
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
+      final children = dashboardChildren.isNotEmpty
+          ? dashboardChildren
+          : linkedChildren;
 
-      final res1 = results[1] is Response
-          ? (results[1] as Response).data
-          : results[1];
+      final res1 = results[2] is Response
+          ? (results[2] as Response).data
+          : results[2];
       final rawEvents = res1 is List
           ? res1
           : (res1 is Map ? (res1['data'] as List? ?? []) : []);
@@ -83,6 +93,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       );
 
       setState(() {
+        _dashboard = dashboard;
         _children = children;
         _eventPosts = feedItems;
         if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
@@ -91,7 +102,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load school feed.';
+        _error = 'Unable to load parent dashboard.';
         _loading = false;
       });
     }
@@ -101,7 +112,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'School Feed',
-      subtitle: 'Posts and activity from your school',
+      subtitle: 'Child summary, actions, and school updates',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -128,22 +139,24 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     Widget child;
     if (_loading) {
       child = const SchoolDeskStatusPanel.loading(
-        message: 'Loading school feed…',
+        message: 'Loading parent dashboard…',
       );
     } else if (_error != null) {
       child = SchoolDeskStatusPanel.error(
-        title: 'Feed unavailable',
+        title: 'Dashboard unavailable',
         message: _error!,
         onAction: _loadDashboardData,
       );
     } else if (_children.isEmpty) {
       child = const SchoolDeskStatusPanel.empty(
         title: 'No linked students',
-        message: 'Ask the school admin to link students to this parent account.',
+        message:
+            'Ask the school admin to link students to this parent account.',
       );
     } else {
       child = _ParentFeedView(
         children: _children,
+        dashboard: _dashboard,
         activeChildIndex: _activeChildIndex,
         onChildSelected: (index) => setState(() => _activeChildIndex = index),
         eventPosts: _eventPosts,
@@ -170,12 +183,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
 
 class _ParentFeedView extends StatelessWidget {
   final List<Map<String, dynamic>> children;
+  final Map<String, dynamic> dashboard;
   final int activeChildIndex;
   final ValueChanged<int> onChildSelected;
   final List<dynamic> eventPosts;
 
   const _ParentFeedView({
     required this.children,
+    required this.dashboard,
     required this.activeChildIndex,
     required this.onChildSelected,
     required this.eventPosts,
@@ -185,11 +200,11 @@ class _ParentFeedView extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
     final parentColor = tokens.roleColor(SchoolDeskRole.parent);
+    final activeChild = children[activeChildIndex];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Child selector pill — same green pill from before
         _ParentChildPillSelector(
           children: children,
           activeIndex: activeChildIndex,
@@ -197,11 +212,200 @@ class _ParentFeedView extends StatelessWidget {
           color: parentColor,
         ),
         SizedBox(height: tokens.spacing.lg),
-        // Post feed — the only content
+        _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
+        SizedBox(height: tokens.spacing.lg),
+        const _ParentWorkflowShortcuts(),
+        SizedBox(height: tokens.spacing.lg),
+        Text(
+          'School Feed',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        SizedBox(height: tokens.spacing.sm),
         _SchoolFeedList(eventPosts: eventPosts),
       ],
     );
   }
+}
+
+class _ParentSummaryGrid extends StatelessWidget {
+  final Map<String, dynamic> dashboard;
+  final Map<String, dynamic> child;
+
+  const _ParentSummaryGrid({required this.dashboard, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = dashboard['metrics'] is Map
+        ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
+        : const <String, dynamic>{};
+    final attendance = dashboard['attendance'] is Map
+        ? Map<String, dynamic>.from(dashboard['attendance'] as Map)
+        : const <String, dynamic>{};
+    return SchoolDeskResponsiveGrid(
+      minTileWidth: 180,
+      spacing: 12,
+      children: [
+        _SummaryTile(
+          icon: Icons.how_to_reg_rounded,
+          label: 'Attendance',
+          value:
+              '${_number(child['attendance_pct'] ?? attendance['attendance_pct'])}%',
+          route: AppRoutes.parentAttendance,
+        ),
+        _SummaryTile(
+          icon: Icons.assignment_turned_in_rounded,
+          label: 'Homework Due',
+          value: _number(child['homework_due'] ?? metrics['open_homework']),
+          route: AppRoutes.parentHomework,
+        ),
+        _SummaryTile(
+          icon: Icons.account_balance_wallet_rounded,
+          label: 'Fees Due',
+          value: _money(
+            child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
+          ),
+          route: AppRoutes.parentFees,
+        ),
+        _SummaryTile(
+          icon: Icons.chat_rounded,
+          label: 'Messages',
+          value: _number(metrics['unread_messages']),
+          route: AppRoutes.parentTeacherChat,
+        ),
+      ],
+    );
+  }
+}
+
+class _SummaryTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String route;
+
+  const _SummaryTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.route,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    final color = tokens.roleColor(SchoolDeskRole.parent);
+    return InkWell(
+      borderRadius: BorderRadius.circular(tokens.radius.card),
+      onTap: () => Navigator.pushNamed(context, route),
+      child: Container(
+        padding: EdgeInsets.all(tokens.spacing.md),
+        decoration: BoxDecoration(
+          color: tokens.panel,
+          borderRadius: BorderRadius.circular(tokens.radius.card),
+          border: Border.all(color: tokens.panelBorder),
+          boxShadow: tokens.elevation.card,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withAlpha(24),
+                borderRadius: BorderRadius.circular(tokens.radius.control),
+              ),
+              child: Icon(icon, color: color),
+            ),
+            SizedBox(width: tokens.spacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SchoolDeskAdaptiveText(
+                    value,
+                    maxLines: 1,
+                    minFontSize: 15,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SchoolDeskAdaptiveText(
+                    label,
+                    maxLines: 1,
+                    minFontSize: 10,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParentWorkflowShortcuts extends StatelessWidget {
+  const _ParentWorkflowShortcuts();
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = [
+      _ShortcutAction(
+        'Attendance',
+        Icons.how_to_reg_rounded,
+        AppRoutes.parentAttendance,
+      ),
+      _ShortcutAction(
+        'Homework',
+        Icons.assignment_rounded,
+        AppRoutes.parentHomework,
+      ),
+      _ShortcutAction(
+        'Pay Fees',
+        Icons.receipt_long_rounded,
+        AppRoutes.parentFees,
+      ),
+      _ShortcutAction('Leave', Icons.event_busy_rounded, AppRoutes.parentLeave),
+      _ShortcutAction(
+        'PTM',
+        Icons.family_restroom_rounded,
+        AppRoutes.parentTeacherChat,
+      ),
+      _ShortcutAction(
+        'Documents',
+        Icons.description_rounded,
+        AppRoutes.parentDocuments,
+      ),
+    ];
+    final tokens = Theme.of(context).schoolDesk;
+    return Wrap(
+      spacing: tokens.spacing.sm,
+      runSpacing: tokens.spacing.sm,
+      children: [
+        for (final action in actions)
+          ActionChip(
+            avatar: Icon(action.icon, size: 18),
+            label: Text(action.label),
+            onPressed: () => Navigator.pushNamed(context, action.route),
+          ),
+      ],
+    );
+  }
+}
+
+class _ShortcutAction {
+  final String label;
+  final IconData icon;
+  final String route;
+
+  const _ShortcutAction(this.label, this.icon, this.route);
 }
 
 // ---------------------------------------------------------------------------
@@ -507,6 +711,31 @@ String _name(Map<String, dynamic> row, {required String fallback}) {
 }
 
 String _text(dynamic value) => value?.toString().trim() ?? '';
+
+String _number(dynamic value) {
+  if (value is int) return '$value';
+  if (value is num) {
+    final rounded = value.roundToDouble();
+    return rounded == value
+        ? value.toInt().toString()
+        : value.toStringAsFixed(1);
+  }
+  final parsed = double.tryParse(_text(value));
+  if (parsed == null) return '0';
+  return parsed.roundToDouble() == parsed
+      ? parsed.toInt().toString()
+      : parsed.toStringAsFixed(1);
+}
+
+String _money(dynamic value) {
+  final parsed = value is num
+      ? value.toDouble()
+      : double.tryParse(_text(value));
+  final amount = parsed ?? 0;
+  if (amount >= 100000) return '₹${(amount / 100000).toStringAsFixed(1)}L';
+  if (amount >= 1000) return '₹${(amount / 1000).toStringAsFixed(1)}K';
+  return '₹${amount.toStringAsFixed(0)}';
+}
 
 String _firstText(Map<String, dynamic> row, List<String> keys) {
   for (final key in keys) {

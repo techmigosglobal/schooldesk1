@@ -67,7 +67,7 @@ class _TeacherAttendanceHistoryScreenState
     return TeacherFlowScaffold(
       title: 'Attendance History',
       subtitle: 'Submitted sessions and review',
-      selectedIndex: 2,
+      selectedIndex: 20,
       loading: _loading,
       error: _error,
       onRefresh: _load,

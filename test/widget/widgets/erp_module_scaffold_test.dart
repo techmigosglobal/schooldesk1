@@ -98,11 +98,11 @@ void main() {
     expect(find.text('Navigation'), findsOneWidget);
   });
 
-  testWidgets('compact role shell supports admin visual shortcuts', (
+  testWidgets('compact role shell supports principal visual shortcuts', (
     tester,
   ) async {
     BackendApiClient.instance.clearAuthToken();
-    BackendApiClient.instance.setCurrentRole('admin');
+    BackendApiClient.instance.setCurrentRole('principal');
     addTearDown(BackendApiClient.instance.clearAuthToken);
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -126,19 +126,19 @@ void main() {
               label: 'Students',
               icon: Icons.school_outlined,
               activeIcon: Icons.school_rounded,
-              route: AppRoutes.adminStudents,
+              route: AppRoutes.studentOversight,
             ),
             SchoolDeskModuleBottomAction(
               label: 'Staff',
               icon: Icons.groups_outlined,
               activeIcon: Icons.groups_rounded,
-              route: AppRoutes.adminTeachers,
+              route: AppRoutes.staffManagement,
             ),
             SchoolDeskModuleBottomAction(
               label: 'Chat',
               icon: Icons.chat_bubble_outline_rounded,
               activeIcon: Icons.chat_bubble_rounded,
-              route: AppRoutes.adminCommunication,
+              route: AppRoutes.communicationCenter,
             ),
             SchoolDeskModuleBottomAction(
               label: 'More',
@@ -147,7 +147,7 @@ void main() {
               route: SchoolDeskModuleScaffold.openNavigationAction,
             ),
           ],
-          body: const Text('Admin content'),
+          body: const Text('Principal content'),
         ),
       ),
     );
@@ -169,7 +169,7 @@ void main() {
     tester,
   ) async {
     BackendApiClient.instance.clearAuthToken();
-    BackendApiClient.instance.setCurrentRole('admin');
+    BackendApiClient.instance.setCurrentRole('principal');
     addTearDown(BackendApiClient.instance.clearAuthToken);
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1;

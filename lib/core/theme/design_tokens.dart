@@ -371,59 +371,59 @@ class SchoolDeskTheme extends ThemeExtension<SchoolDeskTheme> {
       elevation: isDark ? SchoolDeskElevation.dark : SchoolDeskElevation.light,
       motion: SchoolDeskMotion.standard,
       roleColors: const {
-        SchoolDeskRole.principal: Color(0xFF2457D6),
+        SchoolDeskRole.principal: Color(0xFF1D4ED8),
         SchoolDeskRole.teacher: Color(0xFF7C3AED),
-        SchoolDeskRole.parent: Color(0xFF1A6B4A),
+        SchoolDeskRole.parent: Color(0xFF0F766E),
         SchoolDeskRole.student: Color(0xFFEA580C),
       },
       pageBackground: isDark
-          ? const Color(0xFF0B1120)
-          : const Color(0xFFF3F6FA),
+          ? const Color(0xFF0F172A)
+          : const Color(0xFFF8FAFC),
       panel: isDark ? const Color(0xFF111827) : Colors.white,
-      panelMuted: isDark ? const Color(0xFF1F2937) : const Color(0xFFF6F8FB),
+      panelMuted: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
       panelBorder: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-      textMuted: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF667085),
-      focusRing: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
-      primary: isDark ? const Color(0xFF7EA2FF) : const Color(0xFF2457D6),
-      primaryLight: const Color(0xFF7EA2FF),
+      textMuted: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+      focusRing: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8),
+      primary: isDark ? const Color(0xFF60A5FA) : const Color(0xFF1D4ED8),
+      primaryLight: const Color(0xFF60A5FA),
       primaryContainer: isDark
-          ? const Color(0xFF1A3A5C)
-          : const Color(0xFFE6EDFF),
+          ? const Color(0xFF1E3A8A)
+          : const Color(0xFFDBEAFE),
       onPrimary: const Color(0xFFFFFFFF),
-      secondary: const Color(0xFF0E9384),
+      secondary: isDark ? const Color(0xFF5EEAD4) : const Color(0xFF0F766E),
       secondaryContainer: isDark
-          ? const Color(0xFF4A2E00)
-          : const Color(0xFFDDFCF6),
+          ? const Color(0xFF134E4A)
+          : const Color(0xFFCCFBF1),
       onSecondary: const Color(0xFFFFFFFF),
-      accent: const Color(0xFF16A34A),
-      success: const Color(0xFF15803D),
+      accent: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+      success: isDark ? const Color(0xFF22C55E) : const Color(0xFF16A34A),
       successContainer: isDark
-          ? const Color(0xFF14301B)
+          ? const Color(0xFF14532D)
           : const Color(0xFFDCFCE7),
-      warning: const Color(0xFFB45309),
+      warning: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
       warningContainer: isDark
-          ? const Color(0xFF4A2A04)
+          ? const Color(0xFF451A03)
           : const Color(0xFFFEF3C7),
-      error: const Color(0xFFE57373),
+      error: isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626),
       errorContainer: isDark
-          ? const Color(0xFF4A1515)
+          ? const Color(0xFF7F1D1D)
           : const Color(0xFFFEE4E2),
-      info: const Color(0xFF2563EB),
-      infoContainer: isDark ? const Color(0xFF1A2A4A) : const Color(0xFFE0EAFF),
-      surface: isDark ? const Color(0xFF1E2530) : const Color(0xFFFFFFFF),
+      info: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7),
+      infoContainer: isDark ? const Color(0xFF0C4A6E) : const Color(0xFFE0EAFF),
+      surface: isDark ? const Color(0xFF111827) : const Color(0xFFFFFFFF),
       surfaceVariant: isDark
-          ? const Color(0xFF252D3A)
-          : const Color(0xFFF6F8FB),
-      background: isDark ? const Color(0xFF151C26) : const Color(0xFFF3F6FA),
-      outline: isDark ? const Color(0xFF455A64) : const Color(0xFFCBD5E1),
+          ? const Color(0xFF1E293B)
+          : const Color(0xFFF1F5F9),
+      background: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      outline: isDark ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
       outlineVariant: isDark
-          ? const Color(0xFF2D3748)
+          ? const Color(0xFF334155)
           : const Color(0xFFE2E8F0),
-      onSurface: isDark ? const Color(0xFFE8EDF2) : const Color(0xFF101828),
+      onSurface: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
       onSurfaceVariant: isDark
-          ? const Color(0xFFB0BEC5)
-          : const Color(0xFF475467),
-      muted: isDark ? const Color(0xFF90A4AE) : const Color(0xFF667085),
+          ? const Color(0xFFCBD5E1)
+          : const Color(0xFF334155),
+      muted: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
     );
   }
 

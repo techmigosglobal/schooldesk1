@@ -99,7 +99,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
       subtitle: 'Read-only schedule from Principal timetable setup',
-      selectedIndex: 1,
+      selectedIndex: 18,
       loading: _loading,
       error: _error,
       onRefresh: _load,

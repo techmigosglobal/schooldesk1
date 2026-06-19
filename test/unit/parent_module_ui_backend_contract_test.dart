@@ -10,8 +10,6 @@ void main() {
   test('parent module routes are visible through the temporary route gate', () {
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
 
-    expect(routes, contains('_roleWorkflowVisibleRoutes'));
-    expect(routes, contains('!metadata.isShared'));
     for (final route in const [
       'parentDashboard',
       'parentAcademicProgress',
@@ -30,7 +28,8 @@ void main() {
       'parentDiary',
       'parentAcademicInfo',
     ]) {
-      expect(routes, contains('$route,'));
+      expect(routes, contains('static const String $route'));
+      expect(routes, contains('$route:'));
     }
   });
 
@@ -121,13 +120,13 @@ void main() {
     expect(
       main,
       contains(
-        'frontendResource("/notice-acknowledgements", "Admin", "Principal", "Teacher", "Parent")',
+        'frontendResource("/notice-acknowledgements", "Principal", "Teacher", "Parent")',
       ),
     );
     expect(
       main,
       contains(
-        'frontendResource("/documents/access-requests", "Admin", "Principal", "Parent")',
+        'frontendResource("/documents/access-requests", "Principal", "Parent")',
       ),
     );
   });

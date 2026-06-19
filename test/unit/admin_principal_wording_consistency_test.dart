@@ -5,27 +5,15 @@ import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 
 void main() {
-  test('admin and principal registry titles use canonical glossary labels', () {
+  test('principal registry titles use canonical glossary labels', () {
     final expectedTitles = <String, String>{
       '/student-oversight-screen': SchoolDeskGlossary.studentOversight,
       '/staff-management-screen': SchoolDeskGlossary.staffOversight,
-      '/timetable-management-screen': SchoolDeskGlossary.timetableRecords,
-      '/syllabus-monitoring-screen': SchoolDeskGlossary.syllabusRecords,
-      '/exams-results-screen': SchoolDeskGlossary.examRecords,
       '/communication-center-screen': SchoolDeskGlossary.communicationCenter,
       '/complaint-management-screen': SchoolDeskGlossary.complaints,
       '/events-calendar-screen': SchoolDeskGlossary.calendar,
       '/reports-analytics-screen': SchoolDeskGlossary.reports,
       '/principal-analytics-screen': SchoolDeskGlossary.analytics,
-      '/admin-students-screen': SchoolDeskGlossary.students,
-      '/admin-teachers-screen': SchoolDeskGlossary.staff,
-      '/admin-fees-screen': SchoolDeskGlossary.fees,
-      '/admin-timetable-screen': SchoolDeskGlossary.timetable,
-      '/admin-exams-screen': SchoolDeskGlossary.exams,
-      '/admin-helpdesk-screen': SchoolDeskGlossary.helpdesk,
-      '/admin-documents-screen': SchoolDeskGlossary.documents,
-      '/admin-user-access-screen': SchoolDeskGlossary.access,
-      '/admin-reports-screen': SchoolDeskGlossary.reports,
       '/id-card-generation-screen': SchoolDeskGlossary.idCards,
     };
 

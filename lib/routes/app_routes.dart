@@ -234,6 +234,8 @@ class AppRoutes {
       args: _teacherHomeworkSubmissionsArgs(context),
     ),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
+    teacherParentInteraction: (context) =>
+        const TeacherParentInteractionScreen(),
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),

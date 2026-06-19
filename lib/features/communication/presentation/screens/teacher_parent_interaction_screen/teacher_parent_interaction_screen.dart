@@ -177,7 +177,7 @@ class _TeacherParentInteractionScreenState
     return TeacherFlowScaffold(
       title: 'Parent Interaction / PTM',
       subtitle: 'PTM slots, booked discussions, and follow-up notes',
-      selectedIndex: 9,
+      selectedIndex: 21,
       loading: _loading,
       error: _error,
       onRefresh: _loadParentFlow,

@@ -33,7 +33,7 @@ class NotificationRouteResolver {
       'message' => _messageRouteFor(role),
       'homework' => _homeworkRouteFor(role),
       'fee' => _feeRouteFor(role),
-      'exam' || 'exam_schedule' => _dashboardRouteFor(role),
+      'exam' || 'exam_schedule' => _examRouteFor(role),
       'event' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
       'leave' => _leaveRouteFor(role),
@@ -99,11 +99,11 @@ class NotificationRouteResolver {
     };
   }
 
-  static String _dashboardRouteFor(String role) {
+  static String _examRouteFor(String role) {
     return switch (role) {
-      'parent' => AppRoutes.parentDashboard,
-      'teacher' => AppRoutes.teacherDashboard,
-      'principal' => AppRoutes.principalDashboard,
+      'parent' => AppRoutes.parentAcademicProgress,
+      'teacher' => AppRoutes.teacherReports,
+      'principal' => AppRoutes.reportsAnalytics,
       _ => AppRoutes.notificationCenter,
     };
   }
