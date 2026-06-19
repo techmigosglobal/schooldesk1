@@ -3,19 +3,31 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('landing hero uses slide-specific showcase data without fake metrics', () {
+  test('landing hero uses the supplied six artwork slides', () {
     final source = File(
       'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
     ).readAsStringSync();
 
-    final showcaseTitles = RegExp(
-      r"showcaseTitle: '([^']+)'",
-    ).allMatches(source).map((match) => match.group(1)).toSet();
+    final slideAssets = RegExp(
+      r"'assets/images/landing_slide_[1-6]\.png'",
+    ).allMatches(source);
 
-    expect(showcaseTitles, hasLength(greaterThanOrEqualTo(5)));
-    expect(source, isNot(contains("'98%'")));
-    expect(source, isNot(contains("'32+'")));
-    expect(source, isNot(contains("'24/7'")));
+    expect(slideAssets, hasLength(6));
+    expect(source, contains('Image.asset'));
+    expect(source, isNot(contains('_LandingSlide(')));
+    expect(source, isNot(contains('showcaseTitle:')));
+  });
+
+  test('landing hero exposes only app-safe artwork actions', () {
+    final source = File(
+      'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('Artwork login'));
+    expect(source, contains('AppRoutes.principalLogin'));
+    expect(source, isNot(contains('Set Up School')));
+    expect(source, isNot(contains('AppRoutes.onboarding')));
+    expect(source, isNot(contains('Public Events')));
   });
 
   test('landing hero carousel has production autoplay controls', () {
@@ -30,7 +42,7 @@ void main() {
     expect(source, contains('_autoSlidePausedByUser'));
     expect(source, contains('MediaQuery.disableAnimationsOf(context)'));
     expect(source, contains('NotificationListener<ScrollNotification>'));
-    expect(source, contains('LinearProgressIndicator'));
+    expect(source, contains('AnimatedPositioned'));
     expect(source, contains('Pause carousel'));
     expect(source, contains('Resume carousel'));
   });
