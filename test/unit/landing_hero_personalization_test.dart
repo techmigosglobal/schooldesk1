@@ -47,4 +47,23 @@ void main() {
     expect(source, contains('Pause carousel'));
     expect(source, contains('Resume carousel'));
   });
+
+  test('landing hero places slide dots at the bottom and frames brand images', () {
+    final source = File(
+      'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('_LandingBrandPanel'));
+    expect(source, contains('Brand panel container'));
+    expect(source, contains('Slide dots live in the bottom band'));
+    expect(source, contains('indicator: _SlidePositionIndicator'));
+    expect(
+      source,
+      isNot(
+        contains(
+          'Positioned(\n              left: sideInset,\n              right: sideInset,\n              top: isCompact ? 72 : 78,',
+        ),
+      ),
+    );
+  });
 }

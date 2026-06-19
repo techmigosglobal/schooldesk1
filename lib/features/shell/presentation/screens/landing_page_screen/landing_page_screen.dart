@@ -143,11 +143,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                   children: [
                     SizedBox(
                       height: topBandHeight,
-                      child: _LandingHeader(
-                        activeIndex: _activeSlide,
-                        itemCount: _slideAssets.length,
-                        onSignIn: _openLogin,
-                      ),
+                      child: _LandingHeader(onSignIn: _openLogin),
                     ),
                     Expanded(
                       child: Stack(
@@ -191,6 +187,11 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                     SizedBox(
                       height: footerBandHeight,
                       child: _LandingFooter(
+                        // Slide dots live in the bottom band, below the artwork.
+                        indicator: _SlidePositionIndicator(
+                          activeIndex: _activeSlide,
+                          itemCount: _slideAssets.length,
+                        ),
                         onToggleAutoSlide: _reduceMotion
                             ? null
                             : _toggleAutoSlide,
@@ -210,14 +211,8 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 }
 
 class _LandingHeader extends StatelessWidget {
-  const _LandingHeader({
-    required this.activeIndex,
-    required this.itemCount,
-    required this.onSignIn,
-  });
+  const _LandingHeader({required this.onSignIn});
 
-  final int activeIndex;
-  final int itemCount;
   final VoidCallback onSignIn;
 
   @override
@@ -226,7 +221,7 @@ class _LandingHeader extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isCompact = width < 380;
-        final logoHeight = isCompact ? 50.0 : 58.0;
+        final logoHeight = isCompact ? 46.0 : 54.0;
         final sideInset = isCompact ? 12.0 : 20.0;
 
         return Stack(
@@ -234,22 +229,21 @@ class _LandingHeader extends StatelessWidget {
             Align(
               alignment: Alignment.topCenter,
               child: Padding(
-                padding: EdgeInsets.only(top: isCompact ? 8 : 12),
-                child: Image.asset(
-                  'assets/images/header.png',
-                  height: logoHeight,
-                  fit: BoxFit.contain,
-                  semanticLabel: 'SchoolDesk branding',
+                padding: EdgeInsets.only(top: isCompact ? 10 : 14),
+                child: _LandingBrandPanel(
+                  maxWidth: isCompact ? 260 : 330,
+                  minHeight: isCompact ? 58 : 66,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isCompact ? 12 : 18,
+                    vertical: isCompact ? 6 : 8,
+                  ),
+                  child: Image.asset(
+                    'assets/images/header.png',
+                    height: logoHeight,
+                    fit: BoxFit.contain,
+                    semanticLabel: 'Arish Ville Preschool branding',
+                  ),
                 ),
-              ),
-            ),
-            Positioned(
-              left: sideInset,
-              right: sideInset,
-              top: isCompact ? 72 : 78,
-              child: _SlidePositionIndicator(
-                activeIndex: activeIndex,
-                itemCount: itemCount,
               ),
             ),
             Positioned(
@@ -315,10 +309,12 @@ class _SignInButton extends StatelessWidget {
 
 class _LandingFooter extends StatelessWidget {
   const _LandingFooter({
+    required this.indicator,
     required this.onToggleAutoSlide,
     required this.isAutoSlidePaused,
   });
 
+  final Widget indicator;
   final VoidCallback? onToggleAutoSlide;
   final bool isAutoSlidePaused;
 
@@ -327,14 +323,21 @@ class _LandingFooter extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 380;
-        final footerHeight = isCompact ? 34.0 : 40.0;
+        final footerHeight = isCompact ? 30.0 : 36.0;
 
         return Stack(
           children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.only(top: isCompact ? 2 : 4),
+                child: indicator,
+              ),
+            ),
             if (onToggleAutoSlide != null)
               Positioned(
                 right: isCompact ? 12 : 20,
-                top: isCompact ? 4 : 8,
+                top: isCompact ? 28 : 34,
                 child: _PauseButton(
                   isAutoSlidePaused: isAutoSlidePaused,
                   onPressed: onToggleAutoSlide!,
@@ -343,18 +346,68 @@ class _LandingFooter extends StatelessWidget {
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: EdgeInsets.only(bottom: isCompact ? 10 : 14),
-                child: Image.asset(
-                  'assets/images/footer.png',
-                  height: footerHeight,
-                  fit: BoxFit.contain,
-                  semanticLabel: 'SchoolDesk footer',
+                padding: EdgeInsets.only(bottom: isCompact ? 8 : 12),
+                child: _LandingBrandPanel(
+                  maxWidth: isCompact ? 250 : 340,
+                  minHeight: isCompact ? 48 : 56,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isCompact ? 12 : 18,
+                    vertical: isCompact ? 6 : 8,
+                  ),
+                  child: Image.asset(
+                    'assets/images/footer.png',
+                    height: footerHeight,
+                    fit: BoxFit.contain,
+                    semanticLabel: 'Powered by TechMigos',
+                  ),
                 ),
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class _LandingBrandPanel extends StatelessWidget {
+  const _LandingBrandPanel({
+    required this.child,
+    required this.maxWidth,
+    required this.minHeight,
+    required this.padding,
+  });
+
+  final Widget child;
+  final double maxWidth;
+  final double minHeight;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    // Brand panel container: prevents the header/footer images from reading as
+    // loose white blocks while keeping the real brand artwork inspectable.
+    return Container(
+      constraints: BoxConstraints(maxWidth: maxWidth, minHeight: minHeight),
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(238),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withAlpha(210), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: context.appTheme.primary.withAlpha(20),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFFFF), Color(0xFFF5FBFF)],
+        ),
+      ),
+      child: child,
     );
   }
 }
