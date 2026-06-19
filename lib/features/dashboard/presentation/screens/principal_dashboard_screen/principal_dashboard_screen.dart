@@ -325,12 +325,12 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFE9F9EF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Events',
+                    label: 'Calendar',
                     route: AppRoutes.eventsCalendar,
                     illustration: SchoolDeskUiIllustrations.principalEvents,
-                    fallbackIcon: Icons.event_rounded,
-                    accent: const Color(0xFFF59E0B),
-                    cardColor: const Color(0xFFFFF5D8),
+                    fallbackIcon: Icons.calendar_month_rounded,
+                    accent: const Color(0xFF2563EB),
+                    cardColor: const Color(0xFFEAF4FF),
                   ),
                   _AcademicModuleItem(
                     label: 'Event Approvals',

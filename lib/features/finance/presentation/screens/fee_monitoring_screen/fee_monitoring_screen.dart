@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
 
 enum _FeeView {
   home,
@@ -83,6 +84,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   List<Map<String, dynamic>> _feeStructures = const [];
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _recentPayments = const [];
+  List<Map<String, dynamic>> _paymentRequests = const [];
   List<AcademicYearModel> _academicYears = const [];
   List<GradeModel> _grades = const [];
 
@@ -130,11 +132,19 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       final payments = invoices.expand(_normalizePayments).toList()
         ..sort((a, b) => _sortDate(b['date']).compareTo(_sortDate(a['date'])));
 
+      List<Map<String, dynamic>> prList = const [];
+      try {
+        prList = await api.getParentPaymentRequests(status: 'pending');
+      } catch (_) {
+        // Payment requests endpoint may not exist yet — fail gracefully.
+      }
+
       if (!mounted) return;
       setState(() {
         _feeStructures = structures;
         _invoices = invoices;
         _recentPayments = payments;
+        _paymentRequests = prList;
         _academicYears = results[2] as List<AcademicYearModel>;
         _grades = results[3] as List<GradeModel>;
         _selectedStructure = _reselectStructure(_selectedStructure);
@@ -278,6 +288,21 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             ),
           ],
         ),
+        if (_paymentRequests.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          _FeeSectionTitle('Payment Requests (${_paymentRequests.length})'),
+          const SizedBox(height: 10),
+          for (final request in _paymentRequests.take(5))
+            _PaymentRequestRow(
+              request: request,
+              onTap: () => _openPaymentRequestDecision(request),
+            ),
+          if (_paymentRequests.length > 5)
+            TextButton(
+              onPressed: _openAllPaymentRequests,
+              child: Text('View all ${_paymentRequests.length} requests'),
+            ),
+        ],
         const SizedBox(height: 20),
         const _FeeSectionTitle('Quick Actions'),
         const SizedBox(height: 10),
@@ -833,7 +858,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<_PaymentMode>(
-                initialValue: _selectedPaymentMode,
+                value: _selectedPaymentMode,
                 decoration: const InputDecoration(labelText: 'Payment Mode'),
                 items: [
                   for (final mode in _PaymentMode.values)
@@ -1458,6 +1483,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     } catch (error) {
       _snack('Unable to preview receipt: $error');
     }
+  }
+
+  void _openAllPaymentRequests() {
+    Navigator.pushNamed(context, AppRoutes.principalPaymentRequests);
+  }
+
+  void _openPaymentRequestDecision(Map<String, dynamic> request) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.principalPaymentRequestDecision,
+      arguments: AdminPaymentRequestDecisionArgs(request: request),
+    ).then((_) => _loadData());
   }
 
   void _openClassesHubForFees({String gradeId = '', String sectionId = ''}) {
@@ -3035,4 +3072,76 @@ Color _studentStatusColor(String status) {
   if (lower == 'paid') return const Color(0xFF16A34A);
   if (lower == 'partial') return const Color(0xFFF59E0B);
   return const Color(0xFFEF4444);
+}
+
+class _PaymentRequestRow extends StatelessWidget {
+  final Map<String, dynamic> request;
+  final VoidCallback onTap;
+
+  const _PaymentRequestRow({required this.request, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final student = _mapDynamic(request['student']);
+    final studentName = [
+      _textVal(student['first_name']),
+      _textVal(student['last_name']),
+    ].where((p) => p.isNotEmpty).join(' ').trim();
+    final amount = _numVal(request['amount']);
+    final mode = (request['payment_mode'] ?? '-').toString();
+    final hasProof = (request['proof_url'] ?? '').toString().trim().isNotEmpty;
+
+    return _FeeCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          _FeeIconBadge(
+            icon: hasProof ? Icons.receipt_long_outlined : Icons.payment_outlined,
+            color: const Color(0xFF7C3AED),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  studentName.isEmpty ? 'Student' : studentName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$mode • ₹${amount.toStringAsFixed(0)}${hasProof ? ' • Proof attached' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const _FeeStatusPill(label: 'Review', color: Color(0xFF7C3AED)),
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right_rounded, color: context.appTheme.muted),
+        ],
+      ),
+    );
+  }
+
+  static double _numVal(dynamic value) =>
+      value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
+
+  static String _textVal(dynamic value) {
+    final text = '${value ?? ''}'.trim();
+    return (text.isEmpty || text == 'null') ? '' : text;
+  }
+
+  static Map<String, dynamic> _mapDynamic(dynamic value) =>
+      value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
 }

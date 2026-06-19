@@ -125,52 +125,262 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEAF6FF),
       body: SafeArea(
-        child: Center(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final topBandHeight = (constraints.maxHeight * 0.17).clamp(
+              108.0,
+              152.0,
+            );
+            final footerBandHeight = (constraints.maxHeight * 0.13).clamp(
+              90.0,
+              128.0,
+            );
+
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: topBandHeight,
+                      child: _LandingHeader(
+                        activeIndex: _activeSlide,
+                        itemCount: _slideAssets.length,
+                        onSignIn: _openLogin,
+                      ),
+                    ),
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          NotificationListener<ScrollNotification>(
+                            onNotification: (notification) {
+                              if (notification is ScrollStartNotification) {
+                                _pauseAutoSlide();
+                              } else if (notification
+                                  is ScrollEndNotification) {
+                                _resumeAutoSlide();
+                              }
+                              return false;
+                            },
+                            child: PageView.builder(
+                              controller: _controller,
+                              onPageChanged: (index) =>
+                                  setState(() => _activeSlide = index),
+                              itemCount: _slideAssets.length,
+                              itemBuilder: (context, index) {
+                                return _ArtworkSlide(
+                                  assetPath: _slideAssets[index],
+                                );
+                              },
+                            ),
+                          ),
+                          _ArtworkHotspots(
+                            onPrevious: () => _goToSlide(
+                              (_activeSlide - 1 + _slideAssets.length) %
+                                  _slideAssets.length,
+                              manual: true,
+                            ),
+                            onNext: () => _goToSlide(
+                              (_activeSlide + 1) % _slideAssets.length,
+                              manual: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: footerBandHeight,
+                      child: _LandingFooter(
+                        onToggleAutoSlide: _reduceMotion
+                            ? null
+                            : _toggleAutoSlide,
+                        isAutoSlidePaused:
+                            _reduceMotion || _autoSlidePausedByUser,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _LandingHeader extends StatelessWidget {
+  const _LandingHeader({
+    required this.activeIndex,
+    required this.itemCount,
+    required this.onSignIn,
+  });
+
+  final int activeIndex;
+  final int itemCount;
+  final VoidCallback onSignIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final isCompact = width < 380;
+        final logoHeight = isCompact ? 50.0 : 58.0;
+        final sideInset = isCompact ? 12.0 : 20.0;
+
+        return Stack(
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: EdgeInsets.only(top: isCompact ? 8 : 12),
+                child: Image.asset(
+                  'assets/images/header.png',
+                  height: logoHeight,
+                  fit: BoxFit.contain,
+                  semanticLabel: 'SchoolDesk branding',
+                ),
+              ),
+            ),
+            Positioned(
+              left: sideInset,
+              right: sideInset,
+              top: isCompact ? 72 : 78,
+              child: _SlidePositionIndicator(
+                activeIndex: activeIndex,
+                itemCount: itemCount,
+              ),
+            ),
+            Positioned(
+              right: sideInset,
+              top: isCompact ? 58 : 64,
+              child: _SignInButton(onPressed: onSignIn),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _SignInButton extends StatelessWidget {
+  const _SignInButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Sign in',
+      child: Material(
+        color: context.appTheme.primary,
+        borderRadius: BorderRadius.circular(24),
+        elevation: 3,
+        shadowColor: context.appTheme.primary.withAlpha(70),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: onPressed,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Stack(
-              children: [
-                NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification is ScrollStartNotification) {
-                      _pauseAutoSlide();
-                    } else if (notification is ScrollEndNotification) {
-                      _resumeAutoSlide();
-                    }
-                    return false;
-                  },
-                  child: PageView.builder(
-                    controller: _controller,
-                    onPageChanged: (index) =>
-                        setState(() => _activeSlide = index),
-                    itemCount: _slideAssets.length,
-                    itemBuilder: (context, index) {
-                      return _ArtworkSlide(assetPath: _slideAssets[index]);
-                    },
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 84),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.login_rounded,
+                    size: 16,
+                    color: context.appTheme.onPrimary,
                   ),
-                ),
-                _ArtworkHotspots(
-                  onLogin: _openLogin,
-                  onPrevious: () => _goToSlide(
-                    (_activeSlide - 1 + _slideAssets.length) %
-                        _slideAssets.length,
-                    manual: true,
+                  const SizedBox(width: 6),
+                  Text(
+                    'Sign in',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: context.appTheme.onPrimary,
+                    ),
                   ),
-                  onNext: () => _goToSlide(
-                    (_activeSlide + 1) % _slideAssets.length,
-                    manual: true,
-                  ),
-                  onToggleAutoSlide: _reduceMotion ? null : _toggleAutoSlide,
-                  isAutoSlidePaused: _reduceMotion || _autoSlidePausedByUser,
-                ),
-                _SlidePositionIndicator(
-                  activeIndex: _activeSlide,
-                  itemCount: _slideAssets.length,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _LandingFooter extends StatelessWidget {
+  const _LandingFooter({
+    required this.onToggleAutoSlide,
+    required this.isAutoSlidePaused,
+  });
+
+  final VoidCallback? onToggleAutoSlide;
+  final bool isAutoSlidePaused;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 380;
+        final footerHeight = isCompact ? 34.0 : 40.0;
+
+        return Stack(
+          children: [
+            if (onToggleAutoSlide != null)
+              Positioned(
+                right: isCompact ? 12 : 20,
+                top: isCompact ? 4 : 8,
+                child: _PauseButton(
+                  isAutoSlidePaused: isAutoSlidePaused,
+                  onPressed: onToggleAutoSlide!,
+                ),
+              ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: isCompact ? 10 : 14),
+                child: Image.asset(
+                  'assets/images/footer.png',
+                  height: footerHeight,
+                  fit: BoxFit.contain,
+                  semanticLabel: 'SchoolDesk footer',
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PauseButton extends StatelessWidget {
+  const _PauseButton({
+    required this.isAutoSlidePaused,
+    required this.onPressed,
+  });
+
+  final bool isAutoSlidePaused;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filledTonal(
+      tooltip: isAutoSlidePaused ? 'Resume carousel' : 'Pause carousel',
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        fixedSize: const Size.square(44),
+        backgroundColor: context.appTheme.surface.withAlpha(225),
+        foregroundColor: context.appTheme.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      icon: Icon(
+        isAutoSlidePaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
       ),
     );
   }
@@ -185,7 +395,7 @@ class _ArtworkSlide extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxPosterWidth = constraints.maxHeight * (941 / 1672);
+        final maxPosterWidth = constraints.maxHeight * _kPosterAspectRatio;
         final posterWidth = constraints.maxWidth < maxPosterWidth
             ? constraints.maxWidth
             : maxPosterWidth;
@@ -213,19 +423,10 @@ class _ArtworkSlide extends StatelessWidget {
 }
 
 class _ArtworkHotspots extends StatelessWidget {
-  const _ArtworkHotspots({
-    required this.onLogin,
-    required this.onPrevious,
-    required this.onNext,
-    required this.onToggleAutoSlide,
-    required this.isAutoSlidePaused,
-  });
+  const _ArtworkHotspots({required this.onPrevious, required this.onNext});
 
-  final VoidCallback onLogin;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
-  final VoidCallback? onToggleAutoSlide;
-  final bool isAutoSlidePaused;
 
   @override
   Widget build(BuildContext context) {
@@ -239,17 +440,6 @@ class _ArtworkHotspots extends StatelessWidget {
 
         return Stack(
           children: [
-            _ArtworkHotspot(
-              label: 'Artwork login',
-              tooltip: 'Login',
-              onTap: onLogin,
-              rect: Rect.fromLTWH(
-                left + (width * 0.68),
-                top + (height * 0.065),
-                width * 0.2,
-                height * 0.055,
-              ),
-            ),
             _ArtworkHotspot(
               label: 'Previous slide',
               tooltip: 'Previous',
@@ -272,22 +462,6 @@ class _ArtworkHotspots extends StatelessWidget {
                 height * 0.075,
               ),
             ),
-            if (onToggleAutoSlide != null)
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: IconButton.filledTonal(
-                  tooltip: isAutoSlidePaused
-                      ? 'Resume carousel'
-                      : 'Pause carousel',
-                  onPressed: onToggleAutoSlide,
-                  icon: Icon(
-                    isAutoSlidePaused
-                        ? Icons.play_arrow_rounded
-                        : Icons.pause_rounded,
-                  ),
-                ),
-              ),
           ],
         );
       },
@@ -342,56 +516,27 @@ class _SlidePositionIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final frame = _posterFrameFor(constraints.biggest);
-        return Positioned(
-          left: frame.left + (frame.width * 0.38),
-          right: frame.left + (frame.width * 0.38),
-          bottom: constraints.maxHeight - frame.bottom + (frame.height * 0.067),
-          child: Semantics(
-            label: 'Slide ${activeIndex + 1} of $itemCount',
-            child: SizedBox(
-              height: 14,
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: List.generate(
-                      itemCount,
-                      (_) => Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: context.appTheme.outlineVariant.withAlpha(170),
-                        ),
-                      ),
-                    ),
-                  ),
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 260),
-                    curve: Curves.easeOutCubic,
-                    left: itemCount <= 1
-                        ? 0
-                        : activeIndex *
-                              ((frame.width * 0.24 - 9) / (itemCount - 1)),
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: context.appTheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+    return Semantics(
+      label: 'Slide ${activeIndex + 1} of $itemCount',
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(itemCount, (index) {
+          final isActive = index == activeIndex;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            width: isActive ? 10 : 9,
+            height: isActive ? 10 : 9,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isActive
+                  ? context.appTheme.primary
+                  : context.appTheme.outlineVariant.withAlpha(150),
             ),
-          ),
-        );
-      },
+          );
+        }),
+      ),
     );
   }
 }
@@ -413,11 +558,16 @@ class _ArtworkFallback extends StatelessWidget {
   }
 }
 
+/// Target width-to-height ratio for the poster frame.
+/// Chosen to accommodate all slide images (ratios 0.68–0.72)
+/// while keeping a consistent page size for the carousel.
+const double _kPosterAspectRatio = 0.70;
+
 Rect _posterFrameFor(Size size) {
-  final posterWidth = size.width < size.height * (941 / 1672)
+  final posterWidth = size.width < size.height * _kPosterAspectRatio
       ? size.width
-      : size.height * (941 / 1672);
-  final posterHeight = posterWidth * (1672 / 941);
+      : size.height * _kPosterAspectRatio;
+  final posterHeight = posterWidth / _kPosterAspectRatio;
   return Rect.fromLTWH(
     (size.width - posterWidth) / 2,
     (size.height - posterHeight) / 2,

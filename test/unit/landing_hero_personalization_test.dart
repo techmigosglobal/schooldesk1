@@ -23,7 +23,8 @@ void main() {
       'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains('Artwork login'));
+    expect(source, contains('_LandingHeader'));
+    expect(source, contains('_SignInButton'));
     expect(source, contains('AppRoutes.principalLogin'));
     expect(source, isNot(contains('Set Up School')));
     expect(source, isNot(contains('AppRoutes.onboarding')));
@@ -42,7 +43,7 @@ void main() {
     expect(source, contains('_autoSlidePausedByUser'));
     expect(source, contains('MediaQuery.disableAnimationsOf(context)'));
     expect(source, contains('NotificationListener<ScrollNotification>'));
-    expect(source, contains('AnimatedPositioned'));
+    expect(source, contains('AnimatedContainer'));
     expect(source, contains('Pause carousel'));
     expect(source, contains('Resume carousel'));
   });

@@ -21,7 +21,7 @@ enum _EventFilter {
   cancelled,
 }
 
-enum _EventsDisplayMode { calendar, list }
+enum _EventsDisplayMode { calendar, week, list }
 
 enum SchoolCalendarPortal { principal, teacher, parent }
 
@@ -45,12 +45,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   String _query = '';
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
+  late DateTime _selectedWeekStart;
   _EventFilter _filter = _EventFilter.month;
   _EventsDisplayMode _displayMode = _EventsDisplayMode.calendar;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _selectedWeekStart = now.subtract(Duration(days: now.weekday - 1));
     _loadData();
   }
 
@@ -563,54 +566,61 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             : 'Adjust search, month, or status filters to see more events.',
       ),
       filters: _buildFilters(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: PrincipalDirectoryMetricStrip(
-            metrics: [
-              PrincipalDirectoryMetric(
-                label: _monthName(_selectedMonth),
-                value: '$_selectedMonthCount',
-                icon: Icons.calendar_month_rounded,
-                color: principalDirectoryAccent,
-                tone: const Color(0xFFEAF4FF),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Today',
-                value: '$_todayCount',
-                icon: Icons.today_rounded,
-                color: Colors.teal,
-                tone: const Color(0xFFE4FAF6),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Upcoming',
-                value: '$_upcomingCount',
-                icon: Icons.upcoming_rounded,
-                color: Colors.indigo,
-                tone: const Color(0xFFEAF0FF),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Holidays',
-                value: '$_holidayCount',
-                icon: Icons.celebration_rounded,
-                color: Colors.red,
-                tone: const Color(0xFFFFEBEE),
-              ),
-              PrincipalDirectoryMetric(
-                label: 'Approvals',
-                value: '$_approvalCount',
-                icon: Icons.fact_check_rounded,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
-              ),
-            ],
+      slivers: [          SliverToBoxAdapter(
+            child: PrincipalDirectoryMetricStrip(
+              metrics: [
+                PrincipalDirectoryMetric(
+                  label: _monthName(_selectedMonth),
+                  value: '$_selectedMonthCount',
+                  icon: Icons.calendar_month_rounded,
+                  color: principalDirectoryAccent,
+                  tone: const Color(0xFFEAF4FF),
+                ),
+                PrincipalDirectoryMetric(
+                  label: 'Today',
+                  value: '$_todayCount',
+                  icon: Icons.today_rounded,
+                  color: Colors.teal,
+                  tone: const Color(0xFFE4FAF6),
+                ),
+                PrincipalDirectoryMetric(
+                  label: 'Upcoming',
+                  value: '$_upcomingCount',
+                  icon: Icons.upcoming_rounded,
+                  color: Colors.indigo,
+                  tone: const Color(0xFFEAF0FF),
+                ),
+                PrincipalDirectoryMetric(
+                  label: 'Holidays',
+                  value: '$_holidayCount',
+                  icon: Icons.celebration_rounded,
+                  color: Colors.red,
+                  tone: const Color(0xFFFFEBEE),
+                ),
+                PrincipalDirectoryMetric(
+                  label: 'Approvals',
+                  value: '$_approvalCount',
+                  icon: Icons.fact_check_rounded,
+                  color: Colors.orange,
+                  tone: const Color(0xFFFFF4E5),
+                ),
+              ],
+            ),
           ),
-        ),
-        if (_displayMode == _EventsDisplayMode.calendar)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-            sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
-          )
-        else
+          SliverToBoxAdapter(
+            child: _buildEventLegend(),
+          ),
+          if (_displayMode == _EventsDisplayMode.calendar)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+              sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
+            )
+          else if (_displayMode == _EventsDisplayMode.week)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+              sliver: SliverToBoxAdapter(child: _buildWeekView()),
+            )
+          else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
             sliver: SliverList.separated(
@@ -720,6 +730,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                   sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
                 )
+              else if (_displayMode == _EventsDisplayMode.week)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  sliver: SliverToBoxAdapter(child: _buildWeekView()),
+                )
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
@@ -758,6 +773,79 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       year: _calendarYear,
       eventsForDay: _eventsForDay,
       onEventTap: _openDetails,
+      onPrevMonth: () {
+        setState(() {
+          if (_selectedMonth == 1) {
+            _selectedMonth = 12;
+          } else {
+            _selectedMonth--;
+          }
+        });
+      },
+      onNextMonth: () {
+        setState(() {
+          if (_selectedMonth == 12) {
+            _selectedMonth = 1;
+          } else {
+            _selectedMonth++;
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildWeekView() {
+    final endOfWeek = _selectedWeekStart.add(const Duration(days: 6));
+    
+    return _EventCalendarWeek(
+      startOfWeek: _selectedWeekStart,
+      endOfWeek: endOfWeek,
+      eventsForDay: _eventsForDay,
+      onEventTap: _openDetails,
+      onPrevWeek: () {
+        setState(() {
+          _selectedWeekStart = _selectedWeekStart.subtract(const Duration(days: 7));
+        });
+      },
+      onNextWeek: () {
+        setState(() {
+          _selectedWeekStart = _selectedWeekStart.add(const Duration(days: 7));
+        });
+      },
+      onGoToToday: () {
+        setState(() {
+          final now = DateTime.now();
+          _selectedWeekStart = now.subtract(Duration(days: now.weekday - 1));
+        });
+      },
+    );
+  }
+
+  Widget _buildEventLegend() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 4),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFDDE8F4)),
+        ),
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            _LegendItem(color: Colors.red, label: 'Holiday'),
+            _LegendItem(color: const Color(0xFF2563EB), label: 'Academic'),
+            _LegendItem(color: const Color(0xFFD35400), label: 'Exam'),
+            _LegendItem(color: const Color(0xFF16A34A), label: 'Sports'),
+            _LegendItem(color: const Color(0xFF8E44AD), label: 'Cultural'),
+            _LegendItem(color: const Color(0xFF0E9384), label: 'Health'),
+            _LegendItem(color: const Color(0xFF4F46E5), label: 'Staff'),
+            _LegendItem(color: const Color(0xFF1B4F72), label: 'PTM'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -824,11 +912,19 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 runSpacing: 8,
                 children: [
                   PrincipalDirectoryChip(
-                    label: 'Calendar',
+                    label: 'Month',
                     selected: _displayMode == _EventsDisplayMode.calendar,
                     icon: Icons.calendar_month_rounded,
                     onTap: () => setState(
                       () => _displayMode = _EventsDisplayMode.calendar,
+                    ),
+                  ),
+                  PrincipalDirectoryChip(
+                    label: 'Week',
+                    selected: _displayMode == _EventsDisplayMode.week,
+                    icon: Icons.view_week_rounded,
+                    onTap: () => setState(
+                      () => _displayMode = _EventsDisplayMode.week,
                     ),
                   ),
                   PrincipalDirectoryChip(
@@ -969,12 +1065,16 @@ class _EventCalendarMonth extends StatelessWidget {
   final int year;
   final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
   final ValueChanged<_PrincipalEvent> onEventTap;
+  final VoidCallback? onPrevMonth;
+  final VoidCallback? onNextMonth;
 
   const _EventCalendarMonth({
     required this.month,
     required this.year,
     required this.eventsForDay,
     required this.onEventTap,
+    this.onPrevMonth,
+    this.onNextMonth,
   });
 
   @override
@@ -1019,6 +1119,17 @@ class _EventCalendarMonth extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (onPrevMonth != null)
+                IconButton(
+                  tooltip: 'Previous month',
+                  icon: const Icon(Icons.chevron_left_rounded, size: 24),
+                  onPressed: onPrevMonth,
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFEAF4FF),
+                    foregroundColor: principalDirectoryAccent,
+                  ),
+                ),
+              const SizedBox(width: 8),
               Container(
                 width: 36,
                 height: 36,
@@ -1061,6 +1172,16 @@ class _EventCalendarMonth extends StatelessWidget {
                   ],
                 ),
               ),
+              if (onNextMonth != null)
+                IconButton(
+                  tooltip: 'Next month',
+                  icon: const Icon(Icons.chevron_right_rounded, size: 24),
+                  onPressed: onNextMonth,
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFEAF4FF),
+                    foregroundColor: principalDirectoryAccent,
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1909,6 +2030,248 @@ class _CalendarNotice extends StatelessWidget {
       ),
     );
   }
+}
+
+class _EventCalendarWeek extends StatelessWidget {
+  final DateTime startOfWeek;
+  final DateTime endOfWeek;
+  final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
+  final ValueChanged<_PrincipalEvent> onEventTap;
+  final VoidCallback? onPrevWeek;
+  final VoidCallback? onNextWeek;
+  final VoidCallback? onGoToToday;
+
+  const _EventCalendarWeek({
+    required this.startOfWeek,
+    required this.endOfWeek,
+    required this.eventsForDay,
+    required this.onEventTap,
+    this.onPrevWeek,
+    this.onNextWeek,
+    this.onGoToToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final days = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
+    
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDDE8F4)),
+        boxShadow: [
+          BoxShadow(
+            color: context.appTheme.onSurface.withAlpha(8),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              if (onPrevWeek != null)
+                IconButton(
+                  tooltip: 'Previous week',
+                  icon: const Icon(Icons.chevron_left_rounded, size: 22),
+                  onPressed: onPrevWeek,
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFEAF4FF),
+                    foregroundColor: principalDirectoryAccent,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${_monthName(startOfWeek.month)} ${startOfWeek.day} – ${_monthName(endOfWeek.month)} ${endOfWeek.day}, ${endOfWeek.year}',
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryText,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (onGoToToday != null)
+                TextButton(
+                  onPressed: onGoToToday,
+                  child: Text(
+                    'Today',
+                    style: GoogleFonts.dmSans(
+                      color: principalDirectoryAccent,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              if (onNextWeek != null)
+                IconButton(
+                  tooltip: 'Next week',
+                  icon: const Icon(Icons.chevron_right_rounded, size: 22),
+                  onPressed: onNextWeek,
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFFEAF4FF),
+                    foregroundColor: principalDirectoryAccent,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...days.map((day) {
+            final events = eventsForDay(day);
+            final isToday = DateUtils.isSameDay(day, now);
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isToday
+                    ? const Color(0xFFEAF4FF)
+                    : context.appTheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isToday
+                      ? principalDirectoryAccent.withAlpha(120)
+                      : const Color(0xFFE4ECF5),
+                ),
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    child: Column(
+                      children: [
+                        Text(
+                          _dayName(day.weekday),
+                          style: GoogleFonts.dmSans(
+                            color: principalDirectoryMuted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          '${day.day}',
+                          style: GoogleFonts.dmSans(
+                            color: isToday
+                                ? principalDirectoryAccent
+                                : principalDirectoryText,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: events.isEmpty
+                        ? Text(
+                            'No events',
+                            style: GoogleFonts.dmSans(
+                              color: principalDirectoryMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: events.map((event) {
+                              return InkWell(
+                                onTap: () => onEventTap(event),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 3),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        margin: const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: event.typeColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: Text(
+                                          event.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.dmSans(
+                                            color: principalDirectoryText,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                        ),
+                                      ),
+                                      if (event.venue.isNotEmpty)
+                                        Text(
+                                          event.venue,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.dmSans(
+                                            color: principalDirectoryMuted,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: GoogleFonts.dmSans(
+            color: principalDirectoryMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _dayName(int weekday) {
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return days[weekday - 1];
 }
 
 class _PrincipalEvent {
