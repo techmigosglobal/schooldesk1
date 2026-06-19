@@ -178,7 +178,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           'Admin prepares finance requests; Principal final-approves decisions',
       trailing: TextButton.icon(
         onPressed: () =>
-            Navigator.pushNamed(context, AppRoutes.adminPaymentRequests),
+            Navigator.pushNamed(context, AppRoutes.principalPaymentRequests),
         icon: const Icon(Icons.fact_check_outlined),
         label: const Text('Payment requests'),
       ),
@@ -547,7 +547,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openFeeStructureForm({Map<String, dynamic>? structure}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.adminFeeStructureForm,
+      AppRoutes.academicYearFeesExport,
       arguments: AdminFeeStructureFormArgs(
         academicYears: _academicYears,
         grades: _grades,
@@ -563,7 +563,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openGenerateInvoiceForm({Map<String, dynamic>? seed}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.adminInvoiceGenerationForm,
+      AppRoutes.academicYearFeesExport,
       arguments: AdminInvoiceGenerationFormArgs(
         academicYears: _academicYears,
         grades: _grades,
@@ -584,7 +584,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openRecordPaymentForm({Map<String, dynamic>? invoice}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.adminPaymentRecordForm,
+      AppRoutes.feePaymentReceipt,
       arguments: AdminPaymentRecordFormArgs(
         pendingDues: _pendingDues,
         initialInvoice: invoice,

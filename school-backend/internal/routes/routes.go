@@ -114,12 +114,12 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			assistant.POST("/sessions/:id/import-preview", assistantWorkflowHandler.ImportPreview)
 		}
 
-		admin := api.Group("/admin")
-		admin.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Principal"))
+		principalBulkImport := api.Group("/principal/bulk-import")
+		principalBulkImport.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Principal"))
 		{
-			admin.POST("/bulk-import", middleware.RateLimitMiddleware("bulk_import", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), bulkImportHandler.BulkImport)
-			admin.GET("/bulk-import/template", bulkImportHandler.GetImportTemplate)
-			admin.GET("/bulk-import/history", bulkImportHandler.GetImportHistory)
+			principalBulkImport.POST("", middleware.RateLimitMiddleware("bulk_import", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), bulkImportHandler.BulkImport)
+			principalBulkImport.GET("/template", bulkImportHandler.GetImportTemplate)
+			principalBulkImport.GET("/history", bulkImportHandler.GetImportHistory)
 		}
 
 		schools := api.Group("/schools")

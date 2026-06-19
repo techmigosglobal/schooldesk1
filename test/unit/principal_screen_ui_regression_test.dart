@@ -197,9 +197,9 @@ void main() {
     expect(screen, contains('Structure Details'));
     expect(screen, contains('Fee Components'));
     expect(screen, contains('Review Fee Structure'));
-    expect(screen, contains('Confirm & Assign'));
+    expect(screen, contains('Save Fee Structures'));
     expect(screen, contains('Fees Assigned'));
-    expect(screen, contains('Setup Next (Review)'));
+    expect(screen, contains('Generate Invoices'));
     expect(screen, contains('Approvals & Notes'));
     expect(screen, contains('PrincipalPreviewBottomNav'));
     expect(screen, contains('principalDirectoryBackground'));
@@ -224,13 +224,13 @@ void main() {
     expect(
       backendRoutes,
       contains(
-        'timetable.POST("/smart/preview", middleware.RBACMiddleware("Admin", "Principal")',
+        'timetable.POST("/smart/preview", middleware.RBACMiddleware("Principal")',
       ),
     );
     expect(
       backendRoutes,
       contains(
-        'timetable.POST("/smart/generate", middleware.RBACMiddleware("Admin", "Principal")',
+        'timetable.POST("/smart/generate", middleware.RBACMiddleware("Principal")',
       ),
     );
     expect(backendRoutes, contains('timetable.PUT("/templates"'));
@@ -318,9 +318,7 @@ void main() {
     expect(screen, isNot(contains('_showUserDialog')));
     expect(screen, isNot(contains('_showAssignChildrenDialog')));
     expect(screen, contains('Navigator.pushNamed'));
-    expect(routes, contains('adminAccountCreate'));
     expect(routes, contains('principalAccountCreate'));
-    expect(routes, contains('adminParentChildAssignment'));
     expect(routes, contains('principalParentChildAssignment'));
     expect(accountForm, contains('class AccountAccessFormScreen'));
     expect(accountForm, contains('SchoolDeskModuleScaffold'));
@@ -361,7 +359,8 @@ void main() {
     expect(forms, contains('AcademicSubjectFormScreen'));
     expect(forms, contains('AcademicClassFormScreen'));
     expect(forms, contains('AcademicCurriculumFormScreen'));
-    expect(forms, contains('storage.saveAcademicYearRecord'));
+    expect(forms, contains('api.createAcademicYear'));
+    expect(forms, contains('api.updateAcademicYear'));
     expect(forms, contains('storage.saveAcademicSubjectRecord'));
     expect(forms, contains('storage.saveAcademicClassRecord'));
     expect(forms, contains('storage.saveAcademicCurriculumRecord'));
@@ -608,7 +607,7 @@ void main() {
       'lib/core/widgets/app_navigation.dart',
     ).readAsStringSync();
 
-    expect(events, contains('Events Directory'));
+    expect(events, contains("title: 'School Calendar'"));
     expect(events, contains('PrincipalDirectoryScaffold'));
     expect(events, contains('Event Details'));
     expect(events, contains('Create Event'));
@@ -643,7 +642,7 @@ void main() {
     expect(guard, isNot(contains('AppRoutes.principalInbox')));
     expect(dashboard, isNot(contains('route: AppRoutes.principalInbox')));
     expect(appNavigation, isNot(contains('route: AppRoutes.principalInbox')));
-    expect(appNavigation, contains('route: AppRoutes.notificationCenter'));
+    expect(appNavigation, contains('route: AppRoutes.principalEventApprovals'));
   });
 
   test('principal attendance UI uses directory workflow without QR display', () {
@@ -750,6 +749,43 @@ void main() {
     expect(backend, contains('const principalClassInstructionsResource'));
     expect(backend, contains('type PrincipalClassesHandler struct{}'));
     expect(backend, contains('"principal_role": "supervision"'));
+  });
+
+  test('class hub owns subject and fee setup CRUD workflows', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final client = readBackendApiSources();
+    final backendRoutes = readBackendRouteSources();
+
+    expect(screen, contains('Class Hub setup is the source of truth'));
+    expect(screen, contains('_AssignSubjectsSetupPage'));
+    expect(screen, contains('_EditSubjectSetupSheet'));
+    expect(screen, contains('Edit subject details'));
+    expect(screen, contains('deleteRaw'));
+    expect(screen, contains('updateRaw'));
+    expect(screen, contains('/subjects/'));
+    expect(screen, contains('_FeesSetupPage'));
+    expect(screen, contains('createFeeStructure'));
+    expect(screen, contains('updateFeeStructure'));
+    expect(screen, contains('deleteFeeStructure'));
+    expect(screen, contains('generateFeeInvoices'));
+    expect(screen, contains('Generate Invoices'));
+    expect(screen, contains('Back to Class Hub'));
+    expect(screen, isNot(contains('Go to Class Dashboard')));
+    expect(screen, isNot(contains('Setup Next (Review)')));
+
+    expect(client, contains('Future<Map<String, dynamic>> createFeeStructure'));
+    expect(client, contains('Future<Map<String, dynamic>> updateFeeStructure'));
+    expect(client, contains('Future<void> deleteFeeStructure'));
+    expect(
+      client,
+      contains('Future<Map<String, dynamic>> generateFeeInvoices'),
+    );
+    expect(backendRoutes, contains('fees.POST("/structures"'));
+    expect(backendRoutes, contains('fees.PUT("/structures/:id"'));
+    expect(backendRoutes, contains('fees.DELETE("/structures/:id"'));
+    expect(backendRoutes, contains('fees.POST("/invoices/generate"'));
   });
 
   test(
@@ -951,7 +987,7 @@ void main() {
       expect(
         backendRoutes,
         contains(
-          'fees.POST("/invoices/generate", middleware.RBACMiddleware("Admin", "Principal")',
+          'fees.POST("/invoices/generate", middleware.RBACMiddleware("Principal")',
         ),
       );
       expect(teachers, contains('Crop Staff Photo'));
@@ -1094,10 +1130,7 @@ void main() {
 
       expect(exams, isNot(contains('Add New Exam')));
       expect(exams, isNot(contains('Save Changes')));
-      expect(
-        routes,
-        contains("AcademicManagementScreen(ownerRole: 'principal')"),
-      );
+      expect(routes, contains('PrincipalAcademicYearsScreen()'));
       expect(academics, contains('Configure academic years'));
       expect(academics, contains('canManageAcademicYears'));
       expect(academics, contains("ownerRole.toLowerCase() == 'principal'"));
@@ -1120,4 +1153,29 @@ void main() {
       expect(backend, contains('/profile/avatar'));
     },
   );
+
+  test('feature writes invalidate cached reads immediately', () {
+    final apiClient = File(
+      'lib/core/network/backend_api_client.dart',
+    ).readAsStringSync();
+    final interceptors = File(
+      'lib/core/network/api_modules/client_interceptors.dart',
+    ).readAsStringSync();
+    final backend = File(
+      'school-backend/internal/handlers/school.go',
+    ).readAsStringSync();
+
+    expect(apiClient, contains('_WriteCacheInvalidationInterceptor(this)'));
+    expect(apiClient, contains('Future<void> invalidateCachedReads()'));
+    expect(apiClient, contains('store?.clean()'));
+    expect(interceptors, contains('class _WriteCacheInvalidationInterceptor'));
+    expect(interceptors, contains("method == 'POST'"));
+    expect(interceptors, contains("method == 'PUT'"));
+    expect(interceptors, contains("method == 'PATCH'"));
+    expect(interceptors, contains("method == 'DELETE'"));
+    expect(backend, contains('invalidateAcademicYearCaches()'));
+    expect(backend, contains('services.Cache.DeleteByPrefix'));
+    expect(backend, contains('"academic_years_list"'));
+    expect(backend, contains('"academic_years_detail"'));
+  });
 }

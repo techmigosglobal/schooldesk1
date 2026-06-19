@@ -846,13 +846,9 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   }
 
   Future<void> _openUserForm({Map<String, dynamic>? existing}) async {
-    final route = _isPrincipalOwner
-        ? (existing == null
-              ? AppRoutes.principalAccountCreate
-              : AppRoutes.principalAccountEdit)
-        : (existing == null
-              ? AppRoutes.adminAccountCreate
-              : AppRoutes.adminAccountEdit);
+    final route = existing == null
+        ? AppRoutes.principalAccountCreate
+        : AppRoutes.principalAccountEdit;
     final result = await Navigator.pushNamed(
       context,
       route,
@@ -864,36 +860,22 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
 
     if (!mounted || result == null) return;
     final isCreated = result is AccountAccessFormResult && result.created;
-    if (isCreated && !_isPrincipalOwner) {
-      setState(() {
-        _statusFilter = 'All';
-      });
-    }
     await _loadUsers();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            isCreated
-                ? (_isPrincipalOwner
-                      ? 'Account created'
-                      : 'Account created and sent for Principal approval')
-                : 'Account updated',
-          ),
+          content: Text(isCreated ? 'Account created' : 'Account updated'),
           backgroundColor: context.appTheme.success,
         ),
       );
   }
 
   Future<void> _openChildAssignment(Map<String, dynamic> u) async {
-    final route = _isPrincipalOwner
-        ? AppRoutes.principalParentChildAssignment
-        : AppRoutes.adminParentChildAssignment;
     final result = await Navigator.pushNamed(
       context,
-      route,
+      AppRoutes.principalParentChildAssignment,
       arguments: AccountChildAssignmentArgs(
         ownerRole: widget.ownerRole,
         parentUserId: (u['id'] ?? '').toString(),

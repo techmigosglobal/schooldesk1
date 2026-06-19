@@ -4131,6 +4131,9 @@ class _AssignSubjectsSetupPage extends StatefulWidget {
 }
 
 class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
+  static const _classHubSetupTruth =
+      'Class Hub setup is the source of truth for per-class subjects and fees';
+
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -4360,8 +4363,83 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     }
   }
 
+  Future<void> _editSubject(Map<String, dynamic> subject) async {
+    if (_saving) return;
+    final updated = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditSubjectSetupSheet(subject: subject),
+    );
+    if (updated == null || !mounted) return;
+    setState(() => _saving = true);
+    try {
+      final subjectId = _subjectId(subject);
+      await BackendApiClient.instance.updateRaw(
+        '/subjects/$subjectId',
+        updated,
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to update subject: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _deleteSubjectEverywhere(Map<String, dynamic> subject) async {
+    final subjectId = _subjectId(subject);
+    if (subjectId.isEmpty || _saving) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete subject?'),
+        content: Text(
+          'This first removes ${_subjectName(subject)} from $_className, then deletes the subject if the backend has no linked marks, attendance, or reports.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _removeSubject(subject);
+    if (!mounted) return;
+    setState(() => _saving = true);
+    try {
+      await BackendApiClient.instance.deleteRaw('/subjects/$subjectId');
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Removed from this class, but subject could not be deleted globally: $error',
+          ),
+          backgroundColor: context.appTheme.warning,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    assert(_classHubSetupTruth.isNotEmpty);
     final subjects = _mappedSubjects;
     return Scaffold(
       backgroundColor: _background,
@@ -4446,8 +4524,11 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
                                           busy: _saving,
                                           onTeacherChanged: (teacherId) =>
                                               _setTeacher(subject, teacherId),
+                                          onEdit: () => _editSubject(subject),
                                           onRemove: () =>
                                               _removeSubject(subject),
+                                          onDelete: () =>
+                                              _deleteSubjectEverywhere(subject),
                                         ),
                                       ),
                                     ),
@@ -4518,15 +4599,22 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   static const _primary = _CreateClassSetupPageState._primary;
 
   final _structureName = TextEditingController();
+  final _invoiceLabelController = TextEditingController();
+  final _dueDateController = TextEditingController();
   final List<_FeeComponentDraft> _components = [];
+  final List<String> _deletedStructureIds = [];
 
   bool _loading = true;
   bool _saving = false;
   bool _useExisting = false;
   bool _reviewingExisting = false;
+  bool _includeOneTime = true;
+  bool _includeYearly = true;
   int _stage = 0;
   String? _error;
+  Map<String, dynamic>? _invoiceGenerationResult;
   List<Map<String, dynamic>> _existingStructures = [];
+  List<Map<String, dynamic>> _feeCategories = [];
 
   String get _sectionId => _classText(widget.classRow['section_id']);
   String get _gradeId => _classText(widget.classRow['grade_id']);
@@ -4545,6 +4633,10 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   void initState() {
     super.initState();
     _structureName.text = _defaultFeeStructureName(_academicYearLabel);
+    _invoiceLabelController.text = _defaultInvoiceLabel();
+    _dueDateController.text = _formatBackendDate(
+      DateTime.now().add(const Duration(days: 30)),
+    );
     _resetComponents(_defaultFeeComponents());
     _load();
   }
@@ -4552,6 +4644,8 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
   @override
   void dispose() {
     _structureName.dispose();
+    _invoiceLabelController.dispose();
+    _dueDateController.dispose();
     for (final component in _components) {
       component.dispose();
     }
@@ -4564,15 +4658,19 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       _error = null;
     });
     try {
-      final structures = _academicYearId.isEmpty || _gradeId.isEmpty
-          ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getFeeStructures(
-              academicYearId: _academicYearId,
-              gradeId: _gradeId,
-            );
+      final results = await Future.wait<List<Map<String, dynamic>>>([
+        _academicYearId.isEmpty || _gradeId.isEmpty
+            ? Future.value(<Map<String, dynamic>>[])
+            : BackendApiClient.instance.getFeeStructures(
+                academicYearId: _academicYearId,
+                gradeId: _gradeId,
+              ),
+        BackendApiClient.instance.getFeeCategories(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _existingStructures = structures;
+        _existingStructures = results[0];
+        _feeCategories = results[1];
         _loading = false;
       });
     } catch (error) {
@@ -4608,6 +4706,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       }
       setState(() {
         _reviewingExisting = true;
+        _deletedStructureIds.clear();
         _resetComponents(
           _existingStructures.map(_feeDraftFromBackend).toList(),
         );
@@ -4618,6 +4717,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     }
     setState(() {
       _reviewingExisting = false;
+      _deletedStructureIds.clear();
       if (_components.isEmpty) _resetComponents(_defaultFeeComponents());
       _stage = 1;
     });
@@ -4649,7 +4749,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     });
   }
 
-  Future<void> _assignFees() async {
+  Future<void> _saveFeeStructures() async {
     if (_saving) return;
     if (_sectionId.isEmpty || _gradeId.isEmpty || _academicYearId.isEmpty) {
       _showFeeError('Class, grade, and academic year are required.');
@@ -4657,23 +4757,97 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     }
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.updatePrincipalClassSetup(
-        sectionId: _sectionId,
-        gradeId: _gradeId,
-        academicYearId: _academicYearId,
-        sectionName: _sectionName,
-        capacity: _capacity,
-        classTeacherId: _classText(widget.classRow['class_teacher_id']),
-        feeItems: _components
-            .map((component) => component.toPayload())
-            .toList(),
-      );
+      for (final structureId in _deletedStructureIds) {
+        await BackendApiClient.instance.deleteFeeStructure(structureId);
+      }
+      for (final component in _components) {
+        final categoryId = await _ensureFeeCategory(component);
+        if (component.structureId.isEmpty) {
+          await BackendApiClient.instance.createFeeStructure(
+            academicYearId: _academicYearId,
+            gradeId: _gradeId,
+            feeCategoryId: categoryId,
+            amount: component.amount,
+            dueDay: component.dueDay,
+            lateFinePerDay: component.lateFinePerDay,
+            installmentCount: _installmentCountFor(component),
+          );
+        } else {
+          await BackendApiClient.instance.updateFeeStructure(
+            component.structureId,
+            academicYearId: _academicYearId,
+            gradeId: _gradeId,
+            feeCategoryId: categoryId,
+            amount: component.amount,
+            dueDay: component.dueDay,
+            lateFinePerDay: component.lateFinePerDay,
+            installmentCount: _installmentCountFor(component),
+          );
+        }
+      }
       if (!mounted) return;
-      setState(() => _stage = 3);
+      setState(() {
+        _deletedStructureIds.clear();
+        _invoiceGenerationResult = null;
+        _stage = 3;
+      });
       await _load();
     } catch (error) {
       if (!mounted) return;
-      _showFeeError('Unable to assign fee structure: $error');
+      _showFeeError('Unable to save fee structures: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<String> _ensureFeeCategory(_FeeComponentDraft component) async {
+    final name = component.name;
+    final frequency = component.frequencyPayload;
+    if (component.feeCategoryId.isNotEmpty) return component.feeCategoryId;
+    for (final category in _feeCategories) {
+      final categoryName = _classText(
+        category['category_name'] ?? category['name'],
+      ).toLowerCase();
+      final categoryFrequency = _feeFrequencyPayload(
+        _classText(category['frequency']),
+      );
+      if (categoryName == name.toLowerCase() &&
+          categoryFrequency == frequency) {
+        return _classText(category['id']);
+      }
+    }
+    final created = await BackendApiClient.instance.createFeeCategory(
+      categoryName: name,
+      frequency: frequency,
+    );
+    _feeCategories.add(created);
+    return _classText(created['id']);
+  }
+
+  Future<void> _generateInvoices() async {
+    if (_saving) return;
+    if (_dueDateController.text.trim().isEmpty) {
+      _showFeeError('Due date is required.');
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final result = await BackendApiClient.instance.generateFeeInvoices(
+        academicYearId: _academicYearId,
+        gradeId: _gradeId,
+        sectionId: _sectionId,
+        dueDate: _dueDateController.text.trim(),
+        invoiceLabel: _invoiceLabelController.text.trim(),
+        includeOneTime: _includeOneTime,
+        includeYearly: _includeYearly,
+        installmentCount: _maxInstallmentCount,
+      );
+      if (!mounted) return;
+      setState(() => _invoiceGenerationResult = result);
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      _showFeeError('Unable to generate invoices: $error');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -4692,6 +4866,9 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
 
   void _removeComponent(_FeeComponentDraft component) {
     setState(() {
+      if (component.structureId.isNotEmpty) {
+        _deletedStructureIds.add(component.structureId);
+      }
       _components.remove(component);
       component.dispose();
     });
@@ -4802,7 +4979,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         const SizedBox(height: 18),
         const _FeeInfoPanel(
           message:
-              'You can create a new fee structure and assign it to this class.',
+              'Class Hub setup is the source of truth. Saved fee structures appear in the Fees dashboard automatically.',
         ),
         const SizedBox(height: 20),
         _SetupPrimaryButton(
@@ -4917,10 +5094,10 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         ),
         const SizedBox(height: 20),
         _SetupPrimaryButton(
-          label: 'Confirm & Assign',
+          label: 'Save Fee Structures',
           icon: Icons.check_box_rounded,
           saving: _saving,
-          onPressed: _saving ? null : _assignFees,
+          onPressed: _saving ? null : _saveFeeStructures,
         ),
       ],
     );
@@ -4945,34 +5122,88 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           yearlyTotal: _yearlyTotal,
         ),
         const SizedBox(height: 20),
+        _buildGenerateInvoicesPanel(),
+        const SizedBox(height: 20),
         _SetupPrimaryButton(
-          label: 'Go to Class Dashboard',
+          label: 'Back to Class Hub',
           icon: Icons.grid_view_rounded,
           saving: false,
           onPressed: () => Navigator.pop(context, true),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: _classesPhone(context) ? 48 : 52,
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.arrow_forward_rounded, size: 21),
-            label: const Text('Setup Next (Review)'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: _primary,
-              side: const BorderSide(color: _CreateClassSetupPageState._line),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              textStyle: GoogleFonts.dmSans(
-                fontSize: _classesPhone(context) ? 14.5 : 15.5,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-        ),
       ],
+    );
+  }
+
+  Widget _buildGenerateInvoicesPanel() {
+    final result = _invoiceGenerationResult;
+    return _SetupPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _SetupPanelTitle(
+            icon: Icons.receipt_long_rounded,
+            title: 'Generate Invoices',
+          ),
+          const SizedBox(height: 14),
+          _ClassSetupTwoColumnRow(
+            children: [
+              _ClassSetupInputField(
+                label: 'Invoice Label',
+                controller: _invoiceLabelController,
+                hint: 'Term 1',
+                icon: Icons.label_outline_rounded,
+                iconColor: _primary,
+                iconTone: const Color(0xFFEAF2FF),
+                enabled: !_saving,
+              ),
+              _ClassSetupInputField(
+                label: 'Due Date',
+                required: true,
+                controller: _dueDateController,
+                hint: 'YYYY-MM-DD',
+                icon: Icons.event_outlined,
+                iconColor: const Color(0xFF16A34A),
+                iconTone: const Color(0xFFEAFBF0),
+                enabled: !_saving,
+                keyboardType: TextInputType.datetime,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            value: _includeOneTime,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _includeOneTime = value ?? false),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Include one-time components'),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+          CheckboxListTile(
+            value: _includeYearly,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _includeYearly = value ?? false),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Include yearly components'),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+          if (result != null) ...[
+            const SizedBox(height: 8),
+            _FeeInfoPanel(
+              message:
+                  'Created ${_classInt(result['created'])} invoices, skipped ${_classInt(result['skipped'])}. Per student total ${_formatCurrency(_classNum(result['per_student_total']))}.',
+            ),
+          ],
+          const SizedBox(height: 14),
+          _SetupPrimaryButton(
+            label: 'Generate Invoices',
+            icon: Icons.receipt_long_rounded,
+            saving: _saving,
+            onPressed: _saving ? null : _generateInvoices,
+          ),
+        ],
+      ),
     );
   }
 
@@ -5010,6 +5241,18 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       if (year.id == _academicYearId) return year.yearLabel;
     }
     return _academicYearId.isEmpty ? '-' : _academicYearId;
+  }
+
+  int get _maxInstallmentCount => _components.fold<int>(
+    0,
+    (max, component) => _installmentCountFor(component) > max
+        ? _installmentCountFor(component)
+        : max,
+  );
+
+  String _defaultInvoiceLabel() {
+    final year = _academicYearLabel == '-' ? '' : _academicYearLabel;
+    return [_className, year].where((part) => part.trim().isNotEmpty).join(' ');
   }
 }
 
@@ -7147,7 +7390,9 @@ class _AssignedSubjectTile extends StatelessWidget {
   final String teacherId;
   final bool busy;
   final ValueChanged<String> onTeacherChanged;
+  final VoidCallback onEdit;
   final VoidCallback onRemove;
+  final VoidCallback onDelete;
 
   const _AssignedSubjectTile({
     required this.subject,
@@ -7155,7 +7400,9 @@ class _AssignedSubjectTile extends StatelessWidget {
     required this.teacherId,
     required this.busy,
     required this.onTeacherChanged,
+    required this.onEdit,
     required this.onRemove,
+    required this.onDelete,
   });
 
   @override
@@ -7212,13 +7459,184 @@ class _AssignedSubjectTile extends StatelessWidget {
             tooltip: 'Subject actions',
             icon: const Icon(Icons.more_vert_rounded),
             onSelected: (value) {
+              if (value == 'edit') onEdit();
               if (value == 'remove') onRemove();
+              if (value == 'delete') onDelete();
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit subject details')),
               PopupMenuItem(value: 'remove', child: Text('Remove subject')),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('Delete subject globally'),
+              ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _EditSubjectSetupSheet extends StatefulWidget {
+  final Map<String, dynamic> subject;
+
+  const _EditSubjectSetupSheet({required this.subject});
+
+  @override
+  State<_EditSubjectSetupSheet> createState() => _EditSubjectSetupSheetState();
+}
+
+class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _codeController;
+  late final TextEditingController _creditsController;
+  late String _type;
+  late String _department;
+  late String _subjectColor;
+
+  static const _types = ['Core', 'Elective', 'Language', 'Activity'];
+  static const _departments = [
+    'Academics',
+    'Languages',
+    'Arts',
+    'Sports',
+    'Technology',
+  ];
+  static const _colors = _CreateSubjectSetupPageState._colors;
+
+  @override
+  void initState() {
+    super.initState();
+    final subject = widget.subject;
+    _nameController = TextEditingController(text: _subjectName(subject));
+    _codeController = TextEditingController(text: _subjectCode(subject));
+    _creditsController = TextEditingController(
+      text: _formatAmountInput(_classNum(subject['credit_hours'])),
+    );
+    _type = _titleCase(_classText(subject['subject_type'], fallback: 'core'));
+    if (!_types.contains(_type)) _type = 'Core';
+    _department = _classText(subject['department_name'], fallback: 'Academics');
+    if (!_departments.contains(_department)) _department = 'Academics';
+    _subjectColor = _classText(subject['subject_color'], fallback: '#1E63F3');
+    if (!_colors.contains(_subjectColor)) _subjectColor = '#1E63F3';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _codeController.dispose();
+    _creditsController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(context, {
+      'subject_name': _nameController.text.trim(),
+      'subject_code': _codeController.text.trim(),
+      'subject_type': _type.toLowerCase(),
+      'department_name': _department,
+      'credit_hours': double.tryParse(_creditsController.text.trim()) ?? 0,
+      'subject_color': _subjectColor,
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomSheetPanel(
+      title: 'Edit subject details',
+      child: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ClassSetupInputField(
+              label: 'Subject Name',
+              required: true,
+              controller: _nameController,
+              hint: 'Enter subject name',
+              icon: Icons.edit_outlined,
+              iconColor: const Color(0xFF1E63F3),
+              iconTone: const Color(0xFFEAF2FF),
+              enabled: true,
+              textCapitalization: TextCapitalization.words,
+              validator: (value) =>
+                  _classText(value).isEmpty ? 'Subject name is required' : null,
+            ),
+            const SizedBox(height: 14),
+            _ClassSetupTwoColumnRow(
+              children: [
+                _ClassSetupInputField(
+                  label: 'Code',
+                  required: true,
+                  controller: _codeController,
+                  hint: 'Enter code',
+                  icon: Icons.code_rounded,
+                  iconColor: const Color(0xFF7C3AED),
+                  iconTone: const Color(0xFFF3E8FF),
+                  enabled: true,
+                  textCapitalization: TextCapitalization.characters,
+                  validator: (value) =>
+                      _classText(value).isEmpty ? 'Code is required' : null,
+                ),
+                _SimpleSetupDropdown(
+                  label: 'Type',
+                  required: true,
+                  value: _type,
+                  values: _types,
+                  icon: Icons.layers_outlined,
+                  iconColor: const Color(0xFF16A34A),
+                  iconTone: const Color(0xFFEAFBF0),
+                  enabled: true,
+                  onChanged: (value) => setState(() => _type = value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _ClassSetupTwoColumnRow(
+              children: [
+                _SimpleSetupDropdown(
+                  label: 'Department',
+                  required: true,
+                  value: _department,
+                  values: _departments,
+                  icon: Icons.account_balance_outlined,
+                  iconColor: const Color(0xFFF59E0B),
+                  iconTone: const Color(0xFFFFF7E8),
+                  enabled: true,
+                  onChanged: (value) => setState(() => _department = value),
+                ),
+                _ClassSetupInputField(
+                  label: 'Credits',
+                  controller: _creditsController,
+                  hint: '0',
+                  icon: Icons.stars_rounded,
+                  iconColor: const Color(0xFFE11D48),
+                  iconTone: const Color(0xFFFFEAF1),
+                  enabled: true,
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SubjectColorPicker(
+              selected: _subjectColor,
+              colors: _colors,
+              enabled: true,
+              onChanged: (value) => setState(() => _subjectColor = value),
+            ),
+            const SizedBox(height: 22),
+            _SetupPrimaryButton(
+              label: 'Save Subject',
+              icon: Icons.save_rounded,
+              saving: false,
+              onPressed: _submit,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -8084,6 +8502,26 @@ String _formatAmountInput(double amount) {
   return amount.toStringAsFixed(2);
 }
 
+String _formatBackendDate(DateTime value) {
+  final month = value.month.toString().padLeft(2, '0');
+  final day = value.day.toString().padLeft(2, '0');
+  return '${value.year}-$month-$day';
+}
+
+String _titleCase(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return text;
+  return text
+      .split(RegExp(r'[\s_]+'))
+      .where((part) => part.isNotEmpty)
+      .map(
+        (part) => part.length == 1
+            ? part.toUpperCase()
+            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+      )
+      .join(' ');
+}
+
 String _formatCurrency(num value) {
   final rounded = value.round().toString();
   final chars = rounded.split('').reversed.toList();
@@ -8112,6 +8550,15 @@ String _feeFrequencyLabel(String frequency) {
     'monthly' => 'Monthly',
     'term' => 'Term',
     _ => frequency.trim().isEmpty ? 'Term' : frequency.trim(),
+  };
+}
+
+int _installmentCountFor(_FeeComponentDraft component) {
+  return switch (component.frequencyPayload) {
+    'monthly' => 12,
+    'yearly' => 1,
+    'one_time' => 1,
+    _ => 3,
   };
 }
 

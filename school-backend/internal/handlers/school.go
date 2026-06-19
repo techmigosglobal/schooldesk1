@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ import (
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
+	"school-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -354,6 +356,7 @@ func (h *SchoolHandler) CreateAcademicYear(c *gin.Context) {
 
 	id := year.ID
 	auditAction(c, "academic_years", "create", "academic_years", &id)
+	invalidateAcademicYearCaches()
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: year})
 }
 
@@ -393,6 +396,7 @@ func (h *SchoolHandler) UpdateAcademicYear(c *gin.Context) {
 		return
 	}
 	auditAction(c, "academic_years", "update", "academic_years", &id)
+	invalidateAcademicYearCaches()
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: year})
 }
 
@@ -426,7 +430,21 @@ func (h *SchoolHandler) DeleteAcademicYear(c *gin.Context) {
 		return
 	}
 	auditAction(c, "academic_years", "delete", "academic_years", &id)
+	invalidateAcademicYearCaches()
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Academic year deleted successfully"})
+}
+
+func invalidateAcademicYearCaches() {
+	if services.Cache == nil {
+		return
+	}
+	ctx := context.Background()
+	if err := services.Cache.DeleteByPrefix(ctx, "academic_years_list"); err != nil {
+		log.Printf("academic year list cache invalidation failed: %v", err)
+	}
+	if err := services.Cache.DeleteByPrefix(ctx, "academic_years_detail"); err != nil {
+		log.Printf("academic year detail cache invalidation failed: %v", err)
+	}
 }
 
 func parseAcademicYearDates(c *gin.Context, startValue, endValue string) (time.Time, time.Time, bool) {

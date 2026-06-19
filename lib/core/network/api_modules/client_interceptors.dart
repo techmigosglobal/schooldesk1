@@ -83,6 +83,30 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
   }
 }
 
+// ─── Write Cache Invalidation Interceptor ────────────────────────────────────
+
+class _WriteCacheInvalidationInterceptor extends Interceptor {
+  final BackendApiClient _client;
+
+  _WriteCacheInvalidationInterceptor(this._client);
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final method = response.requestOptions.method.toUpperCase();
+    if (method == 'POST' ||
+        method == 'PUT' ||
+        method == 'PATCH' ||
+        method == 'DELETE') {
+      _client
+          .invalidateCachedReads()
+          .then((_) => handler.next(response))
+          .catchError((_) => handler.next(response));
+      return;
+    }
+    handler.next(response);
+  }
+}
+
 // ─── Logging Interceptor ──────────────────────────────────────────────────────
 
 class _LoggingInterceptor extends Interceptor {

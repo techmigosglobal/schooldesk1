@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/widgets/teacher_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 enum _EventFilter {
   month,
@@ -95,10 +96,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final role = BackendApiClient.instance.currentRoleName
         ?.trim()
         .toLowerCase();
-    return role == null ||
-        role.isEmpty ||
-        role == 'admin' ||
-        role == 'principal';
+    return role == null || role.isEmpty || role == 'principal';
   }
 
   bool get _isPrincipalPortal =>
@@ -539,6 +537,17 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       secondaryActions: _canManageEvents
           ? [
               IconButton(
+                tooltip: 'Approve event posts',
+                icon: const Icon(Icons.fact_check_rounded),
+                onPressed: () async {
+                  final changed = await Navigator.pushNamed(
+                    context,
+                    AppRoutes.principalEventApprovals,
+                  );
+                  if (changed == true && mounted) await _loadData();
+                },
+              ),
+              IconButton(
                 tooltip: 'Load 2026–27 school calendar',
                 icon: const Icon(Icons.download_for_offline_rounded),
                 onPressed: _seedSchoolCalendar,
@@ -754,101 +763,113 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildFilters() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PrincipalDirectorySearchBox(
-            hint: 'Search event, venue, audience...',
-            onChanged: (value) => setState(() => _query = value),
-          ),
-          if (_academicYears.length > 1) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedAcademicYearId.isEmpty
-                  ? null
-                  : _selectedAcademicYearId,
-              decoration: const InputDecoration(
-                labelText: 'Academic year',
-                prefixIcon: Icon(Icons.school_rounded),
-              ),
-              items: _academicYears
-                  .map(
-                    (year) => DropdownMenuItem(
-                      value: year.id,
-                      child: Text(year.yearLabel),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) async {
-                if (value == null || value == _selectedAcademicYearId) return;
-                setState(() => _selectedAcademicYearId = value);
-                await _loadData();
-              },
-            ),
-          ],
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                PrincipalDirectoryChip(
-                  label: 'Calendar',
-                  selected: _displayMode == _EventsDisplayMode.calendar,
-                  icon: Icons.calendar_month_rounded,
-                  onTap: () => setState(
-                    () => _displayMode = _EventsDisplayMode.calendar,
+      padding: const EdgeInsets.fromLTRB(22, 6, 22, 4),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final yearField = _academicYears.length > 1
+              ? DropdownButtonFormField<String>(
+                  initialValue: _selectedAcademicYearId.isEmpty
+                      ? null
+                      : _selectedAcademicYearId,
+                  decoration: const InputDecoration(
+                    labelText: 'Academic year',
+                    prefixIcon: Icon(Icons.school_rounded),
                   ),
+                  items: _academicYears
+                      .map(
+                        (year) => DropdownMenuItem(
+                          value: year.id,
+                          child: Text(year.yearLabel),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) async {
+                    if (value == null || value == _selectedAcademicYearId) {
+                      return;
+                    }
+                    setState(() => _selectedAcademicYearId = value);
+                    await _loadData();
+                  },
+                )
+              : null;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (yearField == null || constraints.maxWidth < 640) ...[
+                PrincipalDirectorySearchBox(
+                  hint: 'Search event, venue, audience...',
+                  onChanged: (value) => setState(() => _query = value),
                 ),
-                const SizedBox(width: 8),
-                PrincipalDirectoryChip(
-                  label: 'List',
-                  selected: _displayMode == _EventsDisplayMode.list,
-                  icon: Icons.view_agenda_rounded,
-                  onTap: () =>
-                      setState(() => _displayMode = _EventsDisplayMode.list),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final filter in _EventFilter.values) ...[
-                  PrincipalDirectoryChip(
-                    label: _filterLabel(filter),
-                    selected: _filter == filter,
-                    icon: _filterIcon(filter),
-                    onTap: () => setState(() => _filter = filter),
-                  ),
-                  const SizedBox(width: 8),
+                if (yearField != null) ...[
+                  const SizedBox(height: 10),
+                  yearField,
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(12, (index) {
-                final month = index + 1;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: PrincipalDirectoryChip(
-                    label: _monthName(month),
-                    selected: _selectedMonth == month,
-                    onTap: () => setState(() {
-                      _selectedMonth = month;
-                      _filter = _EventFilter.month;
-                    }),
+              ] else
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: PrincipalDirectorySearchBox(
+                        hint: 'Search event, venue, audience...',
+                        onChanged: (value) => setState(() => _query = value),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(flex: 2, child: yearField),
+                  ],
+                ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  PrincipalDirectoryChip(
+                    label: 'Calendar',
+                    selected: _displayMode == _EventsDisplayMode.calendar,
+                    icon: Icons.calendar_month_rounded,
+                    onTap: () => setState(
+                      () => _displayMode = _EventsDisplayMode.calendar,
+                    ),
                   ),
-                );
-              }),
-            ),
-          ),
-        ],
+                  PrincipalDirectoryChip(
+                    label: 'List',
+                    selected: _displayMode == _EventsDisplayMode.list,
+                    icon: Icons.view_agenda_rounded,
+                    onTap: () =>
+                        setState(() => _displayMode = _EventsDisplayMode.list),
+                  ),
+                  for (final filter in _EventFilter.values)
+                    PrincipalDirectoryChip(
+                      label: _filterLabel(filter),
+                      selected: _filter == filter,
+                      icon: _filterIcon(filter),
+                      onTap: () => setState(() => _filter = filter),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(12, (index) {
+                    final month = index + 1;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: PrincipalDirectoryChip(
+                        label: _monthName(month),
+                        selected: _selectedMonth == month,
+                        onTap: () => setState(() {
+                          _selectedMonth = month;
+                          _filter = _EventFilter.month;
+                        }),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -980,16 +1001,16 @@ class _EventCalendarMonth extends StatelessWidget {
     });
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFDDE8F4)),
         boxShadow: [
           BoxShadow(
-            color: context.appTheme.onSurface.withAlpha(10),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
+            color: context.appTheme.onSurface.withAlpha(8),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -999,8 +1020,8 @@ class _EventCalendarMonth extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   color: const Color(0xFFEAF4FF),
                   borderRadius: BorderRadius.circular(8),
@@ -1021,7 +1042,7 @@ class _EventCalendarMonth extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.dmSans(
                         color: principalDirectoryText,
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -1042,7 +1063,7 @@ class _EventCalendarMonth extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: const [
               _CalendarWeekLabel('Mon'),
@@ -1054,15 +1075,20 @@ class _EventCalendarMonth extends StatelessWidget {
               _CalendarWeekLabel('Sun'),
             ],
           ),
-          const SizedBox(height: 8),
-          GridView.count(
-            crossAxisCount: 7,
-            mainAxisSpacing: 6,
-            crossAxisSpacing: 6,
-            childAspectRatio: 0.82,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            children: cells,
+          const SizedBox(height: 6),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 560;
+              return GridView.count(
+                crossAxisCount: 7,
+                mainAxisSpacing: compact ? 4 : 6,
+                crossAxisSpacing: compact ? 4 : 6,
+                childAspectRatio: compact ? 0.82 : 1.08,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: cells,
+              );
+            },
           ),
           if (monthEventCount == 0) ...[
             const SizedBox(height: 14),

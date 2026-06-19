@@ -59,6 +59,7 @@ class BackendApiClient {
     _dio.interceptors.addAll([
       _AuthInterceptor(this),
       _ReadCacheOptionsInterceptor(this),
+      _WriteCacheInvalidationInterceptor(this),
       _LoggingInterceptor(),
       _ErrorInterceptor(this),
     ]);
@@ -126,6 +127,24 @@ class BackendApiClient {
           name: 'BackendApiClient',
         );
       }
+    }
+  }
+
+  Future<void> invalidateAcademicSetupCache() =>
+      _deleteCachedPaths(const [r'/academic-years', r'/dashboard/']);
+
+  Future<void> invalidateStudentCache() =>
+      _deleteCachedPaths(const [r'/students', r'/dashboard/']);
+
+  Future<void> invalidateCachedReads() async {
+    await _cacheOptions?.store?.clean();
+  }
+
+  Future<void> _deleteCachedPaths(List<String> pathPatterns) async {
+    final store = _cacheOptions?.store;
+    if (store == null) return;
+    for (final pattern in pathPatterns) {
+      await store.deleteFromPath(RegExp(pattern));
     }
   }
 
@@ -213,7 +232,10 @@ class BackendApiClient {
         'dry_run': dryRun.toString(),
         'file': await MultipartFile.fromFile(filePath, filename: 'import.csv'),
       });
-      final response = await _dio.post('/admin/bulk-import', data: formData);
+      final response = await _dio.post(
+        '/principal/bulk-import',
+        data: formData,
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) return _asMap(data['data']);
       throw ServerException(message: data['error'] ?? 'Bulk import failed');
@@ -228,7 +250,7 @@ class BackendApiClient {
   }) async {
     try {
       final response = await _dio.get(
-        '/admin/bulk-import/history',
+        '/principal/bulk-import/history',
         queryParameters: {
           if (importType != null) 'import_type': importType,
           'limit': limit,

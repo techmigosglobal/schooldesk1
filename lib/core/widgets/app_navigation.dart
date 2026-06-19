@@ -186,6 +186,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               label: SchoolDeskGlossary.academicManagement,
               route: AppRoutes.academicManagement,
             ),
+            SchoolDeskNavigationItem(
+              index: 17,
+              icon: Icons.event_note_outlined,
+              activeIcon: Icons.event_note_rounded,
+              label: 'Lesson Planners',
+              route: AppRoutes.principalLessonPlanner,
+            ),
           ],
         ),
         SchoolDeskNavigationSection(

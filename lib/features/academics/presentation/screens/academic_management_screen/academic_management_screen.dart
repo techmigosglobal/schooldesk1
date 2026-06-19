@@ -43,7 +43,7 @@ EdgeInsets _academicListPadding(BuildContext context) {
 class AcademicManagementScreen extends StatefulWidget {
   final String ownerRole;
 
-  const AcademicManagementScreen({super.key, this.ownerRole = 'admin'});
+  const AcademicManagementScreen({super.key, this.ownerRole = 'principal'});
 
   @override
   State<AcademicManagementScreen> createState() =>
@@ -69,7 +69,7 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
   int _unreadNotifications = 0;
 
   String get _role => widget.ownerRole.toLowerCase();
-  bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'admin';
+  bool get _isAdminOwner => widget.ownerRole.toLowerCase() == 'principal';
 
   @override
   void initState() {
@@ -534,9 +534,7 @@ class _AcademicBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final homeRoute = role == 'admin'
-        ? AppRoutes.adminDashboard
-        : AppRoutes.principalDashboard;
+    final homeRoute = AppRoutes.principalDashboard;
     return SafeArea(
       top: false,
       child: Padding(
@@ -2432,7 +2430,6 @@ class _AcademicClassCard extends StatelessWidget {
           classData['school_stage'],
     );
     final args = _academicClassRouteArgs(classData);
-    final role = ownerRole.toLowerCase();
     final compact = _academicCompact(context);
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 16),
@@ -2585,10 +2582,8 @@ class _AcademicClassCard extends StatelessWidget {
                         color: _academicBlue,
                         onTap: () => Navigator.pushNamed(
                           context,
-                          role == 'admin'
-                              ? AppRoutes.academicManagement
-                              : AppRoutes.principalSubjects,
-                          arguments: role == 'admin' ? null : args,
+                          AppRoutes.principalSubjects,
+                          arguments: args,
                         ),
                       ),
                     ),
@@ -2600,28 +2595,11 @@ class _AcademicClassCard extends StatelessWidget {
                         color: _academicGreen,
                         onTap: () => Navigator.pushNamed(
                           context,
-                          role == 'admin'
-                              ? AppRoutes.adminAttendance
-                              : AppRoutes.principalAttendance,
+                          AppRoutes.principalAttendance,
                           arguments: args,
                         ),
                       ),
                     ),
-                    if (role == 'admin') ...[
-                      SizedBox(width: compact ? 8 : 10),
-                      Expanded(
-                        child: _AcademicClassActionButton(
-                          icon: Icons.calendar_month_outlined,
-                          label: 'Timetable',
-                          color: const Color(0xFFFF6E1F),
-                          onTap: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.adminTimetable,
-                            arguments: args,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ],

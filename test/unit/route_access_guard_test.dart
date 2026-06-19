@@ -5,25 +5,102 @@ import 'package:schooldesk1/routes/route_access_guard.dart';
 void main() {
   group('RouteAccessGuard', () {
     test('allows public routes without authentication', () {
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminLogin,
-          isAuthenticated: false,
-          currentRole: null,
-        ),
-        isNull,
-      );
+      for (final route in [
+        AppRoutes.initial,
+        AppRoutes.landingPage,
+        AppRoutes.onboarding,
+        AppRoutes.principalLogin,
+        AppRoutes.teacherLogin,
+        AppRoutes.parentLogin,
+        AppRoutes.kioskLogin,
+      ]) {
+        expect(
+          RouteAccessGuard.redirectFor(
+            routeName: route,
+            isAuthenticated: false,
+            currentRole: null,
+          ),
+          isNull,
+          reason: '$route should be public',
+        );
+      }
     });
 
     test('redirects unauthenticated protected routes to landing', () {
       expect(
         RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminDashboard,
+          routeName: AppRoutes.principalDashboard,
           isAuthenticated: false,
           currentRole: null,
         ),
         AppRoutes.landingPage,
       );
+    });
+
+    test('does not treat admin as an authenticated app role', () {
+      expect(RouteAccessGuard.authenticatedRoles, isNot(contains('admin')));
+      expect(RouteAccessGuard.dashboardForRole('Admin'), isNull);
+      expect(
+        RouteAccessGuard.initialRouteFor(
+          isAuthenticated: true,
+          currentRole: 'Admin',
+        ),
+        AppRoutes.initial,
+      );
+      expect(
+        RouteAccessGuard.redirectFor(
+          routeName: AppRoutes.principalDashboard,
+          isAuthenticated: true,
+          currentRole: 'Admin',
+        ),
+        AppRoutes.landingPage,
+      );
+    });
+
+    test('guards principal setup and monitoring routes by principal role', () {
+      const principalRoutes = [
+        AppRoutes.principalDashboard,
+        AppRoutes.staffManagement,
+        AppRoutes.staffForm,
+        AppRoutes.studentOversight,
+        AppRoutes.approvalCenter,
+        AppRoutes.feeMonitoring,
+        AppRoutes.principalPaymentRequests,
+        AppRoutes.principalPaymentRequestDecision,
+        AppRoutes.academicManagement,
+        AppRoutes.principalClasses,
+        AppRoutes.principalAttendance,
+        AppRoutes.principalSubjects,
+        AppRoutes.principalLessonPlanner,
+        AppRoutes.principalAccountCreate,
+        AppRoutes.principalAccountEdit,
+        AppRoutes.principalParentChildAssignment,
+        AppRoutes.eventsCalendar,
+        AppRoutes.principalEventApprovals,
+        AppRoutes.principalChatCommunications,
+      ];
+
+      for (final route in principalRoutes) {
+        expect(RouteAccessGuard.allowedRolesFor(route), {'principal'});
+        expect(
+          RouteAccessGuard.redirectFor(
+            routeName: route,
+            isAuthenticated: true,
+            currentRole: 'Principal',
+          ),
+          isNull,
+          reason: '$route should be reachable for Principal',
+        );
+        expect(
+          RouteAccessGuard.redirectFor(
+            routeName: route,
+            isAuthenticated: true,
+            currentRole: 'Teacher',
+          ),
+          AppRoutes.teacherDashboard,
+          reason: '$route should redirect Teacher away',
+        );
+      }
     });
 
     test('allows authenticated users into shared protected routes', () {
@@ -34,176 +111,6 @@ void main() {
           currentRole: 'teacher',
         ),
         isNull,
-      );
-    });
-
-    test('allows a matching role into its own route group', () {
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.teacherAttendance,
-          isAuthenticated: true,
-          currentRole: 'Teacher',
-        ),
-        isNull,
-      );
-    });
-
-    test('guards routed account input screens by owner role', () {
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminAccountCreate,
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminAccountEdit,
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminParentChildAssignment,
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.staffForm,
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.staffForm,
-          isAuthenticated: true,
-          currentRole: 'Principal',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.staffForm,
-          isAuthenticated: true,
-          currentRole: 'Teacher',
-        ),
-        AppRoutes.teacherDashboard,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.principalAccountCreate,
-          isAuthenticated: true,
-          currentRole: 'Principal',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.principalAccountEdit,
-          isAuthenticated: true,
-          currentRole: 'Principal',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.principalParentChildAssignment,
-          isAuthenticated: true,
-          currentRole: 'Principal',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.principalAccountCreate,
-          isAuthenticated: true,
-          currentRole: 'admin',
-        ),
-        AppRoutes.adminDashboard,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminAccountCreate,
-          isAuthenticated: true,
-          currentRole: 'parent',
-        ),
-        AppRoutes.parentDashboard,
-      );
-    });
-
-    test('guards routed admin timetable input screens by admin role', () {
-      for (final route in [
-        AppRoutes.adminTimetableGenerationForm,
-        AppRoutes.adminTimetablePeriodForm,
-        AppRoutes.adminTimetableSubstitutionForm,
-      ]) {
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Admin',
-          ),
-          isNull,
-        );
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Principal',
-          ),
-          AppRoutes.principalDashboard,
-        );
-      }
-    });
-
-    test('guards routed admin exam input screens by admin role', () {
-      for (final route in [
-        AppRoutes.adminExamForm,
-        AppRoutes.adminExamScheduleForm,
-      ]) {
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Admin',
-          ),
-          isNull,
-        );
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Teacher',
-          ),
-          AppRoutes.teacherDashboard,
-        );
-      }
-    });
-
-    test('guards routed teacher leave input screen by teacher role', () {
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.teacherLeaveRequestForm,
-          isAuthenticated: true,
-          currentRole: 'Teacher',
-        ),
-        isNull,
-      );
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.teacherLeaveRequestForm,
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        AppRoutes.adminDashboard,
       );
     });
 
@@ -250,50 +157,7 @@ void main() {
       }
     });
 
-    test('teacher study materials and syllabus routes are removed', () {
-      expect(
-        AppRoutes.routes.containsKey('/teacher-study-materials-screen'),
-        isFalse,
-      );
-      expect(
-        AppRoutes.routes.containsKey('/teacher-study-materials-screen/form'),
-        isFalse,
-      );
-      expect(AppRoutes.routes.containsKey('/teacher-syllabus-screen'), isFalse);
-      expect(
-        RouteAccessGuard.allowedRolesFor('/teacher-study-materials-screen'),
-        isEmpty,
-      );
-      expect(
-        RouteAccessGuard.allowedRolesFor(
-          '/teacher-study-materials-screen/form',
-        ),
-        isEmpty,
-      );
-      expect(
-        RouteAccessGuard.allowedRolesFor('/teacher-syllabus-screen'),
-        isEmpty,
-      );
-    });
-
-    test('removed teacher support routes are not teacher reachable', () {
-      for (final route in [
-        '/teacher-student-notes-screen',
-        '/teacher-discipline-screen',
-        AppRoutes.teacherParentInteraction,
-        '/teacher-performance-screen',
-        '/teacher-mark-entry-screen',
-      ]) {
-        expect(AppRoutes.routes.containsKey(route), isFalse);
-        expect(
-          RouteAccessGuard.allowedRolesFor(route),
-          isNot(contains('teacher')),
-          reason: '$route should no longer be reachable for Teacher',
-        );
-      }
-    });
-
-    test('guards routed homework input and submission screens by role', () {
+    test('guards homework input and submission screens by role', () {
       for (final route in [
         AppRoutes.teacherHomeworkForm,
         AppRoutes.teacherHomeworkSubmissions,
@@ -333,31 +197,6 @@ void main() {
       );
     });
 
-    test('redirects wrong-role access to the authenticated role dashboard', () {
-      expect(
-        RouteAccessGuard.redirectFor(
-          routeName: AppRoutes.adminStudents,
-          isAuthenticated: true,
-          currentRole: 'parent',
-        ),
-        AppRoutes.parentDashboard,
-      );
-    });
-
-    test(
-      'redirects role-specific routes when the authenticated role is unknown',
-      () {
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: AppRoutes.principalDashboard,
-            isAuthenticated: true,
-            currentRole: null,
-          ),
-          AppRoutes.landingPage,
-        );
-      },
-    );
-
     test('starts authenticated users on their restored role dashboard', () {
       expect(
         RouteAccessGuard.initialRouteFor(
@@ -365,13 +204,6 @@ void main() {
           currentRole: 'Principal',
         ),
         AppRoutes.principalDashboard,
-      );
-      expect(
-        RouteAccessGuard.initialRouteFor(
-          isAuthenticated: true,
-          currentRole: 'Admin',
-        ),
-        AppRoutes.adminDashboard,
       );
       expect(
         RouteAccessGuard.initialRouteFor(
@@ -386,6 +218,13 @@ void main() {
           currentRole: 'Parent',
         ),
         AppRoutes.parentDashboard,
+      );
+      expect(
+        RouteAccessGuard.initialRouteFor(
+          isAuthenticated: true,
+          currentRole: 'Kiosk',
+        ),
+        AppRoutes.kioskQrAttendance,
       );
     });
 

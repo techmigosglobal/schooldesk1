@@ -17,6 +17,7 @@ class _PrincipalEventApprovalScreenState
   List<dynamic> _posts = [];
   bool _loading = true;
   String? _error;
+  bool _changed = false;
 
   @override
   void initState() {
@@ -51,10 +52,9 @@ class _PrincipalEventApprovalScreenState
 
   Future<void> _approveStatus(String id) async {
     try {
-      await BackendApiClient.instance.dio.post(
-        '/event-posts/$id/approve',
-      );
-      _loadPosts();
+      await BackendApiClient.instance.dio.post('/event-posts/$id/approve');
+      _changed = true;
+      await _loadPosts();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -98,7 +98,8 @@ class _PrincipalEventApprovalScreenState
           '/event-posts/$id/reject',
           data: {'reason': reasonController.text.trim()},
         );
-        _loadPosts();
+        _changed = true;
+        await _loadPosts();
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -110,57 +111,66 @@ class _PrincipalEventApprovalScreenState
 
   @override
   Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: 'Event Approvals',
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Text(
-                _error!,
-                style: TextStyle(color: context.appTheme.error),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(24.0),
-              itemCount: _posts.length,
-              itemBuilder: (context, index) {
-                final post = _posts[index];
-                final destinations = _labels(post['destinations']);
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ListTile(
-                    title: Text(post['title'] ?? 'No Title'),
-                    subtitle: Text(
-                      '${post['description'] ?? ''}\n'
-                      'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
+    return PopScope(
+      canPop: !_changed,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _changed) {
+          _changed = false;
+          Navigator.of(context).pop(true);
+        }
+      },
+      child: SchoolDeskModuleScaffold(
+        title: 'Event Approvals',
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? Center(
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: context.appTheme.error),
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(24.0),
+                itemCount: _posts.length,
+                itemBuilder: (context, index) {
+                  final post = _posts[index];
+                  final destinations = _labels(post['destinations']);
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ListTile(
+                      title: Text(post['title'] ?? 'No Title'),
+                      subtitle: Text(
+                        '${post['description'] ?? ''}\n'
+                        'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
+                      ),
+                      isThreeLine: true,
+                      trailing: post['approval_status'] == 'pending'
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.check,
+                                    color: Colors.green,
+                                  ),
+                                  onPressed: () => _approveStatus(post['id']),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () => _rejectStatus(post['id']),
+                                ),
+                              ],
+                            )
+                          : null,
                     ),
-                    isThreeLine: true,
-                    trailing: post['approval_status'] == 'pending'
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.check,
-                                  color: Colors.green,
-                                ),
-                                onPressed: () => _approveStatus(post['id']),
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.red,
-                                ),
-                                onPressed: () => _rejectStatus(post['id']),
-                              ),
-                            ],
-                          )
-                        : null,
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              ),
+      ),
     );
   }
 

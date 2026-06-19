@@ -163,6 +163,135 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getFeeCategories() async {
+    try {
+      final response = await _dio.get('/fees/categories');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return _asListMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get fee categories',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createFeeCategory({
+    required String categoryName,
+    required String frequency,
+    bool isRefundable = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/categories',
+        data: {
+          'category_name': categoryName.trim(),
+          'frequency': frequency.trim(),
+          'is_refundable': isRefundable,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create fee category',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createFeeStructure({
+    required String academicYearId,
+    required String gradeId,
+    required String feeCategoryId,
+    required double amount,
+    int dueDay = 10,
+    double lateFinePerDay = 0,
+    int installmentCount = 3,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/structures',
+        data: {
+          'academic_year_id': academicYearId.trim(),
+          'grade_id': gradeId.trim(),
+          'fee_category_id': feeCategoryId.trim(),
+          'amount': amount,
+          'due_day': dueDay,
+          'late_fine_per_day': lateFinePerDay,
+          'installment_count': installmentCount,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create fee structure',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateFeeStructure(
+    String structureId, {
+    String? academicYearId,
+    String? gradeId,
+    String? feeCategoryId,
+    double? amount,
+    int? dueDay,
+    double? lateFinePerDay,
+    int? installmentCount,
+  }) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (academicYearId != null) payload['academic_year_id'] = academicYearId;
+      if (gradeId != null) payload['grade_id'] = gradeId;
+      if (feeCategoryId != null) payload['fee_category_id'] = feeCategoryId;
+      if (amount != null) payload['amount'] = amount;
+      if (dueDay != null) payload['due_day'] = dueDay;
+      if (lateFinePerDay != null) {
+        payload['late_fine_per_day'] = lateFinePerDay;
+      }
+      if (installmentCount != null) {
+        payload['installment_count'] = installmentCount;
+      }
+      final response = await _dio.put(
+        '/fees/structures/${structureId.trim()}',
+        data: payload,
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to update fee structure',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> deleteFeeStructure(String structureId) async {
+    try {
+      final response = await _dio.delete(
+        '/fees/structures/${structureId.trim()}',
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) return;
+      throw ServerException(
+        message: data['error'] ?? 'Failed to delete fee structure',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getInvoices({
     String? studentId,
     String? status,
@@ -222,6 +351,48 @@ extension BackendFeesApi on BackendApiClient {
         );
       }
       throw ServerException(message: data['error'] ?? 'Failed to get invoices');
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> generateFeeInvoices({
+    required String academicYearId,
+    required String gradeId,
+    String sectionId = '',
+    String studentId = '',
+    String invoiceDate = '',
+    required String dueDate,
+    String invoiceLabel = '',
+    String termId = '',
+    bool includeOneTime = false,
+    bool includeYearly = false,
+    int installmentCount = 0,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/invoices/generate',
+        data: {
+          'academic_year_id': academicYearId.trim(),
+          'grade_id': gradeId.trim(),
+          'section_id': sectionId.trim(),
+          'student_id': studentId.trim(),
+          if (invoiceDate.trim().isNotEmpty) 'invoice_date': invoiceDate.trim(),
+          'due_date': dueDate.trim(),
+          'invoice_label': invoiceLabel.trim(),
+          'term_id': termId.trim(),
+          'include_one_time': includeOneTime,
+          'include_yearly': includeYearly,
+          if (installmentCount > 0) 'installment_count': installmentCount,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to generate fee invoices',
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

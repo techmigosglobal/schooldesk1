@@ -309,6 +309,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFE8FAFC),
                   ),
                   _AcademicModuleItem(
+                    label: 'Lesson Planners',
+                    route: AppRoutes.principalLessonPlanner,
+                    illustration: SchoolDeskUiIllustrations.lessonPlanner,
+                    fallbackIcon: Icons.auto_stories_rounded,
+                    accent: const Color(0xFFDB2777),
+                    cardColor: const Color(0xFFFCE7F3),
+                  ),
+                  _AcademicModuleItem(
                     label: 'Fees',
                     route: AppRoutes.feeMonitoring,
                     illustration: SchoolDeskUiIllustrations.principalFees,
@@ -323,6 +331,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     fallbackIcon: Icons.event_rounded,
                     accent: const Color(0xFFF59E0B),
                     cardColor: const Color(0xFFFFF5D8),
+                  ),
+                  _AcademicModuleItem(
+                    label: 'Event Approvals',
+                    route: AppRoutes.principalEventApprovals,
+                    illustration: SchoolDeskUiIllustrations.principalEvents,
+                    fallbackIcon: Icons.fact_check_rounded,
+                    accent: const Color(0xFFEA580C),
+                    cardColor: const Color(0xFFFFF1E8),
+                    badge: _data.pendingApprovals,
                   ),
                   _AcademicModuleItem(
                     label: 'Chat Communications',

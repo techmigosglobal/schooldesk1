@@ -44,13 +44,16 @@ void main() {
         isAuthenticated: true,
         currentRole: 'Admin',
       ),
-      isNull,
+      AppRoutes.landingPage,
     );
   });
 
   test('frontend screens use explicit event and lesson planner endpoints', () {
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+    ).readAsStringSync();
+    final parentLessonPlanner = File(
+      'lib/features/academics/presentation/screens/parent_lesson_planner_screen/parent_lesson_planner_screen.dart',
     ).readAsStringSync();
     final landing = File(
       'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
@@ -63,12 +66,12 @@ void main() {
     ).readAsStringSync();
 
     expect(parentDashboard, contains('/event-posts/home-feed'));
-    expect(parentDashboard, contains('/lesson-planners/parent'));
+    expect(parentLessonPlanner, contains('/lesson-planners/parent'));
     expect(
       parentDashboard,
       isNot(contains('/api/v1/event-posts?destination=PARENTS_HOME')),
     );
-    expect(landing, contains('/landing/events'));
+    expect(landing, isNot(contains('/landing/events')));
     expect(
       landing,
       isNot(contains('/api/v1/event-posts?destination=SCHOOL_LANDING')),
@@ -78,29 +81,32 @@ void main() {
     expect(gallery, contains('GridView.builder'));
   });
 
-  test('backend keeps event posts approved-only and landing response public', () {
-    final handler = File(
-      'school-backend/internal/handlers/event_post.go',
-    ).readAsStringSync();
-    final routes = File(
-      'school-backend/internal/routes/routes.go',
-    ).readAsStringSync();
+  test(
+    'backend keeps event posts approved-only and landing response public',
+    () {
+      final handler = File(
+        'school-backend/internal/handlers/event_post.go',
+      ).readAsStringSync();
+      final routes = File(
+        'school-backend/internal/routes/routes.go',
+      ).readAsStringSync();
 
-    expect(handler, contains('normalizeEventPostDestinations'));
-    expect(handler, contains('At least one valid destination is required'));
-    expect(handler, contains('publicEventPost'));
-    expect(handler, contains('ApprovalStatusApproved'));
-    expect(handler, contains('%SCHOOL_GALLERY%'));
-    expect(handler, contains('%PARENTS_HOME%'));
-    expect(handler, contains('%SCHOOL_LANDING%'));
-    expect(
-      routes,
-      contains(
-        'eventPosts.GET("/pending", middleware.RBACMiddleware("Admin", "Principal")',
-      ),
-    );
-    expect(routes, contains('api.GET("/landing/events"'));
-  });
+      expect(handler, contains('normalizeEventPostDestinations'));
+      expect(handler, contains('At least one valid destination is required'));
+      expect(handler, contains('publicEventPost'));
+      expect(handler, contains('ApprovalStatusApproved'));
+      expect(handler, contains('%SCHOOL_GALLERY%'));
+      expect(handler, contains('%PARENTS_HOME%'));
+      expect(handler, contains('%SCHOOL_LANDING%'));
+      expect(
+        routes,
+        contains(
+          'eventPosts.GET("/pending", middleware.RBACMiddleware("Principal")',
+        ),
+      );
+      expect(routes, contains('api.GET("/landing/events"'));
+    },
+  );
 
   test('parent lesson planners are scoped through linked students', () {
     final handler = File(

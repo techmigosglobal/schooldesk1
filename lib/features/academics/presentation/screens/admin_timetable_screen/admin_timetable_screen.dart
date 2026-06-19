@@ -1602,16 +1602,18 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       _showSnack('Select a class before generating timetable.');
       return;
     }
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminTimetableGenerationForm,
-      arguments: AdminTimetableGenerationFormArgs(
-        classLabel: _selectedClassLabel,
-        section: _selectedSection,
-        academicYear: _currentAcademicYear,
-        termId: _currentTermId,
-        dayLabel: _dayLabel(_selectedDay),
-        dayNumber: _selectedDay,
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetableGenerationFormScreen(
+          args: AdminTimetableGenerationFormArgs(
+            classLabel: _selectedClassLabel,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _currentTermId,
+            dayLabel: _dayLabel(_selectedDay),
+            dayNumber: _selectedDay,
+          ),
+        ),
       ),
     );
     await _handleTimetableResult(result);
@@ -1886,56 +1888,62 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       return;
     }
     final periods = _periodsForClass(_selectedSectionId, _selectedDay);
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminTimetablePeriodForm,
-      arguments: AdminTimetablePeriodFormArgs(
-        classLabel: _selectedClassLabel,
-        section: _selectedSection,
-        academicYear: _currentAcademicYear,
-        termId: _currentTermId,
-        dayLabel: _dayLabel(_selectedDay),
-        dayNumber: _selectedDay,
-        nextPeriodNumber: periods.length + 1,
-        subjects: _subjects,
-        staff: _staff,
-        rooms: _rooms,
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetablePeriodFormScreen(
+          args: AdminTimetablePeriodFormArgs(
+            classLabel: _selectedClassLabel,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _currentTermId,
+            dayLabel: _dayLabel(_selectedDay),
+            dayNumber: _selectedDay,
+            nextPeriodNumber: periods.length + 1,
+            subjects: _subjects,
+            staff: _staff,
+            rooms: _rooms,
+          ),
+        ),
       ),
     );
     await _handleTimetableResult(result);
   }
 
   Future<void> _openEditPeriodForm(Map<String, dynamic> period) async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminTimetablePeriodForm,
-      arguments: AdminTimetablePeriodFormArgs(
-        classLabel: _selectedClassLabel,
-        section: _selectedSection,
-        academicYear: _currentAcademicYear,
-        termId: _currentTermId,
-        dayLabel: _dayLabel(_selectedDay),
-        dayNumber: _selectedDay,
-        nextPeriodNumber: _int(period['period_number']),
-        subjects: _subjects,
-        staff: _staff,
-        rooms: _rooms,
-        period: period,
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetablePeriodFormScreen(
+          args: AdminTimetablePeriodFormArgs(
+            classLabel: _selectedClassLabel,
+            section: _selectedSection,
+            academicYear: _currentAcademicYear,
+            termId: _currentTermId,
+            dayLabel: _dayLabel(_selectedDay),
+            dayNumber: _selectedDay,
+            nextPeriodNumber: _int(period['period_number']),
+            subjects: _subjects,
+            staff: _staff,
+            rooms: _rooms,
+            period: period,
+          ),
+        ),
       ),
     );
     await _handleTimetableResult(result);
   }
 
   Future<void> _openSubstitutionForm({Map<String, dynamic>? period}) async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminTimetableSubstitutionForm,
-      arguments: AdminTimetableSubstitutionFormArgs(
-        classLabel: _selectedClassLabel,
-        dayLabel: _dayLabel(_selectedDay),
-        periods: _periodsForClass(_selectedSectionId, _selectedDay),
-        staff: _staff,
-        initialPeriod: period,
+    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminTimetableSubstitutionFormScreen(
+          args: AdminTimetableSubstitutionFormArgs(
+            classLabel: _selectedClassLabel,
+            dayLabel: _dayLabel(_selectedDay),
+            periods: _periodsForClass(_selectedSectionId, _selectedDay),
+            staff: _staff,
+            initialPeriod: period,
+          ),
+        ),
       ),
     );
     await _handleTimetableResult(result);
@@ -3077,10 +3085,10 @@ class _AdminTimetableBottomBar extends StatelessWidget {
           label: 'Home',
           icon: Icons.home_outlined,
           activeIcon: Icons.home_rounded,
-          selected: currentRoute == AppRoutes.adminDashboard,
+          selected: currentRoute == AppRoutes.principalDashboard,
           onTap: () => Navigator.of(
             context,
-          ).pushNamedAndRemoveUntil(AppRoutes.adminDashboard, (_) => false),
+          ).pushNamedAndRemoveUntil(AppRoutes.principalDashboard, (_) => false),
         ),
         SchoolDeskBottomNavItem(
           label: 'Search',
@@ -3089,15 +3097,15 @@ class _AdminTimetableBottomBar extends StatelessWidget {
           selected: currentRoute == AppRoutes.globalSearch,
           onTap: () => Navigator.of(
             context,
-          ).pushNamed(AppRoutes.globalSearch, arguments: 'admin'),
+          ).pushNamed(AppRoutes.globalSearch, arguments: 'principal'),
         ),
         SchoolDeskBottomNavItem(
           label: 'Communication',
           icon: Icons.forum_outlined,
           activeIcon: Icons.forum_rounded,
-          selected: currentRoute == AppRoutes.adminCommunication,
+          selected: currentRoute == AppRoutes.communicationCenter,
           onTap: () =>
-              Navigator.of(context).pushNamed(AppRoutes.adminCommunication),
+              Navigator.of(context).pushNamed(AppRoutes.communicationCenter),
         ),
         SchoolDeskBottomNavItem(
           label: 'Profile',
@@ -3106,7 +3114,7 @@ class _AdminTimetableBottomBar extends StatelessWidget {
           selected: currentRoute == AppRoutes.profileScreen,
           onTap: () => Navigator.of(
             context,
-          ).pushNamed(AppRoutes.profileScreen, arguments: 'admin'),
+          ).pushNamed(AppRoutes.profileScreen, arguments: 'principal'),
         ),
       ],
     );

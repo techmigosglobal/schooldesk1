@@ -86,8 +86,9 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       );
     }
     if (_posts.isEmpty) {
-      final role = BackendApiClient.instance.currentRoleName?.toLowerCase() ?? '';
-      final canCreate = role == 'teacher' || role == 'principal' || role == 'admin';
+      final role =
+          BackendApiClient.instance.currentRoleName?.toLowerCase() ?? '';
+      final canCreate = role == 'teacher' || role == 'principal';
       return SchoolDeskStatusPanel.empty(
         title: 'No gallery posts yet',
         message: 'Approved school gallery posts will appear here.',

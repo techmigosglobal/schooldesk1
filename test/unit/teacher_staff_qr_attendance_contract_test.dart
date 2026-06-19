@@ -113,19 +113,27 @@ void main() {
     expect(routes, contains('kioskQrAttendance: (context)'));
     expect(guard, contains('\'kiosk\''));
     expect(guard, contains('AppRoutes.kioskQrAttendance: {\'kiosk\'}'));
-    expect(landing, contains('QR Display'));
+    final topBar = landing
+        .split('class _TopBar')
+        .last
+        .split('class _SlideView')
+        .first;
+    expect(topBar, isNot(contains('QR Display')));
+    expect(topBar, isNot(contains('AppRoutes.onboarding')));
+    expect(topBar, isNot(contains('AppRoutes.kioskLogin')));
+    expect(topBar, isNot(contains('_showPublicEvents')));
     expect(attendanceExport, contains('kiosk_qr_attendance_screen'));
 
     expect(
       main,
       contains(
-        'attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Admin", "Principal", "Kiosk")',
+        'attendance.GET("/staff/qr-token", middleware.RBACMiddleware("Principal", "Kiosk")',
       ),
     );
     expect(
       main,
       contains(
-        'attendance.GET("/staff", middleware.RBACMiddleware("Admin", "Principal", "Kiosk")',
+        'attendance.GET("/staff", middleware.RBACMiddleware("Principal", "Kiosk")',
       ),
     );
     expect(

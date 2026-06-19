@@ -334,7 +334,7 @@ class _AdminPaymentRequestsScreenState
 
   Future<void> _openDecision(Map<String, dynamic> request) async {
     final updated = await Navigator.of(context).pushNamed(
-      AppRoutes.adminPaymentRequestDecision,
+      AppRoutes.principalPaymentRequestDecision,
       arguments: AdminPaymentRequestDecisionArgs(request: request),
     );
     if (updated == true && mounted) {

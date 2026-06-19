@@ -134,19 +134,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           label: 'Students',
           icon: Icons.school_outlined,
           activeIcon: Icons.school_rounded,
-          route: AppRoutes.adminStudents,
+          route: AppRoutes.studentOversight,
         ),
         SchoolDeskModuleBottomAction(
           label: 'Staff',
           icon: Icons.groups_outlined,
           activeIcon: Icons.groups_rounded,
-          route: AppRoutes.adminTeachers,
+          route: AppRoutes.staffManagement,
         ),
         SchoolDeskModuleBottomAction(
           label: 'Chat',
           icon: Icons.chat_bubble_outline_rounded,
           activeIcon: Icons.chat_bubble_rounded,
-          route: AppRoutes.adminCommunication,
+          route: AppRoutes.communicationCenter,
         ),
       ],
       bodyIsScrollable: true,
@@ -283,13 +283,13 @@ class _DashboardContent extends StatelessWidget {
           actions: [
             FilledButton.icon(
               onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.adminStudents),
+                  Navigator.pushNamed(context, AppRoutes.studentOversight),
               icon: const Icon(Icons.person_add_rounded, size: 18),
               label: const Text('Prepare Student Request'),
             ),
             OutlinedButton.icon(
               onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.adminCommunication),
+                  Navigator.pushNamed(context, AppRoutes.communicationCenter),
               icon: const Icon(Icons.campaign_rounded, size: 18),
               label: const Text('Submit Notice for Approval'),
             ),
@@ -306,7 +306,7 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.school_rounded,
               color: adminColor,
               onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.adminStudents),
+                  Navigator.pushNamed(context, AppRoutes.studentOversight),
             ),
             SchoolDeskKpiCard(
               title: 'Staff',
@@ -315,7 +315,7 @@ class _DashboardContent extends StatelessWidget {
               icon: Icons.people_rounded,
               color: theme.colorScheme.secondary,
               onTap: () =>
-                  Navigator.pushNamed(context, AppRoutes.adminTeachers),
+                  Navigator.pushNamed(context, AppRoutes.staffManagement),
             ),
             SchoolDeskKpiCard(
               title: 'Classes',
@@ -332,7 +332,7 @@ class _DashboardContent extends StatelessWidget {
               subtitle: 'Backend invoices',
               icon: Icons.account_balance_wallet_rounded,
               color: theme.colorScheme.secondary,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.adminFees),
+              onTap: () => Navigator.pushNamed(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Pending dues',
@@ -340,7 +340,7 @@ class _DashboardContent extends StatelessWidget {
               subtitle: '$pendingInvoices invoices',
               icon: Icons.warning_rounded,
               color: theme.colorScheme.error,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.adminFees),
+              onTap: () => Navigator.pushNamed(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Alerts',
@@ -445,42 +445,42 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
         value: '$students',
         icon: Icons.school_rounded,
         color: adminColor,
-        route: AppRoutes.adminStudents,
+        route: AppRoutes.studentOversight,
       ),
       _AdminFeatureSpec(
         label: 'Staff',
         value: '$staff',
         icon: Icons.groups_rounded,
         color: theme.colorScheme.secondary,
-        route: AppRoutes.adminTeachers,
+        route: AppRoutes.staffManagement,
       ),
       _AdminFeatureSpec(
         label: 'Timetable',
         value: '$classes',
         icon: Icons.calendar_view_week_rounded,
         color: theme.colorScheme.primary,
-        route: AppRoutes.adminTimetable,
+        route: AppRoutes.academicManagement,
       ),
       _AdminFeatureSpec(
         label: 'Fees',
         value: money(collected),
         icon: Icons.account_balance_wallet_rounded,
         color: theme.colorScheme.secondary,
-        route: AppRoutes.adminFees,
+        route: AppRoutes.feeMonitoring,
       ),
       _AdminFeatureSpec(
         label: 'Access',
         value: 'Roles',
         icon: Icons.manage_accounts_rounded,
         color: adminColor,
-        route: AppRoutes.adminUserAccess,
+        route: AppRoutes.principalUserManagement,
       ),
       _AdminFeatureSpec(
         label: 'Reports',
         value: 'View',
         icon: Icons.bar_chart_rounded,
         color: theme.colorScheme.primary,
-        route: AppRoutes.adminReports,
+        route: AppRoutes.reportsAnalytics,
       ),
     ];
 
@@ -493,7 +493,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           value: '$students',
           icon: Icons.school_rounded,
           color: adminColor,
-          route: AppRoutes.adminStudents,
+          route: AppRoutes.studentOversight,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -502,7 +502,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           value: '$staff',
           icon: Icons.groups_rounded,
           color: theme.colorScheme.secondary,
-          route: AppRoutes.adminTeachers,
+          route: AppRoutes.staffManagement,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -511,7 +511,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           value: '$classes',
           icon: Icons.class_rounded,
           color: theme.colorScheme.primary,
-          route: AppRoutes.adminTimetable,
+          route: AppRoutes.academicManagement,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -522,7 +522,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           color: approvalPendingSubmissions == 0
               ? theme.colorScheme.primary
               : theme.colorScheme.error,
-          route: AppRoutes.adminDashboard,
+          route: AppRoutes.principalDashboard,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -533,7 +533,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           color: approvalChangesRequested == 0
               ? theme.colorScheme.secondary
               : theme.colorScheme.tertiary,
-          route: AppRoutes.adminDashboard,
+          route: AppRoutes.principalDashboard,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -542,7 +542,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           value: '$approvalResolved',
           icon: Icons.fact_check_rounded,
           color: theme.colorScheme.secondary,
-          route: AppRoutes.adminDashboard,
+          route: AppRoutes.principalDashboard,
         ),
         SizedBox(height: tokens.spacing.sm),
         _AdminSummaryRecord(
@@ -553,7 +553,7 @@ class _AdminMobileWireframeDashboard extends StatelessWidget {
           color: pending > 0
               ? theme.colorScheme.error
               : theme.colorScheme.secondary,
-          route: AppRoutes.adminFees,
+          route: AppRoutes.feeMonitoring,
         ),
         SizedBox(height: tokens.spacing.md),
         _AdminVisualPanel(
@@ -799,37 +799,37 @@ class _QuickActionsCard extends StatelessWidget {
         'Prepare student request',
         'Draft for Principal approval',
         Icons.person_add_rounded,
-        AppRoutes.adminStudents,
+        AppRoutes.studentOversight,
       ),
       _QuickAction(
         'Prepare staff request',
         'Submit staff changes for review',
         Icons.person_add_alt_1_rounded,
-        AppRoutes.adminTeachers,
+        AppRoutes.staffManagement,
       ),
       _QuickAction(
         'Submit fee request',
         'Prepare fee changes',
         Icons.payment_rounded,
-        AppRoutes.adminFees,
+        AppRoutes.feeMonitoring,
       ),
       _QuickAction(
         'Submit timetable request',
         'Prepare periods for approval',
         Icons.calendar_view_week_rounded,
-        AppRoutes.adminTimetable,
+        AppRoutes.academicManagement,
       ),
       _QuickAction(
         'Prepare access request',
         'Accounts and roles review',
         Icons.manage_accounts_rounded,
-        AppRoutes.adminUserAccess,
+        AppRoutes.principalUserManagement,
       ),
       _QuickAction(
         'Reports',
         'Exports and compliance',
         Icons.bar_chart_rounded,
-        AppRoutes.adminReports,
+        AppRoutes.reportsAnalytics,
       ),
     ];
 
@@ -845,7 +845,7 @@ class _QuickActionsCard extends StatelessWidget {
               label: action.label,
               subtitle: action.subtitle,
               icon: action.icon,
-              color: action.route == AppRoutes.adminFees
+              color: action.route == AppRoutes.feeMonitoring
                   ? theme.colorScheme.secondary
                   : adminColor,
               onTap: () => Navigator.pushNamed(context, action.route),

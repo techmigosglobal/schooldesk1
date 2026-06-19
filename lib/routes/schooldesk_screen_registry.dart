@@ -73,6 +73,19 @@ class SchoolDeskScreenRegistry {
       isPublic: true,
     ),
     SchoolDeskScreenMetadata(
+      route: '/kiosk-login-screen',
+      title: 'Kiosk Sign In',
+      module: 'Authentication',
+      portal: 'public',
+      isPublic: true,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/kiosk-qr-attendance-screen',
+      title: 'QR Attendance Kiosk',
+      module: SchoolDeskGlossary.attendance,
+      portal: 'kiosk',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-dashboard-screen',
       title: 'Principal Dashboard',
       module: 'Overview',
@@ -111,6 +124,12 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/principal-subjects-screen',
       title: 'Subjects',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-lesson-planner-screen',
+      title: 'Lesson Planners',
       module: 'Academics',
       portal: 'principal',
     ),
@@ -162,6 +181,20 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/fee-monitoring-screen',
       title: SchoolDeskGlossary.feeMonitoring,
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-fees-screen/payment-requests',
+      title: 'Payment Requests',
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-fees-screen/payment-request-decision',
+      title: 'Payment Request Decision',
       module: 'Finance',
       portal: 'principal',
       feature: SchoolDeskFeature.adminFees,
@@ -511,14 +544,14 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/parent-leave-screen',
       title: 'Leave Requests',
-      module: 'Finance & Admin',
+      module: 'Student Support',
       portal: 'parent',
       feature: SchoolDeskFeature.parentStudentLeave,
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-leave-screen/request',
       title: 'Submit Leave Request',
-      module: 'Finance & Admin',
+      module: 'Student Support',
       portal: 'parent',
       feature: SchoolDeskFeature.parentStudentLeave,
     ),
@@ -566,6 +599,12 @@ class SchoolDeskScreenRegistry {
       module: 'Communication',
       portal: 'parent',
       feature: SchoolDeskFeature.teacherParentMeetings,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/parent-health-update-screen',
+      title: 'Health Update',
+      module: 'Student Support',
+      portal: 'parent',
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-discipline-screen',

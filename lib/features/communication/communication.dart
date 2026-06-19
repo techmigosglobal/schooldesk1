@@ -1,4 +1,3 @@
-export 'presentation/screens/admin_communication_screen/admin_communication_screen.dart';
 export 'presentation/screens/communication_center_screen/communication_center_screen.dart';
 export 'presentation/screens/complaint_management_screen/complaint_management_screen.dart';
 export 'presentation/screens/homework_messaging_screen/homework_messaging_screen.dart';

@@ -37,6 +37,10 @@ class AppRoutes {
   static const String studentOversight = '/student-oversight-screen';
   static const String approvalCenter = '/approval-center-screen';
   static const String feeMonitoring = '/fee-monitoring-screen';
+  static const String principalPaymentRequests =
+      '/principal-fees-screen/payment-requests';
+  static const String principalPaymentRequestDecision =
+      '/principal-fees-screen/payment-request-decision';
   static const String communicationCenter = '/communication-center-screen';
   static const String principalChatCommunications =
       '/principal-chat-communications-screen';
@@ -66,6 +70,8 @@ class AppRoutes {
   static const String principalClasses = '/principal-classes-screen';
   static const String principalAttendance = '/principal-attendance-screen';
   static const String principalSubjects = '/principal-subjects-screen';
+  static const String principalLessonPlanner =
+      '/principal-lesson-planner-screen';
   static const String principalAccountCreate =
       '/principal-user-management-screen/create';
   static const String principalAccountEdit =
@@ -77,47 +83,8 @@ class AppRoutes {
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
 
-  // Legacy operation route constants retained only for Principal-owned
-  // implementation internals. They are not registered as app routes.
-  static const String adminAccountCreate =
-      '/admin-user-management-screen/create';
-  static const String adminAccountEdit = '/admin-user-management-screen/edit';
-  static const String adminParentChildAssignment =
-      '/admin-user-management-screen/assign-children';
-  static const String adminDashboard = '/admin-dashboard-screen';
-  static const String adminStudents = '/admin-students-screen';
-  static const String adminTeachers = '/admin-teachers-screen';
-  static const String adminAttendance = '/admin-attendance-screen';
-  static const String adminFees = '/admin-fees-screen';
-  static const String adminTimetable = '/admin-timetable-screen';
-  static const String adminExams = '/admin-exams-screen';
-  static const String adminCommunication = '/admin-communication-screen';
-  static const String adminHelpdesk = '/admin-helpdesk-screen';
-  static const String adminDocuments = '/admin-documents-screen';
-  static const String adminUserAccess = '/admin-user-access-screen';
-  static const String adminReports = '/admin-reports-screen';
-  static const String adminAcademicInfo = '/admin-academic-info-screen';
   static const String idCardGeneration = '/id-card-generation-screen';
   static const String reportCardGenerator = '/report-card-generator-screen';
-  static const String adminExamForm = '/admin-exams-screen/form';
-  static const String adminExamScheduleForm =
-      '/admin-exams-screen/schedule-form';
-  static const String adminFeeStructureForm =
-      '/admin-fees-screen/fee-structure';
-  static const String adminInvoiceGenerationForm =
-      '/admin-fees-screen/invoice-generation';
-  static const String adminPaymentRecordForm =
-      '/admin-fees-screen/payment-record';
-  static const String adminPaymentRequests =
-      '/admin-fees-screen/payment-requests';
-  static const String adminPaymentRequestDecision =
-      '/admin-fees-screen/payment-request-decision';
-  static const String adminTimetableGenerationForm =
-      '/admin-timetable-screen/generation';
-  static const String adminTimetablePeriodForm =
-      '/admin-timetable-screen/period';
-  static const String adminTimetableSubstitutionForm =
-      '/admin-timetable-screen/substitution';
 
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
@@ -194,10 +161,11 @@ class AppRoutes {
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
     feeMonitoring: (context) => const FeeMonitoringScreen(),
-    adminPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
-    adminPaymentRequestDecision: (context) => AdminPaymentRequestDecisionScreen(
-      args: _adminPaymentRequestDecisionArgs(context),
-    ),
+    principalPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
+    principalPaymentRequestDecision: (context) =>
+        AdminPaymentRequestDecisionScreen(
+          args: _principalPaymentRequestDecisionArgs(context),
+        ),
     communicationCenter: (context) => const CommunicationCenterScreen(),
     principalChatCommunications: (context) =>
         const PrincipalChatCommunicationsScreen(),
@@ -236,6 +204,7 @@ class AppRoutes {
     principalClasses: (context) => const PrincipalClassesScreen(),
     principalAttendance: (context) => const PrincipalAttendanceScreen(),
     principalSubjects: (context) => const PrincipalSubjectsScreen(),
+    principalLessonPlanner: (context) => const PrincipalLessonPlannerScreen(),
     principalAccountCreate: (context) =>
         AccountAccessFormScreen(args: _accountFormArgs(context, 'principal')),
     principalAccountEdit: (context) =>
@@ -521,7 +490,7 @@ class AppRoutes {
     return const ParentPaymentSelectionArgs(fees: []);
   }
 
-  static AdminPaymentRequestDecisionArgs _adminPaymentRequestDecisionArgs(
+  static AdminPaymentRequestDecisionArgs _principalPaymentRequestDecisionArgs(
     BuildContext context,
   ) {
     final args = ModalRoute.of(context)?.settings.arguments;

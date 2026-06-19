@@ -324,9 +324,9 @@ class BulkCsvImportService {
     final actions = <_BulkImportAction>[
       if (target == BulkCsvImportTarget.classTimetables && created > 0)
         const _BulkImportAction(
-          label: 'Open timetable grid',
-          route: AppRoutes.adminTimetable,
-          icon: Icons.calendar_view_week_rounded,
+          label: 'Open Class Hub',
+          route: AppRoutes.principalClasses,
+          icon: Icons.grid_view_rounded,
         ),
     ];
 

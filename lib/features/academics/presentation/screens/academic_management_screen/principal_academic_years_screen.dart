@@ -3,11 +3,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 const _ayBlue = Color(0xFF105DDF);
-const _ayBg = Color(0xFFF7FBFF);
 const _ayInk = Color(0xFF08142F);
 const _ayMuted = Color(0xFF60708C);
 const _ayBorder = Color(0xFFDCE7F5);
@@ -78,17 +79,10 @@ class _PrincipalAcademicYearsScreenState
     return _AyPageShell(
       title: 'Academic Years',
       actions: [
-        TextButton.icon(
+        IconButton(
+          tooltip: 'Create academic year',
           onPressed: _openCreate,
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 30),
-          label: Text(
-            'Add',
-            style: GoogleFonts.dmSans(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          icon: const Icon(Icons.add_rounded),
         ),
       ],
       child: RefreshIndicator(
@@ -96,7 +90,7 @@ class _PrincipalAcademicYearsScreenState
         color: _ayBlue,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(18, 24, 18, 34),
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 88),
           children: [
             Row(
               children: [
@@ -132,17 +126,8 @@ class _PrincipalAcademicYearsScreenState
                   onEdit: () => _openEdit(year),
                   onActivate: () => _activate(year),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
               ],
-            const SizedBox(height: 26),
-            Center(
-              child: _PrimaryPillButton(
-                label: 'Add Academic Year',
-                icon: Icons.add_rounded,
-                onPressed: _openCreate,
-                maxWidth: 300,
-              ),
-            ),
           ],
         ),
       ),
@@ -931,59 +916,26 @@ class _AyPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _ayBg,
+      backgroundColor: principalDirectoryBackground,
+      bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: Column(
-              children: [
-                Container(
-                  height: 88,
-                  decoration: const BoxDecoration(
-                    color: _ayBlue,
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(26),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.maybePop(context),
-                        icon: const Icon(
-                          Icons.chevron_left_rounded,
-                          color: Colors.white,
-                          size: 42,
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.dmSans(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: actions.isEmpty ? 58 : 118,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: actions,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(child: child),
-              ],
+        child: Column(
+          children: [
+            PrincipalDirectoryHeader(
+              title: title,
+              subtitle: 'Academic sessions, exports, and yearly setup',
+              actions: actions,
             ),
-          ),
+            Expanded(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 980),
+                  child: child,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1009,8 +961,8 @@ class _YearListCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CalendarBadge(status: _yearStatus(year), size: 78),
-          const SizedBox(width: 16),
+          _CalendarBadge(status: _yearStatus(year), size: 54),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1020,7 +972,7 @@ class _YearListCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         _yearLabel(year),
-                        style: _titleStyle(30),
+                        style: _titleStyle(17),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1046,16 +998,24 @@ class _YearListCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(_rangeLabel(year), style: _mutedStyle(17)),
-                const SizedBox(height: 20),
-                Row(
+                Text(_rangeLabel(year), style: _mutedStyle(12)),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
                   children: [
-                    if (_isCurrent(year))
-                      const _CurrentChip()
-                    else
-                      const SizedBox.shrink(),
-                    const Spacer(),
-                    _OutlineButton(label: 'View', onPressed: onView),
+                    SizedBox(
+                      width: 190,
+                      child: _isCurrent(year)
+                          ? const _CurrentChip()
+                          : const SizedBox.shrink(),
+                    ),
+                    SizedBox(
+                      width: 88,
+                      child: _OutlineButton(label: 'View', onPressed: onView),
+                    ),
                   ],
                 ),
               ],
@@ -1084,8 +1044,8 @@ class _YearHeroCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _CalendarBadge(status: _yearStatus(year), size: compact ? 58 : 86),
-          SizedBox(width: compact ? 16 : 22),
+          _CalendarBadge(status: _yearStatus(year), size: compact ? 48 : 60),
+          SizedBox(width: compact ? 14 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: centered
@@ -1096,13 +1056,13 @@ class _YearHeroCard extends StatelessWidget {
                   compact
                       ? 'Academic Year:  ${_yearLabel(year)}'
                       : _yearLabel(year),
-                  style: compact ? _titleStyle(20) : _titleStyle(31),
+                  style: compact ? _titleStyle(16) : _titleStyle(20),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (!compact) ...[
                   const SizedBox(height: 8),
-                  Text(_rangeLabel(year), style: _mutedStyle(20)),
+                  Text(_rangeLabel(year), style: _mutedStyle(13)),
                   if (_isCurrent(year)) ...[
                     const SizedBox(height: 18),
                     const _CurrentChip(),
@@ -1176,26 +1136,26 @@ class _ExportHubCard extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 78,
-              height: 78,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
                 color: iconColor.withAlpha(22),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: iconColor, size: 42),
+              child: Icon(icon, color: iconColor, size: 27),
             ),
             const SizedBox(width: 20),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: _titleStyle(22)),
-                  const SizedBox(height: 8),
-                  Text(subtitle, style: _mutedStyle(18)),
+                  Text(title, style: _titleStyle(15)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: _mutedStyle(12)),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: _ayBlue, size: 38),
+            const Icon(Icons.chevron_right_rounded, color: _ayBlue, size: 24),
           ],
         ),
       ),
@@ -1207,7 +1167,7 @@ class _AyCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
 
-  const _AyCard({required this.child, this.padding = const EdgeInsets.all(18)});
+  const _AyCard({required this.child, this.padding = const EdgeInsets.all(14)});
 
   @override
   Widget build(BuildContext context) {
@@ -1215,13 +1175,13 @@ class _AyCard extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _ayBorder),
         boxShadow: const [
           BoxShadow(
             color: Color(0x1208142F),
-            blurRadius: 22,
-            offset: Offset(0, 10),
+            blurRadius: 10,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -1241,15 +1201,15 @@ class _SearchBox extends StatelessWidget {
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: 'Search academic years...',
-        prefixIcon: const Icon(Icons.search_rounded, size: 34),
+        prefixIcon: const Icon(Icons.search_rounded, size: 22),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: _ayBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: _ayBorder),
         ),
       ),
@@ -1274,11 +1234,11 @@ class _FilterButton extends StatelessWidget {
         PopupMenuItem(value: 'upcoming', child: Text('Upcoming')),
       ],
       child: Container(
-        height: 64,
+        height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: _ayBorder),
         ),
         child: Row(
@@ -1287,7 +1247,7 @@ class _FilterButton extends StatelessWidget {
             const SizedBox(width: 10),
             Text(
               status == 'all' ? 'Filter' : _labelize(status),
-              style: _labelStyle(17, color: _ayBlue),
+              style: _labelStyle(13, color: _ayBlue),
             ),
           ],
         ),
@@ -1629,13 +1589,11 @@ class _PrimaryPillButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback? onPressed;
-  final double? maxWidth;
 
   const _PrimaryPillButton({
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.maxWidth,
   });
 
   @override
@@ -1656,11 +1614,7 @@ class _PrimaryPillButton extends StatelessWidget {
         ),
       ),
     );
-    if (maxWidth == null) return button;
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth!),
-      child: button,
-    );
+    return button;
   }
 }
 
@@ -1679,22 +1633,25 @@ class _OutlineButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = OutlinedButton.styleFrom(
+      side: const BorderSide(color: _ayBlue, width: 1.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
     return SizedBox(
       height: 52,
-      width: expanded ? double.infinity : 96,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: icon == null
-            ? const SizedBox.shrink()
-            : Icon(icon, color: _ayBlue, size: 24),
-        label: Text(label, style: _labelStyle(17, color: _ayBlue)),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: _ayBlue, width: 1.4),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
+      width: expanded ? double.infinity : 88,
+      child: icon == null
+          ? OutlinedButton(
+              onPressed: onPressed,
+              style: style,
+              child: Text(label, style: _labelStyle(14, color: _ayBlue)),
+            )
+          : OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon, color: _ayBlue, size: 22),
+              label: Text(label, style: _labelStyle(14, color: _ayBlue)),
+              style: style,
+            ),
     );
   }
 }

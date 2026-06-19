@@ -257,10 +257,13 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                           ? 'Create classes in Class Hub, then map subjects and teachers.'
                           : 'Open a class in Class Hub for subject setup, or adjust the directory filters.',
                       actionLabel: 'Go to Classes Hub',
-                      onAction: () => Navigator.pushNamed(
-                        context,
-                        AppRoutes.principalClasses,
-                      ),
+                      onAction: () async {
+                        await Navigator.pushNamed(
+                          context,
+                          AppRoutes.principalClasses,
+                        );
+                        if (context.mounted) await _loadData();
+                      },
                     ),
                   ),
                 )
@@ -394,8 +397,10 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              onPressed: () =>
-                  Navigator.pushNamed(context, AppRoutes.principalClasses),
+              onPressed: () async {
+                await Navigator.pushNamed(context, AppRoutes.principalClasses);
+                if (context.mounted) await _loadData();
+              },
               icon: const Icon(Icons.account_tree_outlined),
               label: Text(
                 'Setup Subjects in Class Hub',
@@ -508,7 +513,9 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       title: load.teacherName,
       subtitle: load.designation.isEmpty ? 'Teacher load' : load.designation,
       status: '${load.subjectCount} subjects',
-      statusColor: load.subjectCount == 0 ? context.appTheme.warning : context.appTheme.primary,
+      statusColor: load.subjectCount == 0
+          ? context.appTheme.warning
+          : context.appTheme.primary,
       chips: [
         PrincipalInfoPill(
           icon: Icons.apartment_rounded,
@@ -755,24 +762,24 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
     );
     if (!mounted || action == null) return;
     if (action == 'classhub') {
-      _openClassesHubForSubjects();
+      await _openClassesHubForSubjects();
       return;
     }
     if (action.startsWith('classhub:')) {
       final parts = action.split(':');
-      _openClassesHubForSubjects(
+      await _openClassesHubForSubjects(
         gradeId: parts.length > 1 ? parts[1] : '',
         sectionId: parts.length > 2 ? parts[2] : '',
       );
     }
   }
 
-  void _openClassesHubForSubjects({
+  Future<void> _openClassesHubForSubjects({
     String gradeId = '',
     String sectionId = '',
     String subjectId = '',
-  }) {
-    Navigator.pushNamed(
+  }) async {
+    await Navigator.pushNamed(
       context,
       AppRoutes.principalClasses,
       arguments: {
@@ -787,6 +794,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         'source': 'principal_subjects',
       },
     );
+    if (mounted) await _loadData();
   }
 
   Map<String, dynamic> _subjectById(String subjectId) {
@@ -1450,14 +1458,7 @@ class _SubjectDetailScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.principalClasses,
-                  arguments: const {
-                    'class_hub_action': 'subjects',
-                    'source': 'principal_subjects',
-                  },
-                ),
+                onPressed: () => Navigator.pop(context, 'classhub'),
                 icon: const Icon(Icons.apartment_rounded),
                 label: Text(
                   'Go to Classes Hub',
@@ -2051,7 +2052,11 @@ class _TeacherClassCoverageList extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.hub_outlined, size: 18, color: context.appTheme.primary),
+              Icon(
+                Icons.hub_outlined,
+                size: 18,
+                color: context.appTheme.primary,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

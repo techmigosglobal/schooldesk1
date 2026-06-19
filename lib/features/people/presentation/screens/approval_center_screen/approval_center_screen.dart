@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_audit_log_widget.dart';
 import 'package:schooldesk1/features/people/presentation/screens/approval_center_screen/widgets/approval_item_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 enum ApprovalType {
   account,
@@ -166,6 +167,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     'Exams',
     'Documents',
     'Communication',
+    'Event Posts',
   ];
 
   @override
@@ -214,7 +216,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           ),
         ),
         _loadApprovalSource(
-          'Admin submissions',
+          'Principal submissions',
           () => _loadGenericApprovals(path: '/approvals', type: 'approval'),
         ),
         _loadApprovalSource('Student leave', _loadStudentLeaveApprovals),
@@ -459,6 +461,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       10: ApprovalType.exam,
       11: ApprovalType.document,
       12: ApprovalType.communication,
+      13: ApprovalType.event,
     };
     return _allApprovals.where((a) => a.type == typeMap[tabIndex]).toList();
   }
@@ -734,7 +737,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     if (path == null || !path.startsWith('/approvals/')) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Change requests are available for Admin submissions.'),
+          content: Text(
+            'Change requests are available for principal submissions.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -754,7 +759,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Changes requested from Admin'),
+          content: Text('Changes requested'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -858,6 +863,17 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           tooltip: 'Refresh approval queue',
           onPressed: _loading ? null : _loadData,
           icon: const Icon(Icons.refresh_rounded),
+        ),
+        IconButton(
+          tooltip: 'Event post approvals',
+          onPressed: () async {
+            final changed = await Navigator.pushNamed(
+              context,
+              AppRoutes.principalEventApprovals,
+            );
+            if (changed == true && mounted) await _loadData();
+          },
+          icon: const Icon(Icons.fact_check_rounded),
         ),
         _PendingApprovalBadge(pendingCount: pendingCount),
       ],

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -83,7 +82,9 @@ class _AdminExamsScreenState extends State<AdminExamsScreen> {
       drawer: AdminDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
@@ -382,27 +383,31 @@ class _AdminExamsScreenState extends State<AdminExamsScreen> {
   }
 
   Future<void> _openExamForm({Map<String, dynamic>? exam}) async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminExamForm,
-      arguments: AdminExamFormArgs(
-        academicYears: _academicYears,
-        examTypes: _examTypes,
-        exam: exam,
+    final result = await Navigator.of(context).push<AdminExamFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminExamFormScreen(
+          args: AdminExamFormArgs(
+            academicYears: _academicYears,
+            examTypes: _examTypes,
+            exam: exam,
+          ),
+        ),
       ),
     );
     await _handleExamResult(result);
   }
 
   Future<void> _openScheduleForm() async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.adminExamScheduleForm,
-      arguments: AdminExamScheduleFormArgs(
-        exams: _exams,
-        grades: _grades,
-        sections: _sections,
-        subjects: _subjects,
+    final result = await Navigator.of(context).push<AdminExamFormResult>(
+      MaterialPageRoute(
+        builder: (_) => AdminExamScheduleFormScreen(
+          args: AdminExamScheduleFormArgs(
+            exams: _exams,
+            grades: _grades,
+            sections: _sections,
+            subjects: _subjects,
+          ),
+        ),
       ),
     );
     await _handleExamResult(result);
