@@ -50,12 +50,16 @@ void main() {
     expect(nav, contains('My Staff Attendance'));
     expect(dashboard, contains('AppRoutes.teacherMyAttendance'));
     expect(dashboard, contains('My QR Check-in'));
+    expect(dashboard, contains("'auto_scan': true"));
     expect(dashboard, contains('Student Attendance'));
 
     expect(myAttendance, contains('MobileScanner('));
     expect(myAttendance, contains('MobileScannerController'));
     expect(myAttendance, contains('scanStaffQr(token)'));
     expect(myAttendance, contains('getMyStaffAttendanceToday()'));
+    expect(myAttendance, contains('_autoScanRequested'));
+    expect(myAttendance, contains('_maybeOpenAutoScanner'));
+    expect(myAttendance, contains('!(_attendance?.checkedIn ?? false)'));
     expect(myAttendance, contains('Semantics('));
 
     expect(adminAttendance, isNot(contains('StaffQrAttendancePanel')));

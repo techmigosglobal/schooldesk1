@@ -225,6 +225,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   onTap: () => Navigator.pushNamed(
                     context,
                     AppRoutes.teacherMyAttendance,
+                    arguments: {'auto_scan': true},
                   ),
                 ),
                 TeacherFlowAction(
@@ -369,8 +370,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           title: 'Self Attendance',
           subtitle: punchStatus,
           icon: Icons.qr_code_scanner_rounded,
-          onTap: () =>
-              Navigator.pushNamed(context, AppRoutes.teacherMyAttendance),
+          onTap: () => Navigator.pushNamed(
+            context,
+            AppRoutes.teacherMyAttendance,
+            arguments: {'auto_scan': true},
+          ),
         ),
       ),
     );

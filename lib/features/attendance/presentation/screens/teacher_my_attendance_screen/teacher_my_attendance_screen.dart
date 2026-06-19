@@ -20,11 +20,26 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
   bool _submitting = false;
   String? _error;
   String? _message;
+  bool _routeArgumentsRead = false;
+  bool _autoScanRequested = false;
+  bool _autoScannerOpened = false;
 
   @override
   void initState() {
     super.initState();
     _loadToday();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeArgumentsRead) return;
+    _routeArgumentsRead = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      _autoScanRequested = args['auto_scan'] == true;
+    }
+    _maybeOpenAutoScanner();
   }
 
   @override
@@ -46,6 +61,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         _attendance = attendance;
         _loading = false;
       });
+      _maybeOpenAutoScanner();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -53,6 +69,20 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         _error = error.toString();
       });
     }
+  }
+
+  void _maybeOpenAutoScanner() {
+    final shouldOpen =
+        _autoScanRequested &&
+        !_autoScannerOpened &&
+        !_loading &&
+        !_submitting &&
+        !(_attendance?.checkedIn ?? false);
+    if (!shouldOpen) return;
+    _autoScannerOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openScanner();
+    });
   }
 
   void _openScanner() async {
