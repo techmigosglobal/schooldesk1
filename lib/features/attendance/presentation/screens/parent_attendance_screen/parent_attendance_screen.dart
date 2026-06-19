@@ -25,7 +25,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   List<String> _childIds = [];
 
   List<Map<String, dynamic>> _attendanceHistory = [];
+  Map<String, dynamic> _attendanceSummary = {};
   Map<int, String> _attendanceDayStatus = {};
+  Map<int, List<Map<String, dynamic>>> _periodRowsByDay = {};
   List<Map<String, dynamic>> _leaveRequests = [];
   bool _loading = true;
 
@@ -89,27 +91,36 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       // Fetch attendance summary
       final attendanceSummary = await BackendApiClient.instance
           .getStudentAttendanceSummary(studentId: studentId);
+      final attendanceRecords = await BackendApiClient.instance
+          .getStudentAttendanceRecords(
+            studentId,
+            month: DateTime.now().month,
+            year: DateTime.now().year,
+          );
       final leaveRequests = await BackendApiClient.instance
           .getStudentLeaveApplications(studentId: studentId);
-      // Backend integration: populate _attendanceDayStatus from day-wise
-      // attendance rows when the API exposes them. Until then, calendar dates
-      // stay empty instead of showing hard-coded present/absent values.
-      final attendanceDayStatus = _dayStatusFromSummary(attendanceSummary);
+      final periodRows = _periodRowsFromSources(
+        summary: attendanceSummary,
+        records: attendanceRecords,
+        leaveRequests: leaveRequests,
+      );
+      final attendanceDayStatus = _dayStatusFromPeriodRows(periodRows);
 
       setState(() {
-        _attendanceHistory = [
-          {
-            'month': 'Current Month',
-            'present': attendanceSummary['present_days'],
-            'absent': attendanceSummary['absent_days'],
-            'total': attendanceSummary['total_days'],
-            'percentage': attendanceSummary['attendance_pct'],
-            'date': 'Current Month',
-            'time': '—',
-            'status': 'Summary',
-          },
-        ];
+        _attendanceHistory = periodRows.take(20).toList();
+        if (_attendanceHistory.isEmpty) {
+          _attendanceHistory = [
+            {
+              'date': 'Current Month',
+              'time': '—',
+              'status': 'Summary',
+              'reason': '',
+            },
+          ];
+        }
+        _attendanceSummary = attendanceSummary;
         _attendanceDayStatus = attendanceDayStatus;
+        _periodRowsByDay = _groupPeriodRowsByDay(periodRows);
         _leaveRequests = leaveRequests.map(_leaveRequestFromApi).toList();
         _loading = false;
       });
@@ -146,8 +157,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Attendance',
-      subtitle: 'Track daily attendance, history, and leave requests',
+      title: 'My Child Attendance',
+      subtitle: 'Today status, month summary, calendar, and leave',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -201,7 +212,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               color: isActive ? _headerColor : context.appTheme.surface,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.outlineVariant,
               ),
             ),
             child: Text(
@@ -219,54 +232,63 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 
   Widget _buildAttendanceSummary() {
-    final current = _attendanceHistory.isEmpty
-        ? <String, dynamic>{}
-        : _attendanceHistory.first;
-    final present = _numberLabel(current['present']);
-    final absent = _numberLabel(current['absent']);
-    final late = _numberLabel(current['late']);
-    final pct = (current['percentage'] as num?)?.toDouble();
+    final current = _attendanceSummary;
+    final present = _numberLabel(current['present_days']);
+    final absent = _numberLabel(current['absent_days']);
+    final late = _numberLabel(current['late_count']);
+    final leave = _numberLabel(current['leave_days']);
+    final halfDay = _numberLabel(current['half_day_count']);
+    final pct = (current['attendance_pct'] as num?)?.toDouble();
     final rate = pct == null ? '—' : '${pct.toStringAsFixed(0)}%';
-    return Row(
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 3,
+      mainAxisSpacing: 8,
+      crossAxisSpacing: 8,
+      childAspectRatio: 1.3,
       children: [
-        Expanded(
-          child: _statCard(
-            'Present',
-            present,
-            Icons.check_circle_rounded,
-            context.appTheme.success,
-            context.appTheme.successContainer,
-          ),
+        _statCard(
+          'Present',
+          present,
+          Icons.check_circle_rounded,
+          context.appTheme.success,
+          context.appTheme.successContainer,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _statCard(
-            'Absent',
-            absent,
-            Icons.cancel_rounded,
-            context.appTheme.error,
-            context.appTheme.errorContainer,
-          ),
+        _statCard(
+          'Absent',
+          absent,
+          Icons.cancel_rounded,
+          context.appTheme.error,
+          context.appTheme.errorContainer,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _statCard(
-            'Late',
-            late,
-            Icons.schedule_rounded,
-            context.appTheme.warning,
-            context.appTheme.warningContainer,
-          ),
+        _statCard(
+          'Late',
+          late,
+          Icons.schedule_rounded,
+          context.appTheme.warning,
+          context.appTheme.warningContainer,
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _statCard(
-            'Rate',
-            rate,
-            Icons.bar_chart_rounded,
-            context.appTheme.primary,
-            context.appTheme.primaryContainer,
-          ),
+        _statCard(
+          'Leave',
+          leave,
+          Icons.event_available_rounded,
+          context.appTheme.info,
+          context.appTheme.infoContainer,
+        ),
+        _statCard(
+          'Half Day',
+          halfDay,
+          Icons.timelapse_rounded,
+          Colors.purple,
+          context.appTheme.primaryContainer,
+        ),
+        _statCard(
+          'Rate',
+          rate,
+          Icons.bar_chart_rounded,
+          context.appTheme.primary,
+          context.appTheme.primaryContainer,
         ),
       ],
     );
@@ -299,7 +321,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ),
           Text(
             label,
-            style: GoogleFonts.dmSans(fontSize: 10, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 10,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),
@@ -348,7 +373,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             const SizedBox(height: 10),
             Text(
               'Day-wise attendance will appear after the school publishes it.',
-              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ],
@@ -384,24 +412,84 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         } else if (status == 'H') {
           bg = context.appTheme.infoContainer;
           textColor = context.appTheme.info;
+        } else if (status == 'V') {
+          bg = context.appTheme.infoContainer;
+          textColor = context.appTheme.info;
+        } else if (status == 'HD') {
+          bg = context.appTheme.primaryContainer;
+          textColor = Colors.purple;
         }
-        return Container(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Center(
-            child: Text(
-              '$day',
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: textColor,
+        return InkWell(
+          onTap: () => _showDayAttendanceDetail(day),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Center(
+              child: Text(
+                '$day',
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Future<void> _showDayAttendanceDetail(int day) async {
+    final rows = _periodRowsByDay[day] ?? const <Map<String, dynamic>>[];
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Period-wise attendance',
+                style: GoogleFonts.dmSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (rows.isEmpty)
+                Text(
+                  'No attendance rows for this day.',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12,
+                    color: context.appTheme.muted,
+                  ),
+                )
+              else
+                for (final row in rows)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.fact_check_rounded,
+                      color: _statusColor('${row['status'] ?? ''}'),
+                    ),
+                    title: Text(
+                      'Period ${row['period_number'] ?? '—'} • ${row['status'] ?? '—'}',
+                    ),
+                    subtitle: Text(
+                      'Marked by teacher: ${row['marked_by'] ?? '—'}\nReason: ${row['reason'] ?? '—'}',
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -487,7 +575,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ),
           Text(
             rec['time'],
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
           const SizedBox(width: 10),
           Container(
@@ -560,7 +651,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             ),
             child: Icon(
               isApproved ? Icons.check_circle_rounded : Icons.pending_rounded,
-              color: isApproved ? context.appTheme.success : context.appTheme.warning,
+              color: isApproved
+                  ? context.appTheme.success
+                  : context.appTheme.warning,
               size: 20,
             ),
           ),
@@ -607,7 +700,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: isApproved ? context.appTheme.success : context.appTheme.warning,
+                color: isApproved
+                    ? context.appTheme.success
+                    : context.appTheme.warning,
               ),
             ),
           ),
@@ -652,30 +747,150 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 }
 
-Map<int, String> _dayStatusFromSummary(Map<String, dynamic> summary) {
-  final source =
-      summary['daily_statuses'] ??
-      summary['daily_attendance'] ??
-      summary['days'];
-  if (source is! List) return const {};
+List<Map<String, dynamic>> _periodRowsFromSources({
+  required Map<String, dynamic> summary,
+  required List<Map<String, dynamic>> records,
+  required List<Map<String, dynamic>> leaveRequests,
+}) {
+  final rows = <Map<String, dynamic>>[];
+  final summaryRows = summary['period_rows'];
+  if (summaryRows is List) {
+    rows.addAll(
+      summaryRows.whereType<Map>().map((row) {
+        final item = Map<String, dynamic>.from(row);
+        item['status'] = _statusLabel(item['status']);
+        return item;
+      }),
+    );
+  }
+  rows.addAll(records.map(_periodRowFromAttendanceRecord));
+  rows.addAll(_approvedLeavePeriodRows(leaveRequests));
+  rows.sort((a, b) {
+    final left = '${b['date'] ?? ''}${b['period_number'] ?? ''}';
+    final right = '${a['date'] ?? ''}${a['period_number'] ?? ''}';
+    return left.compareTo(right);
+  });
+  return rows;
+}
+
+Map<String, dynamic> _periodRowFromAttendanceRecord(Map<String, dynamic> row) {
+  final session = row['session'] is Map
+      ? Map<String, dynamic>.from(row['session'] as Map)
+      : <String, dynamic>{};
+  final staff = session['staff'] is Map
+      ? Map<String, dynamic>.from(session['staff'] as Map)
+      : <String, dynamic>{};
+  final staffName = [
+    staff['first_name'],
+    staff['last_name'],
+  ].where((part) => '${part ?? ''}'.trim().isNotEmpty).join(' ');
+  return {
+    'date': '${session['date'] ?? row['marked_at'] ?? ''}'.split('T').first,
+    'period_number': session['period_number'] ?? '—',
+    'status': _statusLabel(row['status']),
+    'reason': row['reason'] ?? '',
+    'marked_by': staffName.isEmpty ? 'Teacher' : staffName,
+  };
+}
+
+List<Map<String, dynamic>> _approvedLeavePeriodRows(
+  List<Map<String, dynamic>> leaveRequests,
+) {
+  final now = DateTime.now();
+  final rows = <Map<String, dynamic>>[];
+  for (final request in leaveRequests) {
+    if ('${request['status'] ?? ''}'.toLowerCase() != 'approved') continue;
+    final from = DateTime.tryParse('${request['from_date'] ?? ''}');
+    final to = DateTime.tryParse('${request['to_date'] ?? ''}') ?? from;
+    if (from == null || to == null) continue;
+    for (
+      var day = from;
+      !day.isAfter(to);
+      day = day.add(const Duration(days: 1))
+    ) {
+      if (day.month != now.month || day.year != now.year) continue;
+      rows.add({
+        'date': DateFormat('yyyy-MM-dd').format(day),
+        'period_number': request['half_day'] == true ? 'Half Day' : 'All Day',
+        'status': request['half_day'] == true ? 'Half Day' : 'Leave',
+        'reason': request['reason'] ?? '',
+        'marked_by': 'Approved leave',
+      });
+    }
+  }
+  return rows;
+}
+
+Map<int, String> _dayStatusFromPeriodRows(List<Map<String, dynamic>> rows) {
   final now = DateTime.now();
   final statuses = <int, String>{};
-  for (final item in source.whereType<Map>()) {
-    final row = Map<String, dynamic>.from(item);
+  for (final row in rows) {
     final parsed = DateTime.tryParse('${row['date'] ?? ''}');
     if (parsed == null ||
         parsed.month != now.month ||
         parsed.year != now.year) {
       continue;
     }
-    final status = _statusCode(row['status'] ?? row['attendance_status']);
-    if (status.isNotEmpty) statuses[parsed.day] = status;
+    final code = _statusCode(row['status']);
+    if (code.isNotEmpty) statuses[parsed.day] = code;
   }
   return statuses;
 }
 
+Map<int, List<Map<String, dynamic>>> _groupPeriodRowsByDay(
+  List<Map<String, dynamic>> rows,
+) {
+  final grouped = <int, List<Map<String, dynamic>>>{};
+  final now = DateTime.now();
+  for (final row in rows) {
+    final parsed = DateTime.tryParse('${row['date'] ?? ''}');
+    if (parsed == null ||
+        parsed.month != now.month ||
+        parsed.year != now.year) {
+      continue;
+    }
+    grouped.putIfAbsent(parsed.day, () => []).add(row);
+  }
+  return grouped;
+}
+
+String _statusLabel(dynamic raw) {
+  switch ('${raw ?? ''}'.trim().toLowerCase().replaceAll('-', '_')) {
+    case 'present':
+    case 'p':
+      return 'Present';
+    case 'absent':
+    case 'a':
+      return 'Absent';
+    case 'late':
+    case 'l':
+      return 'Late';
+    case 'leave':
+      return 'Leave';
+    case 'half_day':
+      return 'Half Day';
+  }
+  return '${raw ?? ''}'.trim().isEmpty ? '—' : '${raw ?? ''}';
+}
+
+Color _statusColor(String status) {
+  switch (_statusLabel(status)) {
+    case 'Present':
+      return Colors.green;
+    case 'Absent':
+      return Colors.red;
+    case 'Late':
+      return Colors.orange;
+    case 'Leave':
+      return Colors.blue;
+    case 'Half Day':
+      return Colors.purple;
+  }
+  return Colors.grey;
+}
+
 String _statusCode(dynamic raw) {
-  switch ('${raw ?? ''}'.trim().toLowerCase()) {
+  switch ('${raw ?? ''}'.trim().toLowerCase().replaceAll('-', '_')) {
     case 'present':
     case 'p':
       return 'P';
@@ -688,6 +903,10 @@ String _statusCode(dynamic raw) {
     case 'holiday':
     case 'h':
       return 'H';
+    case 'leave':
+      return 'V';
+    case 'half_day':
+      return 'HD';
   }
   return '';
 }

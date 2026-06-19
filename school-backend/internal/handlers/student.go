@@ -876,16 +876,21 @@ func (h *StudentHandler) GetStudentAttendance(c *gin.Context) {
 	year := c.Query("year")
 
 	var attendance []models.StudentAttendance
-	query := database.DB.Where("student_id = ?", studentID).Preload("Session")
+	query := database.DB.
+		Joins("JOIN attendance_sessions ON attendance_sessions.id = student_attendances.session_id").
+		Where("student_attendances.student_id = ?", studentID).
+		Preload("Session").
+		Preload("Session.Staff").
+		Order("attendance_sessions.date DESC, attendance_sessions.period_number ASC")
 	if month != "" {
 		start, end, ok := monthYearRange(month, year)
 		if ok {
-			query = query.Where("marked_at >= ? AND marked_at < ?", start, end)
+			query = query.Where("attendance_sessions.date >= ? AND attendance_sessions.date < ?", start, end)
 		}
 	} else if year != "" {
 		start, _, ok := monthYearRange("01", year)
 		if ok {
-			query = query.Where("marked_at >= ? AND marked_at < ?", start, start.AddDate(1, 0, 0))
+			query = query.Where("attendance_sessions.date >= ? AND attendance_sessions.date < ?", start, start.AddDate(1, 0, 0))
 		}
 	}
 	query.Find(&attendance)
@@ -991,8 +996,6 @@ func (h *StudentHandler) GetStudentProgress(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"student_id": studentID, "progress": rows})
 }
-
-
 
 func (h *StudentHandler) canAccessStudent(c *gin.Context, studentID string) bool {
 	return canAccessStudent(c, studentID)

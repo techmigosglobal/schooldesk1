@@ -63,7 +63,9 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", scopedSchoolID(c)).
 		Preload("Subject").
-		Preload("Staff")
+		Preload("Staff").
+		Preload("StudentAttendances").
+		Preload("StudentAttendances.Student")
 	if currentRole(c) == "teacher" {
 		staffID := currentStaffID(c)
 		if staffID == "" {
@@ -89,6 +91,9 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 	if err := query.Find(&sessions).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load attendance sessions")
 		return
+	}
+	for i := range sessions {
+		normalizeAttendanceSessionLifecycle(&sessions[i])
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: sessions})
@@ -154,6 +159,7 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 		TotalStudents:  0,
 		PresentCount:   0,
 		IsFinalized:    false,
+		Status:         "draft",
 	}
 
 	if req.TimetableSlotID != "" {
@@ -205,6 +211,7 @@ func defaultAttendanceSubjectID(schoolID, academicYearID, sectionID, staffID str
 func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	var req struct {
+		Finalize    *bool `json:"finalize"`
 		Attendances []struct {
 			StudentID    string `json:"student_id" binding:"required"`
 			EnrollmentID string `json:"enrollment_id" binding:"required"`
@@ -219,6 +226,10 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 	if len(req.Attendances) == 0 {
 		fail(c, http.StatusBadRequest, "attendances must contain at least one record")
 		return
+	}
+	finalize := true
+	if req.Finalize != nil {
+		finalize = *req.Finalize
 	}
 
 	var session models.AttendanceSession
@@ -249,6 +260,15 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		return
 	}
 	for _, att := range req.Attendances {
+		status := normalizeStudentAttendanceStatus(att.Status)
+		if !validAttendanceStatus(status) {
+			fail(c, http.StatusBadRequest, "Invalid attendance status")
+			return
+		}
+		if studentAttendanceReasonRequired(status) && strings.TrimSpace(att.Reason) == "" {
+			fail(c, http.StatusBadRequest, "reason is required for "+studentAttendanceReasonStatusLabel(status))
+			return
+		}
 		if err := validateStudentEnrollmentForSession(scopedSchoolID(c), session, att.StudentID, att.EnrollmentID); err != nil {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
@@ -263,7 +283,7 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 			return err
 		}
 		for _, att := range req.Attendances {
-			status := strings.TrimSpace(att.Status)
+			status := normalizeStudentAttendanceStatus(att.Status)
 			if !validAttendanceStatus(status) {
 				return errInvalidAttendanceStatus
 			}
@@ -275,7 +295,7 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 				StudentID:    att.StudentID,
 				EnrollmentID: att.EnrollmentID,
 				Status:       status,
-				Reason:       att.Reason,
+				Reason:       strings.TrimSpace(att.Reason),
 				MarkedAt:     now,
 				MarkedBy:     &markedBy,
 			}
@@ -285,7 +305,21 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		}
 		session.TotalStudents = len(req.Attendances)
 		session.PresentCount = presentCount
-		session.IsFinalized = true
+		if finalize {
+			wasReopened := session.Status == "reopened"
+			session.IsFinalized = true
+			if wasReopened {
+				session.Status = "corrected"
+				session.CorrectedAt = &now
+			} else {
+				session.Status = "submitted"
+			}
+			session.SubmittedAt = &now
+		} else {
+			session.IsFinalized = false
+			session.Status = "draft"
+			session.SubmittedAt = nil
+		}
 		return tx.Save(&session).Error
 	})
 	if err != nil {
@@ -297,8 +331,12 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		return
 	}
 
-	auditAction(c, "attendance", "update", "student_attendances", &sessionID)
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Message: "Attendance marked successfully"})
+	action := "submit"
+	if !finalize {
+		action = "save_draft"
+	}
+	auditAction(c, "attendance", action, "student_attendances", &sessionID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: session, Message: "Attendance marked successfully"})
 }
 
 func (h *AttendanceHandler) ReopenAttendanceSession(c *gin.Context) {
@@ -330,24 +368,139 @@ func (h *AttendanceHandler) ReopenAttendanceSession(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Model(&session).Update("is_finalized", false).Error; err != nil {
+	now := time.Now().UTC()
+	reopenedBy := currentUserID(c)
+	updates := map[string]interface{}{
+		"is_finalized":  false,
+		"status":        "reopened",
+		"reopen_reason": reason,
+		"reopened_at":   now,
+		"reopened_by":   reopenedBy,
+	}
+	if err := database.DB.Model(&session).Updates(updates).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to reopen attendance session")
 		return
 	}
 	session.IsFinalized = false
+	session.Status = "reopened"
+	session.ReopenReason = reason
+	session.ReopenedAt = &now
+	session.ReopenedBy = &reopenedBy
 	auditAction(c, "attendance", "reopen: "+reason, "attendance_sessions", &sessionID)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: session, Message: "Attendance session reopened"})
+}
+
+func (h *AttendanceHandler) RequestAttendanceCorrection(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "reason is required")
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		fail(c, http.StatusBadRequest, "reason is required")
+		return
+	}
+
+	var session models.AttendanceSession
+	if err := database.DB.Model(&models.AttendanceSession{}).
+		Joins("JOIN sections ON sections.id = attendance_sessions.section_id").
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		Where("attendance_sessions.id = ? AND grades.school_id = ?", sessionID, scopedSchoolID(c)).
+		First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			fail(c, http.StatusNotFound, "Attendance session not found")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "Failed to load attendance session")
+		return
+	}
+	if currentRole(c) != "teacher" {
+		fail(c, http.StatusForbidden, "Only the assigned teacher can request attendance correction")
+		return
+	}
+	if !classTeacherForSection(currentStaffID(c), session.SectionID, scopedSchoolID(c)) {
+		fail(c, http.StatusForbidden, "Only the class teacher can request correction for this class")
+		return
+	}
+	if !session.IsFinalized {
+		fail(c, http.StatusBadRequest, "Only submitted attendance can be sent for correction review")
+		return
+	}
+
+	now := time.Now().UTC()
+	if err := database.DB.Model(&session).Updates(map[string]interface{}{
+		"status":              "needs_review",
+		"correction_reason":   reason,
+		"correction_asked_at": now,
+	}).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to request attendance correction")
+		return
+	}
+	session.Status = "needs_review"
+	session.CorrectionReason = reason
+	session.CorrectionAskedAt = &now
+	auditAction(c, "attendance", "correction_request: "+reason, "attendance_sessions", &sessionID)
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: session, Message: "Attendance correction requested"})
 }
 
 var errInvalidAttendanceStatus = errors.New("invalid attendance status")
 
 func validAttendanceStatus(status string) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "present", "absent", "late", "half-day", "leave":
+	switch normalizeStudentAttendanceStatus(status) {
+	case "present", "absent", "late", "half_day", "leave":
 		return true
 	default:
 		return false
 	}
+}
+
+func normalizeStudentAttendanceStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	status = strings.ReplaceAll(status, "-", "_")
+	status = strings.ReplaceAll(status, " ", "_")
+	return status
+}
+
+func studentAttendanceReasonRequired(status string) bool {
+	switch normalizeStudentAttendanceStatus(status) {
+	case "absent", "late", "leave", "half_day":
+		return true
+	default:
+		return false
+	}
+}
+
+func studentAttendanceReasonStatusLabel(status string) string {
+	switch normalizeStudentAttendanceStatus(status) {
+	case "half_day":
+		return "Half Day"
+	default:
+		label := strings.ReplaceAll(normalizeStudentAttendanceStatus(status), "_", " ")
+		if label == "" {
+			return "attendance status"
+		}
+		return strings.Title(label)
+	}
+}
+
+func normalizeAttendanceSessionLifecycle(session *models.AttendanceSession) {
+	session.Status = normalizeStudentAttendanceSessionStatus(session.Status, session.IsFinalized)
+}
+
+func normalizeStudentAttendanceSessionStatus(status string, finalized bool) string {
+	status = normalizeStudentAttendanceStatus(status)
+	switch status {
+	case "draft", "submitted", "reopened", "needs_review", "corrected":
+		return status
+	}
+	if finalized {
+		return "submitted"
+	}
+	return "draft"
 }
 
 func combineDateAndClock(date time.Time, clock string) (time.Time, error) {
@@ -558,6 +711,43 @@ func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
 		return
 	}
 
+	now := time.Now().In(staffAttendanceLocation())
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	monthEnd := monthStart.AddDate(0, 1, 0)
+
+	var attendanceRows []models.StudentAttendance
+	rowsQuery := database.DB.Model(&models.StudentAttendance{}).
+		Joins("JOIN attendance_sessions ON attendance_sessions.id = student_attendances.session_id").
+		Joins("JOIN sections ON sections.id = attendance_sessions.section_id").
+		Joins("JOIN grades ON grades.id = sections.grade_id").
+		Where("student_attendances.student_id = ? AND grades.school_id = ?", studentID, scopedSchoolID(c)).
+		Where("attendance_sessions.date >= ? AND attendance_sessions.date < ?", monthStart, monthEnd).
+		Preload("Session").
+		Preload("Session.Staff").
+		Order("attendance_sessions.date DESC, attendance_sessions.period_number ASC")
+	if yearID != "" {
+		rowsQuery = rowsQuery.Where("attendance_sessions.academic_year_id = ?", yearID)
+	}
+	if err := rowsQuery.Find(&attendanceRows).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load attendance rows")
+		return
+	}
+
+	var approvedLeaves []models.StudentLeaveApplication
+	if err := database.DB.Where("school_id = ? AND student_id = ? AND status = ?", scopedSchoolID(c), studentID, "approved").
+		Where("from_date < ? AND to_date >= ?", monthEnd, monthStart).
+		Order("from_date DESC").
+		Find(&approvedLeaves).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load approved leave rows")
+		return
+	}
+
+	if len(attendanceRows) > 0 || len(approvedLeaves) > 0 {
+		payload := buildStudentAttendanceSummaryPayload(studentID, yearID, termID, attendanceRows, approvedLeaves, monthStart, monthEnd, now)
+		c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: payload})
+		return
+	}
+
 	var summary models.AttendanceSummary
 	query := database.DB.Where("student_id = ?", studentID)
 	if yearID != "" {
@@ -578,8 +768,13 @@ func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
 					"present_days":      0,
 					"absent_days":       0,
 					"late_count":        0,
+					"leave_days":        0,
+					"half_day_count":    0,
 					"attendance_pct":    0,
 					"attendance_status": "not_started",
+					"today_status":      "not_started",
+					"daily_statuses":    []gin.H{},
+					"period_rows":       []gin.H{},
 				},
 			})
 			return
@@ -588,7 +783,187 @@ func (h *AttendanceHandler) GetStudentAttendanceSummary(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: summary})
+	c.JSON(http.StatusOK, models.APIResponse{
+		Success: true,
+		Data: gin.H{
+			"student_id":        summary.StudentID,
+			"section_id":        summary.SectionID,
+			"academic_year_id":  summary.AcademicYearID,
+			"term_id":           summary.TermID,
+			"total_days":        summary.TotalDays,
+			"present_days":      summary.PresentDays,
+			"absent_days":       summary.AbsentDays,
+			"late_count":        summary.LateCount,
+			"leave_days":        0,
+			"half_day_count":    0,
+			"attendance_pct":    summary.AttendancePct,
+			"attendance_status": "summary",
+			"today_status":      "not_started",
+			"daily_statuses":    []gin.H{},
+			"period_rows":       []gin.H{},
+			"updated_at":        summary.UpdatedAt,
+		},
+	})
+}
+
+func buildStudentAttendanceSummaryPayload(
+	studentID, yearID, termID string,
+	rows []models.StudentAttendance,
+	leaves []models.StudentLeaveApplication,
+	monthStart, monthEnd time.Time,
+	now time.Time,
+) gin.H {
+	periodRows := make([]gin.H, 0, len(rows))
+	dayStatuses := map[string]string{}
+	dayReasons := map[string]string{}
+	total := 0
+	present := 0
+	absent := 0
+	late := 0
+	leave := 0
+	halfDay := 0
+
+	for _, row := range rows {
+		sessionDate := row.MarkedAt
+		period := 0
+		markedBy := ""
+		if row.Session != nil {
+			sessionDate = row.Session.Date
+			period = row.Session.PeriodNumber
+			if row.Session.Staff != nil {
+				markedBy = strings.TrimSpace(row.Session.Staff.FirstName + " " + row.Session.Staff.LastName)
+			}
+		}
+		status := normalizeStudentAttendanceStatus(row.Status)
+		dateText := sessionDate.Format("2006-01-02")
+		periodRows = append(periodRows, gin.H{
+			"id":            row.ID,
+			"date":          dateText,
+			"period_number": period,
+			"status":        status,
+			"reason":        row.Reason,
+			"marked_by":     markedBy,
+			"marked_at":     row.MarkedAt,
+			"session_id":    row.SessionID,
+		})
+		total++
+		switch status {
+		case "present":
+			present++
+		case "late":
+			present++
+			late++
+		case "leave":
+			leave++
+		case "half_day":
+			halfDay++
+			present++
+		default:
+			absent++
+		}
+		dayStatuses[dateText] = mergeStudentDayAttendanceStatus(dayStatuses[dateText], status)
+		if strings.TrimSpace(row.Reason) != "" {
+			dayReasons[dateText] = row.Reason
+		}
+	}
+
+	for _, app := range leaves {
+		status := "leave"
+		if app.HalfDay {
+			status = "half_day"
+		}
+		for day := maxDate(app.FromDate, monthStart); day.Before(minDate(app.ToDate.AddDate(0, 0, 1), monthEnd)); day = day.AddDate(0, 0, 1) {
+			dateText := day.Format("2006-01-02")
+			if _, exists := dayStatuses[dateText]; exists {
+				continue
+			}
+			periodRows = append(periodRows, gin.H{
+				"id":            app.ID,
+				"date":          dateText,
+				"period_number": 0,
+				"status":        status,
+				"reason":        app.Reason,
+				"marked_by":     "Approved leave",
+				"marked_at":     app.DecidedAt,
+				"session_id":    "",
+			})
+			total++
+			if status == "half_day" {
+				halfDay++
+				present++
+			} else {
+				leave++
+			}
+			dayStatuses[dateText] = status
+			dayReasons[dateText] = app.Reason
+		}
+	}
+
+	dailyRows := make([]gin.H, 0, len(dayStatuses))
+	for dateText, status := range dayStatuses {
+		dailyRows = append(dailyRows, gin.H{
+			"date":   dateText,
+			"status": status,
+			"reason": dayReasons[dateText],
+		})
+	}
+	pct := 0.0
+	if total > 0 {
+		pct = (float64(present) / float64(total)) * 100
+	}
+	todayStatus := dayStatuses[now.Format("2006-01-02")]
+	if todayStatus == "" {
+		todayStatus = "not_started"
+	}
+	return gin.H{
+		"student_id":        studentID,
+		"academic_year_id":  yearID,
+		"term_id":           termID,
+		"total_days":        total,
+		"present_days":      present,
+		"absent_days":       absent,
+		"late_count":        late,
+		"leave_days":        leave,
+		"half_day_count":    halfDay,
+		"attendance_pct":    pct,
+		"attendance_status": "calculated",
+		"today_status":      todayStatus,
+		"daily_statuses":    dailyRows,
+		"period_rows":       periodRows,
+	}
+}
+
+func mergeStudentDayAttendanceStatus(existing, next string) string {
+	existing = normalizeStudentAttendanceStatus(existing)
+	next = normalizeStudentAttendanceStatus(next)
+	if existing == "" {
+		return next
+	}
+	rank := map[string]int{
+		"absent":   5,
+		"late":     4,
+		"half_day": 3,
+		"leave":    2,
+		"present":  1,
+	}
+	if rank[next] > rank[existing] {
+		return next
+	}
+	return existing
+}
+
+func minDate(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func maxDate(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 func (h *AttendanceHandler) MarkStaffAttendance(c *gin.Context) {

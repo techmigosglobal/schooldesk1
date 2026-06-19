@@ -209,6 +209,14 @@ type AttendanceSession struct {
 	TotalStudents      int                 `json:"total_students"`
 	PresentCount       int                 `json:"present_count"`
 	IsFinalized        bool                `gorm:"default:false" json:"is_finalized"`
+	Status             string              `gorm:"type:text;default:'draft';index" json:"status"`
+	SubmittedAt        *time.Time          `json:"submitted_at,omitempty"`
+	ReopenedAt         *time.Time          `json:"reopened_at,omitempty"`
+	ReopenedBy         *string             `gorm:"type:text" json:"reopened_by,omitempty"`
+	ReopenReason       string              `gorm:"type:text" json:"reopen_reason,omitempty"`
+	CorrectionReason   string              `gorm:"type:text" json:"correction_reason,omitempty"`
+	CorrectionAskedAt  *time.Time          `json:"correction_asked_at,omitempty"`
+	CorrectedAt        *time.Time          `json:"corrected_at,omitempty"`
 	CreatedAt          time.Time           `json:"created_at"`
 	Section            *Section            `gorm:"foreignKey:SectionID" json:"section,omitempty"`
 	AcademicYear       *AcademicYear       `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`

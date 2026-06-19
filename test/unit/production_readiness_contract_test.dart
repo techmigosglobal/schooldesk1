@@ -18,18 +18,21 @@ void main() {
       expect(source, contains('RoleAccessService.initialize()'));
       expect(source, contains('RoleAccessService.teacherStaffId'));
       expect(source, contains('getTimetableSlots('));
-      expect(source, contains('staffId: staffId'));
-      expect(source, contains('dayOfWeek: DateTime.now().weekday'));
+      expect(source, contains('staffId: _staffId'));
+      expect(source, contains('dayOfWeek: _selectedDate.weekday'));
       expect(source, contains('getStudentEnrollments(s.id)'));
       expect(source, contains("'enrollment_missing': enrollmentId.isEmpty"));
       expect(source, contains("throw Exception('Enrollment record missing"));
       expect(source, contains('getAttendanceSessions('));
       expect(source, contains('RoleAccessService.teacherClassId'));
-      expect(source, contains('slotBelongsToSection ? slotId : null'));
-      expect(source, contains('academicYearId: academicYearId'));
-      expect(source, contains('periodNumber: periodNumber'));
-      expect(source, contains('markAttendance(sessionId, attendances)'));
-      expect(source, isNot(contains('Request Correction')));
+      expect(
+        source,
+        contains('Future<AttendanceSessionModel> _ensureSessionForSave'),
+      );
+      expect(source, contains('academicYearId: _academicYearId'));
+      expect(source, contains('periodNumber: _periodNumber'));
+      expect(source, contains('finalize: finalize'));
+      expect(source, contains('Request Correction'));
       expect(source, isNot(contains("String _selectedClass =")));
       expect(source, isNot(contains('getProfile()')));
       expect(api, contains('final String timetableSlotId;'));

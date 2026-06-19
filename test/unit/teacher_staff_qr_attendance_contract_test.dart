@@ -49,8 +49,8 @@ void main() {
     expect(nav, contains('AppRoutes.teacherMyAttendance'));
     expect(nav, contains('My Staff Attendance'));
     expect(dashboard, contains('AppRoutes.teacherMyAttendance'));
-    expect(dashboard, contains('Scan QR'));
-    expect(dashboard, contains('Attendance'));
+    expect(dashboard, contains('My QR Check-in'));
+    expect(dashboard, contains('Student Attendance'));
 
     expect(myAttendance, contains('MobileScanner('));
     expect(myAttendance, contains('MobileScannerController'));

@@ -158,6 +158,126 @@ func TestTeacherAttendanceLocksUntilPrincipalReopens(t *testing.T) {
 	}
 }
 
+func TestTeacherCanSaveDraftThenSubmitFinalAttendance(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	session := models.AttendanceSession{
+		BaseModel:      models.BaseModel{ID: "attendance-draft-session"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:   1,
+		Status:         "not_started",
+	}
+	assert.NoError(t, database.DB.Create(&session).Error)
+
+	handler := NewAttendanceHandler()
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/attendance/sessions/:session_id/mark", handler.MarkStudentAttendance)
+
+	draftBody := `{"finalize":false,"attendances":[{"student_id":"` + f.studentID + `","enrollment_id":"` + f.enrollmentID + `","status":"present"}]}`
+	draft := httptest.NewRecorder()
+	router.ServeHTTP(draft, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(draftBody)))
+	if draft.Code != http.StatusOK {
+		t.Fatalf("draft mark status=%d body=%s", draft.Code, draft.Body.String())
+	}
+
+	var savedDraft models.AttendanceSession
+	assert.NoError(t, database.DB.First(&savedDraft, "id = ?", session.ID).Error)
+	assert.False(t, savedDraft.IsFinalized)
+	assert.Equal(t, "draft", savedDraft.Status)
+
+	finalBody := `{"finalize":true,"attendances":[{"student_id":"` + f.studentID + `","enrollment_id":"` + f.enrollmentID + `","status":"present"}]}`
+	final := httptest.NewRecorder()
+	router.ServeHTTP(final, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(finalBody)))
+	if final.Code != http.StatusOK {
+		t.Fatalf("final mark status=%d body=%s", final.Code, final.Body.String())
+	}
+
+	var submitted models.AttendanceSession
+	assert.NoError(t, database.DB.First(&submitted, "id = ?", session.ID).Error)
+	assert.True(t, submitted.IsFinalized)
+	assert.Equal(t, "submitted", submitted.Status)
+	assert.NotNil(t, submitted.SubmittedAt)
+}
+
+func TestAttendanceRequiresReasonForNonPresentStatuses(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	session := models.AttendanceSession{
+		BaseModel:      models.BaseModel{ID: "attendance-reason-session"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:   1,
+		Status:         "draft",
+	}
+	assert.NoError(t, database.DB.Create(&session).Error)
+
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/attendance/sessions/:session_id/mark", NewAttendanceHandler().MarkStudentAttendance)
+
+	body := `{"finalize":false,"attendances":[{"student_id":"` + f.studentID + `","enrollment_id":"` + f.enrollmentID + `","status":"absent"}]}`
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
+
+	assert.Equal(t, http.StatusBadRequest, resp.Code)
+	assert.Contains(t, resp.Body.String(), "reason is required")
+}
+
+func TestTeacherRequestsCorrectionAndPrincipalReopenStoresReason(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	submittedAt := time.Date(2026, 6, 12, 8, 30, 0, 0, time.UTC)
+	session := models.AttendanceSession{
+		BaseModel:      models.BaseModel{ID: "attendance-correction-session"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:   1,
+		TotalStudents:  1,
+		PresentCount:   1,
+		IsFinalized:    true,
+		Status:         "submitted",
+		SubmittedAt:    &submittedAt,
+	}
+	assert.NoError(t, database.DB.Create(&session).Error)
+
+	handler := NewAttendanceHandler()
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/attendance/sessions/:session_id/correction-request", handler.RequestAttendanceCorrection)
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.POST("/attendance/sessions/:session_id/reopen", handler.ReopenAttendanceSession)
+
+	request := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(request, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/correction-request", strings.NewReader(`{"reason":"One child arrived late"}`)))
+	if request.Code != http.StatusOK {
+		t.Fatalf("correction request status=%d body=%s", request.Code, request.Body.String())
+	}
+
+	var needsReview models.AttendanceSession
+	assert.NoError(t, database.DB.First(&needsReview, "id = ?", session.ID).Error)
+	assert.True(t, needsReview.IsFinalized)
+	assert.Equal(t, "needs_review", needsReview.Status)
+	assert.Equal(t, "One child arrived late", needsReview.CorrectionReason)
+
+	reopen := httptest.NewRecorder()
+	principalRouter.ServeHTTP(reopen, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/reopen", strings.NewReader(`{"reason":"Approved correction window"}`)))
+	if reopen.Code != http.StatusOK {
+		t.Fatalf("reopen status=%d body=%s", reopen.Code, reopen.Body.String())
+	}
+
+	var reopened models.AttendanceSession
+	assert.NoError(t, database.DB.First(&reopened, "id = ?", session.ID).Error)
+	assert.False(t, reopened.IsFinalized)
+	assert.Equal(t, "reopened", reopened.Status)
+	assert.Equal(t, "Approved correction window", reopened.ReopenReason)
+	assert.NotNil(t, reopened.ReopenedAt)
+}
+
 func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	h := NewAttendanceHandler()

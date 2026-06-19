@@ -31,6 +31,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _assignedClasses = 0;
   int _homeworkDue = 0;
   int _homeworkTotal = 0;
+  int _homeworkToday = 0;
+  String _homeworkReminderStatus = 'pending';
   int _unreadMessages = 0;
   int _attendancePending = 0;
   StaffAttendanceModel? _myAttendance;
@@ -61,6 +63,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         api.getDashboard('teacher'),
         api.getAnnouncements(),
         _loadMyAttendanceSafely(api),
+        _loadHomeworkReminderSafely(api),
       ]);
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
       final metrics = Map<String, dynamic>.from(
@@ -77,6 +80,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             RoleAccessService.teacherClassTeacherClasses.isNotEmpty ? 1 : 0;
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
+        _homeworkToday = teacherFlowInt(metrics['homework_today']);
+        final reminder = Map<String, dynamic>.from(results[3] as Map);
+        _homeworkReminderStatus = teacherFlowText(
+          reminder['status'] ?? metrics['homework_reminder_status'],
+          fallback: _homeworkToday > 0 ? 'assigned' : 'pending',
+        ).toLowerCase();
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
         _attendancePending = _timetable
             .where(
@@ -104,7 +113,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     // Only show a reminder after 3 PM if no homework has been assigned today.
     // We navigate the teacher to the proper Homework screen — no raw API bypass.
     final now = DateTime.now();
-    if (now.hour >= 15 && _homeworkTotal == 0) {
+    if (now.hour >= 15 &&
+        _homeworkToday == 0 &&
+        _homeworkReminderStatus == 'pending') {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         showDialog(
@@ -140,6 +151,18 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       return await api.getMyStaffAttendanceToday();
     } catch (_) {
       return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadHomeworkReminderSafely(
+    BackendApiClient api,
+  ) async {
+    try {
+      return await api.getTodayHomeworkReminderStatus(
+        sectionId: RoleAccessService.teacherClassId,
+      );
+    } catch (_) {
+      return const {};
     }
   }
 
@@ -196,7 +219,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               timeLabel: _currentTimeLabel,
               actions: [
                 TeacherFlowAction(
-                  label: 'Scan QR',
+                  label: 'My QR Check-in',
                   icon: Icons.qr_code_scanner_rounded,
                   filled: true,
                   onTap: () => Navigator.pushNamed(
@@ -205,7 +228,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                 ),
                 TeacherFlowAction(
-                  label: 'Attendance',
+                  label: 'Student Attendance',
                   icon: Icons.how_to_reg_rounded,
                   onTap: () =>
                       Navigator.pushNamed(context, AppRoutes.teacherAttendance),
@@ -426,8 +449,8 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         AppRoutes.teacherTimetable,
       ),
       _QuickAction(
-        'Attendance',
-        'Select period',
+        'Student Attendance',
+        'Mark your class',
         SchoolDeskUiIllustrations.attendance,
         AppRoutes.teacherAttendance,
       ),

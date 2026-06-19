@@ -101,6 +101,53 @@ void main() {
     },
   );
 
+  test(
+    'teacher class label does not repeat section when grade already includes it',
+    () async {
+      adapter.routes['GET /auth/profile'] = _ok({
+        'id': 'teacher-user-1',
+        'email': 'teacher@example.test',
+        'name': 'Backend Teacher',
+        'school_id': 'school-1',
+        'role_id': 'role-teacher',
+        'role_name': 'Teacher',
+        'is_active': true,
+      });
+      adapter.routes['GET /dashboard/teacher'] = _ok({
+        'role': 'Teacher',
+        'staff_id': 'staff-1',
+        'metrics': {
+          'assigned_classes': 1,
+          'assigned_students': 1,
+          'homework_total': 0,
+          'homework_due': 0,
+          'unread_messages': 0,
+        },
+        'assigned_classes': [
+          {'id': 'section-1', 'grade_name': 'PP1-A', 'section_name': 'A'},
+        ],
+      });
+      adapter.routes['GET /students'] = _okList([
+        {
+          'id': 'student-1',
+          'school_id': 'school-1',
+          'student_code': 'STU-1',
+          'admission_number': 'ADM-1',
+          'first_name': 'Linked',
+          'last_name': 'Student',
+          'current_section_id': 'section-1',
+          'status': 'active',
+        },
+      ], total: 1);
+      adapter.routes['GET /timetable/slots'] = _ok([]);
+
+      await RoleAccessService.initialize();
+
+      expect(RoleAccessService.teacherClassName, 'PP1-A');
+      expect(RoleAccessService.teacherAssignedClasses.single['label'], 'PP1-A');
+    },
+  );
+
   testWidgets(
     'teacher classes screen initializes backend role scope before rendering assigned class',
     (tester) async {

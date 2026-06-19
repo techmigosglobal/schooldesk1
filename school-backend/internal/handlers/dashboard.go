@@ -722,6 +722,7 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 		TodayPresent     int64 `json:"today_present"`
 		TodayMarked      int64 `json:"today_marked"`
 		HomeworkTotal    int64 `json:"homework_total"`
+		HomeworkToday    int64 `json:"homework_today"`
 		HomeworkDue      int64 `json:"homework_due"`
 		DiaryToday       int64 `json:"diary_today"`
 		UnreadMessages   int64 `json:"unread_messages"`
@@ -739,15 +740,17 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 			(SELECT COUNT(*) FROM students WHERE school_id = ? AND current_section_id IN (SELECT id FROM assigned_sections) AND status != 'inactive') AS assigned_students,
 			(SELECT COUNT(*) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?) AS today_sessions,
 			COALESCE((SELECT SUM(present_count) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?), 0) AS today_present,
-			COALESCE((SELECT SUM(total_students) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?), 0) AS today_marked,
-			(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ?) AS homework_total,
-			(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ? AND submission_date >= ? AND status NOT IN ('completed', 'closed')) AS homework_due,
-			(SELECT COUNT(*) FROM diary_entries WHERE school_id = ? AND teacher_id = ? AND entry_date >= ? AND entry_date < ?) AS diary_today,
-			(SELECT COUNT(*) FROM messages JOIN message_conversations ON message_conversations.id = messages.conversation_id WHERE message_conversations.school_id = ? AND message_conversations.teacher_id = ? AND messages.sender_role = 'parent' AND messages.is_read = false) AS unread_messages
-	`, schoolID, staffID, staffID, schoolID, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, schoolID, staffID, schoolID, staffID, todayStart, schoolID, staffID, todayStart, todayEnd, schoolID, staffID).Scan(&row).Error; err != nil {
+				COALESCE((SELECT SUM(total_students) FROM attendance_sessions WHERE staff_id = ? AND date >= ? AND date < ?), 0) AS today_marked,
+				(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ?) AS homework_total,
+				(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ? AND created_at >= ? AND created_at < ?) AS homework_today,
+				(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ? AND submission_date >= ? AND status NOT IN ('completed', 'closed')) AS homework_due,
+				(SELECT COUNT(*) FROM diary_entries WHERE school_id = ? AND teacher_id = ? AND entry_date >= ? AND entry_date < ?) AS diary_today,
+				(SELECT COUNT(*) FROM messages JOIN message_conversations ON message_conversations.id = messages.conversation_id WHERE message_conversations.school_id = ? AND message_conversations.teacher_id = ? AND messages.sender_role = 'parent' AND messages.is_read = false) AS unread_messages
+		`, schoolID, staffID, staffID, schoolID, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, schoolID, staffID, schoolID, staffID, todayStart, todayEnd, schoolID, staffID, todayStart, schoolID, staffID, todayStart, todayEnd, schoolID, staffID).Scan(&row).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load teacher dashboard")
 		return
 	}
+	reminderStatus, _ := homeworkReminderStatusFor(schoolID, staffID, "", time.Now())
 	var classes []teacherClassSummary
 	if err := database.DB.Raw(teacherAssignedClassesSQL(), staffID, schoolID, staffID, staffID).Scan(&classes).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load assigned classes")
@@ -757,12 +760,14 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 		"role":     "Teacher",
 		"staff_id": staffID,
 		"metrics": gin.H{
-			"assigned_classes":    row.AssignedClasses,
-			"assigned_students":   row.AssignedStudents,
-			"homework_total":      row.HomeworkTotal,
-			"homework_due":        row.HomeworkDue,
-			"diary_entries_today": row.DiaryToday,
-			"unread_messages":     row.UnreadMessages,
+			"assigned_classes":         row.AssignedClasses,
+			"assigned_students":        row.AssignedStudents,
+			"homework_total":           row.HomeworkTotal,
+			"homework_today":           row.HomeworkToday,
+			"homework_due":             row.HomeworkDue,
+			"homework_reminder_status": stringMapValue(reminderStatus["status"]),
+			"diary_entries_today":      row.DiaryToday,
+			"unread_messages":          row.UnreadMessages,
 		},
 		"today_attendance": buildAttendanceSummary(row.TodayPresent, row.TodayMarked, row.TodaySessions),
 		"assigned_classes": classes,

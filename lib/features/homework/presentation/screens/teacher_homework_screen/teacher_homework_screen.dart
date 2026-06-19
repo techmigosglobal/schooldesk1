@@ -20,6 +20,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   List<Map<String, dynamic>> _homework = const [];
   Map<String, int> _submissionCounts = const {};
   bool _skippedToday = false;
+  String _reminderStatus = 'pending';
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       final rows = await BackendApiClient.instance.getHomework(
         teacherId: staffId.isEmpty ? null : staffId,
       );
+      final reminder = await _loadReminderStatus();
       final counts = <String, int>{};
       for (final row in rows.take(12)) {
         final id = _homeworkId(row);
@@ -52,6 +54,13 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       setState(() {
         _homework = rows;
         _submissionCounts = counts;
+        _reminderStatus = teacherFlowText(
+          reminder['status'],
+          fallback: _isHomeworkSubmittedTodayFromRows(rows)
+              ? 'assigned'
+              : 'pending',
+        ).toLowerCase();
+        _skippedToday = _reminderStatus == 'skipped';
         _loading = false;
       });
     } catch (error) {
@@ -60,6 +69,42 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
         _loading = false;
         _error = error.toString();
       });
+    }
+  }
+
+  Future<Map<String, dynamic>> _loadReminderStatus() async {
+    try {
+      return await BackendApiClient.instance.getTodayHomeworkReminderStatus(
+        sectionId: RoleAccessService.teacherClassId,
+      );
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<void> _skipToday() async {
+    try {
+      final reminder = await BackendApiClient.instance
+          .skipTodayHomeworkReminder(
+            sectionId: RoleAccessService.teacherClassId,
+            reason: 'Teacher skipped homework assignment for today',
+          );
+      if (!mounted) return;
+      setState(() {
+        _reminderStatus = teacherFlowText(
+          reminder['status'],
+          fallback: 'skipped',
+        ).toLowerCase();
+        _skippedToday = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Homework reminder skipped for today')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to skip homework reminder: $error')),
+      );
     }
   }
 
@@ -180,7 +225,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                     TeacherFlowAction(
                       label: 'Skip for Today',
                       icon: Icons.close_rounded,
-                      onTap: () => setState(() => _skippedToday = true),
+                      onTap: _skipToday,
                     ),
                   ],
                 ),
@@ -300,8 +345,14 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   }
 
   bool _isHomeworkSubmittedToday() {
+    if (_reminderStatus == 'assigned') return true;
+    if (_reminderStatus == 'skipped') return false;
+    return _isHomeworkSubmittedTodayFromRows(_homework);
+  }
+
+  bool _isHomeworkSubmittedTodayFromRows(List<Map<String, dynamic>> rows) {
     final today = DateTime.now();
-    for (final row in _homework) {
+    for (final row in rows) {
       final dateStr =
           row['created_at'] ?? row['homework_date'] ?? row['due_date'];
       final date = DateTime.tryParse(teacherFlowDateOnly(dateStr));

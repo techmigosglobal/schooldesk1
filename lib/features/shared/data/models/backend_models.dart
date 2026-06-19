@@ -698,6 +698,15 @@ class AttendanceSessionModel {
   final int totalStudents;
   final int presentCount;
   final bool isFinalized;
+  final String status;
+  final String submittedAt;
+  final String reopenedAt;
+  final String reopenedBy;
+  final String reopenReason;
+  final String correctionReason;
+  final String correctionAskedAt;
+  final String correctedAt;
+  final List<Map<String, dynamic>> studentAttendances;
 
   const AttendanceSessionModel({
     required this.id,
@@ -710,6 +719,15 @@ class AttendanceSessionModel {
     required this.totalStudents,
     required this.presentCount,
     required this.isFinalized,
+    this.status = 'draft',
+    this.submittedAt = '',
+    this.reopenedAt = '',
+    this.reopenedBy = '',
+    this.reopenReason = '',
+    this.correctionReason = '',
+    this.correctionAskedAt = '',
+    this.correctedAt = '',
+    this.studentAttendances = const [],
   });
 
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) =>
@@ -724,6 +742,22 @@ class AttendanceSessionModel {
         totalStudents: json['total_students'] as int? ?? 0,
         presentCount: json['present_count'] as int? ?? 0,
         isFinalized: json['is_finalized'] as bool? ?? false,
+        status: (json['status'] as String? ?? '').isEmpty
+            ? ((json['is_finalized'] as bool? ?? false) ? 'submitted' : 'draft')
+            : json['status'] as String,
+        submittedAt: '${json['submitted_at'] ?? ''}',
+        reopenedAt: '${json['reopened_at'] ?? ''}',
+        reopenedBy: '${json['reopened_by'] ?? ''}',
+        reopenReason: '${json['reopen_reason'] ?? ''}',
+        correctionReason: '${json['correction_reason'] ?? ''}',
+        correctionAskedAt: '${json['correction_asked_at'] ?? ''}',
+        correctedAt: '${json['corrected_at'] ?? ''}',
+        studentAttendances:
+            (json['student_attendances'] as List?)
+                ?.whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList() ??
+            const [],
       );
 }
 

@@ -293,6 +293,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			attendance.GET("/sessions", attendanceHandler.GetAttendanceSessions)
 			attendance.POST("/sessions", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.CreateAttendanceSession)
 			attendance.POST("/sessions/:session_id/mark", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.MarkStudentAttendance)
+			attendance.POST("/sessions/:session_id/correction-request", middleware.RBACMiddleware("Teacher"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.RequestAttendanceCorrection)
 			attendance.POST("/sessions/:session_id/reopen", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("attendance_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), attendanceHandler.ReopenAttendanceSession)
 			attendance.GET("/summary", attendanceHandler.GetStudentAttendanceSummary)
 			attendance.GET("/staff", middleware.RBACMiddleware("Principal", "Kiosk"), attendanceHandler.ListStaffAttendance)
@@ -685,6 +686,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		homework := api.Group("/homework")
 		homework.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
+			homework.GET("/reminders/today", middleware.RBACMiddleware("Teacher"), homeworkReminderHandler.TodayStatus)
+			homework.POST("/reminders/today/skip", middleware.RBACMiddleware("Teacher"), homeworkReminderHandler.SkipToday)
 			homework.POST("/reminders/trigger-end-of-day", middleware.RBACMiddleware("Principal"), homeworkReminderHandler.TriggerEndOfDayReminders)
 		}
 

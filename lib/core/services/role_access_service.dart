@@ -540,10 +540,7 @@ class RoleAccessService {
     if (section is Map) {
       final grade = _text(section['grade_name']);
       final sectionName = _text(section['section_name']);
-      final label = [
-        grade,
-        sectionName,
-      ].where((part) => part.isNotEmpty).join(' ');
+      final label = _joinGradeSectionLabel(grade, sectionName);
       if (label.isNotEmpty) return label;
     }
     return _classLabelForSection(_text(slot['section_id']));
@@ -552,8 +549,23 @@ class RoleAccessService {
   static String _classLabel(Map<String, dynamic> row) {
     final grade = _text(row['grade_name']);
     final section = _text(row['section_name']);
-    final label = [grade, section].where((part) => part.isNotEmpty).join(' ');
+    final label = _joinGradeSectionLabel(grade, section);
     return label.isNotEmpty ? label : _text(row['id']);
+  }
+
+  static String _joinGradeSectionLabel(String grade, String section) {
+    if (grade.isEmpty) return section;
+    if (section.isEmpty) return grade;
+    final normalizedGrade = grade.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    final normalizedSection = section.toLowerCase().replaceAll(
+      RegExp(r'\s+'),
+      '',
+    );
+    if (normalizedGrade.endsWith('-$normalizedSection') ||
+        normalizedGrade.endsWith(normalizedSection)) {
+      return grade;
+    }
+    return '$grade $section';
   }
 
   static Future<T?> _try<T>(Future<T> Function() loader) async {

@@ -69,12 +69,13 @@ extension BackendAttendanceApi on BackendApiClient {
 
   Future<void> markAttendance(
     String sessionId,
-    List<Map<String, dynamic>> attendances,
-  ) async {
+    List<Map<String, dynamic>> attendances, {
+    bool finalize = true,
+  }) async {
     try {
       final response = await _dio.post(
         '/attendance/sessions/$sessionId/mark',
-        data: {'attendances': attendances},
+        data: {'attendances': attendances, 'finalize': finalize},
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] != true) {
@@ -82,6 +83,29 @@ extension BackendAttendanceApi on BackendApiClient {
           message: data['error'] ?? 'Failed to mark attendance',
         );
       }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<AttendanceSessionModel> requestAttendanceCorrection(
+    String sessionId, {
+    required String reason,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/attendance/sessions/$sessionId/correction-request',
+        data: {'reason': reason},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return AttendanceSessionModel.fromJson(
+          data['data'] as Map<String, dynamic>,
+        );
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to request attendance correction',
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

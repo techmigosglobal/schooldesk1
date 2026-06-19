@@ -26,13 +26,16 @@ void main() {
       expect(adminTimetable, contains('api.getTimetableSlots()'));
       expect(teacherAttendance, contains('RoleAccessService.teacherStaffId'));
       expect(teacherAttendance, contains('getTimetableSlots('));
-      expect(teacherAttendance, contains('staffId: staffId'));
+      expect(teacherAttendance, contains('staffId: _staffId'));
       expect(teacherAttendance, contains('getStudentEnrollments(s.id)'));
-      expect(teacherAttendance, contains('createAttendanceSession('));
       expect(
         teacherAttendance,
-        contains('markAttendance(sessionId, attendances)'),
+        contains('Future<AttendanceSessionModel> _ensureSessionForSave'),
       );
+      expect(teacherAttendance, contains('createAttendanceSession('));
+      expect(teacherAttendance, contains('finalize: finalize'));
+      expect(teacherAttendance, contains('Save Draft'));
+      expect(teacherAttendance, contains('Submit Final'));
       expect(
         timetableHandler,
         contains('currentTeacherID := currentStaffID(c)'),

@@ -655,10 +655,10 @@ void main() {
 
     expect(screenFile.existsSync(), isTrue);
     final screen = screenFile.readAsStringSync();
-    expect(screen, contains('Attendance Directory'));
+    expect(screen, contains('Student Attendance Monitor'));
     expect(
       screen,
-      contains('Class-wise sessions, student rolls, and attendance history'),
+      contains('Class-period status, correction review, and registers'),
     );
     expect(screen, contains('PrincipalDirectoryScaffold'));
     expect(screen, contains('PrincipalDetailPage'));

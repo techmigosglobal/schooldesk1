@@ -27,6 +27,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   DateTime _selectedDate = DateTime.now();
   String _selectedSlotId = '';
   List<Map<String, dynamic>> _slots = const [];
+  String _sectionId = '';
+  String _staffId = '';
+  String _subjectId = '';
+  String _academicYearId = '';
+  String _timetableSlotId = '';
+  int _periodNumber = 1;
 
   @override
   void initState() {
@@ -114,8 +120,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             session.periodNumber == effectivePeriodNumber,
       );
 
-      // Use existing session or create a new one.
-      // If no timetable slot provides academic year / subject, fetch them.
+      // Use an existing session only. New sessions are created on Save Draft or Submit Final.
       String effectiveAcademicYearId = academicYearId;
       if (effectiveAcademicYearId.isEmpty) {
         try {
@@ -131,20 +136,16 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         }
       }
 
-      final session = matching.isNotEmpty
-          ? matching.first
-          : await api.createAttendanceSession(
-              sectionId: sectionId,
-              subjectId: subjectId,
-              academicYearId: effectiveAcademicYearId,
-              staffId: staffId,
-              date: date,
-              timetableSlotId: slotId.isNotEmpty ? slotId : null,
-              periodNumber: effectivePeriodNumber,
-            );
+      final session = matching.isNotEmpty ? matching.first : null;
 
       if (!mounted) return;
       setState(() {
+        _sectionId = sectionId;
+        _staffId = staffId;
+        _subjectId = subjectId;
+        _academicYearId = effectiveAcademicYearId;
+        _timetableSlotId = slotId;
+        _periodNumber = effectivePeriodNumber;
         _classLabel = _classLabelForSection(sectionId);
         _subjectLabel = slot.isNotEmpty
             ? _subjectLabelFromSlot(slot)
@@ -165,9 +166,27 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     }
   }
 
-  Future<void> _submit() async {
-    if (_session == null) return;
-    if (_session!.isFinalized) {
+  Future<AttendanceSessionModel> _ensureSessionForSave() async {
+    final existing = _session;
+    if (existing != null) return existing;
+    if (_sectionId.isEmpty || _staffId.isEmpty || _academicYearId.isEmpty) {
+      throw Exception('Assigned class or academic year is not ready.');
+    }
+    final session = await BackendApiClient.instance.createAttendanceSession(
+      sectionId: _sectionId,
+      subjectId: _subjectId,
+      academicYearId: _academicYearId,
+      staffId: _staffId,
+      date: teacherFlowDate(_selectedDate),
+      timetableSlotId: _timetableSlotId.isNotEmpty ? _timetableSlotId : null,
+      periodNumber: _periodNumber,
+    );
+    if (mounted) setState(() => _session = session);
+    return session;
+  }
+
+  Future<void> _saveAttendance({required bool finalize}) async {
+    if (_session?.isFinalized ?? false) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text(
@@ -179,32 +198,59 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       return;
     }
+    final missingReason = _students.where(
+      (student) => student.requiresReason && student.reason.trim().isEmpty,
+    );
+    if (missingReason.isNotEmpty) {
+      final student = missingReason.first;
+      await _editReason(student);
+      if (!mounted) return;
+      final updated = _students.where((row) => row.id == student.id).first;
+      if (updated.reason.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reason is required for ${student.name}.'),
+            backgroundColor: context.appTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
     final missing = _students.where((student) => student.enrollmentMissing);
     if (missing.isNotEmpty) {
       throw Exception('Enrollment record missing for ${missing.first.name}');
     }
     setState(() => _saving = true);
     try {
-      final sessionId = _session!.id;
+      final session = await _ensureSessionForSave();
       final attendances = _students.map((student) {
         final enrollmentId = student.enrollmentId;
         return {
           'student_id': student.id,
           'enrollment_id': enrollmentId,
           'status': student.status,
-          'remarks': '',
+          'reason': student.reason,
           'enrollment_missing': enrollmentId.isEmpty,
         };
       }).toList();
-      await BackendApiClient.instance.markAttendance(sessionId, attendances);
+      await BackendApiClient.instance.markAttendance(
+        session.id,
+        attendances,
+        finalize: finalize,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Attendance shared'),
+        SnackBar(
+          content: Text(
+            finalize ? 'Attendance submitted and locked' : 'Draft saved',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      await _offerDiaryAfterPeriod();
+      if (finalize) {
+        await _offerDiaryAfterPeriod();
+      }
       setState(() => _saving = false);
       await _loadFlow();
     } catch (error) {
@@ -212,7 +258,66 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Unable to submit attendance: $error'),
+          content: Text('Unable to save attendance: $error'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _requestCorrection() async {
+    final session = _session;
+    if (session == null || !session.isFinalized) return;
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Request Correction'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'Explain what needs correction',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || reason.trim().isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await BackendApiClient.instance.requestAttendanceCorrection(
+        session.id,
+        reason: reason.trim(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Correction request sent to principal'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      setState(() => _saving = false);
+      await _loadFlow();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to request correction: $error'),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -258,20 +363,80 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (_session?.isFinalized ?? false) return;
     setState(() {
       _students = _students
-          .map((student) => student.copyWith(status: status))
+          .map(
+            (student) => student.copyWith(
+              status: status,
+              reason: _statusRequiresReason(status) ? student.reason : '',
+            ),
+          )
           .toList();
     });
   }
 
-  void _markOne(_AttendanceStudent student, String status) {
+  Future<void> _markOne(_AttendanceStudent student, String status) async {
     if (_session?.isFinalized ?? false) return;
+    String reason = student.reason;
+    if (_statusRequiresReason(status)) {
+      reason = await _reasonForStatus(student, status) ?? student.reason;
+      if (reason.trim().isEmpty) return;
+    } else {
+      reason = '';
+    }
     setState(() {
       _students = _students
           .map(
-            (row) => row.id == student.id ? row.copyWith(status: status) : row,
+            (row) => row.id == student.id
+                ? row.copyWith(status: status, reason: reason)
+                : row,
           )
           .toList();
     });
+  }
+
+  Future<void> _editReason(_AttendanceStudent student) async {
+    final reason = await _reasonForStatus(student, student.status);
+    if (reason == null) return;
+    setState(() {
+      _students = _students
+          .map(
+            (row) => row.id == student.id ? row.copyWith(reason: reason) : row,
+          )
+          .toList();
+    });
+  }
+
+  Future<String?> _reasonForStatus(
+    _AttendanceStudent student,
+    String status,
+  ) async {
+    final controller = TextEditingController(text: student.reason);
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${_statusLabel(status)} reason'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Reason',
+            hintText: 'Required for ${_statusLabel(status)}',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return reason;
   }
 
   @override
@@ -356,8 +521,16 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               title: 'Attendance locked',
               subtitle:
                   'This session has been submitted. The principal must reopen it before edits are allowed.',
-              status: 'Submitted',
+              status: _statusLabel(_session?.status ?? 'submitted'),
               statusColor: Colors.green,
+              body: Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: _saving ? null : _requestCorrection,
+                  icon: const Icon(Icons.report_problem_rounded, size: 18),
+                  label: const Text('Request Correction'),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
           ],
@@ -376,45 +549,33 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 statusColor: student.statusColor,
                 body: Container(
                   width: double.infinity,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.grey.shade300),
                   ),
-                  child: Row(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      _buildAttendanceButton(
-                        student: student,
-                        status: 'present',
-                        label: 'Present',
-                        color: Colors.green,
-                        isFirst: true,
-                      ),
-                      Container(
-                        width: 1,
-                        height: 40,
-                        color: Colors.grey.shade300,
-                      ),
-                      _buildAttendanceButton(
-                        student: student,
-                        status: 'absent',
-                        label: 'Absent',
-                        color: Colors.red,
-                        isFirst: false,
-                      ),
-                      Container(
-                        width: 1,
-                        height: 40,
-                        color: Colors.grey.shade300,
-                      ),
-                      _buildAttendanceButton(
-                        student: student,
-                        status: 'late',
-                        label: 'Late',
-                        color: Colors.orange,
-                        isFirst: false,
-                        isLast: true,
-                      ),
+                      for (final option in _attendanceStatusOptions)
+                        _buildAttendanceButton(
+                          student: student,
+                          status: option['status']!,
+                          label: option['label']!,
+                          color: _statusColor(option['status']!),
+                        ),
+                      if (student.requiresReason)
+                        TextButton.icon(
+                          onPressed: locked ? null : () => _editReason(student),
+                          icon: const Icon(Icons.notes_rounded, size: 16),
+                          label: Text(
+                            student.reason.trim().isEmpty
+                                ? 'Add reason'
+                                : 'Edit reason',
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -430,16 +591,34 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               ),
             ),
           const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: _saving || _students.isEmpty || locked ? null : _submit,
-            icon: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_done_rounded),
-            label: Text(_saving ? 'Submitting...' : 'Submit Attendance'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _saving || _students.isEmpty || locked
+                      ? null
+                      : () => _saveAttendance(finalize: false),
+                  icon: const Icon(Icons.save_rounded),
+                  label: const Text('Save Draft'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _saving || _students.isEmpty || locked
+                      ? null
+                      : () => _saveAttendance(finalize: true),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lock_rounded),
+                  label: Text(_saving ? 'Saving...' : 'Submit Final'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -451,39 +630,35 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     required String status,
     required String label,
     required Color color,
-    bool isFirst = false,
-    bool isLast = false,
   }) {
     final isSelected = student.status == status;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _markOne(student, status),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
-            borderRadius: BorderRadius.horizontal(
-              left: isFirst ? const Radius.circular(12) : Radius.zero,
-              right: isLast ? const Radius.circular(12) : Radius.zero,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (isSelected) ...[
-                Icon(Icons.check_circle_rounded, color: color, size: 16),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  color: isSelected ? color : Colors.grey.shade600,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                ),
-              ),
+    return InkWell(
+      onTap: () => _markOne(student, status),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 92, minHeight: 40),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (isSelected) ...[
+              Icon(Icons.check_circle_rounded, color: color, size: 16),
+              const SizedBox(width: 6),
             ],
-          ),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? color : Colors.grey.shade600,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -612,6 +787,46 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (match.isNotEmpty) return teacherFlowText(match.first['label']);
     return RoleAccessService.teacherClassName;
   }
+
+  static const _attendanceStatusOptions = [
+    {'status': 'present', 'label': 'Present'},
+    {'status': 'absent', 'label': 'Absent'},
+    {'status': 'late', 'label': 'Late'},
+    {'status': 'leave', 'label': 'Leave'},
+    {'status': 'half_day', 'label': 'Half Day'},
+  ];
+
+  static bool _statusRequiresReason(String status) {
+    return const {'absent', 'late', 'leave', 'half_day'}.contains(status);
+  }
+
+  static String _statusLabel(String status) {
+    return switch (status) {
+      'not_started' => 'Not Started',
+      'needs_review' => 'Needs Review',
+      'half_day' => 'Half Day',
+      'submitted' => 'Submitted',
+      'reopened' => 'Reopened',
+      'corrected' => 'Corrected',
+      'draft' => 'Draft',
+      'present' => 'Present',
+      'absent' => 'Absent',
+      'late' => 'Late',
+      'leave' => 'Leave',
+      _ => teacherFlowTitleCase(status),
+    };
+  }
+
+  static Color _statusColor(String status) {
+    return switch (status) {
+      'present' => Colors.green,
+      'absent' => Colors.red,
+      'late' => Colors.orange,
+      'leave' => Colors.blue,
+      'half_day' => Colors.purple,
+      _ => teacherFlowAccent,
+    };
+  }
 }
 
 class _AttendanceStudent {
@@ -621,6 +836,7 @@ class _AttendanceStudent {
   final String enrollmentId;
   final bool enrollmentMissing;
   final String status;
+  final String reason;
 
   const _AttendanceStudent({
     required this.id,
@@ -629,18 +845,17 @@ class _AttendanceStudent {
     required this.enrollmentId,
     required this.enrollmentMissing,
     this.status = 'present',
+    this.reason = '',
   });
 
+  bool get requiresReason =>
+      _TeacherAttendanceScreenState._statusRequiresReason(status);
+
   Color get statusColor {
-    return switch (status) {
-      'present' => Colors.green,
-      'absent' => Colors.red,
-      'late' => Colors.orange,
-      _ => teacherFlowAccent,
-    };
+    return _TeacherAttendanceScreenState._statusColor(status);
   }
 
-  _AttendanceStudent copyWith({String? status}) {
+  _AttendanceStudent copyWith({String? status, String? reason}) {
     return _AttendanceStudent(
       id: id,
       name: name,
@@ -648,6 +863,7 @@ class _AttendanceStudent {
       enrollmentId: enrollmentId,
       enrollmentMissing: enrollmentMissing,
       status: status ?? this.status,
+      reason: reason ?? this.reason,
     );
   }
 }

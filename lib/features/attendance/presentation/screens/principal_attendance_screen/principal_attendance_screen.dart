@@ -139,8 +139,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   Widget build(BuildContext context) {
     final cards = _directoryCards;
     return PrincipalDirectoryScaffold(
-      title: 'Attendance Directory',
-      subtitle: 'Class-wise sessions, student rolls, and attendance history',
+      title: 'Student Attendance Monitor',
+      subtitle: 'Class-period status, correction review, and registers',
       loading: _loading,
       error: _error,
       onRefresh: _load,
@@ -185,7 +185,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       tone: const Color(0xFFECFDF3),
     ),
     PrincipalDirectoryMetric(
-      label: 'Staff Checked In',
+      label: 'Staff Check-in Monitor',
       value:
           '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length}',
       icon: Icons.badge_outlined,
@@ -196,7 +196,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       label: 'Exceptions',
       value: '${_exceptions.length}',
       icon: Icons.warning_amber_rounded,
-      color: _exceptions.isEmpty ? context.appTheme.success : context.appTheme.warning,
+      color: _exceptions.isEmpty
+          ? context.appTheme.success
+          : context.appTheme.warning,
       tone: const Color(0xFFFFF7ED),
     ),
   ];
@@ -224,7 +226,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 ),
                 _modeChip(
                   _AttendanceView.sessions,
-                  'Sessions',
+                  'Monitor',
                   Icons.list_alt_outlined,
                 ),
                 _modeChip(
@@ -328,11 +330,15 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     final present = sessions.fold(0, (sum, row) => sum + row.presentCount);
     final total = sessions.fold(0, (sum, row) => sum + row.totalStudents);
     final percent = total <= 0 ? 0 : (present / total) * 100;
-    final status = total <= 0
-        ? 'Pending'
-        : percent < 75
-        ? 'Review'
-        : 'Marked';
+    final status = sessions.isEmpty
+        ? 'Not Started'
+        : sessions.any((row) => row.status == 'needs_review')
+        ? 'Needs Review'
+        : sessions.any((row) => row.status == 'draft')
+        ? 'Draft'
+        : sessions.any((row) => row.status == 'reopened')
+        ? 'Reopened'
+        : 'Submitted';
     final statusColor = total <= 0
         ? context.appTheme.warning
         : percent < 75
@@ -399,18 +405,31 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Widget _sessionCard(AttendanceSessionModel session) {
-    final marked = session.totalStudents > 0;
+    final status = _sessionStatusLabel(session);
+    final counts = _sessionStatusCounts(session);
     return PrincipalDirectoryCard(
       icon: Icons.fact_check_outlined,
       title: _sectionLabel(session.sectionId),
       subtitle:
-          'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present | ${_dateOnly(session.date)}',
-      status: marked ? 'Marked' : 'Pending',
-      statusColor: marked ? context.appTheme.success : context.appTheme.warning,
+          'Teacher ${_staffLabel(session.staffId)} | Period ${session.periodNumber} | ${_dateOnly(session.date)}',
+      status: status,
+      statusColor: _sessionStatusColor(session),
       chips: [
         PrincipalInfoPill(
-          icon: Icons.percent_rounded,
-          label: '${_attendancePercent(session).toStringAsFixed(0)}%',
+          icon: Icons.check_circle_outline,
+          label: 'Present ${counts['present']}',
+        ),
+        PrincipalInfoPill(
+          icon: Icons.cancel_outlined,
+          label: 'Absent ${counts['absent']}',
+        ),
+        PrincipalInfoPill(
+          icon: Icons.schedule_outlined,
+          label: 'Late ${counts['late']}',
+        ),
+        PrincipalInfoPill(
+          icon: Icons.event_available_outlined,
+          label: 'Leave ${counts['leave']}',
         ),
         PrincipalInfoPill(
           icon: Icons.menu_book_outlined,
@@ -432,7 +451,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       title: student.fullName.isEmpty ? student.id : student.fullName,
       subtitle: 'Admission ${student.admissionNumber} | ${student.status}',
       status: selected ? 'Selected' : student.status,
-      statusColor: selected ? context.appTheme.primary : context.appTheme.success,
+      statusColor: selected
+          ? context.appTheme.primary
+          : context.appTheme.success,
       chips: [
         PrincipalInfoPill(
           icon: Icons.apartment_rounded,
@@ -504,10 +525,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
             PrincipalDetailCard(
               title: 'Attendance Session',
               trailing: PrincipalStatusPill(
-                label: session.totalStudents > 0 ? 'Marked' : 'Pending',
-                color: session.totalStudents > 0
-                    ? context.appTheme.success
-                    : context.appTheme.warning,
+                label: _sessionStatusLabel(session),
+                color: _sessionStatusColor(session),
               ),
               children: [
                 PrincipalDetailRow(
@@ -531,12 +550,99 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   value: session.subjectId,
                 ),
                 PrincipalDetailRow(label: 'Staff ID', value: session.staffId),
+                PrincipalDetailRow(
+                  label: 'Reopen reason',
+                  value: session.reopenReason.isEmpty
+                      ? 'Not reopened'
+                      : session.reopenReason,
+                ),
+                PrincipalDetailRow(
+                  label: 'Correction request',
+                  value: session.correctionReason.isEmpty
+                      ? 'None'
+                      : session.correctionReason,
+                ),
+                PrincipalActionTile(
+                  icon: Icons.lock_open_rounded,
+                  title: 'Reopen Attendance',
+                  subtitle: 'Allow the assigned teacher to submit a correction',
+                  onTap: () => _reopenAttendance(session),
+                ),
+                PrincipalActionTile(
+                  icon: Icons.notifications_active_outlined,
+                  title: 'Send Reminder',
+                  subtitle: 'Notify teacher ${_staffLabel(session.staffId)}',
+                  onTap: () => _showSnack(
+                    'Reminder queued for ${_staffLabel(session.staffId)}',
+                    success: true,
+                  ),
+                ),
+                PrincipalActionTile(
+                  icon: Icons.table_chart_outlined,
+                  title: 'Export Class Register',
+                  subtitle: 'Open the attendance register export',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openReportDetail('Class attendance register', 'csv');
+                  },
+                ),
+                PrincipalActionTile(
+                  icon: Icons.history_rounded,
+                  title: 'Audit Trail',
+                  subtitle: _auditTrailSummary(session),
+                ),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _reopenAttendance(AttendanceSessionModel session) async {
+    final reason = await _promptReason('Reopen Attendance');
+    if (reason == null || reason.trim().isEmpty) return;
+    try {
+      await BackendApiClient.instance.reopenAttendanceSession(
+        session.id,
+        reason: reason.trim(),
+      );
+      if (!mounted) return;
+      _showSnack('Attendance reopened', success: true);
+      Navigator.pop(context);
+      await _load();
+    } catch (error) {
+      _showSnack('Unable to reopen attendance: $error');
+    }
+  }
+
+  Future<String?> _promptReason(String title) {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'Required for audit trail',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Reopen'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   Future<void> _openStudentDetail(StudentModel student) async {
@@ -679,6 +785,77 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     return (session.presentCount / session.totalStudents) * 100;
   }
 
+  String _sessionStatusLabel(AttendanceSessionModel session) {
+    return switch (session.status) {
+      'submitted' => 'Submitted',
+      'draft' => 'Draft',
+      'reopened' => 'Reopened',
+      'needs_review' => 'Needs Review',
+      'corrected' => 'Corrected',
+      'not_started' => 'Not Started',
+      _ => session.totalStudents > 0 ? 'Submitted' : 'Not Started',
+    };
+  }
+
+  Color _sessionStatusColor(AttendanceSessionModel session) {
+    return switch (session.status) {
+      'submitted' => context.appTheme.success,
+      'corrected' => context.appTheme.success,
+      'draft' => context.appTheme.warning,
+      'reopened' => context.appTheme.warning,
+      'needs_review' => context.appTheme.error,
+      _ =>
+        session.totalStudents > 0
+            ? context.appTheme.success
+            : context.appTheme.warning,
+    };
+  }
+
+  Map<String, int> _sessionStatusCounts(AttendanceSessionModel session) {
+    final counts = {
+      'present': 0,
+      'absent': 0,
+      'late': 0,
+      'leave': 0,
+      'half_day': 0,
+    };
+    for (final row in session.studentAttendances) {
+      final status = _text(row['status']).toLowerCase().replaceAll('-', '_');
+      if (counts.containsKey(status)) counts[status] = counts[status]! + 1;
+    }
+    if (session.studentAttendances.isEmpty) {
+      counts['present'] = session.presentCount;
+      counts['absent'] = (session.totalStudents - session.presentCount).clamp(
+        0,
+        session.totalStudents,
+      );
+    }
+    return counts;
+  }
+
+  String _staffLabel(String staffId) {
+    for (final staff in _staff) {
+      if (staff.id == staffId) {
+        final name = '${staff.firstName} ${staff.lastName}'.trim();
+        return name.isEmpty ? staffId : name;
+      }
+    }
+    return staffId;
+  }
+
+  String _auditTrailSummary(AttendanceSessionModel session) {
+    final parts = <String>[
+      'Status ${_sessionStatusLabel(session)}',
+      if (session.submittedAt.isNotEmpty)
+        'Submitted ${_dateOnly(session.submittedAt)}',
+      if (session.reopenedAt.isNotEmpty)
+        'Reopened ${_dateOnly(session.reopenedAt)}',
+      if (session.correctedAt.isNotEmpty)
+        'Corrected ${_dateOnly(session.correctedAt)}',
+    ];
+    return parts.join(' | ');
+  }
+
   String _dateOnly(String value) {
     final text = value.trim();
     if (text.isEmpty) return _todayText;
@@ -692,7 +869,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
+        backgroundColor: success
+            ? context.appTheme.success
+            : context.appTheme.error,
       ),
     );
   }

@@ -35,6 +35,48 @@ extension BackendHomeworkApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> getTodayHomeworkReminderStatus({
+    String sectionId = '',
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/homework/reminders/today',
+        queryParameters: {
+          if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load homework reminder status',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> skipTodayHomeworkReminder({
+    String sectionId = '',
+    String reason = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/homework/reminders/today/skip',
+        data: {
+          if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
+          if (reason.trim().isNotEmpty) 'reason': reason.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to skip homework reminder',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> createHomework({
     required String title,
     required String subject,
