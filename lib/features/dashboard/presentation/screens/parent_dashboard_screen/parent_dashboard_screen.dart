@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
@@ -84,6 +86,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           'sort_date': ev['created_at'] ?? '',
           'category': ev['category'] ?? '',
           'author': ev['author'] ?? ev['posted_by'] ?? '',
+          'media_urls': ev['media_urls'],
+          'media_type': ev['media_type'] ?? ev['mediaType'],
         });
       }
       feedItems.sort(
@@ -113,6 +117,8 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
     return SchoolDeskModuleScaffold(
       title: 'School Feed',
       subtitle: 'Child summary, actions, and school updates',
+      isPortalRoot: true,
+      fallbackRoute: AppRoutes.parentDashboard,
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -205,6 +211,15 @@ class _ParentFeedView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'School Feed',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        SizedBox(height: tokens.spacing.sm),
+        _SchoolFeedList(eventPosts: eventPosts),
+        SizedBox(height: tokens.spacing.lg),
         _ParentChildPillSelector(
           children: children,
           activeIndex: activeChildIndex,
@@ -215,15 +230,6 @@ class _ParentFeedView extends StatelessWidget {
         _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
         SizedBox(height: tokens.spacing.lg),
         const _ParentWorkflowShortcuts(),
-        SizedBox(height: tokens.spacing.lg),
-        Text(
-          'School Feed',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        SizedBox(height: tokens.spacing.sm),
-        _SchoolFeedList(eventPosts: eventPosts),
       ],
     );
   }
@@ -574,6 +580,7 @@ class _PostCard extends StatelessWidget {
     final category = _text(post['category']);
     final author = _text(post['author']);
     final formattedDate = _formatPostDate(rawDate);
+    final mediaType = _eventPostMediaType(post);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -639,6 +646,10 @@ class _PostCard extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (mediaType.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _FeedMediaTypeChip(type: mediaType),
+                      ],
                     ],
                   ),
                 ),
@@ -655,6 +666,7 @@ class _PostCard extends StatelessWidget {
               ],
             ),
           ),
+          _SchoolFeedMediaPreview(post: post),
           // Body: description
           if (description.isNotEmpty)
             Padding(
@@ -685,6 +697,148 @@ class _PostCard extends StatelessWidget {
     }
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return DateFormat('d MMM').format(parsed);
+  }
+}
+
+class _SchoolFeedMediaPreview extends StatelessWidget {
+  final Map<String, dynamic> post;
+
+  const _SchoolFeedMediaPreview({required this.post});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).schoolDesk;
+    final mediaUrls = _eventPostMediaUrls(post);
+    final mediaType = _eventPostMediaType(post);
+    if (mediaUrls.isEmpty && mediaType.isEmpty) return const SizedBox.shrink();
+
+    final url = mediaUrls.isEmpty ? '' : mediaUrls.first;
+    final isPhoto = mediaType == 'Photo' || mediaType == 'Image';
+    final preview = isPhoto && url.isNotEmpty
+        ? Image.network(
+            url,
+            height: 180,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) =>
+                _MediaFallbackPreview(type: mediaType, url: url),
+          )
+        : _MediaFallbackPreview(type: mediaType, url: url);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(tokens.radius.control),
+        child: Stack(
+          alignment: Alignment.bottomLeft,
+          children: [
+            SizedBox(width: double.infinity, child: preview),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: _FeedMediaTypeChip(type: mediaType),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MediaFallbackPreview extends StatelessWidget {
+  final String type;
+  final String url;
+
+  const _MediaFallbackPreview({required this.type, required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    final color = tokens.roleColor(SchoolDeskRole.parent);
+    final label = type.isEmpty ? 'Media' : type;
+    final fileName = _mediaFileName(url);
+
+    return Container(
+      height: 144,
+      width: double.infinity,
+      padding: EdgeInsets.all(tokens.spacing.md),
+      decoration: BoxDecoration(color: color.withAlpha(18)),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withAlpha(28),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(_eventPostMediaIcon(label), color: color, size: 28),
+          ),
+          SizedBox(width: tokens.spacing.md),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (fileName.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedMediaTypeChip extends StatelessWidget {
+  final String type;
+
+  const _FeedMediaTypeChip({required this.type});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).schoolDesk;
+    final color = tokens.roleColor(SchoolDeskRole.parent);
+    final label = type.isEmpty ? 'Media' : type;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(tokens.radius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(_eventPostMediaIcon(label), color: Colors.white, size: 14),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -743,4 +897,81 @@ String _firstText(Map<String, dynamic> row, List<String> keys) {
     if (text.isNotEmpty) return text;
   }
   return '';
+}
+
+List<String> _eventPostMediaUrls(Map<String, dynamic> post) {
+  final raw =
+      post['media_urls'] ??
+      post['mediaUrls'] ??
+      post['media_url'] ??
+      post['mediaUrl'] ??
+      post['attachments'];
+  if (raw is List) {
+    return raw.map(_text).where((url) => url.isNotEmpty).toList();
+  }
+  final text = _text(raw);
+  if (text.isEmpty) return const [];
+  if (text.startsWith('[')) {
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) {
+        return decoded.map(_text).where((url) => url.isNotEmpty).toList();
+      }
+    } catch (_) {
+      // Fall back to comma parsing for legacy rows.
+    }
+  }
+  return text
+      .split(',')
+      .map((url) => url.trim())
+      .where((url) => url.isNotEmpty)
+      .toList();
+}
+
+String _eventPostMediaType(Map<String, dynamic> post) {
+  final explicit = _firstText(post, [
+    'media_type',
+    'mediaType',
+    'file_type',
+    'fileType',
+    'type',
+  ]).toLowerCase();
+  if (explicit.contains('video')) return 'Video';
+  if (explicit.contains('photo')) return 'Photo';
+  if (explicit.contains('image')) return 'Photo';
+
+  final urls = _eventPostMediaUrls(post);
+  if (urls.isEmpty) return '';
+  final path = Uri.tryParse(urls.first)?.path.toLowerCase() ?? urls.first;
+  if (path.endsWith('.mp4') ||
+      path.endsWith('.mov') ||
+      path.endsWith('.m4v') ||
+      path.endsWith('.webm')) {
+    return 'Video';
+  }
+  if (path.endsWith('.jpg') ||
+      path.endsWith('.jpeg') ||
+      path.endsWith('.png') ||
+      path.endsWith('.webp') ||
+      path.endsWith('.gif') ||
+      path.endsWith('.heic')) {
+    return 'Photo';
+  }
+  return 'Media';
+}
+
+IconData _eventPostMediaIcon(String type) {
+  final normalized = type.toLowerCase();
+  if (normalized.contains('video')) return Icons.play_circle_fill_rounded;
+  if (normalized.contains('photo') || normalized.contains('image')) {
+    return Icons.image_rounded;
+  }
+  return Icons.attach_file_rounded;
+}
+
+String _mediaFileName(String url) {
+  if (url.isEmpty) return '';
+  final uri = Uri.tryParse(url);
+  final segments = uri?.pathSegments ?? const <String>[];
+  return segments.isEmpty ? url : segments.last;
 }

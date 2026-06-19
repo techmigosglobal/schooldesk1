@@ -23,6 +23,9 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
   final bool bodyIsScrollable;
   final List<SchoolDeskModuleBottomAction>? mobileBottomActions;
   final bool navigationDrawerEnabled;
+  final bool isPortalRoot;
+  final String? fallbackRoute;
+  final bool showBackButton;
 
   const SchoolDeskModuleScaffold({
     super.key,
@@ -38,6 +41,9 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
     this.bodyIsScrollable = false,
     this.mobileBottomActions,
     this.navigationDrawerEnabled = true,
+    this.isPortalRoot = false,
+    this.fallbackRoute,
+    this.showBackButton = true,
   });
 
   @override
@@ -99,69 +105,93 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
     final showCompactMenuButton = !showRail && widget.navigationDrawerEnabled;
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
+    final canNavigateBack =
+        widget.showBackButton &&
+        !widget.isPortalRoot &&
+        (ModalRoute.of(context)?.canPop ?? false);
 
-    return Semantics(
-      label: '${widget.title} module',
-      container: true,
-      explicitChildNodes: true,
-      child: Scaffold(
-        key: _scaffoldKey,
-        backgroundColor: tokens.pageBackground,
-        drawer: showRail || !widget.navigationDrawerEnabled
-            ? null
-            : widget.drawer,
-        floatingActionButton: widget.floatingActionButton,
-        floatingActionButtonLocation: widget.floatingActionButtonLocation,
-        bottomNavigationBar: !showRail && _hasRoleShell
-            ? _ModuleBottomActionBar(
-                role: _role,
-                unreadCount: _unreadCount,
-                customActions: widget.mobileBottomActions,
-                onSelected: _navigateGlobal,
-                onOpenNavigation: () => _scaffoldKey.currentState?.openDrawer(),
-              )
-            : null,
-        body: Row(
-          children: [
-            if (showRail && widget.drawer != null) widget.drawer!,
-            Expanded(
-              child: Column(
-                children: [
-                  Material(
-                    color: tokens.panel,
-                    elevation: 0,
-                    child: SafeArea(
-                      bottom: false,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ModuleToolbar(
-                            title: widget.title,
-                            subtitle: widget.subtitle,
-                            showMenu: showCompactMenuButton,
-                            onMenuPressed: () =>
-                                _scaffoldKey.currentState?.openDrawer(),
-                            actions: widget.actions,
-                            globalActions: _hasRoleShell
-                                ? (showRail
-                                      ? _globalToolbarActions()
-                                      : _compactToolbarActions())
-                                : const [],
-                          ),
-                          if (widget.bottom != null) widget.bottom!,
-                        ],
+    return PopScope(
+      canPop: !widget.isPortalRoot,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !widget.isPortalRoot) return;
+        ScaffoldMessenger.maybeOf(context)
+          ?..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                'Use ${SchoolDeskGlossary.signOut} to leave this portal.',
+              ),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+      },
+      child: Semantics(
+        label: '${widget.title} module',
+        container: true,
+        explicitChildNodes: true,
+        child: Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: tokens.pageBackground,
+          drawer: showRail || !widget.navigationDrawerEnabled
+              ? null
+              : widget.drawer,
+          floatingActionButton: widget.floatingActionButton,
+          floatingActionButtonLocation: widget.floatingActionButtonLocation,
+          bottomNavigationBar: !showRail && _hasRoleShell
+              ? _ModuleBottomActionBar(
+                  role: _role,
+                  unreadCount: _unreadCount,
+                  customActions: widget.mobileBottomActions,
+                  onSelected: _navigateGlobal,
+                  onOpenNavigation: () =>
+                      _scaffoldKey.currentState?.openDrawer(),
+                )
+              : null,
+          body: Row(
+            children: [
+              if (showRail && widget.drawer != null) widget.drawer!,
+              Expanded(
+                child: Column(
+                  children: [
+                    Material(
+                      color: tokens.panel,
+                      elevation: 0,
+                      child: SafeArea(
+                        bottom: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _ModuleToolbar(
+                              title: widget.title,
+                              subtitle: widget.subtitle,
+                              showMenu: showCompactMenuButton,
+                              onMenuPressed: () =>
+                                  _scaffoldKey.currentState?.openDrawer(),
+                              canNavigateBack: canNavigateBack,
+                              onBackPressed: _handleBackPressed,
+                              actions: widget.actions,
+                              globalActions: _hasRoleShell
+                                  ? (showRail
+                                        ? _globalToolbarActions()
+                                        : _compactToolbarActions())
+                                  : const [],
+                            ),
+                            if (widget.bottom != null) widget.bottom!,
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: widget.bodyIsScrollable
-                        ? SingleChildScrollView(child: widget.body)
-                        : widget.body,
-                  ),
-                ],
+                    Expanded(
+                      child: widget.bodyIsScrollable
+                          ? SingleChildScrollView(child: widget.body)
+                          : widget.body,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -241,6 +271,18 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
     }
     return null;
   }
+
+  Future<void> _handleBackPressed() async {
+    if (await Navigator.of(context).maybePop()) return;
+    final fallback =
+        widget.fallbackRoute ??
+        RouteAccessGuard.dashboardForRole(_role) ??
+        AppRoutes.landingPage;
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(fallback, (existing) => false);
+  }
 }
 
 @immutable
@@ -267,6 +309,8 @@ class _ModuleToolbar extends StatelessWidget {
   final String? subtitle;
   final bool showMenu;
   final VoidCallback onMenuPressed;
+  final bool canNavigateBack;
+  final VoidCallback onBackPressed;
   final List<Widget> actions;
   final List<Widget> globalActions;
 
@@ -275,6 +319,8 @@ class _ModuleToolbar extends StatelessWidget {
     required this.subtitle,
     required this.showMenu,
     required this.onMenuPressed,
+    required this.canNavigateBack,
+    required this.onBackPressed,
     required this.actions,
     required this.globalActions,
   });
@@ -292,7 +338,6 @@ class _ModuleToolbar extends StatelessWidget {
         ? 112.0
         : 280.0;
     final inlineActionWidth = compactActions ? 132.0 : 320.0;
-    final canPop = ModalRoute.of(context)?.canPop ?? false;
 
     return Container(
       constraints: BoxConstraints(minHeight: tokens.sizing.toolbarHeight),
@@ -306,12 +351,12 @@ class _ModuleToolbar extends StatelessWidget {
       child: showMenu
           ? Row(
               children: [
-                if (canPop)
+                if (canNavigateBack)
                   SizedBox(
                     width: tokens.sizing.buttonHeight,
                     child: IconButton(
                       tooltip: 'Back',
-                      onPressed: () => Navigator.maybePop(context),
+                      onPressed: onBackPressed,
                       icon: const Icon(Icons.arrow_back_rounded),
                     ),
                   )
@@ -367,12 +412,12 @@ class _ModuleToolbar extends StatelessWidget {
             )
           : Row(
               children: [
-                if (canPop) ...[
+                if (canNavigateBack) ...[
                   SizedBox(
                     width: tokens.sizing.buttonHeight,
                     child: IconButton(
                       tooltip: 'Back',
-                      onPressed: () => Navigator.maybePop(context),
+                      onPressed: onBackPressed,
                       icon: const Icon(Icons.arrow_back_rounded),
                     ),
                   ),

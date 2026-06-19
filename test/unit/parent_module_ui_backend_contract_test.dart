@@ -71,6 +71,52 @@ void main() {
     expect(leaveForm, isNot(contains('static const _leaveTypes')));
   });
 
+  test('parent dashboard puts media-rich school feed before utility actions', () {
+    final dashboard = File(
+      'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+    ).readAsStringSync();
+
+    final feedIndex = dashboard.indexOf(
+      '_SchoolFeedList(eventPosts: eventPosts)',
+    );
+    final summaryIndex = dashboard.indexOf(
+      '_ParentSummaryGrid(dashboard: dashboard, child: activeChild)',
+    );
+    final shortcutsIndex = dashboard.indexOf(
+      'const _ParentWorkflowShortcuts()',
+    );
+
+    expect(feedIndex, isNonNegative);
+    expect(summaryIndex, isNonNegative);
+    expect(shortcutsIndex, isNonNegative);
+    expect(feedIndex, lessThan(summaryIndex));
+    expect(feedIndex, lessThan(shortcutsIndex));
+    expect(dashboard, contains("'media_urls': ev['media_urls']"));
+    expect(dashboard, contains('_eventPostMediaUrls'));
+    expect(dashboard, contains('_eventPostMediaType'));
+    expect(dashboard, contains('_SchoolFeedMediaPreview'));
+  });
+
+  test('parent portal root does not expose stack back to login', () {
+    final dashboard = File(
+      'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+    ).readAsStringSync();
+    final scaffold = File(
+      'lib/core/widgets/erp_module_scaffold.dart',
+    ).readAsStringSync();
+
+    expect(dashboard, contains('isPortalRoot: true'));
+    expect(dashboard, contains('fallbackRoute: AppRoutes.parentDashboard'));
+    expect(scaffold, contains('final bool isPortalRoot;'));
+    expect(scaffold, contains('final String? fallbackRoute;'));
+    expect(scaffold, contains('final bool showBackButton;'));
+    expect(scaffold, contains('canNavigateBack'));
+    expect(scaffold, contains('_handleBackPressed'));
+    expect(scaffold, contains('PopScope('));
+    expect(scaffold, contains('canPop: !widget.isPortalRoot'));
+    expect(scaffold, contains('pushNamedAndRemoveUntil'));
+  });
+
   test('parent child summaries surface backend operational fields', () {
     final api = readBackendApiSources();
     final data = File(
