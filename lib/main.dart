@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/semantics.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +18,7 @@ import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SemanticsBinding.instance.ensureSemantics();
   GoogleFonts.config.allowRuntimeFetching = false;
 
   await BackendApiClient.initialize();
