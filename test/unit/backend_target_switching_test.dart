@@ -47,6 +47,16 @@ void main() {
     );
   });
 
+  test('release builds default to the Railway backend without build args', () {
+    final source = File('lib/core/config/env_config.dart').readAsStringSync();
+
+    expect(
+      source,
+      contains('https://schooldesk1-production.up.railway.app/api'),
+    );
+    expect(() => EnvConfig.validate(isRelease: true), returnsNormally);
+  });
+
   test('release Android helper always builds artifacts against Hostinger', () {
     final script = File('scripts/build-android-vps.sh');
     final readme = File('README.md').readAsStringSync();

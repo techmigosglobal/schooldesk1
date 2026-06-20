@@ -77,8 +77,10 @@ Details are in `docs/observability-runbook.md`.
 
 ## Switching Backend Targets
 
-The app changes backend linkage through `API_BASE_URL`; no Dart code should be
-edited when switching between local Docker and Hostinger.
+Release builds default to the Railway backend
+(`https://schooldesk1-production.up.railway.app/api`). The app can still change
+backend linkage through `API_BASE_URL`; no Dart code should be edited when
+switching between local Docker, staging, or another production backend.
 
 For local Docker:
 

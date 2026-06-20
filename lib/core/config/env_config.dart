@@ -15,7 +15,7 @@ class EnvConfig {
   );
   static const String _productionApiBaseUrl = String.fromEnvironment(
     'PRODUCTION_API_BASE_URL',
-    defaultValue: 'https://api.yourschool.com/api',
+    defaultValue: 'https://schooldesk1-production.up.railway.app/api',
   );
 
   static const String appEnv = String.fromEnvironment(
@@ -75,7 +75,7 @@ class EnvConfig {
   static bool get isStaging => appEnv == 'staging';
 
   /// The backend base URL. Always reads from --dart-define=API_BASE_URL first.
-  /// Defaults to the local Docker FastAPI service for development.
+  /// Defaults to Railway for release builds and local Docker for development.
   static String get apiBaseUrl {
     if (_configuredApiBaseUrl.isNotEmpty) {
       return v1BaseUrlFrom(_configuredApiBaseUrl);
@@ -84,6 +84,13 @@ class EnvConfig {
   }
 
   static String get apiOrigin => apiOriginFromBaseUrl(apiBaseUrl);
+
+  static String get _releaseApiBaseUrl {
+    if (_configuredApiBaseUrl.isNotEmpty) {
+      return v1BaseUrlFrom(_configuredApiBaseUrl);
+    }
+    return v1BaseUrlFrom(_productionApiBaseUrl);
+  }
 
   static String v1BaseUrlFrom(String value) {
     final clean = _withoutTrailingSlash(value);
@@ -136,18 +143,10 @@ class EnvConfig {
 
   /// Validates that all required environment variables are set.
   static void validate({bool isRelease = kReleaseMode}) {
-    if (isRelease && _configuredApiBaseUrl.isEmpty) {
+    final validatedBaseUrl = isRelease ? _releaseApiBaseUrl : apiBaseUrl;
+    if (isRelease && !validatedBaseUrl.startsWith('https://')) {
       throw Exception(
-        'API_BASE_URL must be provided in release builds.\n'
-        'Pass --dart-define=API_BASE_URL=https://your-api-domain',
-      );
-    }
-    if (isRelease &&
-        _configuredApiBaseUrl.isNotEmpty &&
-        !_configuredApiBaseUrl.startsWith('https://')) {
-      throw Exception(
-        'API_BASE_URL must use HTTPS in release builds. '
-        'Got: $_configuredApiBaseUrl',
+        'Release API base URL must use HTTPS. Got: $validatedBaseUrl',
       );
     }
   }
