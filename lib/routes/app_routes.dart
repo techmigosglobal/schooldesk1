@@ -115,6 +115,7 @@ class AppRoutes {
   static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDiscipline = '/teacher-discipline-screen';
+  static const String syllabusMonitoring = '/syllabus-monitoring-screen';
 
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
@@ -255,6 +256,7 @@ class AppRoutes {
     teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherDiscipline: (context) => const TeacherDisciplineScreen(),
+    syllabusMonitoring: (context) => const SyllabusMonitoringScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),
 

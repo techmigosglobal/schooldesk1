@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class LandingPageScreen extends StatefulWidget {
@@ -117,211 +117,232 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
   }
 
   void _openLogin() {
+    HapticFeedback.lightImpact();
     Navigator.pushNamed(context, AppRoutes.principalLogin);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFEAF6FF),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final topBandHeight = (constraints.maxHeight * 0.17).clamp(
-              108.0,
-              152.0,
-            );
-            final footerBandHeight = (constraints.maxHeight * 0.13).clamp(
-              90.0,
-              128.0,
-            );
+    final size = MediaQuery.sizeOf(context);
+    final isSmall = size.width < 400;
 
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      height: topBandHeight,
-                      child: _LandingHeader(onSignIn: _openLogin),
-                    ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          NotificationListener<ScrollNotification>(
-                            onNotification: (notification) {
-                              if (notification is ScrollStartNotification) {
-                                _pauseAutoSlide();
-                              } else if (notification
-                                  is ScrollEndNotification) {
-                                _resumeAutoSlide();
-                              }
-                              return false;
-                            },
-                            child: PageView.builder(
-                              controller: _controller,
-                              onPageChanged: (index) =>
-                                  setState(() => _activeSlide = index),
-                              itemCount: _slideAssets.length,
-                              itemBuilder: (context, index) {
-                                return _ArtworkSlide(
-                                  assetPath: _slideAssets[index],
-                                );
-                              },
-                            ),
-                          ),
-                          _ArtworkHotspots(
-                            onPrevious: () => _goToSlide(
-                              (_activeSlide - 1 + _slideAssets.length) %
-                                  _slideAssets.length,
-                              manual: true,
-                            ),
-                            onNext: () => _goToSlide(
-                              (_activeSlide + 1) % _slideAssets.length,
-                              manual: true,
-                            ),
-                          ),
-                        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.transparent,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFEBF5FF),
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: Column(
+                    children: [
+                      // ── TOP HEADER ──────────────────────────────────────
+                      _LandingHeader(
+                        onSignIn: _openLogin,
+                        isSmall: isSmall,
                       ),
-                    ),
-                    SizedBox(
-                      height: footerBandHeight,
-                      child: _LandingFooter(
-                        // Slide dots live in the bottom band, below the artwork.
-                        indicator: _SlidePositionIndicator(
-                          activeIndex: _activeSlide,
-                          itemCount: _slideAssets.length,
+                      // ── SLIDE CAROUSEL ──────────────────────────────────
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: isSmall ? 8 : 16,
+                          ),
+                          child: Stack(
+                            children: [
+                              NotificationListener<ScrollNotification>(
+                                onNotification: (notification) {
+                                  if (notification
+                                      is ScrollStartNotification) {
+                                    _pauseAutoSlide();
+                                  } else if (notification
+                                      is ScrollEndNotification) {
+                                    _resumeAutoSlide();
+                                  }
+                                  return false;
+                                },
+                                child: PageView.builder(
+                                  controller: _controller,
+                                  onPageChanged: (index) =>
+                                      setState(() => _activeSlide = index),
+                                  itemCount: _slideAssets.length,
+                                  itemBuilder: (context, index) {
+                                    return _ArtworkSlide(
+                                      assetPath: _slideAssets[index],
+                                    );
+                                  },
+                                ),
+                              ),
+                              _ArtworkHotspots(
+                                onPrevious: () => _goToSlide(
+                                  (_activeSlide - 1 + _slideAssets.length) %
+                                      _slideAssets.length,
+                                  manual: true,
+                                ),
+                                onNext: () => _goToSlide(
+                                  (_activeSlide + 1) % _slideAssets.length,
+                                  manual: true,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        onToggleAutoSlide: _reduceMotion
-                            ? null
-                            : _toggleAutoSlide,
+                      ),
+                      // ── BOTTOM FOOTER ───────────────────────────────────
+                      _LandingFooter(
+                        activeIndex: _activeSlide,
+                        itemCount: _slideAssets.length,
+                        onToggleAutoSlide:
+                            _reduceMotion ? null : _toggleAutoSlide,
                         isAutoSlidePaused:
                             _reduceMotion || _autoSlidePausedByUser,
+                        isSmall: isSmall,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Header — single clean bar with logo left, sign-in right
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _LandingHeader extends StatelessWidget {
-  const _LandingHeader({required this.onSignIn});
+  const _LandingHeader({required this.onSignIn, required this.isSmall});
 
   final VoidCallback onSignIn;
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final isCompact = width < 380;
-        final logoHeight = isCompact ? 58.0 : 68.0;
-        final sideInset = isCompact ? 12.0 : 20.0;
-
-        return Stack(
-          children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: EdgeInsets.only(top: isCompact ? 10 : 14),
-                child: _LandingBrandPanel(
-                  maxWidth: isCompact ? 290 : 360,
-                  minHeight: isCompact ? 72 : 82,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isCompact ? 10 : 14,
-                    vertical: isCompact ? 6 : 7,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(
-                          'assets/branding/ArishVilleLogo.png',
-                          height: logoHeight,
-                          width: logoHeight,
-                          fit: BoxFit.cover,
-                          semanticLabel: 'ArishVille Preschool logo',
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Flexible(
-                        child: Text(
-                          'ArishVille Preschool',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: isCompact ? 16 : 19,
-                            height: 1.06,
-                            fontWeight: FontWeight.w900,
-                            color: context.appTheme.onSurface,
-                          ),
-                        ),
-                      ),
-                    ],
+    return Container(
+      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 10, isSmall ? 8 : 16, 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 10 : 14,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1565C0).withAlpha(18),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Logo
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/branding/ArishVilleLogo.png',
+              height: isSmall ? 44 : 52,
+              width: isSmall ? 44 : 52,
+              fit: BoxFit.cover,
+              semanticLabel: 'School logo',
+            ),
+          ),
+          const SizedBox(width: 10),
+          // School name
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'ArishVille Preschool',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: isSmall ? 15 : 17,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF0D1B2A),
+                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
+                Text(
+                  'Powered by SchoolDesk',
+                  style: TextStyle(
+                    fontSize: isSmall ? 10 : 11,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF1565C0).withAlpha(180),
+                  ),
+                ),
+              ],
             ),
-            Positioned(
-              right: sideInset,
-              top: isCompact ? 58 : 64,
-              child: _SignInButton(key: const Key('sign_in_button'), onPressed: onSignIn),
-            ),
-          ],
-        );
-      },
+          ),
+          // Sign In button
+          const SizedBox(width: 8),
+          _SignInButton(
+            key: const Key('sign_in_button'),
+            onPressed: onSignIn,
+            isSmall: isSmall,
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _SignInButton extends StatelessWidget {
-  const _SignInButton({required this.onPressed, super.key});
+  const _SignInButton({
+    required this.onPressed,
+    required this.isSmall,
+    super.key,
+  });
 
   final VoidCallback onPressed;
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Sign in',
+      label: 'Sign in to SchoolDesk',
       child: Material(
-        color: context.appTheme.primary,
-        borderRadius: BorderRadius.circular(24),
-        elevation: 3,
-        shadowColor: context.appTheme.primary.withAlpha(70),
+        color: const Color(0xFF1565C0),
+        borderRadius: BorderRadius.circular(12),
+        elevation: 0,
         child: InkWell(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(12),
           onTap: onPressed,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 48, minWidth: 84),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.login_rounded,
-                    size: 16,
-                    color: context.appTheme.onPrimary,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isSmall ? 12 : 16,
+              vertical: isSmall ? 9 : 11,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.login_rounded,
+                  size: isSmall ? 15 : 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'Sign in',
+                  style: TextStyle(
+                    fontSize: isSmall ? 12 : 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.2,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Sign in',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w800,
-                      color: context.appTheme.onPrimary,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -329,123 +350,113 @@ class _SignInButton extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Footer — dots centre, pause left, Techmigos brand right
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _LandingFooter extends StatelessWidget {
   const _LandingFooter({
-    required this.indicator,
+    required this.activeIndex,
+    required this.itemCount,
     required this.onToggleAutoSlide,
     required this.isAutoSlidePaused,
+    required this.isSmall,
   });
 
-  final Widget indicator;
+  final int activeIndex;
+  final int itemCount;
   final VoidCallback? onToggleAutoSlide;
   final bool isAutoSlidePaused;
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 380;
-        final footerHeight = isCompact ? 30.0 : 36.0;
-
-        return Stack(
-          children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: Padding(
-                padding: EdgeInsets.only(top: isCompact ? 2 : 4),
-                child: indicator,
+    return Container(
+      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 8, isSmall ? 8 : 16, 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: isSmall ? 10 : 14,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1565C0).withAlpha(18),
+            blurRadius: 16,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Techmigos brand (left)
+          _TechmigasBrand(isSmall: isSmall),
+          // Slide indicator (centre)
+          Expanded(
+            child: Center(
+              child: _SlidePositionIndicator(
+                activeIndex: activeIndex,
+                itemCount: itemCount,
               ),
             ),
-            if (onToggleAutoSlide != null)
-              Positioned(
-                right: isCompact ? 12 : 20,
-                top: isCompact ? 28 : 34,
-                child: _PauseButton(
-                  isAutoSlidePaused: isAutoSlidePaused,
-                  onPressed: onToggleAutoSlide!,
-                ),
-              ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: isCompact ? 8 : 12),
-                child: _LandingBrandPanel(
-                  maxWidth: isCompact ? 250 : 340,
-                  minHeight: isCompact ? 48 : 56,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: isCompact ? 12 : 18,
-                    vertical: isCompact ? 6 : 8,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Image.asset(
-                        'assets/branding/techmigos_logo.png',
-                        height: footerHeight,
-                        width: footerHeight,
-                        fit: BoxFit.contain,
-                        semanticLabel: 'Techmigos logo',
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Powered by Techmigos',
-                        style: TextStyle(
-                          fontSize: isCompact ? 12 : 13,
-                          fontWeight: FontWeight.w800,
-                          color: context.appTheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+          // Pause/play (right)
+          if (onToggleAutoSlide != null)
+            _PauseButton(
+              isAutoSlidePaused: isAutoSlidePaused,
+              onPressed: onToggleAutoSlide!,
+              isSmall: isSmall,
+            )
+          else
+            SizedBox(width: isSmall ? 32 : 40),
+        ],
+      ),
     );
   }
 }
 
-class _LandingBrandPanel extends StatelessWidget {
-  const _LandingBrandPanel({
-    required this.child,
-    required this.maxWidth,
-    required this.minHeight,
-    required this.padding,
-  });
-
-  final Widget child;
-  final double maxWidth;
-  final double minHeight;
-  final EdgeInsetsGeometry padding;
+class _TechmigasBrand extends StatelessWidget {
+  const _TechmigasBrand({required this.isSmall});
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
-    // Brand panel container: prevents the header/footer images from reading as
-    // loose white blocks while keeping the real brand artwork inspectable.
-    return Container(
-      constraints: BoxConstraints(maxWidth: maxWidth, minHeight: minHeight),
-      padding: padding,
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(238),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withAlpha(210), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: context.appTheme.primary.withAlpha(20),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFFFF), Color(0xFFF5FBFF)],
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          'assets/branding/techmigos_logo.png',
+          height: isSmall ? 26 : 30,
+          width: isSmall ? 26 : 30,
+          fit: BoxFit.contain,
+          semanticLabel: 'TechMigos logo',
         ),
-      ),
-      child: child,
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Powered by',
+              style: TextStyle(
+                fontSize: isSmall ? 8.5 : 9.5,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF607D8B),
+              ),
+            ),
+            Text(
+              'TechMigos',
+              style: TextStyle(
+                fontSize: isSmall ? 10 : 11,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1565C0),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -454,28 +465,84 @@ class _PauseButton extends StatelessWidget {
   const _PauseButton({
     required this.isAutoSlidePaused,
     required this.onPressed,
+    required this.isSmall,
   });
 
   final bool isAutoSlidePaused;
   final VoidCallback onPressed;
+  final bool isSmall;
 
   @override
   Widget build(BuildContext context) {
-    return IconButton.filledTonal(
-      tooltip: isAutoSlidePaused ? 'Resume carousel' : 'Pause carousel',
-      onPressed: onPressed,
-      style: IconButton.styleFrom(
-        fixedSize: const Size.square(44),
-        backgroundColor: context.appTheme.surface.withAlpha(225),
-        foregroundColor: context.appTheme.primary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      icon: Icon(
-        isAutoSlidePaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+    return Semantics(
+      button: true,
+      label: isAutoSlidePaused ? 'Resume slideshow' : 'Pause slideshow',
+      child: GestureDetector(
+        onTap: onPressed,
+        child: Container(
+          width: isSmall ? 32 : 38,
+          height: isSmall ? 32 : 38,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE3F0FF),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            isAutoSlidePaused
+                ? Icons.play_arrow_rounded
+                : Icons.pause_rounded,
+            size: isSmall ? 17 : 20,
+            color: const Color(0xFF1565C0),
+          ),
+        ),
       ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slide indicator — pill for active, dot for inactive
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SlidePositionIndicator extends StatelessWidget {
+  const _SlidePositionIndicator({
+    required this.activeIndex,
+    required this.itemCount,
+  });
+
+  final int activeIndex;
+  final int itemCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Slide ${activeIndex + 1} of $itemCount',
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(itemCount, (index) {
+          final isActive = index == activeIndex;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: isActive ? 22 : 7,
+            height: 7,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: isActive
+                  ? const Color(0xFF1565C0)
+                  : const Color(0xFFB0C4DE),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Artwork slide with rounded corners and shadow
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _ArtworkSlide extends StatelessWidget {
   const _ArtworkSlide({required this.assetPath});
@@ -492,11 +559,21 @@ class _ArtworkSlide extends StatelessWidget {
             : maxPosterWidth;
 
         return Center(
-          child: SizedBox(
+          child: Container(
             width: posterWidth,
             height: constraints.maxHeight,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1565C0).withAlpha(22),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               child: Image.asset(
                 assetPath,
                 fit: BoxFit.contain,
@@ -596,49 +673,13 @@ class _ArtworkHotspot extends StatelessWidget {
   }
 }
 
-class _SlidePositionIndicator extends StatelessWidget {
-  const _SlidePositionIndicator({
-    required this.activeIndex,
-    required this.itemCount,
-  });
-
-  final int activeIndex;
-  final int itemCount;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Slide ${activeIndex + 1} of $itemCount',
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(itemCount, (index) {
-          final isActive = index == activeIndex;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            width: isActive ? 10 : 9,
-            height: isActive ? 10 : 9,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isActive
-                  ? context.appTheme.primary
-                  : context.appTheme.outlineVariant.withAlpha(150),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
-
 class _ArtworkFallback extends StatelessWidget {
   const _ArtworkFallback();
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: context.appTheme.surface,
+      color: const Color(0xFFEBF5FF),
       child: Center(
         child: Text(
           'Landing artwork unavailable',
@@ -650,8 +691,6 @@ class _ArtworkFallback extends StatelessWidget {
 }
 
 /// Target width-to-height ratio for the poster frame.
-/// Chosen to accommodate all slide images (ratios 0.68–0.72)
-/// while keeping a consistent page size for the carousel.
 const double _kPosterAspectRatio = 0.70;
 
 Rect _posterFrameFor(Size size) {

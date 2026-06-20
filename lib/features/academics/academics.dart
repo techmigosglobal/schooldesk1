@@ -13,6 +13,7 @@ export 'presentation/screens/teacher_diary_screen/teacher_diary_screen.dart';
 export 'presentation/screens/teacher_performance_screen/teacher_performance_screen.dart';
 export 'presentation/screens/teacher_student_notes_screen/teacher_student_notes_screen.dart';
 export 'presentation/screens/teacher_discipline_screen/teacher_discipline_screen.dart';
+export 'presentation/screens/syllabus_monitoring_screen/syllabus_monitoring_screen.dart';
 export 'presentation/screens/admin_timetable_screen/admin_timetable_screen.dart';
 export 'presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart';
 export 'presentation/screens/lesson_planner_screen.dart';
