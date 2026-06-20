@@ -387,16 +387,53 @@ class _IntroPanel extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Container(
-          width: 84,
-          height: 84,
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            color: context.appTheme.primary.withAlpha(18),
+            color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.appTheme.outlineVariant),
           ),
-          child: Icon(
-            Icons.school_rounded,
-            size: 42,
-            color: context.appTheme.primary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Image.asset(
+                  'assets/branding/arishville_logo_light.png',
+                  height: 108,
+                  fit: BoxFit.contain,
+                  semanticLabel: 'ArishVille Preschool',
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset(
+                      'assets/branding/arishville_logo_dark.png',
+                      width: 54,
+                      height: 54,
+                      fit: BoxFit.cover,
+                      semanticLabel: 'ArishVille dark logo',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'ArishVille Preschool',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 18,
+                        height: 1.15,
+                        fontWeight: FontWeight.w900,
+                        color: context.appTheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 24),
@@ -427,6 +464,28 @@ class _IntroPanel extends StatelessWidget {
             _SetupChip(icon: Icons.lock_rounded, label: 'Permissions'),
             _SetupChip(icon: Icons.person_add_alt_1_rounded, label: 'Login'),
             _SetupChip(icon: Icons.fact_check_rounded, label: 'Audit ready'),
+          ],
+        ),
+        const SizedBox(height: 22),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/branding/techmigos_logo.png',
+              width: 32,
+              height: 32,
+              fit: BoxFit.contain,
+              semanticLabel: 'Techmigos logo',
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Powered by Techmigos',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: context.appTheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ],

@@ -63,6 +63,7 @@ flutter:
   uses-material-design: true # CRITICAL: Required for Material icon font - DO NOT REMOVE
   assets:
     - assets/
+    - assets/branding/
     - assets/images/
     - assets/images/ui/
     - assets/google_fonts/

@@ -81,7 +81,7 @@ class MyApp extends StatelessWidget {
     return Sizer(
       builder: (context, orientation, screenType) {
         return MaterialApp(
-          title: 'schooldesk',
+          title: 'ArishVille Preschool',
           navigatorKey: PushNotificationService.navigatorKey,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

@@ -238,10 +238,10 @@ class _LandingHeader extends StatelessWidget {
                     vertical: isCompact ? 6 : 8,
                   ),
                   child: Image.asset(
-                    'assets/images/header.png',
-                    height: logoHeight,
+                    'assets/branding/arishville_logo_light.png',
+                    height: logoHeight + 12,
                     fit: BoxFit.contain,
-                    semanticLabel: 'Arish Ville Preschool branding',
+                    semanticLabel: 'ArishVille Preschool',
                   ),
                 ),
               ),
@@ -354,11 +354,26 @@ class _LandingFooter extends StatelessWidget {
                     horizontal: isCompact ? 12 : 18,
                     vertical: isCompact ? 6 : 8,
                   ),
-                  child: Image.asset(
-                    'assets/images/footer.png',
-                    height: footerHeight,
-                    fit: BoxFit.contain,
-                    semanticLabel: 'Powered by TechMigos',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        'assets/branding/techmigos_logo.png',
+                        height: footerHeight,
+                        width: footerHeight,
+                        fit: BoxFit.contain,
+                        semanticLabel: 'Techmigos logo',
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Powered by Techmigos',
+                        style: TextStyle(
+                          fontSize: isCompact ? 12 : 13,
+                          fontWeight: FontWeight.w800,
+                          color: context.appTheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
