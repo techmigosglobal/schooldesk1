@@ -1,0 +1,82 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${TEACHER_USERNAME}"
+- tapOn: "Password"
+- inputText: "${TEACHER_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Teacher portal"
+    timeout: 20000
+- tapOn:
+    text: "Mark Student Attendance"
+    optional: true
+- tapOn:
+    text: "Attendance"
+    optional: true
+- extendedWaitUntil:
+    visible: "Student Attendance"
+    timeout: 20000
+- tapOn:
+    text: "Request Correction"
+    optional: true
+- assertVisible:
+    text: "Request Correction"
+    optional: true
+- tapOn:
+    text: "Reason"
+    optional: true
+- inputText: "Maestro correction check"
+- tapOn:
+    text: "Send"
+    optional: true
+- assertVisible:
+    text: "Correction request sent to principal"
+    optional: true
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${PRINCIPAL_USERNAME}"
+- tapOn: "Password"
+- inputText: "${PRINCIPAL_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Principal portal"
+    timeout: 20000
+- tapOn:
+    text: "Correction Requests"
+    optional: true
+- tapOn:
+    text: "Review Attendance"
+    optional: true
+- extendedWaitUntil:
+    visible: "Student Attendance Monitor"
+    timeout: 20000
+- assertVisible:
+    text: "Needs Review"
+    optional: true
+- tapOn:
+    text: "Reopen Attendance"
+    optional: true
+- tapOn:
+    text: "Reason"
+    optional: true
+- inputText: "Maestro reopen approval"
+- tapOn:
+    text: "Reopen"
+    optional: true
+- assertVisible:
+    text: "reopened"
+    optional: true

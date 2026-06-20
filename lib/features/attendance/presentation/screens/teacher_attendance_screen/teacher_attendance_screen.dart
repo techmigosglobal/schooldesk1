@@ -84,6 +84,21 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           : 1;
       final effectivePeriodNumber = periodNumber < 1 ? 1 : periodNumber;
 
+      String effectiveAcademicYearId = academicYearId;
+      if (effectiveAcademicYearId.isEmpty) {
+        try {
+          final years = await api.getAcademicYears();
+          final active = years.where((y) => y.isCurrent);
+          if (active.isNotEmpty) {
+            effectiveAcademicYearId = active.first.id;
+          } else if (years.isNotEmpty) {
+            effectiveAcademicYearId = years.first.id;
+          }
+        } catch (_) {
+          // If we can't get academic year, proceed with empty — backend may still accept.
+        }
+      }
+
       // Load students for the class-teacher's section.
       final studentsPage = await api.getStudents(
         sectionId: sectionId,
@@ -92,7 +107,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       final students = <_AttendanceStudent>[];
       for (final s in studentsPage.data) {
-        final enrollmentId = await _resolveEnrollmentId(api, s);
+        final enrollmentId = await _resolveEnrollmentId(
+          api,
+          s,
+          sectionId: sectionId,
+          academicYearId: effectiveAcademicYearId,
+        );
         students.add(
           _AttendanceStudent(
             id: s.id,
@@ -120,21 +140,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
 
       // Use an existing session only. New sessions are created on Save Draft or Submit Final.
-      String effectiveAcademicYearId = academicYearId;
-      if (effectiveAcademicYearId.isEmpty) {
-        try {
-          final years = await api.getAcademicYears();
-          final active = years.where((y) => y.isCurrent);
-          if (active.isNotEmpty) {
-            effectiveAcademicYearId = active.first.id;
-          } else if (years.isNotEmpty) {
-            effectiveAcademicYearId = years.first.id;
-          }
-        } catch (_) {
-          // If we can't get academic year, proceed with empty — backend may still accept.
-        }
-      }
-
       final session = matching.isNotEmpty ? matching.first : null;
       final attendanceRows = _hydrateSavedAttendanceRows(students, session);
 
@@ -763,8 +768,27 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     return firstPeriod.isNotEmpty ? firstPeriod.first : slots.first;
   }
 
-  String _activeEnrollmentId(List<Map<String, dynamic>> enrollments) {
+  String _attendanceEnrollmentId(
+    List<Map<String, dynamic>> enrollments, {
+    required String sectionId,
+    required String academicYearId,
+    String fallbackEnrollmentId = '',
+  }) {
     if (enrollments.isEmpty) return '';
+    final matching = enrollments.where((row) {
+      final rowSectionId = teacherFlowText(row['section_id']);
+      final rowAcademicYearId = teacherFlowText(row['academic_year_id']);
+      return rowSectionId == sectionId &&
+          (academicYearId.isEmpty || rowAcademicYearId == academicYearId);
+    }).toList();
+    if (matching.isNotEmpty) {
+      final active = matching.where(
+        (row) => teacherFlowText(row['status']).toLowerCase() == 'active',
+      );
+      final row = active.isNotEmpty ? active.first : matching.first;
+      return teacherFlowText(row['id'] ?? row['enrollment_id']);
+    }
+    if (fallbackEnrollmentId.trim().isNotEmpty) return fallbackEnrollmentId;
     final active = enrollments.where(
       (row) => teacherFlowText(row['status']).toLowerCase() == 'active',
     );
@@ -774,11 +798,17 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Future<String> _resolveEnrollmentId(
     BackendApiClient api,
-    StudentModel s,
-  ) async {
-    if (s.activeEnrollmentId.trim().isNotEmpty) return s.activeEnrollmentId;
+    StudentModel s, {
+    required String sectionId,
+    required String academicYearId,
+  }) async {
     final enrollments = await api.getStudentEnrollments(s.id);
-    return _activeEnrollmentId(enrollments);
+    return _attendanceEnrollmentId(
+      enrollments,
+      sectionId: sectionId,
+      academicYearId: academicYearId,
+      fallbackEnrollmentId: s.activeEnrollmentId,
+    );
   }
 
   String _subjectLabelFromSlot(Map<String, dynamic> slot) {

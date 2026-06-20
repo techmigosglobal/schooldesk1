@@ -1,0 +1,88 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${PRINCIPAL_USERNAME}"
+- tapOn: "Password"
+- inputText: "${PRINCIPAL_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Principal portal"
+    timeout: 20000
+- assertVisible:
+    text: "Principal Action Queue"
+    optional: true
+- tapOn:
+    text: "Review Attendance"
+    optional: true
+- assertVisible:
+    text: "Student Attendance Monitor"
+    optional: true
+- back
+- tapOn:
+    text: "Correction Requests"
+    optional: true
+- assertVisible:
+    text: "Student Attendance Monitor"
+    optional: true
+- back
+- tapOn:
+    text: "Class Hub"
+    optional: true
+- assertVisible:
+    text: "Class Hub"
+    optional: true
+- back
+- tapOn:
+    text: "Event Approvals"
+    optional: true
+- assertVisible:
+    text: "Event Approvals"
+    optional: true
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${TEACHER_USERNAME}"
+- tapOn: "Password"
+- inputText: "${TEACHER_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Teacher portal"
+    timeout: 20000
+- assertVisible:
+    text: "Today Action Queue"
+    optional: true
+- tapOn:
+    text: "Mark Student Attendance"
+    optional: true
+- assertVisible:
+    text: "Student Attendance"
+    optional: true
+- back
+- tapOn:
+    text: "Record Class Diary"
+    optional: true
+- assertVisible:
+    text: "Class Diary"
+    optional: true
+- back
+- tapOn:
+    text: "Post Homework"
+    optional: true
+- assertVisible:
+    text: "Diary"
+    optional: true
+- assertVisible:
+    text: "Homework"
+    optional: true

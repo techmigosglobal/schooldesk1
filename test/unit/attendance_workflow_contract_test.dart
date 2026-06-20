@@ -35,6 +35,15 @@ void main() {
       );
       expect(teacherAttendance, contains('s.activeEnrollmentId'));
       expect(teacherAttendance, contains('_resolveEnrollmentId'));
+      expect(teacherAttendance, contains('_attendanceEnrollmentId'));
+      expect(
+        teacherAttendance,
+        isNot(
+          contains(
+            'if (s.activeEnrollmentId.trim().isNotEmpty) return s.activeEnrollmentId;',
+          ),
+        ),
+      );
       expect(teacherAttendance, contains("'status': 'leave'"));
       expect(teacherAttendance, contains("'status': 'half_day'"));
       expect(api, contains('bool finalize = true'));

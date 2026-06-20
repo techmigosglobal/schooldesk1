@@ -1,0 +1,57 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${TEACHER_USERNAME}"
+- tapOn: "Password"
+- inputText: "${TEACHER_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Teacher portal"
+    timeout: 20000
+- tapOn:
+    text: "Parent Messages"
+    optional: true
+- assertVisible:
+    text: "Communication"
+    optional: true
+- assertVisible:
+    text: "Visible to Principal monitoring"
+    optional: true
+- back
+- tapOn:
+    text: "Homework Feedback"
+    optional: true
+- assertVisible:
+    text: "Homework Messaging"
+    optional: true
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${PRINCIPAL_USERNAME}"
+- tapOn: "Password"
+- inputText: "${PRINCIPAL_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Principal portal"
+    timeout: 20000
+- tapOn:
+    text: "Message Oversight"
+    optional: true
+- assertVisible:
+    text: "Message Oversight"
+    optional: true
+- assertVisible:
+    text: "Teacher Messages"
+    optional: true

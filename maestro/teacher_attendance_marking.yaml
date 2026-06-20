@@ -1,0 +1,52 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${TEACHER_USERNAME}"
+- tapOn: "Password"
+- inputText: "${TEACHER_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Teacher portal"
+    timeout: 20000
+- tapOn:
+    text: "Mark Student Attendance"
+    optional: true
+- tapOn:
+    text: "Attendance"
+    optional: true
+- extendedWaitUntil:
+    visible: "Student Attendance"
+    timeout: 20000
+- assertVisible: "Attendance selection"
+- assertVisible: "Swipe-free Quick Marking"
+- tapOn:
+    text: "All Present"
+    optional: true
+- assertVisible:
+    text: "Present"
+    optional: true
+- tapOn:
+    text: "Save Draft"
+    optional: true
+- assertVisible:
+    text: "Draft saved"
+    optional: true
+- tapOn:
+    text: "Submit Final"
+    optional: true
+- assertVisible:
+    text: "Attendance submitted and locked"
+    optional: true
+- assertVisible:
+    text: "Attendance locked"
+    optional: true
+- tapOn:
+    text: "Later"
+    optional: true

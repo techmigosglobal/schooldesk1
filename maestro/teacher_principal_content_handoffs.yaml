@@ -1,0 +1,87 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${TEACHER_USERNAME}"
+- tapOn: "Password"
+- inputText: "${TEACHER_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Teacher portal"
+    timeout: 20000
+- tapOn:
+    text: "Post Homework"
+    optional: true
+- tapOn:
+    text: "Diary"
+    optional: true
+- assertVisible:
+    text: "Homework"
+    optional: true
+- tapOn:
+    text: "Assign Homework"
+    optional: true
+- tapOn:
+    point: "90%, 8%"
+    optional: true
+- assertVisible:
+    text: "Assign Homework"
+    optional: true
+- back
+- tapOn:
+    text: "Lesson Planner"
+    optional: true
+- assertVisible:
+    text: "Lesson Planner"
+    optional: true
+- back
+- tapOn:
+    text: "Event Posts"
+    optional: true
+- assertVisible:
+    text: "Event Posts"
+    optional: true
+- tapOn:
+    text: "Create"
+    optional: true
+- tapOn:
+    text: "Post"
+    optional: true
+- back
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    point: "84%,14%"
+- tapOn: "Username"
+- inputText: "${PRINCIPAL_USERNAME}"
+- tapOn: "Password"
+- inputText: "${PRINCIPAL_PASSWORD}"
+- tapOn: "Sign in"
+- extendedWaitUntil:
+    visible: "Principal portal"
+    timeout: 20000
+- tapOn:
+    text: "Lesson Planners"
+    optional: true
+- assertVisible:
+    text: "Lesson Planners"
+    optional: true
+- back
+- tapOn:
+    text: "Event Approvals"
+    optional: true
+- assertVisible:
+    text: "Event Approvals"
+    optional: true
+- assertVisible:
+    text: "No event approvals pending"
+    optional: true
