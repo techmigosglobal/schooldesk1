@@ -20,9 +20,7 @@ void main() {
     final iosInfo = File('ios/Runner/Info.plist').readAsStringSync();
 
     for (final asset in [
-      'assets/branding/arishville_logo_dark.png',
-      'assets/branding/arishville_logo_light.png',
-      'assets/branding/arishville_app_icon.png',
+      'assets/branding/ArishVilleLogo.png',
       'assets/branding/techmigos_logo.png',
     ]) {
       expect(File(asset).existsSync(), isTrue, reason: '$asset is missing');
@@ -33,13 +31,21 @@ void main() {
     for (final source in [landing, onboarding]) {
       expect(source, contains('ArishVille Preschool'));
       expect(source, contains('Powered by Techmigos'));
-      expect(source, contains('assets/branding/arishville_logo_light.png'));
+      expect(source, contains('assets/branding/ArishVilleLogo.png'));
       expect(source, contains('assets/branding/techmigos_logo.png'));
+      expect(
+        source,
+        isNot(contains('assets/branding/arishville_logo_light.png')),
+      );
+      expect(
+        source,
+        isNot(contains('assets/branding/arishville_logo_dark.png')),
+      );
       expect(source, isNot(contains('assets/images/header.png')));
       expect(source, isNot(contains('assets/images/footer.png')));
     }
 
-    expect(onboarding, contains('assets/branding/arishville_logo_dark.png'));
+    expect(onboarding, contains('assets/branding/ArishVilleLogo.png'));
     expect(main, contains("title: 'ArishVille Preschool'"));
     expect(webIndex, contains('<title>ArishVille Preschool</title>'));
     expect(webManifest, contains('"name": "ArishVille Preschool"'));

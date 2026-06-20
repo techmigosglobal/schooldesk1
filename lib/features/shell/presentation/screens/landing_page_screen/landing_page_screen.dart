@@ -221,7 +221,7 @@ class _LandingHeader extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final isCompact = width < 380;
-        final logoHeight = isCompact ? 46.0 : 54.0;
+        final logoHeight = isCompact ? 58.0 : 68.0;
         final sideInset = isCompact ? 12.0 : 20.0;
 
         return Stack(
@@ -231,17 +231,40 @@ class _LandingHeader extends StatelessWidget {
               child: Padding(
                 padding: EdgeInsets.only(top: isCompact ? 10 : 14),
                 child: _LandingBrandPanel(
-                  maxWidth: isCompact ? 260 : 330,
-                  minHeight: isCompact ? 58 : 66,
+                  maxWidth: isCompact ? 290 : 360,
+                  minHeight: isCompact ? 72 : 82,
                   padding: EdgeInsets.symmetric(
-                    horizontal: isCompact ? 12 : 18,
-                    vertical: isCompact ? 6 : 8,
+                    horizontal: isCompact ? 10 : 14,
+                    vertical: isCompact ? 6 : 7,
                   ),
-                  child: Image.asset(
-                    'assets/branding/arishville_logo_light.png',
-                    height: logoHeight + 12,
-                    fit: BoxFit.contain,
-                    semanticLabel: 'ArishVille Preschool',
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/branding/ArishVilleLogo.png',
+                          height: logoHeight,
+                          width: logoHeight,
+                          fit: BoxFit.cover,
+                          semanticLabel: 'ArishVille Preschool logo',
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          'ArishVille Preschool',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: isCompact ? 16 : 19,
+                            height: 1.06,
+                            fontWeight: FontWeight.w900,
+                            color: context.appTheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

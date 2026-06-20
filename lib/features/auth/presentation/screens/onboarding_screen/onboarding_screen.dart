@@ -400,8 +400,8 @@ class _IntroPanel extends StatelessWidget {
             children: [
               Center(
                 child: Image.asset(
-                  'assets/branding/arishville_logo_light.png',
-                  height: 108,
+                  'assets/branding/ArishVilleLogo.png',
+                  height: 150,
                   fit: BoxFit.contain,
                   semanticLabel: 'ArishVille Preschool',
                 ),
@@ -412,11 +412,11 @@ class _IntroPanel extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: Image.asset(
-                      'assets/branding/arishville_logo_dark.png',
+                      'assets/branding/ArishVilleLogo.png',
                       width: 54,
                       height: 54,
                       fit: BoxFit.cover,
-                      semanticLabel: 'ArishVille dark logo',
+                      semanticLabel: 'ArishVille Preschool logo',
                     ),
                   ),
                   const SizedBox(width: 12),
