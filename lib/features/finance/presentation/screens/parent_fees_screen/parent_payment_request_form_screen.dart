@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -72,8 +73,10 @@ class _ParentPaymentRequestFormScreenState
   String get _upiId => _text(_paymentConfig['upi_id']);
   String get _payeeName =>
       _text(_paymentConfig['payee_name'], fallback: 'School');
+  String get _qrImageUrl => _text(_paymentConfig['qr_image_url']);
   bool get _upiEnabled =>
-      _paymentConfig['upi_enabled'] == true && _upiId.isNotEmpty;
+      _paymentConfig['upi_enabled'] == true &&
+      (_upiId.isNotEmpty || _qrImageUrl.isNotEmpty);
 
   String get _upiUri {
     final params = {
@@ -362,26 +365,44 @@ class _ParentPaymentRequestFormScreenState
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
-          QrImageView(data: _upiUri, version: QrVersions.auto, size: 190),
-          const SizedBox(height: 12),
-          SelectableText(
-            _upiId,
-            style: GoogleFonts.dmSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+          if (_qrImageUrl.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                _absoluteMediaUrl(_qrImageUrl),
+                width: 210,
+                height: 210,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => QrImageView(
+                  data: _upiUri,
+                  version: QrVersions.auto,
+                  size: 190,
+                ),
+              ),
+            )
+          else
+            QrImageView(data: _upiUri, version: QrVersions.auto, size: 190),
+          if (_upiId.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            SelectableText(
+              _upiId,
+              style: GoogleFonts.dmSans(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: _upiId));
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text('UPI ID copied')));
-            },
-            icon: const Icon(Icons.copy_rounded, size: 18),
-            label: const Text('Copy UPI ID'),
-          ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: _upiId));
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('UPI ID copied')));
+              },
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              label: const Text('Copy UPI ID'),
+            ),
+          ],
         ],
       ),
     );
@@ -654,6 +675,15 @@ class _ParentPaymentRequestFormScreenState
   bool _isIsoDate(String raw) {
     final match = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw);
     return match && DateTime.tryParse(raw) != null;
+  }
+
+  String _absoluteMediaUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
+    return '${EnvConfig.apiOrigin}/$trimmed';
   }
 }
 

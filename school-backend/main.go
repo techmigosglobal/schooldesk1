@@ -67,10 +67,11 @@ func main() {
 	}
 
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
 
 	r.Use(
 		middleware.RequestIDMiddleware(),
+		middleware.ErrorEventMiddleware(),
 		middleware.MetricsMiddleware(),
 		middleware.RequestLogMiddleware(),
 		middleware.CORSMiddleware(),

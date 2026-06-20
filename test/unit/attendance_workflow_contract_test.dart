@@ -25,6 +25,16 @@ void main() {
       expect(teacherAttendance, contains('Request Correction'));
       expect(teacherAttendance, contains("'reason': student.reason"));
       expect(teacherAttendance, isNot(contains("'remarks':")));
+      expect(teacherAttendance, isNot(contains("this.status = 'present'")));
+      expect(teacherAttendance, contains("this.status = 'unmarked'"));
+      expect(teacherAttendance, contains('_hydrateSavedAttendanceRows'));
+      expect(teacherAttendance, contains('_unmarkedStudents'));
+      expect(
+        teacherAttendance,
+        contains('Mark every student before final submit'),
+      );
+      expect(teacherAttendance, contains('s.activeEnrollmentId'));
+      expect(teacherAttendance, contains('_resolveEnrollmentId'));
       expect(teacherAttendance, contains("'status': 'leave'"));
       expect(teacherAttendance, contains("'status': 'half_day'"));
       expect(api, contains('bool finalize = true'));
@@ -53,6 +63,12 @@ void main() {
       expect(principalAttendance, contains('Send Reminder'));
       expect(principalAttendance, contains('Export Class Register'));
       expect(principalAttendance, contains('Audit Trail'));
+      expect(principalAttendance, contains('Incomplete'));
+      expect(principalAttendance, contains('_unmarkedCount'));
+      expect(principalAttendance, contains("label: 'Subject'"));
+      expect(principalAttendance, contains("label: 'Teacher'"));
+      expect(principalAttendance, isNot(contains("label: 'Subject ID'")));
+      expect(principalAttendance, isNot(contains("label: 'Staff ID'")));
       expect(principalAttendance, contains('reopenAttendanceSession'));
       expect(principalAttendance, contains('Not Started'));
       expect(principalAttendance, contains('Needs Review'));
@@ -80,4 +96,21 @@ void main() {
     expect(backend, contains('"period_rows"'));
     expect(backend, contains('StudentLeaveApplication'));
   });
+
+  test(
+    'student list includes active enrollment id for attendance performance',
+    () {
+      final studentModel = File(
+        'lib/features/shared/data/models/backend_models.dart',
+      ).readAsStringSync();
+      final backend = File(
+        'school-backend/internal/handlers/student.go',
+      ).readAsStringSync();
+
+      expect(studentModel, contains('activeEnrollmentId'));
+      expect(studentModel, contains("json['active_enrollment_id']"));
+      expect(backend, contains('"active_enrollment_id"'));
+      expect(backend, contains('activeEnrollmentIDsForStudents'));
+    },
+  );
 }

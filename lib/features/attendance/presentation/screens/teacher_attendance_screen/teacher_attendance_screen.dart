@@ -92,8 +92,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       final students = <_AttendanceStudent>[];
       for (final s in studentsPage.data) {
-        final enrollments = await api.getStudentEnrollments(s.id);
-        final enrollmentId = _activeEnrollmentId(enrollments);
+        final enrollmentId = await _resolveEnrollmentId(api, s);
         students.add(
           _AttendanceStudent(
             id: s.id,
@@ -137,6 +136,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       }
 
       final session = matching.isNotEmpty ? matching.first : null;
+      final attendanceRows = _hydrateSavedAttendanceRows(students, session);
 
       if (!mounted) return;
       setState(() {
@@ -154,7 +154,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             ? _timeLabelFromSlot(slot)
             : 'Period $effectivePeriodNumber';
         _session = session;
-        _students = students;
+        _students = attendanceRows;
         _loading = false;
       });
     } catch (error) {
@@ -198,6 +198,26 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       return;
     }
+    if (finalize && _unmarkedStudents.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Mark every student before final submit.'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (!finalize && _markedStudents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Mark at least one student before saving draft.'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final missingReason = _students.where(
       (student) => student.requiresReason && student.reason.trim().isEmpty,
     );
@@ -224,7 +244,8 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     setState(() => _saving = true);
     try {
       final session = await _ensureSessionForSave();
-      final attendances = _students.map((student) {
+      final rowsForSave = finalize ? _students : _markedStudents;
+      final attendances = rowsForSave.map((student) {
         final enrollmentId = student.enrollmentId;
         return {
           'student_id': student.id,
@@ -373,6 +394,30 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     });
   }
 
+  List<_AttendanceStudent> _hydrateSavedAttendanceRows(
+    List<_AttendanceStudent> students,
+    AttendanceSessionModel? session,
+  ) {
+    if (session == null || session.studentAttendances.isEmpty) {
+      return students;
+    }
+    final rowsByStudentId = <String, Map<String, dynamic>>{};
+    for (final row in session.studentAttendances) {
+      final studentId = teacherFlowText(row['student_id']);
+      if (studentId.isNotEmpty) rowsByStudentId[studentId] = row;
+    }
+    return students.map((student) {
+      final row = rowsByStudentId[student.id];
+      if (row == null) return student;
+      final status = _normalizeAttendanceStatus(row['status']);
+      if (status == 'unmarked') return student;
+      return student.copyWith(
+        status: status,
+        reason: teacherFlowText(row['reason']),
+      );
+    }).toList();
+  }
+
   Future<void> _markOne(_AttendanceStudent student, String status) async {
     if (_session?.isFinalized ?? false) return;
     String reason = student.reason;
@@ -442,6 +487,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     final locked = _session?.isFinalized ?? false;
+    final unmarkedCount = _unmarkedStudents.length;
     return TeacherFlowScaffold(
       title: 'Student Attendance',
       subtitle: 'Class teacher attendance',
@@ -491,6 +537,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 tone: const Color(0xFFE3FAF5),
               ),
               TeacherFlowMetric(
+                label: 'Not Marked',
+                value: '$unmarkedCount',
+                icon: Icons.radio_button_unchecked_rounded,
+                color: Colors.blueGrey,
+                tone: const Color(0xFFF1F5F9),
+              ),
+              TeacherFlowMetric(
                 label: 'Present',
                 value:
                     '${_students.where((s) => s.status == 'present').length}',
@@ -535,6 +588,14 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             const SizedBox(height: 12),
           ],
           TeacherFlowSectionHeader(title: 'Swipe-free Quick Marking'),
+          if (unmarkedCount > 0 && !locked) ...[
+            const SizedBox(height: 8),
+            TeacherInfoPill(
+              icon: Icons.info_outline_rounded,
+              label:
+                  '$unmarkedCount student${unmarkedCount == 1 ? '' : 's'} not marked yet',
+            ),
+          ],
           const SizedBox(height: 10),
           ..._students.map(
             (student) => Padding(
@@ -545,7 +606,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 subtitle: student.roll.isEmpty
                     ? 'Roll not assigned'
                     : student.roll,
-                status: teacherFlowTitleCase(student.status),
+                status: _statusLabel(student.status),
                 statusColor: student.statusColor,
                 body: Container(
                   width: double.infinity,
@@ -595,7 +656,11 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _saving || _students.isEmpty || locked
+                  onPressed:
+                      _saving ||
+                          _students.isEmpty ||
+                          locked ||
+                          _markedStudents.isEmpty
                       ? null
                       : () => _saveAttendance(finalize: false),
                   icon: const Icon(Icons.save_rounded),
@@ -605,7 +670,11 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: _saving || _students.isEmpty || locked
+                  onPressed:
+                      _saving ||
+                          _students.isEmpty ||
+                          locked ||
+                          _unmarkedStudents.isNotEmpty
                       ? null
                       : () => _saveAttendance(finalize: true),
                   icon: _saving
@@ -701,6 +770,15 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
     final row = active.isNotEmpty ? active.first : enrollments.first;
     return teacherFlowText(row['id'] ?? row['enrollment_id']);
+  }
+
+  Future<String> _resolveEnrollmentId(
+    BackendApiClient api,
+    StudentModel s,
+  ) async {
+    if (s.activeEnrollmentId.trim().isNotEmpty) return s.activeEnrollmentId;
+    final enrollments = await api.getStudentEnrollments(s.id);
+    return _activeEnrollmentId(enrollments);
   }
 
   String _subjectLabelFromSlot(Map<String, dynamic> slot) {
@@ -809,6 +887,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       'reopened' => 'Reopened',
       'corrected' => 'Corrected',
       'draft' => 'Draft',
+      'unmarked' => 'Not Marked',
       'present' => 'Present',
       'absent' => 'Absent',
       'late' => 'Late',
@@ -819,6 +898,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   static Color _statusColor(String status) {
     return switch (status) {
+      'unmarked' => Colors.blueGrey,
       'present' => Colors.green,
       'absent' => Colors.red,
       'late' => Colors.orange,
@@ -827,6 +907,22 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       _ => teacherFlowAccent,
     };
   }
+
+  static String _normalizeAttendanceStatus(Object? value) {
+    final status = teacherFlowText(
+      value,
+    ).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+    if (_attendanceStatusOptions.any((option) => option['status'] == status)) {
+      return status;
+    }
+    return 'unmarked';
+  }
+
+  List<_AttendanceStudent> get _unmarkedStudents =>
+      _students.where((student) => student.status == 'unmarked').toList();
+
+  List<_AttendanceStudent> get _markedStudents =>
+      _students.where((student) => student.status != 'unmarked').toList();
 }
 
 class _AttendanceStudent {
@@ -844,7 +940,7 @@ class _AttendanceStudent {
     required this.roll,
     required this.enrollmentId,
     required this.enrollmentMissing,
-    this.status = 'present',
+    this.status = 'unmarked',
     this.reason = '',
   });
 

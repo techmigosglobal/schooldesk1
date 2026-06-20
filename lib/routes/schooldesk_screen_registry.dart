@@ -104,6 +104,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/system-monitor-screen',
+      title: 'System Monitor',
+      module: 'Operations',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/guardian-directory-screen',
       title: 'Parents & Guardians',
       module: 'People',

@@ -1,0 +1,278 @@
+import 'package:flutter/material.dart';
+
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
+
+class SystemMonitorScreen extends StatefulWidget {
+  const SystemMonitorScreen({super.key});
+
+  @override
+  State<SystemMonitorScreen> createState() => _SystemMonitorScreenState();
+}
+
+class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
+  final _api = BackendApiClient.instance;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  String _status = 'open';
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _events = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final response = await _api.getErrorEvents(
+        status: _status == 'all' ? null : _status,
+        pageSize: 50,
+      );
+      final data = response['data'];
+      setState(() {
+        _events = data is List
+            ? data
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+            : const [];
+      });
+    } catch (error) {
+      setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      drawer: PrincipalDrawer(selectedIndex: 26, onDestinationSelected: (_) {}),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu_rounded),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+        ),
+        title: const Text('System Monitor'),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _load,
+          ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _buildFilters(),
+            const SizedBox(height: 16),
+            if (_loading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
+                ),
+              )
+            else if (_error != null)
+              _MessagePanel(
+                icon: Icons.error_outline_rounded,
+                title: 'Unable to load events',
+                message: _error!,
+              )
+            else if (_events.isEmpty)
+              const _MessagePanel(
+                icon: Icons.check_circle_outline_rounded,
+                title: 'No matching error events',
+                message: 'New crashes and backend errors will appear here.',
+              )
+            else
+              for (final event in _events)
+                _ErrorEventTile(
+                  event: event,
+                  onOpen: () => _showDetails(event),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilters() {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(
+          value: 'open',
+          icon: Icon(Icons.report_problem_outlined),
+          label: Text('Open'),
+        ),
+        ButtonSegment(
+          value: 'resolved',
+          icon: Icon(Icons.task_alt_rounded),
+          label: Text('Resolved'),
+        ),
+        ButtonSegment(
+          value: 'all',
+          icon: Icon(Icons.list_alt_rounded),
+          label: Text('All'),
+        ),
+      ],
+      selected: {_status},
+      onSelectionChanged: (selection) {
+        setState(() => _status = selection.first);
+        _load();
+      },
+    );
+  }
+
+  Future<void> _showDetails(Map<String, dynamic> event) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_text(event['message'], fallback: 'Error event')),
+        content: SizedBox(
+          width: 640,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detail('Error ID', event['error_id']),
+                _detail('Request ID', event['request_id']),
+                _detail('Source', event['source']),
+                _detail('Severity', event['severity']),
+                _detail('Status', event['status']),
+                _detail('Role', event['role']),
+                _detail('Path', event['path']),
+                _detail('Occurred', event['occurred_at']),
+                const SizedBox(height: 12),
+                Text(
+                  _text(event['stack_trace'], fallback: 'No stack trace'),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (_text(event['status'], fallback: 'open') != 'resolved')
+            FilledButton.icon(
+              icon: const Icon(Icons.task_alt_rounded),
+              label: const Text('Resolve'),
+              onPressed: () async {
+                await _api.resolveErrorEvent(
+                  _text(
+                    event['id'],
+                    fallback: _text(event['error_id'], fallback: ''),
+                  ),
+                  resolutionNote: 'Reviewed by Principal',
+                );
+                if (!mounted) return;
+                Navigator.pop(context);
+                _load();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detail(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: SelectableText('$label: ${_text(value, fallback: '-')}'),
+    );
+  }
+}
+
+class _ErrorEventTile extends StatelessWidget {
+  const _ErrorEventTile({required this.event, required this.onOpen});
+
+  final Map<String, dynamic> event;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _text(event['status'], fallback: 'open');
+    final severity = _text(event['severity'], fallback: 'error');
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Icon(
+          status == 'resolved'
+              ? Icons.task_alt_rounded
+              : Icons.report_problem_outlined,
+          color: status == 'resolved'
+              ? Colors.green.shade700
+              : Theme.of(context).colorScheme.error,
+        ),
+        title: Text(
+          _text(event['message'], fallback: 'Error event'),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'Error ID: ${_text(event['error_id'], fallback: '-')}  '
+            'Request ID: ${_text(event['request_id'], fallback: '-')}  '
+            '${_text(event['source'], fallback: 'unknown')} / $severity',
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onOpen,
+      ),
+    );
+  }
+}
+
+class _MessagePanel extends StatelessWidget {
+  const _MessagePanel({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(icon, size: 40),
+            const SizedBox(height: 12),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _text(dynamic value, {required String fallback}) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
+}

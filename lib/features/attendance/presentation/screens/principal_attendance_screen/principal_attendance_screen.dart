@@ -379,12 +379,16 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Widget _exceptionCard(AttendanceSessionModel session) {
+    final incomplete = _isIncompleteSession(session);
     return PrincipalDirectoryCard(
-      icon: Icons.warning_amber_rounded,
+      icon: incomplete
+          ? Icons.radio_button_unchecked_rounded
+          : Icons.warning_amber_rounded,
       title: _sectionLabel(session.sectionId),
-      subtitle:
-          'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present',
-      status: 'Review',
+      subtitle: incomplete
+          ? 'Period ${session.periodNumber} | ${_sessionStaffLabel(session)} has not submitted final attendance'
+          : 'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present',
+      status: incomplete ? 'Incomplete' : 'Review',
       statusColor: context.appTheme.warning,
       chips: [
         PrincipalInfoPill(
@@ -393,7 +397,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ),
         PrincipalInfoPill(
           icon: Icons.groups_outlined,
-          label: '${_attendancePercent(session).toStringAsFixed(0)}%',
+          label: incomplete
+              ? '${_unmarkedCount(session)} unmarked'
+              : '${_attendancePercent(session).toStringAsFixed(0)}%',
         ),
       ],
       trailing: const Icon(
@@ -411,7 +417,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       icon: Icons.fact_check_outlined,
       title: _sectionLabel(session.sectionId),
       subtitle:
-          'Teacher ${_staffLabel(session.staffId)} | Period ${session.periodNumber} | ${_dateOnly(session.date)}',
+          'Teacher ${_sessionStaffLabel(session)} | Period ${session.periodNumber} | ${_dateOnly(session.date)}',
       status: status,
       statusColor: _sessionStatusColor(session),
       chips: [
@@ -431,9 +437,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           icon: Icons.event_available_outlined,
           label: 'Leave ${counts['leave']}',
         ),
+        if (_isIncompleteSession(session))
+          PrincipalInfoPill(
+            icon: Icons.radio_button_unchecked_rounded,
+            label: '${_unmarkedCount(session)} unmarked',
+          ),
         PrincipalInfoPill(
           icon: Icons.menu_book_outlined,
-          label: session.subjectId,
+          label: _sessionSubjectLabel(session),
         ),
       ],
       trailing: const Icon(
@@ -546,10 +557,13 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   value: '${_attendancePercent(session).toStringAsFixed(1)}%',
                 ),
                 PrincipalDetailRow(
-                  label: 'Subject ID',
-                  value: session.subjectId,
+                  label: 'Subject',
+                  value: _sessionSubjectLabel(session),
                 ),
-                PrincipalDetailRow(label: 'Staff ID', value: session.staffId),
+                PrincipalDetailRow(
+                  label: 'Teacher',
+                  value: _sessionStaffLabel(session),
+                ),
                 PrincipalDetailRow(
                   label: 'Reopen reason',
                   value: session.reopenReason.isEmpty
@@ -571,9 +585,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 PrincipalActionTile(
                   icon: Icons.notifications_active_outlined,
                   title: 'Send Reminder',
-                  subtitle: 'Notify teacher ${_staffLabel(session.staffId)}',
+                  subtitle: 'Notify teacher ${_sessionStaffLabel(session)}',
                   onTap: () => _showSnack(
-                    'Reminder queued for ${_staffLabel(session.staffId)}',
+                    'Reminder queued for ${_sessionStaffLabel(session)}',
                     success: true,
                   ),
                 ),
@@ -756,7 +770,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   List<AttendanceSessionModel> get _exceptions => _sessions
       .where(
         (session) =>
-            session.totalStudents == 0 ||
+            _isIncompleteSession(session) ||
             (session.totalStudents > 0 &&
                 session.presentCount / session.totalStudents < 0.75),
       )
@@ -786,6 +800,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   String _sessionStatusLabel(AttendanceSessionModel session) {
+    if (_isIncompleteSession(session)) return 'Incomplete';
     return switch (session.status) {
       'submitted' => 'Submitted',
       'draft' => 'Draft',
@@ -798,6 +813,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Color _sessionStatusColor(AttendanceSessionModel session) {
+    if (_isIncompleteSession(session)) return context.appTheme.warning;
     return switch (session.status) {
       'submitted' => context.appTheme.success,
       'corrected' => context.appTheme.success,
@@ -809,6 +825,21 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
             ? context.appTheme.success
             : context.appTheme.warning,
     };
+  }
+
+  bool _isIncompleteSession(AttendanceSessionModel session) {
+    return session.totalStudents == 0 ||
+        session.status == 'draft' ||
+        session.status == 'reopened' ||
+        session.status == 'needs_review';
+  }
+
+  int _unmarkedCount(AttendanceSessionModel session) {
+    if (session.studentAttendances.isEmpty) return session.totalStudents;
+    return session.studentAttendances.where((row) {
+      final status = _text(row['status']).toLowerCase().replaceAll('-', '_');
+      return status == 'unmarked' || status.isEmpty;
+    }).length;
   }
 
   Map<String, int> _sessionStatusCounts(AttendanceSessionModel session) {
@@ -841,6 +872,18 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       }
     }
     return staffId;
+  }
+
+  String _sessionStaffLabel(AttendanceSessionModel session) {
+    if (session.staffName.trim().isNotEmpty) return session.staffName.trim();
+    return _staffLabel(session.staffId);
+  }
+
+  String _sessionSubjectLabel(AttendanceSessionModel session) {
+    if (session.subjectName.trim().isNotEmpty) {
+      return session.subjectName.trim();
+    }
+    return session.subjectId;
   }
 
   String _auditTrailSummary(AttendanceSessionModel session) {

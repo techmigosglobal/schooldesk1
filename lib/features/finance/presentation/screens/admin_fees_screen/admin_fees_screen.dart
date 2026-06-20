@@ -1,5 +1,8 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -33,6 +36,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   List<GradeModel> _grades = [];
   List<SectionModel> _sections = [];
   List<StudentModel> _students = [];
+  Map<String, dynamic> _paymentConfig = const {};
+  final _upiIdController = TextEditingController();
+  final _payeeNameController = TextEditingController();
+  final _qrNoteController = TextEditingController();
+  bool _savingPaymentConfig = false;
+  bool _uploadingQr = false;
 
   String _paymentSearchQuery = '';
   String _paymentModeFilter = 'All';
@@ -43,6 +52,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _upiIdController.dispose();
+    _payeeNameController.dispose();
+    _qrNoteController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -56,6 +73,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final invoices = await api.getInvoices();
       final feeCategories = await api.getRawList('/fees/categories');
       final concessions = await api.getRawList('/fees/concessions');
+      final paymentConfig = await api.getPaymentConfig();
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
       final sections = await api.getSections();
@@ -66,6 +84,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
         _feeCategories = feeCategories;
         _concessions = concessions;
+        _paymentConfig = paymentConfig;
+        _upiIdController.text = _textValue(paymentConfig['upi_id']);
+        _payeeNameController.text = _textValue(paymentConfig['payee_name']);
+        _qrNoteController.text = _textValue(paymentConfig['qr_note']);
         _academicYears = academicYears;
         _grades = grades;
         _sections = sections;
@@ -94,7 +116,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
@@ -166,8 +190,131 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           ],
         ),
         _buildViewPicker(),
+        _buildPaymentQrSettings(),
         _buildCurrentView(),
       ],
+    );
+  }
+
+  Widget _buildPaymentQrSettings() {
+    final qrImageUrl = _textValue(_paymentConfig['qr_image_url']);
+    final upiEnabled = _paymentConfig['upi_enabled'] == true;
+    return OpsPanel(
+      title: 'Payment QR Settings',
+      subtitle: upiEnabled
+          ? 'Parents will see this QR on UPI payment requests'
+          : 'Set a QR or UPI ID before parents submit UPI proofs',
+      trailing: OpsStatusPill(
+        label: upiEnabled ? 'Active' : 'Not Set',
+        color: upiEnabled ? Colors.green : Colors.orange,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                width: 150,
+                height: 150,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: context.appTheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: context.appTheme.outlineVariant),
+                ),
+                child: qrImageUrl.isEmpty
+                    ? Icon(
+                        Icons.qr_code_2_rounded,
+                        size: 64,
+                        color: context.appTheme.muted,
+                      )
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          _absoluteMediaUrl(qrImageUrl),
+                          width: 140,
+                          height: 140,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.broken_image_outlined,
+                            color: context.appTheme.error,
+                          ),
+                        ),
+                      ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _upiIdController,
+                  enabled: !_savingPaymentConfig && !_uploadingQr,
+                  decoration: const InputDecoration(
+                    labelText: 'UPI ID',
+                    prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 260,
+                child: TextField(
+                  controller: _payeeNameController,
+                  enabled: !_savingPaymentConfig && !_uploadingQr,
+                  decoration: const InputDecoration(
+                    labelText: 'Payee name',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 300,
+                child: TextField(
+                  controller: _qrNoteController,
+                  enabled: !_savingPaymentConfig && !_uploadingQr,
+                  decoration: const InputDecoration(
+                    labelText: 'Payment note',
+                    prefixIcon: Icon(Icons.notes_outlined),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              FilledButton.icon(
+                onPressed: _savingPaymentConfig || _uploadingQr
+                    ? null
+                    : _savePaymentConfig,
+                icon: _savingPaymentConfig
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_outlined),
+                label: Text(
+                  _savingPaymentConfig ? 'Saving...' : 'Save Payment Details',
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _savingPaymentConfig || _uploadingQr
+                    ? null
+                    : _pickPaymentQr,
+                icon: _uploadingQr
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file_outlined),
+                label: Text(_uploadingQr ? 'Uploading...' : 'Upload QR'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -684,6 +831,60 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     }
   }
 
+  Future<void> _savePaymentConfig() async {
+    setState(() => _savingPaymentConfig = true);
+    try {
+      final config = await BackendApiClient.instance
+          .updateRaw('/fees/payment-config', {
+            'upi_id': _upiIdController.text.trim(),
+            'payee_name': _payeeNameController.text.trim(),
+            'qr_note': _qrNoteController.text.trim(),
+            'qr_image_url': _textValue(_paymentConfig['qr_image_url']),
+            'upi_enabled':
+                _upiIdController.text.trim().isNotEmpty ||
+                _textValue(_paymentConfig['qr_image_url']).isNotEmpty,
+          });
+      if (!mounted) return;
+      setState(() => _paymentConfig = config);
+      _snack('Payment details saved for parent fee payments.', success: true);
+    } catch (error) {
+      _snack('Unable to save payment details: $error');
+    } finally {
+      if (mounted) setState(() => _savingPaymentConfig = false);
+    }
+  }
+
+  Future<void> _pickPaymentQr() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final path = file.path;
+    if (path == null || path.isEmpty) return;
+    setState(() => _uploadingQr = true);
+    try {
+      final response = await BackendApiClient.instance.dio.post(
+        '/fees/payment-config/qr',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(path, filename: file.name),
+        }),
+      );
+      final responseData = response.data;
+      final data = responseData is Map ? responseData['data'] : null;
+      if (data is! Map) throw Exception('QR upload did not return settings');
+      if (!mounted) return;
+      final config = Map<String, dynamic>.from(data);
+      setState(() => _paymentConfig = config);
+      _snack('Payment QR updated for parents.', success: true);
+    } catch (error) {
+      _snack('Unable to upload payment QR: $error');
+    } finally {
+      if (mounted) setState(() => _uploadingQr = false);
+    }
+  }
+
   Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> fee) {
     final category = _mapValue(fee['fee_category']);
     final grade = _mapValue(fee['grade']);
@@ -813,5 +1014,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   String _textValue(Object? value, {String fallback = ''}) {
     final text = '${value ?? ''}'.trim();
     return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
+  String _absoluteMediaUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
+    return '${EnvConfig.apiOrigin}/$trimmed';
   }
 }

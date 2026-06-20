@@ -23,6 +23,7 @@ import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 import 'package:schooldesk1/features/reports/presentation/screens/report_card_generator_screen/report_card_generator_screen.dart';
+import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -82,6 +83,7 @@ class AppRoutes {
       '/principal-school-profile-screen';
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
+  static const String systemMonitor = '/system-monitor-screen';
 
   static const String idCardGeneration = '/id-card-generation-screen';
   static const String reportCardGenerator = '/report-card-generator-screen';
@@ -214,6 +216,7 @@ class AppRoutes {
     ),
     principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
     principalAnalytics: (context) => PrincipalAnalyticsScreen(),
+    systemMonitor: (context) => const SystemMonitorScreen(),
 
     idCardGeneration: (context) => const IdCardGenerationScreen(),
     reportCardGenerator: (context) => const ReportCardGeneratorScreen(),

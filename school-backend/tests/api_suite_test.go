@@ -203,7 +203,7 @@ func TestCompleteAPISuite(t *testing.T) {
 	}, http.StatusCreated, "announcement")
 	s.expect("Principal analytics students", "GET", "/students", "Principal", "Principal", nil, http.StatusOK)
 	s.expect("Principal monitoring audit logs", "GET", "/audit-logs", "Principal", "Principal", nil, http.StatusOK)
-	s.expectAuditContains("Audit attendance marking", "Principal", "attendance", "update", "student_attendances", s.ids["attendance_session"], "Teacher")
+	s.expectAuditContains("Audit attendance marking", "Principal", "attendance", "submit", "student_attendances", s.ids["attendance_session"], "Teacher")
 	s.expectAuditContains("Audit exam marks entry", "Principal", "exams", "create", "student_marks", "", "Teacher")
 	s.expectAuditContains("Audit leave approval", "Principal", "leave", "update", "leave_applications", s.ids["leave"], "Principal")
 	s.expectAuditContains("Audit message conversation", "Principal", "message_conversations", "create", "message_conversations", s.ids["conversation"], "Parent")

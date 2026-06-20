@@ -33,11 +33,15 @@ part 'api_modules/timetable_api.dart';
 part 'api_modules/homework_api.dart';
 part 'api_modules/tables_raw_api.dart';
 part 'api_modules/approval_requests_api.dart';
+part 'api_modules/monitoring_api.dart';
+
+typedef ApiErrorReporter = void Function(DioException error);
 
 /// Backend API client for school-desk backend
 /// Handles all HTTP communication with the FastAPI backend.
 class BackendApiClient {
   static BackendApiClient? _instance;
+  static ApiErrorReporter? apiErrorReporter;
   late final Dio _dio;
   CacheOptions? _cacheOptions;
   bool _cacheInstalled = false;
@@ -159,6 +163,10 @@ class BackendApiClient {
   // ─── Error Handling ─────────────────────────────────────────────────────────
 
   Exception _handleError(DioException e) {
+    final path = e.requestOptions.path.toLowerCase();
+    if (!path.contains('/monitoring/error-events')) {
+      apiErrorReporter?.call(e);
+    }
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout) {
       return const NetworkException(

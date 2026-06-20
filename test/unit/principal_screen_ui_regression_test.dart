@@ -451,7 +451,7 @@ void main() {
     expect(dashboard, isNot(contains("label: 'Exam Timetable'")));
     expect(dashboard, isNot(contains("label: 'Results'")));
     expect(dashboard, contains("label: 'Fees'"));
-    expect(dashboard, contains("label: 'Chat Communications'"));
+    expect(dashboard, contains("label: 'Message Oversight'"));
     expect(dashboard, contains('route: AppRoutes.principalChatCommunications'));
     expect(dashboard, contains('SchoolDeskUiIllustrations.chat'));
     expect(dashboard, contains('constraints.maxWidth < 340'));

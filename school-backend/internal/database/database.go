@@ -220,6 +220,7 @@ func autoMigrate() error {
 		&models.UserSession{},
 		&models.OTPVerification{},
 		&models.AuditLog{},
+		&models.ErrorEvent{},
 		&models.WorkflowSession{},
 		&models.WorkflowLog{},
 	); err != nil {
@@ -255,6 +256,7 @@ func autoMigrate() error {
 		&models.ReportExport{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
+		&models.SchoolPaymentSetting{},
 		&models.FeeConcession{},
 		&models.FeeInvoice{},
 		&models.FeeInvoiceItem{},

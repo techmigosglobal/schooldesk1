@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,7 @@ import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
@@ -18,6 +20,15 @@ void main() async {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   await BackendApiClient.initialize();
+  await ErrorReportingService.instance.initialize();
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    unawaited(ErrorReportingService.instance.recordFlutterError(details));
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    unawaited(ErrorReportingService.instance.recordPlatformError(error, stack));
+    return false;
+  };
   await ServiceLocator.initialize();
   EnvConfig.validate();
   await RoleAccessService.initialize();

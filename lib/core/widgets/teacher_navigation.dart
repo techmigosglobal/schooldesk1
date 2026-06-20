@@ -191,7 +191,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: 8,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
-              label: 'Communication',
+              label: 'Parent Messages',
               route: AppRoutes.teacherCommunication,
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
@@ -206,7 +206,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: 16,
               icon: Icons.feedback_outlined,
               activeIcon: Icons.feedback_rounded,
-              label: 'Diary Feedback',
+              label: 'Homework Feedback',
               route: AppRoutes.homeworkMessaging,
               arguments: {
                 'role': 'teacher',

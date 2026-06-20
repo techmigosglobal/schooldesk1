@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type FeeCategory struct {
@@ -30,6 +32,19 @@ type FeeStructure struct {
 	AcademicYear     *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
 	Grade            *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
 	FeeCategory      *FeeCategory  `gorm:"foreignKey:FeeCategoryID" json:"fee_category,omitempty"`
+}
+
+type SchoolPaymentSetting struct {
+	BaseModel
+	SchoolID     string  `gorm:"type:text;not null;uniqueIndex" json:"school_id"`
+	UPIID        string  `gorm:"type:text" json:"upi_id"`
+	PayeeName    string  `gorm:"type:text" json:"payee_name"`
+	MerchantCode string  `gorm:"type:text" json:"merchant_code"`
+	QRNote       string  `gorm:"type:text" json:"qr_note"`
+	QRImageURL   string  `gorm:"type:text" json:"qr_image_url"`
+	UPIEnabled   bool    `gorm:"default:false" json:"upi_enabled"`
+	UpdatedBy    *string `gorm:"type:text" json:"updated_by,omitempty"`
+	School       *School `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
 }
 
 type FeeConcession struct {
@@ -120,14 +135,14 @@ type ParentPaymentRequest struct {
 	Payment          *Payment    `gorm:"foreignKey:PaymentID" json:"payment,omitempty"`
 }
 
-// AfterScan hook to populate NetAmount from PayableAmount (backward compatibility)
-func (fi *FeeInvoice) AfterScan(tx interface{}) error {
+// AfterFind populates NetAmount from PayableAmount (backward compatibility).
+func (fi *FeeInvoice) AfterFind(tx *gorm.DB) error {
 	fi.NetAmount = fi.PayableAmount
 	return nil
 }
 
 // BeforeSave hook to update PayableAmount if NetAmount is set
-func (fi *FeeInvoice) BeforeSave(tx interface{}) error {
+func (fi *FeeInvoice) BeforeSave(tx *gorm.DB) error {
 	if fi.NetAmount != 0 {
 		fi.PayableAmount = fi.NetAmount
 	}

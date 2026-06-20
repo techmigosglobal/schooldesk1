@@ -41,12 +41,22 @@ void main() {
       expect(handler, contains('"upi_enabled"'));
       expect(handler, contains('"upi_id"'));
       expect(handler, contains('"payee_name"'));
+      expect(handler, contains('"qr_image_url"'));
+      expect(handler, contains('UpdatePaymentConfig'));
+      expect(handler, contains('UploadPaymentQR'));
       expect(handler, contains('ProofURL'));
       expect(
         handler,
         contains('proof_url is required for UPI payment requests'),
       );
+      expect(model, contains('SchoolPaymentSetting'));
       expect(model, contains('ProofURL'));
+      expect(routes, contains('/payment-config'));
+      expect(routes, contains('/payment-config/qr'));
+      expect(
+        routes,
+        contains('RBACMiddleware("Teacher", "Principal", "Parent")'),
+      );
       expect(routes, isNot(contains('razorpay')));
     });
 

@@ -291,6 +291,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           ),
           const SizedBox(height: 18),
           TeacherFlowSectionHeader(
+            title: 'Today Action Queue',
+            actionLabel: 'Refresh',
+            onAction: _loadDashboardData,
+          ),
+          const SizedBox(height: 10),
+          ..._teacherActionQueue(context),
+          const SizedBox(height: 18),
+          TeacherFlowSectionHeader(
             title: 'Today Feed',
             actionLabel: 'Classes',
             onAction: () =>
@@ -433,6 +441,83 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       }
     }
     return rows;
+  }
+
+  List<Widget> _teacherActionQueue(BuildContext context) {
+    final rows = <Widget>[
+      _teacherActionItem(
+        context,
+        time: 'Required',
+        title: 'Mark Student Attendance',
+        subtitle: _attendancePending > 0
+            ? 'Finish attendance for $_attendancePending pending period${_attendancePending == 1 ? '' : 's'}.'
+            : 'Open attendance when your class is ready.',
+        icon: Icons.how_to_reg_rounded,
+        color: Colors.indigo,
+        route: AppRoutes.teacherAttendance,
+      ),
+      _teacherActionItem(
+        context,
+        time: 'After class',
+        title: 'Record Class Diary',
+        subtitle: 'Capture what was taught and the next class plan.',
+        icon: Icons.bookmarks_rounded,
+        color: teacherFlowAccent,
+        route: AppRoutes.teacherDiary,
+      ),
+      _teacherActionItem(
+        context,
+        time: 'Today',
+        title: 'Post Homework',
+        subtitle: _homeworkToday > 0
+            ? 'Homework is posted for today.'
+            : 'Add practice work before end of day.',
+        icon: Icons.menu_book_rounded,
+        color: Colors.orange,
+        route: AppRoutes.teacherHomework,
+      ),
+      _teacherActionItem(
+        context,
+        time: 'Parents',
+        title: 'Review PTM Slots',
+        subtitle: 'Check upcoming parent meeting slots and requests.',
+        icon: Icons.event_available_rounded,
+        color: Colors.teal,
+        route: AppRoutes.teacherParentInteraction,
+      ),
+      _teacherActionItem(
+        context,
+        time: 'Admin',
+        title: 'Track Leave',
+        subtitle: 'Review your leave requests and approval status.',
+        icon: Icons.event_busy_rounded,
+        color: Colors.purple,
+        route: AppRoutes.teacherLeave,
+      ),
+    ];
+    return rows;
+  }
+
+  Widget _teacherActionItem(
+    BuildContext context, {
+    required String time,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required String route,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TeacherTimelineItem(
+        time: time,
+        title: title,
+        subtitle: subtitle,
+        icon: icon,
+        color: color,
+        onTap: () => Navigator.pushNamed(context, route),
+      ),
+    );
   }
 }
 

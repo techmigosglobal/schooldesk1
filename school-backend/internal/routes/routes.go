@@ -40,6 +40,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	studentApprovalHandler := handlers.NewStudentApprovalHandler()
 	approvalRequestHandler := handlers.NewApprovalRequestHandler()
 	auditLogHandler := handlers.NewAuditLogHandler()
+	errorEventHandler := handlers.NewErrorEventHandler()
 	dashboardHandler := handlers.NewDashboardHandler()
 	principalClassesHandler := handlers.NewPrincipalClassesHandler()
 	principalSubjectsHandler := handlers.NewPrincipalSubjectsHandler()
@@ -357,7 +358,10 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateParentPaymentRequest)
 			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
 			fees.PATCH("/payment-requests/:id/decision", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
-			fees.GET("/payment-config", middleware.RBACMiddleware("Parent"), feeHandler.GetPaymentConfig)
+			fees.GET("/payment-config", middleware.RBACMiddleware("Principal", "Parent"), feeHandler.GetPaymentConfig)
+			fees.PUT("/payment-config", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdatePaymentConfig)
+			fees.PATCH("/payment-config", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdatePaymentConfig)
+			fees.POST("/payment-config/qr", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UploadPaymentQR)
 			feeConcessions := handlers.NewFrontendRecordHandler("fees/concessions")
 			fees.GET("/concessions", middleware.RBACMiddleware("Principal", "Parent"), feeConcessions.List)
 			fees.POST("/concessions", middleware.RBACMiddleware("Principal", "Parent"), feeConcessions.Create)
@@ -466,7 +470,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 
 		// Generic file upload — used by event posts and lesson planners
 		uploads := api.Group("/uploads")
-		uploads.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Teacher", "Principal"))
+		uploads.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Teacher", "Principal", "Parent"))
 		{
 			uploads.POST("", uploadHandler.UploadFile)
 		}
@@ -681,6 +685,15 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		auditLogs.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			auditLogs.GET("", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("audit_logs", "read"), auditLogHandler.List)
+		}
+
+		monitoring := api.Group("/monitoring")
+		monitoring.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
+		{
+			monitoring.POST("/error-events", errorEventHandler.Create)
+			monitoring.GET("/error-events", middleware.RBACMiddleware("Principal"), errorEventHandler.List)
+			monitoring.GET("/error-events/:id", middleware.RBACMiddleware("Principal"), errorEventHandler.Get)
+			monitoring.PATCH("/error-events/:id/resolve", middleware.RBACMiddleware("Principal"), errorEventHandler.Resolve)
 		}
 
 		homework := api.Group("/homework")

@@ -132,6 +132,7 @@ type studentSummarySet struct {
 	lastStatus  map[string]string
 	performance map[string]studentPerformanceSummary
 	parents     map[string][]gin.H
+	enrollments map[string]string
 }
 
 func studentResponseRows(db *gorm.DB, schoolID string, students []models.Student) []gin.H {
@@ -154,6 +155,38 @@ func studentResponseRow(db *gorm.DB, schoolID string, student models.Student) gi
 	return studentResponseFromSummaries(student, summaries)
 }
 
+func activeEnrollmentIDsForStudents(db *gorm.DB, schoolID string, studentIDs []string) map[string]string {
+	out := map[string]string{}
+	if db == nil || len(studentIDs) == 0 {
+		return out
+	}
+	var rows []struct {
+		ID        string
+		StudentID string
+	}
+	_ = db.Model(&models.Enrollment{}).
+		Select("enrollments.id, enrollments.student_id").
+		Joins("JOIN students ON students.id = enrollments.student_id").
+		Where("students.school_id = ? AND enrollments.student_id IN ?", schoolID, studentIDs).
+		Order(`
+			CASE LOWER(enrollments.status)
+				WHEN 'active' THEN 0
+				WHEN 'enrolled' THEN 1
+				ELSE 2
+			END,
+			enrollments.enrollment_date DESC,
+			enrollments.created_at DESC
+		`).
+		Scan(&rows)
+	for _, row := range rows {
+		if _, exists := out[row.StudentID]; exists {
+			continue
+		}
+		out[row.StudentID] = row.ID
+	}
+	return out
+}
+
 func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) studentSummarySet {
 	out := studentSummarySet{
 		fees:        map[string]studentFeeSummary{},
@@ -161,10 +194,12 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 		lastStatus:  map[string]string{},
 		performance: map[string]studentPerformanceSummary{},
 		parents:     map[string][]gin.H{},
+		enrollments: map[string]string{},
 	}
 	if db == nil || len(studentIDs) == 0 {
 		return out
 	}
+	out.enrollments = activeEnrollmentIDsForStudents(db, schoolID, studentIDs)
 
 	var fees []studentFeeSummary
 	_ = db.Model(&models.FeeInvoice{}).
@@ -291,6 +326,7 @@ func studentResponseFromSummaries(student models.Student, summaries studentSumma
 		"nationality":           student.Nationality,
 		"admission_date":        student.AdmissionDate,
 		"current_section_id":    student.CurrentSectionID,
+		"active_enrollment_id":  summaries.enrollments[student.ID],
 		"aadhar_number":         student.AadharNumber,
 		"address":               student.Address,
 		"status":                student.Status,

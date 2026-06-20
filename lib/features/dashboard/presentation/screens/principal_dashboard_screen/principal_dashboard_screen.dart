@@ -342,7 +342,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     badge: _data.pendingApprovals,
                   ),
                   _AcademicModuleItem(
-                    label: 'Chat Communications',
+                    label: 'Message Oversight',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
                     fallbackIcon: Icons.forum_rounded,
@@ -365,6 +365,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                 onAttendance: () => _open(AppRoutes.principalAttendance),
                 onFees: () => _open(AppRoutes.feeMonitoring),
               ),
+              const SizedBox(height: 22),
+              _SectionTitle('Principal Action Queue'),
+              const SizedBox(height: 10),
+              _principalActionQueue(),
               const SizedBox(height: 22),
               _SectionTitle('School Setup'),
               const SizedBox(height: 10),
@@ -419,6 +423,69 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   void _open(String route, {Object? arguments}) {
     Navigator.pushNamed(context, route, arguments: arguments);
+  }
+
+  Widget _principalActionQueue() {
+    final items = [
+      _PrincipalActionQueueItem(
+        label: 'Review Attendance',
+        detail:
+            '${_data.attendancePresent}/${_data.attendanceMarked} marked today',
+        icon: Icons.fact_check_rounded,
+        color: const Color(0xFF0E9384),
+        route: AppRoutes.principalAttendance,
+      ),
+      _PrincipalActionQueueItem(
+        label: 'Correction Requests',
+        detail: 'Review reopened or disputed attendance sessions',
+        icon: Icons.lock_open_rounded,
+        color: const Color(0xFFF59E0B),
+        route: AppRoutes.principalAttendance,
+      ),
+      _PrincipalActionQueueItem(
+        label: 'Event Approvals',
+        detail:
+            '${_data.pendingApprovals} approval${_data.pendingApprovals == 1 ? '' : 's'} waiting',
+        icon: Icons.approval_rounded,
+        color: const Color(0xFFEA580C),
+        route: AppRoutes.principalEventApprovals,
+      ),
+      _PrincipalActionQueueItem(
+        label: 'Fee Requests',
+        detail: 'Check fee setup, payment requests, and QR status',
+        icon: Icons.account_balance_wallet_rounded,
+        color: const Color(0xFF16A34A),
+        route: AppRoutes.feeMonitoring,
+      ),
+      _PrincipalActionQueueItem(
+        label: 'Access Approvals',
+        detail: 'Manage staff, parent, and student account access',
+        icon: Icons.manage_accounts_rounded,
+        color: const Color(0xFF2563EB),
+        route: AppRoutes.principalUserManagement,
+      ),
+    ];
+    return Material(
+      color: context.appTheme.surface,
+      borderRadius: BorderRadius.circular(18),
+      elevation: 2,
+      shadowColor: const Color(0x140F172A),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          children: [
+            for (var index = 0; index < items.length; index++) ...[
+              _PrincipalActionQueueTile(
+                item: items[index],
+                onTap: () => _open(items[index].route),
+              ),
+              if (index != items.length - 1)
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   void _showGoLiveStatus() {
@@ -1614,6 +1681,82 @@ class _SnapshotTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               child: tile,
             ),
+    );
+  }
+}
+
+class _PrincipalActionQueueItem {
+  final String label;
+  final String detail;
+  final IconData icon;
+  final Color color;
+  final String route;
+
+  const _PrincipalActionQueueItem({
+    required this.label,
+    required this.detail,
+    required this.icon,
+    required this.color,
+    required this.route,
+  });
+}
+
+class _PrincipalActionQueueTile extends StatelessWidget {
+  final _PrincipalActionQueueItem item;
+  final VoidCallback onTap;
+
+  const _PrincipalActionQueueTile({required this.item, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: item.color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(item.icon, color: item.color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF0F172A),
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.detail,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+          ],
+        ),
+      ),
     );
   }
 }

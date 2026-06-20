@@ -67,6 +67,7 @@ class RouteAccessGuard {
     AppRoutes.principalAccountEdit: {'principal'},
     AppRoutes.principalParentChildAssignment: {'principal'},
     AppRoutes.principalSchoolProfile: {'principal'},
+    AppRoutes.systemMonitor: {'principal'},
     // Teacher routes
     AppRoutes.teacherDashboard: {'teacher'},
     AppRoutes.teacherClasses: {'teacher'},

@@ -5,6 +5,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
@@ -397,6 +398,7 @@ func (h *FeeHandler) CreateInvoice(c *gin.Context) {
 		TotalAmount:    req.TotalAmount,
 		DiscountAmount: req.DiscountAmount,
 		NetAmount:      req.NetAmount,
+		PayableAmount:  req.NetAmount,
 		PaidAmount:     0,
 		Balance:        req.NetAmount,
 		Status:         "pending",
@@ -579,6 +581,12 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 		return
 	}
 
+	concessionsByStudent, err := loadApprovedFeeConcessions(schoolID, req.AcademicYearID, students)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load student concessions")
+		return
+	}
+
 	created := make([]models.FeeInvoice, 0, len(students))
 	skipped := make([]gin.H, 0)
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
@@ -605,19 +613,26 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 				value := termID
 				invoiceTermID = &value
 			}
+			concessionAmount := concessionAmountForItems(billableItems, concessionsByStudent[student.ID])
+			payableAmount := roundMoney(total - concessionAmount)
+			if payableAmount < 0 {
+				payableAmount = 0
+			}
 			invoice := models.FeeInvoice{
-				StudentID:      student.ID,
-				AcademicYearID: req.AcademicYearID,
-				TermID:         invoiceTermID,
-				InvoiceNumber:  invoiceNumber,
-				InvoiceDate:    invoiceDate,
-				DueDate:        dueDate,
-				TotalAmount:    total,
-				DiscountAmount: 0,
-				NetAmount:      total,
-				PaidAmount:     0,
-				Balance:        total,
-				Status:         "pending",
+				StudentID:        student.ID,
+				AcademicYearID:   req.AcademicYearID,
+				TermID:           invoiceTermID,
+				InvoiceNumber:    invoiceNumber,
+				InvoiceDate:      invoiceDate,
+				DueDate:          dueDate,
+				TotalAmount:      total,
+				DiscountAmount:   0,
+				ConcessionAmount: concessionAmount,
+				NetAmount:        payableAmount,
+				PayableAmount:    payableAmount,
+				PaidAmount:       0,
+				Balance:          payableAmount,
+				Status:           "pending",
 			}
 			if err := tx.Create(&invoice).Error; err != nil {
 				return err
@@ -699,6 +714,71 @@ func feeBillableItems(structures []models.FeeStructure, termMode bool, termCount
 		})
 	}
 	return items
+}
+
+func loadApprovedFeeConcessions(schoolID, academicYearID string, students []models.Student) (map[string][]models.FeeConcession, error) {
+	result := make(map[string][]models.FeeConcession)
+	if len(students) == 0 {
+		return result, nil
+	}
+	studentIDs := make([]string, 0, len(students))
+	for _, student := range students {
+		studentIDs = append(studentIDs, student.ID)
+	}
+	var concessions []models.FeeConcession
+	if err := database.DB.
+		Model(&models.FeeConcession{}).
+		Joins("JOIN students ON students.id = fee_concessions.student_id").
+		Where("students.school_id = ? AND fee_concessions.academic_year_id = ? AND fee_concessions.student_id IN ? AND fee_concessions.approved_by IS NOT NULL", schoolID, academicYearID, studentIDs).
+		Find(&concessions).Error; err != nil {
+		return result, err
+	}
+	for _, concession := range concessions {
+		result[concession.StudentID] = append(result[concession.StudentID], concession)
+	}
+	return result, nil
+}
+
+func concessionAmountForItems(items []feeBillableItem, concessions []models.FeeConcession) float64 {
+	if len(items) == 0 || len(concessions) == 0 {
+		return 0
+	}
+	totalConcession := 0.0
+	for _, item := range items {
+		for _, concession := range concessions {
+			if concession.FeeCategoryID != item.structure.FeeCategoryID {
+				continue
+			}
+			switch normalizedConcessionType(concession.ConcessionType) {
+			case "percentage":
+				totalConcession += item.amount * concession.Value / 100
+			case "amount":
+				totalConcession += concession.Value
+			}
+		}
+	}
+	itemTotal := 0.0
+	for _, item := range items {
+		itemTotal += item.amount
+	}
+	if totalConcession > itemTotal {
+		totalConcession = itemTotal
+	}
+	return roundMoney(totalConcession)
+}
+
+func normalizedConcessionType(value string) string {
+	text := strings.ToLower(strings.TrimSpace(value))
+	text = strings.ReplaceAll(text, "-", "_")
+	text = strings.ReplaceAll(text, " ", "_")
+	switch {
+	case strings.Contains(text, "percent"):
+		return "percentage"
+	case strings.Contains(text, "amount"), strings.Contains(text, "flat"), strings.Contains(text, "fixed"):
+		return "amount"
+	default:
+		return text
+	}
 }
 
 func normalizedFeeFrequency(structure models.FeeStructure) string {
@@ -1271,18 +1351,116 @@ func normalizeInvoiceSegment(value string) string {
 
 // GetPaymentConfig returns the UPI payment configuration for the frontend.
 func (h *FeeHandler) GetPaymentConfig(c *gin.Context) {
-	upiID := strings.TrimSpace(os.Getenv("UPI_ID"))
-	payeeName := strings.TrimSpace(os.Getenv("UPI_PAYEE_NAME"))
-	merchantCode := strings.TrimSpace(os.Getenv("UPI_MERCHANT_CODE"))
-	qrNote := strings.TrimSpace(os.Getenv("UPI_QR_NOTE"))
+	setting := paymentSettingForSchool(scopedSchoolID(c))
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
-		Data: gin.H{
-			"upi_enabled":   upiID != "",
-			"upi_id":        upiID,
-			"payee_name":    payeeName,
-			"merchant_code": merchantCode,
-			"qr_note":       qrNote,
-		},
+		Data:    paymentSettingResponse(setting),
 	})
+}
+
+func (h *FeeHandler) UpdatePaymentConfig(c *gin.Context) {
+	var req struct {
+		UPIID        string `json:"upi_id"`
+		PayeeName    string `json:"payee_name"`
+		MerchantCode string `json:"merchant_code"`
+		QRNote       string `json:"qr_note"`
+		QRImageURL   string `json:"qr_image_url"`
+		UPIEnabled   *bool  `json:"upi_enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	schoolID := scopedSchoolID(c)
+	setting := paymentSettingForSchool(schoolID)
+	setting.UPIID = strings.TrimSpace(req.UPIID)
+	setting.PayeeName = strings.TrimSpace(req.PayeeName)
+	setting.MerchantCode = strings.TrimSpace(req.MerchantCode)
+	setting.QRNote = strings.TrimSpace(req.QRNote)
+	if strings.TrimSpace(req.QRImageURL) != "" {
+		setting.QRImageURL = strings.TrimSpace(req.QRImageURL)
+	}
+	if req.UPIEnabled != nil {
+		setting.UPIEnabled = *req.UPIEnabled
+	} else {
+		setting.UPIEnabled = setting.UPIID != "" || setting.QRImageURL != ""
+	}
+	if userID := currentUserID(c); userID != "" {
+		setting.UpdatedBy = &userID
+	}
+	if err := database.DB.Save(&setting).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to update payment configuration")
+		return
+	}
+	id := setting.ID
+	auditAction(c, "fees", "update", "school_payment_settings", &id)
+	success(c, http.StatusOK, paymentSettingResponse(setting), "Payment configuration updated")
+}
+
+func (h *FeeHandler) UploadPaymentQR(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		fail(c, http.StatusBadRequest, "No QR image provided (field: file)")
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+	if !allowed[ext] {
+		fail(c, http.StatusBadRequest, "Unsupported QR file type. Allowed: jpg, png, webp")
+		return
+	}
+	schoolID := scopedSchoolID(c)
+	dir := filepath.Join("uploads", "payment_qr", schoolID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to prepare QR storage")
+		return
+	}
+	filename := fmt.Sprintf("fee_qr_%d%s", time.Now().UnixNano(), ext)
+	dest := filepath.ToSlash(filepath.Join(dir, filename))
+	if err := c.SaveUploadedFile(file, dest); err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to save QR image")
+		return
+	}
+	url := "/" + dest
+	setting := paymentSettingForSchool(schoolID)
+	setting.QRImageURL = url
+	setting.UPIEnabled = true
+	if userID := currentUserID(c); userID != "" {
+		setting.UpdatedBy = &userID
+	}
+	if err := database.DB.Save(&setting).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to update payment QR")
+		return
+	}
+	id := setting.ID
+	auditAction(c, "fees", "upload_qr", "school_payment_settings", &id)
+	success(c, http.StatusOK, paymentSettingResponse(setting), "Payment QR updated")
+}
+
+func paymentSettingForSchool(schoolID string) models.SchoolPaymentSetting {
+	var setting models.SchoolPaymentSetting
+	if err := database.DB.First(&setting, "school_id = ?", schoolID).Error; err == nil {
+		return setting
+	}
+	upiID := strings.TrimSpace(os.Getenv("UPI_ID"))
+	setting = models.SchoolPaymentSetting{
+		SchoolID:     schoolID,
+		UPIID:        upiID,
+		PayeeName:    strings.TrimSpace(os.Getenv("UPI_PAYEE_NAME")),
+		MerchantCode: strings.TrimSpace(os.Getenv("UPI_MERCHANT_CODE")),
+		QRNote:       strings.TrimSpace(os.Getenv("UPI_QR_NOTE")),
+		UPIEnabled:   upiID != "",
+	}
+	return setting
+}
+
+func paymentSettingResponse(setting models.SchoolPaymentSetting) gin.H {
+	return gin.H{
+		"upi_enabled":   setting.UPIEnabled && (strings.TrimSpace(setting.UPIID) != "" || strings.TrimSpace(setting.QRImageURL) != ""),
+		"upi_id":        setting.UPIID,
+		"payee_name":    setting.PayeeName,
+		"merchant_code": setting.MerchantCode,
+		"qr_note":       setting.QRNote,
+		"qr_image_url":  setting.QRImageURL,
+	}
 }

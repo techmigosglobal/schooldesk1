@@ -541,6 +541,7 @@ class StudentModel {
   final String? admissionDate;
   final String? gender;
   final String? currentSectionId;
+  final String activeEnrollmentId;
   final String status;
   final String photoUrl;
   final List<Map<String, dynamic>> guardians;
@@ -564,6 +565,7 @@ class StudentModel {
     this.admissionDate,
     this.gender,
     this.currentSectionId,
+    this.activeEnrollmentId = '',
     required this.status,
     required this.photoUrl,
     this.guardians = const [],
@@ -626,6 +628,7 @@ class StudentModel {
     admissionDate: json['admission_date'] as String?,
     gender: json['gender'] as String?,
     currentSectionId: json['current_section_id'] as String?,
+    activeEnrollmentId: '${json['active_enrollment_id'] ?? ''}',
     status: json['status'] as String? ?? 'active',
     photoUrl: _photoUrlFromJson(json),
     guardians: _asListMap(json['guardians']),
@@ -692,7 +695,9 @@ class AttendanceSessionModel {
   final String sectionId;
   final String timetableSlotId;
   final String subjectId;
+  final String subjectName;
   final String staffId;
+  final String staffName;
   final String date;
   final int periodNumber;
   final int totalStudents;
@@ -713,7 +718,9 @@ class AttendanceSessionModel {
     required this.sectionId,
     required this.timetableSlotId,
     required this.subjectId,
+    this.subjectName = '',
     required this.staffId,
+    this.staffName = '',
     required this.date,
     required this.periodNumber,
     required this.totalStudents,
@@ -736,7 +743,12 @@ class AttendanceSessionModel {
         sectionId: json['section_id'] as String,
         timetableSlotId: json['timetable_slot_id'] as String? ?? '',
         subjectId: json['subject_id'] as String,
+        subjectName: _attendanceNestedText(json['subject'], const [
+          'subject_name',
+          'name',
+        ]),
         staffId: json['staff_id'] as String,
+        staffName: _attendanceStaffName(json['staff']),
         date: json['date'] as String,
         periodNumber: json['period_number'] as int? ?? 0,
         totalStudents: json['total_students'] as int? ?? 0,
@@ -759,6 +771,27 @@ class AttendanceSessionModel {
                 .toList() ??
             const [],
       );
+}
+
+String _attendanceNestedText(Object? value, List<String> keys) {
+  if (value is! Map) return '';
+  final map = Map<String, dynamic>.from(value);
+  for (final key in keys) {
+    final text = '${map[key] ?? ''}'.trim();
+    if (text.isNotEmpty && text != 'null') return text;
+  }
+  return '';
+}
+
+String _attendanceStaffName(Object? value) {
+  if (value is! Map) return '';
+  final map = Map<String, dynamic>.from(value);
+  final fullName = '${map['full_name'] ?? map['name'] ?? ''}'.trim();
+  if (fullName.isNotEmpty && fullName != 'null') return fullName;
+  return ['first_name', 'last_name']
+      .map((key) => '${map[key] ?? ''}'.trim())
+      .where((part) => part.isNotEmpty && part != 'null')
+      .join(' ');
 }
 
 class StaffQrTokenModel {

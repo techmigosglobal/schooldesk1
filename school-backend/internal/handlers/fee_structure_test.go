@@ -16,6 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
+func stringPtr(value string) *string {
+	return &value
+}
+
 func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
@@ -166,6 +170,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 		&models.Student{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
+		&models.FeeConcession{},
 		&models.FeeInvoice{},
 		&models.FeeInvoiceItem{},
 		&models.Payment{},
@@ -208,6 +213,19 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 			t.Fatalf("seed student: %v", err)
 		}
 	}
+	concession := models.FeeConcession{
+		BaseModel:      models.BaseModel{ID: "concession-asha-tuition"},
+		StudentID:      "student-fee-one",
+		FeeCategoryID:  category.ID,
+		AcademicYearID: year.ID,
+		ConcessionType: "percentage",
+		Value:          10,
+		Reason:         "Sibling concession",
+		ApprovedBy:     stringPtr("principal-fees"),
+	}
+	if err := db.Create(&concession).Error; err != nil {
+		t.Fatalf("seed concession: %v", err)
+	}
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -245,11 +263,20 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 		t.Fatalf("invoice/item counts mismatch invoices=%d items=%d", invoiceCount, itemCount)
 	}
 	var tuitionItem models.FeeInvoiceItem
-	if err := db.First(&tuitionItem, "fee_category_id = ?", category.ID).Error; err != nil {
+	if err := db.
+		Joins("JOIN fee_invoices ON fee_invoices.id = fee_invoice_items.invoice_id").
+		First(&tuitionItem, "fee_invoice_items.fee_category_id = ? AND fee_invoices.student_id = ?", category.ID, "student-fee-one").Error; err != nil {
 		t.Fatalf("load tuition item: %v", err)
 	}
 	if tuitionItem.Amount != 833.33 {
 		t.Fatalf("term-wise tuition should default to 3 installments, got %.2f", tuitionItem.Amount)
+	}
+	var concededInvoice models.FeeInvoice
+	if err := db.First(&concededInvoice, "student_id = ? AND invoice_number LIKE ?", "student-fee-one", "%TERM-1%").Error; err != nil {
+		t.Fatalf("load conceded invoice: %v", err)
+	}
+	if concededInvoice.TotalAmount != 1000 || concededInvoice.ConcessionAmount != 83.33 || concededInvoice.PayableAmount != 916.67 || concededInvoice.Balance != 916.67 {
+		t.Fatalf("concession should reduce payable invoice total, got total=%.2f concession=%.2f payable=%.2f balance=%.2f", concededInvoice.TotalAmount, concededInvoice.ConcessionAmount, concededInvoice.PayableAmount, concededInvoice.Balance)
 	}
 
 	duplicate := httptest.NewRecorder()
