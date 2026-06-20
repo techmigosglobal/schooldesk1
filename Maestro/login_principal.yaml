@@ -2,25 +2,10 @@ appId: com.techmigos.schooldesk1
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible: "ArishVille Preschool"
-    timeout: 15000
-- tapOn:
-    point: "84%,14%"
-- tapOn: "Username"
-- inputText: ${PRINCIPAL_USERNAME || "principal"}
-- tapOn: "Password"
-- inputText: ${PRINCIPAL_PASSWORD || "Principal@12345"}
-- tapOn: "Sign in"
+- runFlow: subflows/login_principal.yaml
 - extendedWaitUntil:
     visible: "Academics"
     timeout: 20000
-- assertVisible:
-    text: "Principal Action Queue"
-    optional: true
-- assertVisible:
-    text: "Review Attendance"
-    optional: true
-- assertVisible:
-    text: "Correction Requests"
-    optional: true
+- assertVisible: "Principal Action Queue"
+- assertVisible: "Review Attendance"
+- assertVisible: "Correction Requests"

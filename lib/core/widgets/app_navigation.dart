@@ -187,6 +187,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.academicManagement,
             ),
             SchoolDeskNavigationItem(
+              index: 27,
+              icon: Icons.calendar_month_outlined,
+              activeIcon: Icons.calendar_month_rounded,
+              label: 'Timetable',
+              route: AppRoutes.principalTimetable,
+            ),
+            SchoolDeskNavigationItem(
               index: 17,
               icon: Icons.event_note_outlined,
               activeIcon: Icons.event_note_rounded,

@@ -34,7 +34,7 @@ void main() {
     expect(form, contains('TeacherLeaveRequestFormScreen'));
     expect(form, contains('submitLeaveApplication('));
     expect(form, contains('LeaveApplicationRequest('));
-    expect(form, contains('staffId: widget.args.staffId'));
+    expect(form, contains('staffId: _staffId'));
     expect(form, contains('leaveTypeId: _leaveTypeId'));
     expect(form, contains('halfDay: _halfDay'));
     expect(form, isNot(contains('substituteCtrl')));

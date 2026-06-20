@@ -498,10 +498,10 @@ void main() {
         contains("AppRoutes.principalChatCommunications: {'principal'}"),
       );
 
-      expect(routes, isNot(contains('static const String principalTimetable')));
+      expect(routes, contains('static const String principalTimetable'));
       expect(routes, isNot(contains('static const String principalExams')));
       expect(routes, isNot(contains('static const String principalResults')));
-      expect(routes, isNot(contains('PrincipalTimetableScreen()')));
+      expect(routes, contains('AdminTimetableScreen'));
       expect(routes, isNot(contains('PrincipalExamsScreen()')));
       expect(routes, isNot(contains('PrincipalResultsScreen()')));
 
@@ -514,7 +514,6 @@ void main() {
       expect(guard, isNot(contains('AppRoutes.guidedAssistant')));
 
       for (final route in <String>[
-        'principalTimetable',
         'principalExams',
         'principalResults',
       ]) {
@@ -522,6 +521,7 @@ void main() {
         expect(routes, isNot(contains('static const String $route')));
         expect(guard, isNot(contains('AppRoutes.$route')));
       }
+      expect(guard, contains("AppRoutes.principalTimetable: {'principal'}"));
 
       expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
       expect(dashboard, contains('SchoolDeskUiIllustrations.principalFees'));
@@ -921,16 +921,16 @@ void main() {
     expect(crud, contains('validateGradeSubjectPolicy'));
   });
 
-  test('principal timetable exams and results are not exposed', () {
+  test('principal timetable sessions and results are not exposed', () {
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final drawer = File(
       'lib/core/widgets/app_navigation.dart',
     ).readAsStringSync();
 
-    expect(routes, isNot(contains('PrincipalTimetableScreen')));
     expect(routes, isNot(contains('PrincipalExamsScreen')));
     expect(routes, isNot(contains('PrincipalResultsScreen')));
-    expect(drawer, isNot(contains('route: AppRoutes.principalTimetable')));
+    expect(routes, contains('AdminTimetableScreen'));
+    expect(drawer, contains('route: AppRoutes.principalTimetable'));
     expect(drawer, isNot(contains('route: AppRoutes.principalExams')));
     expect(drawer, isNot(contains('route: AppRoutes.principalResults')));
   });

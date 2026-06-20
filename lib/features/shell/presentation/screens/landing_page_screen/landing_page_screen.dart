@@ -272,7 +272,7 @@ class _LandingHeader extends StatelessWidget {
             Positioned(
               right: sideInset,
               top: isCompact ? 58 : 64,
-              child: _SignInButton(onPressed: onSignIn),
+              child: _SignInButton(key: const Key('sign_in_button'), onPressed: onSignIn),
             ),
           ],
         );
@@ -282,7 +282,7 @@ class _LandingHeader extends StatelessWidget {
 }
 
 class _SignInButton extends StatelessWidget {
-  const _SignInButton({required this.onPressed});
+  const _SignInButton({required this.onPressed, super.key});
 
   final VoidCallback onPressed;
 

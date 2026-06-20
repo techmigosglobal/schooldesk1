@@ -2,58 +2,42 @@ appId: com.techmigos.schooldesk1
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible: "ArishVille Preschool"
-    timeout: 15000
-- tapOn:
-    point: "84%,14%"
-- tapOn: "Username"
-- inputText: ${PRINCIPAL_USERNAME || "principal"}
-- tapOn: "Password"
-- inputText: ${PRINCIPAL_PASSWORD || "Principal@12345"}
-- tapOn: "Sign in"
+- runFlow: subflows/login_principal.yaml
 - extendedWaitUntil:
     visible: "Academics"
     timeout: 20000
-- tapOn:
-    text: "Staff Management"
-    optional: true
-- tapOn:
-    text: "Access Permissions"
-    optional: true
-- tapOn:
-    point: "90%, 8%"
-- assertVisible:
-    text: "Add New Teacher"
-    optional: true
-- assertVisible:
-    text: "Create"
-    optional: true
-- tapOn:
-    text: "Teacher Name"
-    optional: true
-- inputText: "Maestro Teacher"
-- tapOn:
-    text: "Subject / Designation"
-    optional: true
-- inputText: "Mathematics"
-- tapOn:
-    text: "Username"
-    optional: true
-- inputText: ${TEACHER_USERNAME || "teacher01"}
-- tapOn:
-    text: "Password"
-    optional: true
-- inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
-- tapOn:
-    text: "Add"
-    optional: true
-- tapOn:
-    text: "Create"
-    optional: true
-- tapOn:
-    text: "Save"
-    optional: true
-- assertVisible:
-    text: "Maestro Teacher"
-    optional: true
+- scrollUntilVisible:
+    element: "Access Approvals"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Access Approvals"
+- extendedWaitUntil:
+    visible: "Access & Permissions"
+    timeout: 20000
+- runFlow:
+    when:
+      notVisible: ${TEACHER_USERNAME || "teacher01"}
+    commands:
+      - tapOn:
+          label: "Create role login"
+      - extendedWaitUntil:
+          visible: "Create Account"
+          timeout: 15000
+      - tapOn: "Full name *"
+      - inputText: "Maestro Teacher"
+      - tapOn: "Username *"
+      - inputText: ${TEACHER_USERNAME || "teacher01"}
+      - tapOn: "Email *"
+      - inputText: "maestro.teacher@schooldesk.test"
+      - tapOn: "Password *"
+      - inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
+      - hideKeyboard
+      - tapOn: "Create Account"
+      - extendedWaitUntil:
+          visible: "Access & Permissions"
+          timeout: 20000
+- scrollUntilVisible:
+    element: ${TEACHER_USERNAME || "teacher01"}
+    direction: DOWN
+    timeout: 20000
+- assertVisible: ${TEACHER_USERNAME || "teacher01"}

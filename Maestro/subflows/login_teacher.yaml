@@ -1,0 +1,10 @@
+appId: com.techmigos.schooldesk1
+---
+- runFlow: open_sign_in.yaml
+- tapOn: "Username"
+- inputText: ${TEACHER_USERNAME || "teacher01"}
+- tapOn: "Password"
+- inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
+- hideKeyboard
+- tapOn:
+    label: "Sign in"

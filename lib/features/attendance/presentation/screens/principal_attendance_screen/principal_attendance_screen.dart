@@ -178,19 +178,26 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       tone: const Color(0xFFEFF6FF),
     ),
     PrincipalDirectoryMetric(
-      label: 'Marked Students',
-      value: '$_markedStudents',
+      label: 'Present Today',
+      value: '$_presentStudentsToday',
       icon: Icons.groups_outlined,
       color: context.appTheme.success,
       tone: const Color(0xFFECFDF3),
+    ),
+    PrincipalDirectoryMetric(
+      label: 'Marked Today',
+      value: '$_markedStudentsToday/$_expectedStudentsToday',
+      icon: Icons.how_to_reg_outlined,
+      color: Colors.teal,
+      tone: const Color(0xFFE6FFFB),
     ),
     PrincipalDirectoryMetric(
       label: 'Staff Check-in Monitor',
       value:
           '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length}',
       icon: Icons.badge_outlined,
-      color: Colors.teal,
-      tone: const Color(0xFFE6FFFB),
+      color: Colors.indigo,
+      tone: const Color(0xFFEAF0FF),
     ),
     PrincipalDirectoryMetric(
       label: 'Exceptions',
@@ -327,8 +334,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     final sessions = _sessions
         .where((session) => session.sectionId == section.sectionId)
         .toList();
-    final present = sessions.fold(0, (sum, row) => sum + row.presentCount);
-    final total = sessions.fold(0, (sum, row) => sum + row.totalStudents);
+    final present = sessions.fold(0, (sum, row) => sum + _effectivePresentCount(row));
+    final total = sessions.fold(0, (sum, row) => sum + _effectiveTotalStudents(row));
     final percent = total <= 0 ? 0 : (present / total) * 100;
     final status = sessions.isEmpty
         ? 'Not Started'
@@ -771,13 +778,53 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       .where(
         (session) =>
             _isIncompleteSession(session) ||
-            (session.totalStudents > 0 &&
-                session.presentCount / session.totalStudents < 0.75),
+            (_effectiveTotalStudents(session) > 0 &&
+                _effectivePresentCount(session) /
+                        _effectiveTotalStudents(session) <
+                    0.75),
       )
       .toList();
 
-  int get _markedStudents =>
-      _sessions.fold(0, (sum, session) => sum + session.presentCount);
+  int get _presentStudentsToday => _sessions.fold(
+    0,
+    (sum, session) => sum + _effectivePresentCount(session),
+  );
+
+  int get _markedStudentsToday => _sessions.fold(
+    0,
+    (sum, session) => sum + _effectiveMarkedCount(session),
+  );
+
+  int get _expectedStudentsToday => _sessions.fold(
+    0,
+    (sum, session) => sum + _effectiveTotalStudents(session),
+  );
+
+  int _effectivePresentCount(AttendanceSessionModel session) {
+    final counts = _sessionStatusCounts(session);
+    return counts['present']! + counts['late']!;
+  }
+
+  int _effectiveMarkedCount(AttendanceSessionModel session) {
+    if (session.studentAttendances.isNotEmpty) {
+      return session.studentAttendances.where((row) {
+        final status = _text(row['status']).toLowerCase().replaceAll('-', '_');
+        return status.isNotEmpty && status != 'unmarked';
+      }).length;
+    }
+    return session.presentCount;
+  }
+
+  int _effectiveTotalStudents(AttendanceSessionModel session) {
+    if (session.totalStudents > 0) return session.totalStudents;
+    if (session.studentAttendances.isNotEmpty) {
+      return session.studentAttendances.length;
+    }
+    if (session.sectionId == _selectedSectionId && _sectionStudents.isNotEmpty) {
+      return _sectionStudents.length;
+    }
+    return 0;
+  }
 
   String _sectionLabel(String sectionId) {
     if (sectionId.trim().isEmpty) return 'All classes';
@@ -795,8 +842,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   double _attendancePercent(AttendanceSessionModel session) {
-    if (session.totalStudents <= 0) return 0;
-    return (session.presentCount / session.totalStudents) * 100;
+    final total = _effectiveTotalStudents(session);
+    if (total <= 0) return 0;
+    return (_effectivePresentCount(session) / total) * 100;
   }
 
   String _sessionStatusLabel(AttendanceSessionModel session) {
@@ -828,14 +876,21 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   bool _isIncompleteSession(AttendanceSessionModel session) {
-    return session.totalStudents == 0 ||
+    final total = _effectiveTotalStudents(session);
+    if (total == 0 ||
         session.status == 'draft' ||
         session.status == 'reopened' ||
-        session.status == 'needs_review';
+        session.status == 'needs_review') {
+      return true;
+    }
+    return _effectiveMarkedCount(session) < total;
   }
 
   int _unmarkedCount(AttendanceSessionModel session) {
-    if (session.studentAttendances.isEmpty) return session.totalStudents;
+    final total = _effectiveTotalStudents(session);
+    if (session.studentAttendances.isEmpty) {
+      return (total - _effectiveMarkedCount(session)).clamp(0, total);
+    }
     return session.studentAttendances.where((row) {
       final status = _text(row['status']).toLowerCase().replaceAll('-', '_');
       return status == 'unmarked' || status.isEmpty;
@@ -856,9 +911,10 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     }
     if (session.studentAttendances.isEmpty) {
       counts['present'] = session.presentCount;
-      counts['absent'] = (session.totalStudents - session.presentCount).clamp(
+      final total = _effectiveTotalStudents(session);
+      counts['absent'] = (total - _effectivePresentCount(session)).clamp(
         0,
-        session.totalStudents,
+        total,
       );
     }
     return counts;

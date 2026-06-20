@@ -535,11 +535,20 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           TeacherFlowMetricGrid(
             metrics: [
               TeacherFlowMetric(
-                label: 'Students',
-                value: '${_students.length}',
-                icon: Icons.groups_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFE3FAF5),
+                label: 'Marked',
+                value:
+                    '${_markedStudents.length}/${_students.length}',
+                icon: Icons.how_to_reg_rounded,
+                color: Colors.indigo,
+                tone: const Color(0xFFEAF0FF),
+              ),
+              TeacherFlowMetric(
+                label: 'Present',
+                value:
+                    '${_students.where((s) => s.status == 'present' || s.status == 'late').length}',
+                icon: Icons.check_circle_rounded,
+                color: Colors.green,
+                tone: const Color(0xFFEAFBF0),
               ),
               TeacherFlowMetric(
                 label: 'Not Marked',
@@ -547,14 +556,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 icon: Icons.radio_button_unchecked_rounded,
                 color: Colors.blueGrey,
                 tone: const Color(0xFFF1F5F9),
-              ),
-              TeacherFlowMetric(
-                label: 'Present',
-                value:
-                    '${_students.where((s) => s.status == 'present').length}',
-                icon: Icons.check_circle_rounded,
-                color: Colors.green,
-                tone: const Color(0xFFEAFBF0),
               ),
               TeacherFlowMetric(
                 label: 'Absent',

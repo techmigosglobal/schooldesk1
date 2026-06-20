@@ -2,68 +2,56 @@ appId: com.techmigos.schooldesk1
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
-    visible: "ArishVille Preschool"
-    timeout: 15000
-- tapOn:
-    point: "84%,14%"
-- tapOn: "Username"
-- inputText: ${TEACHER_USERNAME || "teacher01"}
-- tapOn: "Password"
-- inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
-- tapOn: "Sign in"
+- runFlow: subflows/login_teacher.yaml
 - extendedWaitUntil:
     visible: "Quick Actions"
     timeout: 20000
-- tapOn:
-    text: "Track Leave"
-    optional: true
-- tapOn:
-    text: "Leave Requests"
-    optional: true
-- assertVisible:
-    text: "My Leaves"
-    optional: true
-- tapOn:
-    text: "Apply Leave"
-    optional: true
-- assertVisible:
-    text: "Apply Leave"
-    optional: true
-- tapOn:
-    text: "Reason"
-    optional: true
+- scrollUntilVisible:
+    element: "Track Leave"
+    direction: DOWN
+    timeout: 15000
+- tapOn: "Track Leave"
+- extendedWaitUntil:
+    visible: "My Leaves"
+    timeout: 20000
+- tapOn: "Apply Leave"
+- extendedWaitUntil:
+    visible: "Apply Leave"
+    timeout: 20000
+- tapOn: "Reason"
 - inputText: "Maestro leave approval handoff"
-- tapOn:
-    text: "Submit"
-    optional: true
-- assertVisible:
-    text: "Leave request submitted"
-    optional: true
+- hideKeyboard
+- tapOn: "Submit Leave"
+- extendedWaitUntil:
+    visible: "My Leaves"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Maestro leave approval handoff"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Maestro leave approval handoff"
 - launchApp:
     clearState: true
+- runFlow: subflows/login_principal.yaml
 - extendedWaitUntil:
-    visible: "ArishVille Preschool"
-    timeout: 15000
-- tapOn:
-    point: "84%,14%"
-- tapOn: "Username"
-- inputText: ${PRINCIPAL_USERNAME || "principal"}
-- tapOn: "Password"
-- inputText: ${PRINCIPAL_PASSWORD || "Principal@12345"}
-- tapOn: "Sign in"
-- extendedWaitUntil:
-    visible: "Academics"
+    visible: "Principal Action Queue"
     timeout: 20000
-- tapOn:
-    text: "Approval Center"
-    optional: true
-- tapOn:
-    text: "Access Approvals"
-    optional: true
-- assertVisible:
-    text: "Approval"
-    optional: true
-- assertVisible:
-    text: "Leave"
-    optional: true
+- scrollUntilVisible:
+    element: "Access Approvals"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Access Approvals"
+- extendedWaitUntil:
+    visible: "Access & Permissions"
+    timeout: 20000
+- runFlow: subflows/open_principal_drawer.yaml
+- tapOn: "Approval Center"
+- extendedWaitUntil:
+    visible: "Approval Center"
+    timeout: 20000
+- tapOn: "Leave"
+- scrollUntilVisible:
+    element: "Maestro leave approval handoff"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Maestro leave approval handoff"

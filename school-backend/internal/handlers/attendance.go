@@ -93,6 +93,7 @@ func (h *AttendanceHandler) GetAttendanceSessions(c *gin.Context) {
 		return
 	}
 	for i := range sessions {
+		enrichAttendanceSessionTotals(&sessions[i])
 		normalizeAttendanceSessionLifecycle(&sessions[i])
 	}
 
@@ -156,7 +157,7 @@ func (h *AttendanceHandler) CreateAttendanceSession(c *gin.Context) {
 		StaffID:        req.StaffID,
 		Date:           date,
 		PeriodNumber:   req.PeriodNumber,
-		TotalStudents:  0,
+		TotalStudents:  attendanceRosterCount(req.SectionID, req.AcademicYearID, scopedSchoolID(c)),
 		PresentCount:   0,
 		IsFinalized:    false,
 		Status:         "draft",
@@ -303,7 +304,10 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 				return err
 			}
 		}
-		session.TotalStudents = len(req.Attendances)
+		session.TotalStudents = attendanceRosterCount(session.SectionID, session.AcademicYearID, scopedSchoolID(c))
+		if session.TotalStudents == 0 {
+			session.TotalStudents = len(req.Attendances)
+		}
 		session.PresentCount = presentCount
 		if finalize {
 			wasReopened := session.Status == "reopened"
@@ -488,7 +492,57 @@ func studentAttendanceReasonStatusLabel(status string) string {
 }
 
 func normalizeAttendanceSessionLifecycle(session *models.AttendanceSession) {
+	enrichAttendanceSessionTotals(session)
 	session.Status = normalizeStudentAttendanceSessionStatus(session.Status, session.IsFinalized)
+}
+
+func attendanceRosterCount(sectionID, academicYearID, schoolID string) int {
+	sectionID = strings.TrimSpace(sectionID)
+	schoolID = strings.TrimSpace(schoolID)
+	if sectionID == "" {
+		return 0
+	}
+	var count int64
+	query := database.DB.Model(&models.Student{}).
+		Where("current_section_id = ? AND status != ?", sectionID, "inactive")
+	if schoolID != "" {
+		query = query.Where("school_id = ?", schoolID)
+	}
+	academicYearID = strings.TrimSpace(academicYearID)
+	if academicYearID != "" {
+		query = query.Where(
+			`EXISTS (
+				SELECT 1 FROM enrollments
+				WHERE enrollments.student_id = students.id
+					AND enrollments.section_id = ?
+					AND enrollments.academic_year_id = ?
+					AND LOWER(enrollments.status) = 'active'
+			)`,
+			sectionID,
+			academicYearID,
+		)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return 0
+	}
+	return int(count)
+}
+
+func enrichAttendanceSessionTotals(session *models.AttendanceSession) {
+	if session == nil || len(session.StudentAttendances) == 0 {
+		return
+	}
+	presentCount := 0
+	for _, row := range session.StudentAttendances {
+		status := normalizeStudentAttendanceStatus(row.Status)
+		if strings.EqualFold(status, "present") || strings.EqualFold(status, "late") {
+			presentCount++
+		}
+	}
+	session.PresentCount = presentCount
+	if session.TotalStudents <= 0 {
+		session.TotalStudents = len(session.StudentAttendances)
+	}
 }
 
 func normalizeStudentAttendanceSessionStatus(status string, finalized bool) string {

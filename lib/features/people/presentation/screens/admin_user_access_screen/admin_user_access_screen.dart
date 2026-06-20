@@ -187,10 +187,14 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         if (_isPrincipalOwner)
-          IconButton(
-            tooltip: 'Create role login',
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            onPressed: () => _openUserForm(),
+          Semantics(
+            label: 'Create role login',
+            button: true,
+            child: IconButton(
+              tooltip: 'Create role login',
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              onPressed: () => _openUserForm(),
+            ),
           ),
         if (_isPrincipalOwner)
           IconButton(

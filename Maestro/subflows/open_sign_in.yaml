@@ -1,0 +1,13 @@
+appId: com.techmigos.schooldesk1
+---
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "ArishVille Preschool"
+    timeout: 15000
+- tapOn:
+    id: "sign_in_button"
+- extendedWaitUntil:
+    visible: "Username"
+    timeout: 15000

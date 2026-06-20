@@ -35,6 +35,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _homeworkReminderStatus = 'pending';
   int _unreadMessages = 0;
   int _attendancePending = 0;
+  int _attendancePresentToday = 0;
+  int _attendanceMarkedToday = 0;
   StaffAttendanceModel? _myAttendance;
   List<Map<String, dynamic>> _timetable = const [];
   List<AnnouncementModel> _announcements = const [];
@@ -69,6 +71,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final metrics = Map<String, dynamic>.from(
         dashboard['metrics'] as Map? ?? const {},
       );
+      final todayAttendance = Map<String, dynamic>.from(
+        dashboard['today_attendance'] as Map? ?? const {},
+      );
       if (!mounted) return;
       setState(() {
         _roleScopeLoaded = true;
@@ -92,6 +97,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               (row) => teacherFlowText(row['done']).toLowerCase() != 'true',
             )
             .length;
+        _attendancePresentToday = teacherFlowInt(todayAttendance['present']);
+        _attendanceMarkedToday = teacherFlowInt(todayAttendance['marked']);
         _myAttendance = results[2] as StaffAttendanceModel?;
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
@@ -267,8 +274,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 tone: const Color(0xFFE3FAF5),
               ),
               TeacherFlowMetric(
-                label: 'Pending',
-                value: '$_attendancePending',
+                label: 'Attendance',
+                value: _attendanceMarkedToday > 0
+                    ? '$_attendancePresentToday/$_attendanceMarkedToday'
+                    : '$_attendancePending pending',
                 icon: Icons.fact_check_rounded,
                 color: Colors.indigo,
                 tone: const Color(0xFFEAF0FF),

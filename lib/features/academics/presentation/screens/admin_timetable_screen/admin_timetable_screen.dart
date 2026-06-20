@@ -130,7 +130,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       drawer: AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
       bottomNavigationBar: const _AdminTimetableBottomBar(),
       body: SafeArea(
-        child: RefreshIndicator(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: RefreshIndicator(
           color: const Color(0xFF0877D8),
           onRefresh: _loadBackendTimetable,
           child: CustomScrollView(
@@ -166,7 +170,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           ),
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildHeader() {

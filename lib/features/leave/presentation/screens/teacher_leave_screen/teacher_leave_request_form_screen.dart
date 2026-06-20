@@ -171,17 +171,17 @@ class _TeacherLeaveRequestFormScreenState
             child: Column(
               children: [
                 DropdownButtonFormField<String>(
-                  initialValue: _leaveTypeId.isEmpty ? null : _leaveTypeId,
+                  value: _leaveTypeId.isEmpty ? null : _leaveTypeId,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Leave type',
                     prefixIcon: Icon(Icons.category_rounded),
                   ),
                   items: _leaveTypes
-                      .where((type) => teacherFlowText(type['id']).isNotEmpty)
+                      .where((type) => _leaveTypeIdFrom(type).isNotEmpty)
                       .map(
                         (type) => DropdownMenuItem(
-                          value: teacherFlowText(type['id']),
+                          value: _leaveTypeIdFrom(type),
                           child: Text(_leaveTypeName(type)),
                         ),
                       )
@@ -198,26 +198,32 @@ class _TeacherLeaveRequestFormScreenState
                     Expanded(
                       child: TextFormField(
                         controller: _fromDateController,
+                        readOnly: true,
                         decoration: const InputDecoration(
                           labelText: 'From date',
                           hintText: 'YYYY-MM-DD',
                           prefixIcon: Icon(Icons.event_rounded),
+                          suffixIcon: Icon(Icons.calendar_today_outlined),
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
+                        onTap: _saving ? null : () => _pickDate(_fromDateController),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextFormField(
                         controller: _toDateController,
+                        readOnly: true,
                         decoration: const InputDecoration(
                           labelText: 'To date',
                           hintText: 'YYYY-MM-DD',
                           prefixIcon: Icon(Icons.event_available_rounded),
+                          suffixIcon: Icon(Icons.calendar_today_outlined),
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
+                        onTap: _saving ? null : () => _pickDate(_toDateController),
                       ),
                     ),
                   ],
@@ -276,47 +282,77 @@ class _TeacherLeaveRequestFormScreenState
 
   String _firstLeaveTypeId() {
     for (final type in _leaveTypes) {
-      final id = teacherFlowText(type['id']);
+      final id = _leaveTypeIdFrom(type);
       if (id.isNotEmpty) return id;
     }
     return '';
   }
 
+  Future<void> _pickDate(TextEditingController controller) async {
+    final initial = DateTime.tryParse(controller.text.trim()) ??
+        DateTime.now().add(const Duration(days: 1));
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null || !mounted) return;
+    controller.text = teacherFlowDate(picked);
+    if (controller == _fromDateController &&
+        DateTime.tryParse(_toDateController.text.trim())?.isBefore(picked) ==
+            true) {
+      _toDateController.text = teacherFlowDate(picked);
+    }
+  }
+
   Future<void> _loadMissingContext() async {
     try {
-      if (_staffId.isEmpty || _leaveTypes.isEmpty) {
-        await RoleAccessService.initialize();
-        final staffId = RoleAccessService.teacherStaffId;
-        final types = _leaveTypes.isEmpty
-            ? await BackendApiClient.instance.getLeaveTypes()
-            : _leaveTypes;
-        final balances = _balances.isEmpty && staffId.isNotEmpty
-            ? await BackendApiClient.instance.getLeaveBalances(staffId: staffId)
-            : _balances;
-        if (!mounted) return;
-        setState(() {
-          _staffId = _staffId.isEmpty ? staffId : _staffId;
-          _staffName = _staffName.isEmpty
-              ? RoleAccessService.teacherName
-              : _staffName;
-          _leaveTypes = types;
-          _balances = balances;
-          _leaveTypeId = _firstLeaveTypeId();
-          _loadingContext = false;
-        });
-        return;
-      }
-    } catch (_) {
-      // Fall through to the existing missing-context state.
+      await RoleAccessService.initialize();
+      final staffId = _staffId.isEmpty
+          ? RoleAccessService.teacherStaffId
+          : _staffId;
+      final types = _leaveTypes.isEmpty
+          ? await BackendApiClient.instance.getLeaveTypes()
+          : _leaveTypes;
+      final balances = _balances.isEmpty && staffId.isNotEmpty
+          ? await BackendApiClient.instance.getLeaveBalances(staffId: staffId)
+          : _balances;
+      if (!mounted) return;
+      setState(() {
+        _staffId = staffId;
+        _staffName = _staffName.isEmpty
+            ? RoleAccessService.teacherName
+            : _staffName;
+        _leaveTypes = types;
+        _balances = balances;
+        _leaveTypeId = _firstLeaveTypeId();
+        _loadingContext = false;
+      });
+      return;
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingContext = false;
+        _error = error.toString();
+      });
     }
-    if (!mounted) return;
-    setState(() => _loadingContext = false);
+  }
+
+  String _leaveTypeIdFrom(Map<String, dynamic> type) {
+    return teacherFlowText(type['id'] ?? type['leave_type_id']);
   }
 
   String _leaveTypeName(Map<String, dynamic> type) {
     return teacherFlowText(
-      type['name'] ?? type['leave_type'] ?? type['type_name'],
-      fallback: teacherFlowText(type['id'], fallback: 'Leave'),
+      type['leave_name'] ??
+          type['name'] ??
+          type['leave_type'] ??
+          type['type_name'],
+      fallback: teacherFlowText(
+        type['id'] ?? type['leave_type_id'],
+        fallback: 'Leave',
+      ),
     );
   }
 }

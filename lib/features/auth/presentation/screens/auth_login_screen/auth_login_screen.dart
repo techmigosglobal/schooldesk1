@@ -227,46 +227,54 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            TextFormField(
-              controller: _usernameCtrl,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Username',
-                prefixIcon: Icon(Icons.person_outline_rounded),
+            Semantics(
+              label: 'Username',
+              textField: true,
+              child: TextFormField(
+                controller: _usernameCtrl,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  prefixIcon: Icon(Icons.person_outline_rounded),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Enter username';
+                  }
+                  return null;
+                },
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Enter username';
-                }
-                return null;
-              },
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _passwordCtrl,
-              obscureText: _obscurePassword,
-              onFieldSubmitted: (_) => _login(),
-              decoration: InputDecoration(
-                labelText: 'Password',
-                prefixIcon: const Icon(Icons.lock_outline_rounded),
-                suffixIcon: IconButton(
-                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-                  icon: Icon(
-                    _obscurePassword
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
+            Semantics(
+              label: 'Password',
+              textField: true,
+              child: TextFormField(
+                controller: _passwordCtrl,
+                obscureText: _obscurePassword,
+                onFieldSubmitted: (_) => _login(),
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                    onPressed: () {
+                      setState(() => _obscurePassword = !_obscurePassword);
+                    },
                   ),
-                  onPressed: () {
-                    setState(() => _obscurePassword = !_obscurePassword);
-                  },
                 ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Enter password';
+                  }
+                  return null;
+                },
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Enter password';
-                }
-                return null;
-              },
             ),
             if (_error != null) ...[
               const SizedBox(height: 14),
@@ -286,23 +294,28 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
               ),
             ],
             const SizedBox(height: 22),
-            SizedBox(
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _loading ? null : _login,
-                icon: _loading
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.appTheme.surface,
-                        ),
-                      )
-                    : const Icon(Icons.login_rounded, size: 18),
-                label: Text(
-                  _loading ? 'Signing in' : 'Sign in',
-                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            Semantics(
+              button: true,
+              label: _loading ? 'Signing in' : 'Sign in',
+              enabled: !_loading,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _loading ? null : _login,
+                  icon: _loading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.appTheme.surface,
+                          ),
+                        )
+                      : const Icon(Icons.login_rounded, size: 18),
+                  label: Text(
+                    _loading ? 'Signing in' : 'Sign in',
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
             ),

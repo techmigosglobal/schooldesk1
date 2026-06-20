@@ -776,7 +776,7 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 
 func teacherAssignedClassesSQL() string {
 	return `
-		SELECT id, section_name, grade_name, is_class_teacher
+		SELECT id, grade_id, section_name, grade_name, is_class_teacher
 		FROM (
 			SELECT DISTINCT
 				sections.id,

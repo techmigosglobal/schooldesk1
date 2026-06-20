@@ -18,26 +18,23 @@ if [[ -z "${ANDROID_SERIAL:-}" ]]; then
   exit 1
 fi
 
-echo "Running Maestro on ${ANDROID_SERIAL}"
+echo "Running Maestro suite on ${ANDROID_SERIAL}"
 
-flows=(
-  "Maestro/login_principal.yaml"
-  "Maestro/create_teacher.yaml"
-  "Maestro/principal_teacher_navigation.yaml"
-  "Maestro/teacher_attendance_marking.yaml"
-  "Maestro/teacher_principal_attendance_correction.yaml"
-  "Maestro/teacher_principal_content_handoffs.yaml"
-  "Maestro/teacher_leave_principal_approval.yaml"
-  "Maestro/teacher_principal_communication.yaml"
+maestro_args=(
+  test
+  --device "${ANDROID_SERIAL}"
+  -e "PRINCIPAL_USERNAME=${PRINCIPAL_USERNAME}"
+  -e "PRINCIPAL_PASSWORD=${PRINCIPAL_PASSWORD}"
+  -e "TEACHER_USERNAME=${TEACHER_USERNAME}"
+  -e "TEACHER_PASSWORD=${TEACHER_PASSWORD}"
 )
 
-for flow in "${flows[@]}"; do
-  echo "==> ${flow}"
-  maestro test \
-    --device "${ANDROID_SERIAL}" \
-    -e "PRINCIPAL_USERNAME=${PRINCIPAL_USERNAME}" \
-    -e "PRINCIPAL_PASSWORD=${PRINCIPAL_PASSWORD}" \
-    -e "TEACHER_USERNAME=${TEACHER_USERNAME}" \
-    -e "TEACHER_PASSWORD=${TEACHER_PASSWORD}" \
-    "${ROOT_DIR}/${flow}"
-done
+if [[ -n "${MAESTRO_FORMAT:-}" ]]; then
+  maestro_args+=(--format "${MAESTRO_FORMAT}")
+fi
+
+if [[ -n "${MAESTRO_OUTPUT:-}" ]]; then
+  maestro_args+=(--output "${MAESTRO_OUTPUT}")
+fi
+
+maestro "${maestro_args[@]}" "${ROOT_DIR}/Maestro/config.yaml"

@@ -1,17 +1,25 @@
 # SchoolDesk Maestro E2E
 
-These flows target the wireless Moto G85 (`moto_g85_5G`) and cover the Teacher ↔ Principal workflows:
+These flows target the wireless Moto G85 (`moto_g85_5G`) and cover the Teacher ↔ Principal workflows end to end:
 
 - principal login and dashboard queue
-- principal teacher/account creation smoke
+- principal teacher account provisioning via Access & Permissions
 - principal and teacher navigation boundaries
 - teacher attendance draft/final submit
 - teacher correction request → principal attendance monitor/reopen
 - teacher homework, lesson planner, event post → principal lesson/event review
-- teacher leave request → principal approval surface
+- teacher leave request → principal approval center review
 - teacher communication → principal message oversight
 
-Run on the G85:
+All selectors use accessibility labels and visible text. Coordinate taps and `optional: true` steps are not used.
+
+## Layout
+
+- `config.yaml` — suite order for local runs and Maestro Cloud
+- `subflows/` — reusable login and drawer helpers
+- `*.yaml` — one journey per Teacher ↔ Principal workflow
+
+## Run on the G85
 
 ```bash
 Maestro/run_g85.sh
@@ -39,7 +47,7 @@ maestro test \
 
 The GitHub Actions workflow lives at `.github/workflows/maestro-cloud.yml`.
 It builds a Flutter debug APK with a public HTTPS backend URL, uploads the APK to
-Maestro Cloud, and runs every flow in this `Maestro/` directory.
+Maestro Cloud, and runs every flow in this `Maestro/` directory via `config.yaml`.
 
 ## Maestro Studio ENV1
 
@@ -72,3 +80,10 @@ Optional repository variables:
 - `MAESTRO_DEVICE_MODEL`, defaults to `pixel_6`
 - `MAESTRO_DEVICE_OS`, defaults to `android-34`
 - `MAESTRO_TIMEOUT_MINUTES`, defaults to `90`
+
+## Selector conventions
+
+- Landing page: tap the `Sign in` accessibility label (not screen coordinates).
+- Forms: tap field labels such as `Username`, `Password`, `Reason`, and `Full name *`.
+- Dashboard tiles and action queue rows expose their title as the accessibility label.
+- Drawer destinations are opened with `Open navigation`, then the drawer item label.

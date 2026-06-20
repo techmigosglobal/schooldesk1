@@ -110,17 +110,10 @@ class _TeacherLessonPlannerScreenState
         '/lesson-planners/teacher',
       );
       if (!mounted) return;
-      final classes = RoleAccessService.teacherAssignedClasses
-          .where(
-            (row) => _sectionId(row).isNotEmpty && _gradeId(row).isNotEmpty,
-          )
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      final classes = await _loadAssignedClasses();
       setState(() {
         _classes = classes;
-        _selectedSectionId = classes.isNotEmpty
-            ? _sectionId(classes.first)
-            : null;
+        _selectedSectionId = _resolveSelectedSectionId(classes);
         _planners = response.data['data'] ?? [];
         _loading = false;
       });
@@ -131,6 +124,48 @@ class _TeacherLessonPlannerScreenState
         _error = 'Failed to load lesson planners: $e';
       });
     }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadAssignedClasses() async {
+    final assigned = RoleAccessService.teacherAssignedClasses
+        .where((row) => _sectionId(row).isNotEmpty)
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+    if (assigned.isEmpty) return assigned;
+
+    final needsGradeId = assigned.any((row) => _gradeId(row).isEmpty);
+    if (!needsGradeId) return assigned;
+
+    try {
+      final sections = await BackendApiClient.instance.getSections();
+      final bySectionId = {
+        for (final section in sections) section.id: section,
+      };
+      return assigned.map((row) {
+        final sectionId = _sectionId(row);
+        final section = bySectionId[sectionId];
+        if (section == null) return row;
+        return {
+          ...row,
+          if (_gradeId(row).isEmpty) 'grade_id': section.gradeId,
+          if (_text(row['grade_name']).isEmpty) 'grade_name': section.gradeName,
+          if (_text(row['section_name']).isEmpty)
+            'section_name': section.sectionName,
+        };
+      }).toList();
+    } catch (_) {
+      return assigned;
+    }
+  }
+
+  String? _resolveSelectedSectionId(List<Map<String, dynamic>> classes) {
+    if (classes.isEmpty) return null;
+    final current = _selectedSectionId;
+    if (current != null &&
+        classes.any((row) => _sectionId(row) == current)) {
+      return current;
+    }
+    return _sectionId(classes.first);
   }
 
   Future<void> _submit() async {
@@ -259,9 +294,12 @@ class _TeacherLessonPlannerScreenState
                     // Class selector
                     DropdownButtonFormField<String>(
                       value: _selectedSectionId,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Assigned Class / Section',
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
+                        helperText: _classes.isEmpty
+                            ? 'No assigned classes found. Contact Admin/Principal.'
+                            : null,
                       ),
                       items: _classes
                           .map(
@@ -272,9 +310,9 @@ class _TeacherLessonPlannerScreenState
                           )
                           .where((item) => item.value?.isNotEmpty == true)
                           .toList(),
-                      onChanged: _classes.length > 1
-                          ? (v) => setState(() => _selectedSectionId = v)
-                          : null,
+                      onChanged: _classes.isEmpty
+                          ? null
+                          : (value) => setState(() => _selectedSectionId = value),
                     ),
                     const SizedBox(height: 14),
                     // Week start date
@@ -472,4 +510,9 @@ String _classLabel(Map<String, dynamic> row) {
           .toString();
   final section = (row['section_name'] ?? row['section'] ?? '').toString();
   return section.trim().isEmpty ? grade : '$grade - $section';
+}
+
+String _text(Object? value, {String fallback = ''}) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
 }

@@ -1710,12 +1710,15 @@ class _PrincipalActionQueueTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
-        child: Row(
+    return Semantics(
+      button: true,
+      label: item.label,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
+          child: Row(
           children: [
             Container(
               width: 38,
@@ -1757,6 +1760,7 @@ class _PrincipalActionQueueTile extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -1913,13 +1917,12 @@ class _SetupStepChip extends StatelessWidget {
                       color: const Color(0xFF0F172A),
                       fontWeight: FontWeight.w800,
                     ),
-                  ),
-                ),
-              ],
-            ),
+                  ),              ),
+            ],
           ),
         ),
       ),
+    ),
     );
   }
 }

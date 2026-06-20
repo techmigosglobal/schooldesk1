@@ -460,7 +460,10 @@ class PrincipalDirectoryCard extends StatelessWidget {
     final borderColor = selected
         ? principalDirectoryAccent
         : const Color(0xFFE0E8F0);
-    return Material(
+    final semanticLabel = status == null || status!.isEmpty
+        ? title
+        : '$title, $status';
+    final card = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -545,6 +548,12 @@ class PrincipalDirectoryCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+    return Semantics(
+      button: onTap != null,
+      label: semanticLabel,
+      enabled: onTap != null,
+      child: card,
     );
   }
 }
@@ -790,10 +799,14 @@ class PrincipalActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
+    return Semantics(
+      button: onTap != null,
+      label: title,
+      enabled: onTap != null,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 9),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -844,6 +857,7 @@ class PrincipalActionTile extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

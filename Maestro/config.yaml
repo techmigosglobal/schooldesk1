@@ -7,6 +7,8 @@ flows:
   - teacher_principal_content_handoffs.yaml
   - teacher_leave_principal_approval.yaml
   - teacher_principal_communication.yaml
+  - teacher_timetable_viewing.yaml
+  - principal_timetable_management.yaml
 executionOrder:
   continueOnFailure: false
   flowsOrder:
@@ -18,6 +20,8 @@ executionOrder:
     - teacher_principal_content_handoffs
     - teacher_leave_principal_approval
     - teacher_principal_communication
+    - teacher_timetable_viewing
+    - principal_timetable_management
 platform:
   android:
     disableAnimations: true

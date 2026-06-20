@@ -1,0 +1,21 @@
+appId: com.techmigos.schooldesk1
+---
+- launchApp:
+    clearState: true
+- runFlow: subflows/login_principal.yaml
+- extendedWaitUntil:
+    visible: "Principal Action Queue"
+    timeout: 20000
+- runFlow: subflows/open_principal_drawer.yaml
+- scrollUntilVisible:
+    element: "Timetable"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Timetable"
+- extendedWaitUntil:
+    visible: "Timetable"
+    timeout: 20000
+- assertVisible: "Timetable"
+- assertVisible: "Class Timetable"
+- assertVisible: "Teacher Timetable"
+- assertVisible: "Room Timetable"

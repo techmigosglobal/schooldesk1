@@ -365,7 +365,7 @@ class TeacherFlowCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
-    return Material(
+    final card = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -449,6 +449,12 @@ class TeacherFlowCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+    return Semantics(
+      button: onTap != null,
+      label: title,
+      enabled: onTap != null,
+      child: card,
     );
   }
 }
@@ -536,17 +542,22 @@ class TeacherFlowActionWrap extends StatelessWidget {
       runSpacing: 8,
       children: [
         for (final action in actions)
-          action.filled
-              ? FilledButton.icon(
-                  onPressed: action.onTap,
-                  icon: Icon(action.icon, size: 18),
-                  label: Text(action.label),
-                )
-              : OutlinedButton.icon(
-                  onPressed: action.onTap,
-                  icon: Icon(action.icon, size: 18),
-                  label: Text(action.label),
-                ),
+          Semantics(
+            button: true,
+            label: action.label,
+            enabled: action.onTap != null,
+            child: action.filled
+                ? FilledButton.icon(
+                    onPressed: action.onTap,
+                    icon: Icon(action.icon, size: 18),
+                    label: Text(action.label),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: action.onTap,
+                    icon: Icon(action.icon, size: 18),
+                    label: Text(action.label),
+                  ),
+          ),
       ],
     );
   }

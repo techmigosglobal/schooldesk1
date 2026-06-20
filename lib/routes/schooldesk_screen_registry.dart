@@ -644,6 +644,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-timetable-screen',
+      title: 'Timetable',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/notification-center-screen',
       title: 'Notifications',
       module: 'Shared Tools',
