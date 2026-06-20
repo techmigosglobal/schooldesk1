@@ -57,6 +57,7 @@ type principalClassSetupRequest struct {
 	SectionName            string                         `json:"section_name"`
 	Capacity               int                            `json:"capacity"`
 	ClassTeacherID         string                         `json:"class_teacher_id"`
+	CoTeacherID            string                         `json:"co_teacher_id"`
 	ClassTeacherRef        classImportStaffRef            `json:"-"`
 	RoomID                 *string                        `json:"room_id"`
 	RoomNumber             *string                        `json:"room_number"`
@@ -110,6 +111,7 @@ func (h *PrincipalClassesHandler) Overview(c *gin.Context) {
 	if err := database.DB.
 		Preload("Grade").
 		Preload("ClassTeacher").
+		Preload("CoTeacher").
 		Preload("Room").
 		Joins("JOIN grades ON grades.id = sections.grade_id").
 		Where("grades.school_id = ?", schoolID).
@@ -173,6 +175,8 @@ func (h *PrincipalClassesHandler) Overview(c *gin.Context) {
 			"grade_number":           principalGradeNumber(section.Grade),
 			"class_teacher_id":       section.ClassTeacherID,
 			"class_teacher":          teacherName,
+			"co_teacher_id":          section.CoTeacherID,
+			"co_teacher":             principalTeacherName(section.CoTeacher),
 			"room_id":                section.RoomID,
 			"room_number":            principalRoomNumber(section.Room),
 			"room_type":              principalRoomType(section.Room),
@@ -263,6 +267,20 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 		}
 		classTeacherID = &classTeacherIDValue
 	}
+	coTeacherIDValue := strings.TrimSpace(req.CoTeacherID)
+	var coTeacherID *string
+	if coTeacherIDValue != "" {
+		var staff models.Staff
+		if err := database.DB.First(&staff, "id = ? AND school_id = ? AND status = ?", coTeacherIDValue, schoolID, "active").Error; err != nil {
+			fail(c, http.StatusBadRequest, "Co-teacher must be active staff in this school")
+			return
+		}
+		coTeacherID = &coTeacherIDValue
+	}
+	if classTeacherID != nil && coTeacherID != nil && *classTeacherID == *coTeacherID {
+		fail(c, http.StatusBadRequest, "Class teacher and co-teacher must be different staff")
+		return
+	}
 
 	var grade models.Grade
 	var section models.Section
@@ -294,6 +312,7 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 			SectionName:    sectionName,
 			Capacity:       req.Capacity,
 			ClassTeacherID: classTeacherID,
+			CoTeacherID:    coTeacherID,
 			RoomID:         roomID,
 		}
 		if err := tx.Create(&section).Error; err != nil {
@@ -302,7 +321,7 @@ func (h *PrincipalClassesHandler) CreateClass(c *gin.Context) {
 		if err := h.applyClassSetupBundle(tx, schoolID, &section, req); err != nil {
 			return err
 		}
-		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
+		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("CoTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
 			return err
 		}
 		setup = h.classSetupResponse(tx, schoolID, section)
@@ -378,6 +397,21 @@ func (h *PrincipalClassesHandler) UpdateClassSetup(c *gin.Context) {
 		classTeacherID = &classTeacherIDValue
 	}
 
+	coTeacherIDValue := strings.TrimSpace(req.CoTeacherID)
+	var coTeacherID *string
+	if coTeacherIDValue != "" {
+		var staff models.Staff
+		if err := database.DB.First(&staff, "id = ? AND school_id = ? AND status = ?", coTeacherIDValue, schoolID, "active").Error; err != nil {
+			fail(c, http.StatusBadRequest, "Co-teacher must be active staff in this school")
+			return
+		}
+		coTeacherID = &coTeacherIDValue
+	}
+	if classTeacherID != nil && coTeacherID != nil && *classTeacherID == *coTeacherID {
+		fail(c, http.StatusBadRequest, "Class teacher and co-teacher must be different staff")
+		return
+	}
+
 	var setup gin.H
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
 		if strings.TrimSpace(req.GradeName) != "" || req.GradeNumber > 0 {
@@ -404,6 +438,7 @@ func (h *PrincipalClassesHandler) UpdateClassSetup(c *gin.Context) {
 		section.SectionName = sectionName
 		section.Capacity = capacity
 		section.ClassTeacherID = classTeacherID
+		section.CoTeacherID = coTeacherID
 		section.RoomID = roomID
 		if err := tx.Save(&section).Error; err != nil {
 			return err
@@ -411,7 +446,7 @@ func (h *PrincipalClassesHandler) UpdateClassSetup(c *gin.Context) {
 		if err := h.applyClassSetupBundle(tx, schoolID, &section, req); err != nil {
 			return err
 		}
-		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
+		if err := tx.Preload("Grade").Preload("ClassTeacher").Preload("CoTeacher").Preload("Room").First(&section, "id = ?", section.ID).Error; err != nil {
 			return err
 		}
 		setup = h.classSetupResponse(tx, schoolID, section)

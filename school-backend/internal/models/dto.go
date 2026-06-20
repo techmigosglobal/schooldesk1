@@ -129,6 +129,7 @@ type CreateSectionRequest struct {
 	AcademicYearID string `json:"academic_year_id" binding:"required"`
 	SectionName    string `json:"section_name" binding:"required"`
 	ClassTeacherID string `json:"class_teacher_id"`
+	CoTeacherID    string `json:"co_teacher_id"`
 	RoomID         string `json:"room_id"`
 	Capacity       int    `json:"capacity"`
 }

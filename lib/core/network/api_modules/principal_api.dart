@@ -40,6 +40,7 @@ extension BackendPrincipalApi on BackendApiClient {
     String gradeName = '',
     int? gradeNumber,
     String classTeacherId = '',
+    String coTeacherId = '',
     String roomNumber = '',
     String roomType = 'classroom',
     int roomCapacity = 0,
@@ -57,6 +58,8 @@ extension BackendPrincipalApi on BackendApiClient {
           'section_name': sectionName.trim(),
           'capacity': capacity,
           'class_teacher_id': classTeacherId.trim(),
+          if (coTeacherId.trim().isNotEmpty)
+            'co_teacher_id': coTeacherId.trim(),
           if (roomNumber.trim().isNotEmpty) 'room_number': roomNumber.trim(),
           if (roomNumber.trim().isNotEmpty)
             'room_type': roomType.trim().isEmpty
@@ -129,6 +132,7 @@ extension BackendPrincipalApi on BackendApiClient {
     String gradeName = '',
     int? gradeNumber,
     String classTeacherId = '',
+    String coTeacherId = '',
     String? roomNumber,
     String roomType = 'classroom',
     int roomCapacity = 0,
@@ -149,6 +153,8 @@ extension BackendPrincipalApi on BackendApiClient {
           'section_name': sectionName.trim(),
           'capacity': capacity,
           'class_teacher_id': classTeacherId.trim(),
+          if (coTeacherId.trim().isNotEmpty)
+            'co_teacher_id': coTeacherId.trim(),
           if (roomNumber != null) 'room_number': roomNumber.trim(),
           if (roomNumber != null && roomNumber.trim().isNotEmpty)
             'room_type': roomType.trim().isEmpty

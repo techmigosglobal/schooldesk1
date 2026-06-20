@@ -342,6 +342,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     badge: _data.pendingApprovals,
                   ),
                   _AcademicModuleItem(
+                    label: 'Timetable',
+                    route: AppRoutes.principalTimetable,
+                    illustration: SchoolDeskUiIllustrations.calendar,
+                    fallbackIcon: Icons.calendar_month_rounded,
+                    accent: const Color(0xFF0EA5E9),
+                    cardColor: const Color(0xFFE8F7FF),
+                  ),
+                  _AcademicModuleItem(
                     label: 'Message Oversight',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
@@ -1719,48 +1727,48 @@ class _PrincipalActionQueueTile extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 9),
           child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: item.color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: item.color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(item.icon, color: item.color, size: 20),
               ),
-              child: Icon(item.icon, color: item.color, size: 20),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF0F172A),
-                      fontWeight: FontWeight.w900,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    item.detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF64748B),
-                      fontWeight: FontWeight.w600,
+                    const SizedBox(height: 2),
+                    Text(
+                      item.detail,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF64748B),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
-          ],
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1917,12 +1925,13 @@ class _SetupStepChip extends StatelessWidget {
                       color: const Color(0xFF0F172A),
                       fontWeight: FontWeight.w800,
                     ),
-                  ),              ),
-            ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }

@@ -474,6 +474,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required String gradeName,
     required int? gradeNumber,
     required String classTeacherId,
+    required String coTeacherId,
     required String roomNumber,
     required String roomType,
     required int roomCapacity,
@@ -488,6 +489,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         gradeName: gradeName,
         gradeNumber: gradeNumber,
         classTeacherId: classTeacherId,
+        coTeacherId: coTeacherId,
         roomNumber: roomNumber,
         roomType: roomType,
         roomCapacity: roomCapacity,
@@ -526,6 +528,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     required String sectionName,
     required int capacity,
     required String classTeacherId,
+    required String coTeacherId,
     required String roomNumber,
     required String roomType,
     required int roomCapacity,
@@ -540,6 +543,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         sectionName: sectionName,
         capacity: capacity,
         classTeacherId: classTeacherId,
+        coTeacherId: coTeacherId,
         roomNumber: roomNumber,
         roomType: roomType,
         roomCapacity: roomCapacity,
@@ -2546,6 +2550,13 @@ class _ClassDetailPage extends StatelessWidget {
                   ),
                 ),
                 _ClassDetailRow(
+                  label: 'Co-Teacher',
+                  value: _classText(
+                    row['co_teacher'],
+                    fallback: 'Not assigned',
+                  ),
+                ),
+                _ClassDetailRow(
                   label: 'Grade',
                   value: _classText(row['grade_name'], fallback: className),
                 ),
@@ -3144,6 +3155,7 @@ class _CreateClassSetupPage extends StatefulWidget {
     required String gradeName,
     required int? gradeNumber,
     required String classTeacherId,
+    required String coTeacherId,
     required String roomNumber,
     required String roomType,
     required int roomCapacity,
@@ -3181,6 +3193,7 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
   String _academicYearId = '';
   String _teacherId = '';
   bool _saving = false;
+  String _coTeacherId = "";
 
   bool get _busy => _saving || widget.saving;
 
@@ -3343,6 +3356,30 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
                                   onChanged: (value) =>
                                       setState(() => _teacherId = value),
                                 ),
+                                const SizedBox(height: 14),
+                                _ClassSetupSelectField(
+                                  label: 'Co-Teacher',
+                                  value: _coTeacherId,
+                                  hint: 'Choose co-teacher (optional)',
+                                  icon: Icons.person_add_outlined,
+                                  iconColor: const Color(0xFF7C3AED),
+                                  iconTone: const Color(0xFFF4ECFF),
+                                  enabled: !_busy,
+                                  items: [
+                                    const DropdownMenuItem(
+                                      value: '',
+                                      child: Text('Not assigned'),
+                                    ),
+                                    ...widget.staff.map(
+                                      (staff) => DropdownMenuItem(
+                                        value: staff.id,
+                                        child: Text(staff.fullName),
+                                      ),
+                                    ),
+                                  ],
+                                  onChanged: (value) =>
+                                      setState(() => _coTeacherId = value),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 18),
@@ -3420,6 +3457,7 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
       gradeId: '',
       gradeName: _gradeName.text.trim(),
       gradeNumber: _gradeOrderValue(),
+      coTeacherId: _coTeacherId,
       classTeacherId: _teacherId,
       roomNumber: _roomNumber.text.trim(),
       roomType: _roomType.text.trim(),
@@ -8599,6 +8637,7 @@ class _EditClassSheet extends StatefulWidget {
     required String sectionName,
     required int capacity,
     required String classTeacherId,
+    required String coTeacherId,
     required String roomNumber,
     required String roomType,
     required int roomCapacity,
@@ -8627,6 +8666,7 @@ class _EditClassSheetState extends State<_EditClassSheet> {
   String _academicYearId = '';
   String _teacherId = '';
   bool _saving = false;
+  String _coTeacherId = "";
 
   @override
   void initState() {
@@ -8647,6 +8687,9 @@ class _EditClassSheetState extends State<_EditClassSheet> {
     final teacherId = _classText(widget.row['class_teacher_id']);
     final teacherIds = widget.staff.map((staff) => staff.id).toSet();
     _teacherId = teacherIds.contains(teacherId) ? teacherId : '';
+    final coTeacherId = _classText(widget.row['co_teacher_id']);
+    final coTeacherIds = widget.staff.map((staff) => staff.id).toSet();
+    _coTeacherId = coTeacherIds.contains(coTeacherId) ? coTeacherId : '';
     _roomNumber.text = _classText(widget.row['room_number']);
     final roomType = _classText(widget.row['room_type']);
     if (roomType.isNotEmpty) _roomType.text = roomType;
@@ -8781,6 +8824,21 @@ class _EditClassSheetState extends State<_EditClassSheet> {
                 onChanged: (value) => _teacherId = value ?? '',
               ),
               const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _coTeacherId.isEmpty ? '' : _coTeacherId,
+                decoration: const InputDecoration(labelText: 'Co-teacher'),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('Unassigned')),
+                  ...widget.staff.map(
+                    (staff) => DropdownMenuItem(
+                      value: staff.id,
+                      child: Text(staff.fullName),
+                    ),
+                  ),
+                ],
+                onChanged: (value) => _coTeacherId = value ?? '',
+              ),
+              const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final roomNumber = TextFormField(
@@ -8848,6 +8906,7 @@ class _EditClassSheetState extends State<_EditClassSheet> {
       sectionName: _section.text.trim(),
       capacity: int.tryParse(_capacity.text.trim()) ?? 40,
       classTeacherId: _teacherId,
+      coTeacherId: _coTeacherId,
       roomNumber: _roomNumber.text.trim(),
       roomType: _roomType.text.trim(),
       roomCapacity: int.tryParse(_capacity.text.trim()) ?? 40,

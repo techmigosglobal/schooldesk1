@@ -448,7 +448,8 @@ void main() {
     expect(dashboard, contains("label: 'Attendance'"));
     expect(dashboard, contains('route: AppRoutes.principalAttendance'));
     expect(dashboard, contains("label: 'Subjects'"));
-    expect(dashboard, isNot(contains("label: 'Timetable'")));
+    expect(dashboard, contains("label: 'Timetable'"));
+    expect(dashboard, contains('route: AppRoutes.principalTimetable'));
     expect(dashboard, isNot(contains("label: 'Exam Timetable'")));
     expect(dashboard, isNot(contains("label: 'Results'")));
     expect(dashboard, contains("label: 'Fees'"));

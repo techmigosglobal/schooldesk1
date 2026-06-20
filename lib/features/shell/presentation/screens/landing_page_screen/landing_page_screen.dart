@@ -141,10 +141,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                   child: Column(
                     children: [
                       // ── TOP HEADER ──────────────────────────────────────
-                      _LandingHeader(
-                        onSignIn: _openLogin,
-                        isSmall: isSmall,
-                      ),
+                      _LandingHeader(onSignIn: _openLogin, isSmall: isSmall),
                       // ── SLIDE CAROUSEL ──────────────────────────────────
                       Expanded(
                         child: Padding(
@@ -155,8 +152,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                             children: [
                               NotificationListener<ScrollNotification>(
                                 onNotification: (notification) {
-                                  if (notification
-                                      is ScrollStartNotification) {
+                                  if (notification is ScrollStartNotification) {
                                     _pauseAutoSlide();
                                   } else if (notification
                                       is ScrollEndNotification) {
@@ -195,8 +191,9 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                       _LandingFooter(
                         activeIndex: _activeSlide,
                         itemCount: _slideAssets.length,
-                        onToggleAutoSlide:
-                            _reduceMotion ? null : _toggleAutoSlide,
+                        onToggleAutoSlide: _reduceMotion
+                            ? null
+                            : _toggleAutoSlide,
                         isAutoSlidePaused:
                             _reduceMotion || _autoSlidePausedByUser,
                         isSmall: isSmall,
@@ -227,10 +224,7 @@ class _LandingHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 10, isSmall ? 8 : 16, 8),
-      padding: EdgeInsets.symmetric(
-        horizontal: isSmall ? 10 : 14,
-        vertical: 8,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -274,7 +268,7 @@ class _LandingHeader extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Powered by SchoolDesk',
+                  'Learn Today, Lead Tomorrow',
                   style: TextStyle(
                     fontSize: isSmall ? 10 : 11,
                     fontWeight: FontWeight.w500,
@@ -311,7 +305,7 @@ class _SignInButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Sign in to SchoolDesk',
+      label: 'Sign in to Arish Ville',
       child: Material(
         color: const Color(0xFF1565C0),
         borderRadius: BorderRadius.circular(12),
@@ -487,9 +481,7 @@ class _PauseButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
-            isAutoSlidePaused
-                ? Icons.play_arrow_rounded
-                : Icons.pause_rounded,
+            isAutoSlidePaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
             size: isSmall ? 17 : 20,
             color: const Color(0xFF1565C0),
           ),

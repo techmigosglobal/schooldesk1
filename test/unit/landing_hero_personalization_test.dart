@@ -44,8 +44,8 @@ void main() {
     expect(source, contains('MediaQuery.disableAnimationsOf(context)'));
     expect(source, contains('NotificationListener<ScrollNotification>'));
     expect(source, contains('AnimatedContainer'));
-    expect(source, contains('Pause carousel'));
-    expect(source, contains('Resume carousel'));
+    expect(source, contains('Pause slideshow'));
+    expect(source, contains('Resume slideshow'));
   });
 
   test('landing hero places slide dots at the bottom and frames brand images', () {
@@ -53,10 +53,11 @@ void main() {
       'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains('_LandingBrandPanel'));
-    expect(source, contains('Brand panel container'));
-    expect(source, contains('Slide dots live in the bottom band'));
-    expect(source, contains('indicator: _SlidePositionIndicator'));
+    expect(source, contains('_LandingFooter'));
+    expect(source, contains('_TechmigasBrand'));
+    expect(source, contains('_SlidePositionIndicator'));
+    expect(source, contains('Learn Today, Lead Tomorrow'));
+    expect(source, isNot(contains('Powered by SchoolDesk')));
     expect(
       source,
       isNot(

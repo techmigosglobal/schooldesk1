@@ -357,6 +357,8 @@ class SectionModel {
   final String sectionName;
   final String classTeacherId;
   final String classTeacherName;
+  final String coTeacherId;
+  final String coTeacherName;
   final String roomId;
   final String roomNumber;
   final String roomType;
@@ -370,6 +372,8 @@ class SectionModel {
     required this.sectionName,
     required this.classTeacherId,
     required this.classTeacherName,
+    this.coTeacherId = '',
+    this.coTeacherName = '',
     required this.roomId,
     required this.roomNumber,
     required this.roomType,
@@ -384,6 +388,8 @@ class SectionModel {
     sectionName: _stringValue(json['section_name']),
     classTeacherId: _stringValue(json['class_teacher_id']),
     classTeacherName: _staffName(json['class_teacher']),
+    coTeacherId: _stringValue(json['co_teacher_id']),
+    coTeacherName: _staffName(json['co_teacher']),
     roomId: _stringValue(json['room_id']),
     roomNumber: _roomNumber(json),
     roomType: _roomType(json),

@@ -134,44 +134,44 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
             child: RefreshIndicator(
-          color: const Color(0xFF0877D8),
-          onRefresh: _loadBackendTimetable,
-          child: CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(child: _buildHeader()),
-              if (_loading)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_error != null)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: OpsEmptyState(
-                      icon: Icons.cloud_off_rounded,
-                      title: 'Timetable unavailable',
-                      message: _error!,
-                      actionLabel: 'Retry',
-                      onAction: _loadBackendTimetable,
-                    ),
-                  ),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 92),
-                  sliver: SliverToBoxAdapter(child: _buildActiveView()),
+              color: const Color(0xFF0877D8),
+              onRefresh: _loadBackendTimetable,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
                 ),
-            ],
+                slivers: [
+                  SliverToBoxAdapter(child: _buildHeader()),
+                  if (_loading)
+                    const SliverFillRemaining(
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_error != null)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: OpsEmptyState(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'Timetable unavailable',
+                          message: _error!,
+                          actionLabel: 'Retry',
+                          onAction: _loadBackendTimetable,
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 92),
+                      sliver: SliverToBoxAdapter(child: _buildActiveView()),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 
   Widget _buildHeader() {
@@ -429,8 +429,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             child: _TimetableCard(
               icon: Icons.groups_2_outlined,
               title: _text(row['class_name'], fallback: 'Class'),
-              subtitle:
-                  '${_int(row['slot_count'])} Periods / Week - Class teacher: ${_text(row['class_teacher'], fallback: 'Pending')}',
+              subtitle: (() {
+                final ct = _text(row['class_teacher'], fallback: 'Pending');
+                final co = _text(row['co_teacher'], fallback: '');
+                return '${_int(row['slot_count'])} Periods / Week - Class teacher: $ct${co.isEmpty ? '' : ' + Co-teacher: $co'}';
+              })(),
               status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
               statusColor: _int(row['slot_count']) > 0
                   ? context.appTheme.success

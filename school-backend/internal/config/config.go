@@ -72,7 +72,7 @@ func Load() *Config {
 		RateLimitMaxLogin:             getEnvAsInt("RATE_LIMIT_MAX_LOGIN", 5),
 		RateLimitMaxAPI:               getEnvAsInt("RATE_LIMIT_MAX_API", 120),
 		DisablePublicRegistration:     getEnvAsBool("DISABLE_PUBLIC_REGISTRATION", isProd),
-		MigrateOnStart:                getEnvAsBool("MIGRATE_ON_START", !isProd),
+		MigrateOnStart:                getEnvAsBool("MIGRATE_ON_START", true),
 		SeedOnStart:                   getEnvAsBool("SEED_ON_START", false),
 		UsePostgresOnly:               getEnvAsBool("USE_POSTGRES_ONLY", isProd),
 		RequireHTTPSAPIBaseURL:        getEnvAsBool("REQUIRE_HTTPS_API_BASE_URL", isProd),

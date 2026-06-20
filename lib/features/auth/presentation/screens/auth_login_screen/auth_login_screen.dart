@@ -11,7 +11,6 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
-import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AuthLoginScreen extends StatefulWidget {
@@ -150,14 +149,19 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           ? MainAxisAlignment.center
           : MainAxisAlignment.start,
       children: [
-        SchoolDeskIllustration(
-          asset: SchoolDeskUiIllustrations.secureLogin,
-          size: expanded ? 180 : 132,
-          semanticLabel: 'Secure SchoolDesk sign in',
+        ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Image.asset(
+            'assets/branding/ArishVilleLogo.png',
+            width: expanded ? 180 : 132,
+            height: expanded ? 180 : 132,
+            fit: BoxFit.cover,
+            semanticLabel: 'Arish Ville logo',
+          ),
         ),
         const SizedBox(height: 22),
         Text(
-          'SchoolDesk',
+          'Arish Ville',
           style: GoogleFonts.dmSans(
             fontSize: expanded ? 44 : 34,
             height: 1.05,
@@ -167,7 +171,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'A single secure sign-in for school leadership, operations, teachers, and parents.',
+          'Learn Today, Lead Tomorrow',
           style: GoogleFonts.dmSans(
             fontSize: 16,
             height: 1.5,
@@ -257,7 +261,9 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
                   labelText: 'Password',
                   prefixIcon: const Icon(Icons.lock_outline_rounded),
                   suffixIcon: IconButton(
-                    tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                    tooltip: _obscurePassword
+                        ? 'Show password'
+                        : 'Hide password',
                     icon: Icon(
                       _obscurePassword
                           ? Icons.visibility_outlined

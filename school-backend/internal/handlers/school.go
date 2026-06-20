@@ -607,17 +607,17 @@ func (h *SchoolHandler) GetSection(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: section})
 }
 
-func resolveSectionOptionalRefs(c *gin.Context, req models.CreateSectionRequest) (*string, *string, bool) {
+func resolveSectionOptionalRefs(c *gin.Context, req models.CreateSectionRequest) (*string, *string, *string, bool) {
 	schoolID := scopedSchoolID(c)
 	var grade models.Grade
 	if err := database.DB.First(&grade, "id = ? AND school_id = ?", req.GradeID, schoolID).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Grade must belong to this school"})
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 
 	if err := academicDomainService().EnsureAcademicYearWritable(schoolID, req.AcademicYearID); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 
 	var classTeacherID *string
@@ -625,9 +625,19 @@ func resolveSectionOptionalRefs(c *gin.Context, req models.CreateSectionRequest)
 		var staff models.Staff
 		if err := database.DB.First(&staff, "id = ? AND school_id = ? AND status = ?", trimmed, schoolID, "active").Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Class teacher must be active staff in this school"})
-			return nil, nil, false
+			return nil, nil, nil, false
 		}
 		classTeacherID = &trimmed
+	}
+
+	var coTeacherID *string
+	if trimmed := strings.TrimSpace(req.CoTeacherID); trimmed != "" {
+		var staff models.Staff
+		if err := database.DB.First(&staff, "id = ? AND school_id = ? AND status = ?", trimmed, schoolID, "active").Error; err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Co-teacher must be active staff in this school"})
+			return nil, nil, nil, false
+		}
+		coTeacherID = &trimmed
 	}
 
 	var roomID *string
@@ -635,12 +645,12 @@ func resolveSectionOptionalRefs(c *gin.Context, req models.CreateSectionRequest)
 		var room models.Room
 		if err := database.DB.First(&room, "id = ? AND school_id = ?", trimmed, schoolID).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Room must belong to this school"})
-			return nil, nil, false
+			return nil, nil, nil, false
 		}
 		roomID = &trimmed
 	}
 
-	return classTeacherID, roomID, true
+	return classTeacherID, coTeacherID, roomID, true
 }
 
 func (h *SchoolHandler) CreateSection(c *gin.Context) {
@@ -649,7 +659,7 @@ func (h *SchoolHandler) CreateSection(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	classTeacherID, roomID, ok := resolveSectionOptionalRefs(c, req)
+	classTeacherID, coTeacherID, roomID, ok := resolveSectionOptionalRefs(c, req)
 	if !ok {
 		return
 	}
@@ -661,6 +671,7 @@ func (h *SchoolHandler) CreateSection(c *gin.Context) {
 		SectionName:    req.SectionName,
 		Capacity:       req.Capacity,
 		ClassTeacherID: classTeacherID,
+		CoTeacherID:    coTeacherID,
 		RoomID:         roomID,
 	}
 
@@ -671,7 +682,7 @@ func (h *SchoolHandler) CreateSection(c *gin.Context) {
 
 	id := section.ID
 	auditAction(c, "sections", "create", "sections", &id)
-	database.DB.Preload("Grade").Preload("ClassTeacher").Preload("Room").First(&section, "id = ?", section.ID)
+	database.DB.Preload("Grade").Preload("ClassTeacher").Preload("CoTeacher").Preload("Room").First(&section, "id = ?", section.ID)
 	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: section})
 }
 
@@ -689,7 +700,7 @@ func (h *SchoolHandler) UpdateSection(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	classTeacherID, roomID, ok := resolveSectionOptionalRefs(c, req)
+	classTeacherID, coTeacherID, roomID, ok := resolveSectionOptionalRefs(c, req)
 	if !ok {
 		return
 	}
@@ -699,13 +710,14 @@ func (h *SchoolHandler) UpdateSection(c *gin.Context) {
 	section.SectionName = req.SectionName
 	section.Capacity = req.Capacity
 	section.ClassTeacherID = classTeacherID
+	section.CoTeacherID = coTeacherID
 	section.RoomID = roomID
 	if err := database.DB.Save(&section).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update section"})
 		return
 	}
 	auditAction(c, "sections", "update", "sections", &id)
-	database.DB.Preload("Grade").Preload("ClassTeacher").Preload("Room").Preload("AcademicYear").First(&section, "id = ?", section.ID)
+	database.DB.Preload("Grade").Preload("ClassTeacher").Preload("CoTeacher").Preload("Room").Preload("AcademicYear").First(&section, "id = ?", section.ID)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: section})
 }
 

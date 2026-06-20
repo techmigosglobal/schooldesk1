@@ -30,7 +30,6 @@ void main() {
 
     for (final source in [landing, onboarding]) {
       expect(source, contains('ArishVille Preschool'));
-      expect(source, contains('Powered by Techmigos'));
       expect(source, contains('assets/branding/ArishVilleLogo.png'));
       expect(source, contains('assets/branding/techmigos_logo.png'));
       expect(
@@ -44,6 +43,9 @@ void main() {
       expect(source, isNot(contains('assets/images/header.png')));
       expect(source, isNot(contains('assets/images/footer.png')));
     }
+    expect(landing, contains('Learn Today, Lead Tomorrow'));
+    expect(landing, isNot(contains('Powered by SchoolDesk')));
+    expect(onboarding, contains('Powered by Techmigos'));
 
     expect(onboarding, contains('assets/branding/ArishVilleLogo.png'));
     expect(main, contains("title: 'ArishVille Preschool'"));

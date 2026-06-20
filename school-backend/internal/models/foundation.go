@@ -144,11 +144,12 @@ type GradeSubject struct {
 
 type Section struct {
 	BaseModel
-	SchoolID       string        `gorm:"type:text;index" json:"school_id"`
-	GradeID        string        `gorm:"type:text;not null" json:"grade_id"`
-	AcademicYearID string        `gorm:"type:text;not null" json:"academic_year_id"`
+	SchoolID                      string        `gorm:"type:text;index" json:"school_id"`
+	GradeID                       string        `gorm:"type:text;not null" json:"grade_id"`
+	AcademicYearID                string        `gorm:"type:text;not null" json:"academic_year_id"`
 	SectionName                   string        `gorm:"type:text;not null" json:"section_name"`
 	ClassTeacherID                *string       `gorm:"type:text" json:"class_teacher_id"`
+	CoTeacherID                   *string       `gorm:"type:text" json:"co_teacher_id"`
 	RoomID                        *string       `gorm:"type:text" json:"room_id"`
 	PrePrimaryTimetableTemplateID *string       `gorm:"type:text" json:"pre_primary_timetable_template_id"`
 	Capacity                      int           `json:"capacity"`
@@ -156,6 +157,7 @@ type Section struct {
 	Grade                         *Grade        `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
 	AcademicYear                  *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
 	ClassTeacher                  *Staff        `gorm:"foreignKey:ClassTeacherID" json:"class_teacher,omitempty"`
+	CoTeacher                     *Staff        `gorm:"foreignKey:CoTeacherID" json:"co_teacher,omitempty"`
 	Room                          *Room         `gorm:"foreignKey:RoomID" json:"room,omitempty"`
 	// PrePrimaryTimetableTemplate *PrePrimaryTimetableTemplate `gorm:"foreignKey:PrePrimaryTimetableTemplateID" json:"pre_primary_timetable_template,omitempty"`
 }

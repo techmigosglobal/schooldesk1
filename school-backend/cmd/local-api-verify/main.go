@@ -210,7 +210,6 @@ func (v *verifier) runSafe() {
 		passKey  string
 		dashPath string
 	}{
-		{"Admin", "QA_ADMIN_USERNAME", "QA_ADMIN_PASSWORD", "/dashboard/admin"},
 		{"Teacher", "QA_TEACHER_USERNAME", "QA_TEACHER_PASSWORD", "/dashboard/teacher"},
 		{"Parent", "QA_PARENT_USERNAME", "QA_PARENT_PASSWORD", "/dashboard/parent"},
 	}
@@ -229,32 +228,11 @@ func (v *verifier) runSafe() {
 }
 
 func (v *verifier) runMutating() {
-	adminEmail := v.suffix + "_admin@schooldesk.local"
-	adminPass := "Admin@" + v.suffix + "!"
 	teacherEmail := v.suffix + "_teacher@schooldesk.local"
 	teacherPass := "Teacher@" + v.suffix + "!"
 	parentUser := v.suffix + "_parent"
 	parentEmail := v.suffix + "_parent@schooldesk.local"
 	parentPass := "Parent@" + v.suffix + "!"
-	pendingUser := v.suffix + "_pending_parent"
-	pendingEmail := v.suffix + "_pending_parent@schooldesk.local"
-	pendingPass := "Pending@" + v.suffix + "!"
-
-	v.expectDataID("Principal creates Admin staff login", http.MethodPost, "/staff", "Principal", "Principal", map[string]any{
-		"staff_code":      strings.ToUpper(v.suffix) + "-ADM",
-		"username":        v.suffix + "_admin_staff",
-		"first_name":      "QA",
-		"last_name":       "Admin " + v.suffix,
-		"email":           adminEmail,
-		"password":        adminPass,
-		"account_role":    "Admin",
-		"designation":     "Admin",
-		"gender":          "unspecified",
-		"employment_type": "full_time",
-		"join_date":       "2026-01-01",
-		"date_of_birth":   "1990-01-01",
-	}, http.StatusCreated, "admin_staff")
-	v.login("Admin", adminEmail, adminPass, http.StatusOK)
 
 	v.expectDataID("Principal creates Teacher staff login", http.MethodPost, "/staff", "Principal", "Principal", map[string]any{
 		"staff_code":      strings.ToUpper(v.suffix) + "-TCH",
@@ -288,41 +266,16 @@ func (v *verifier) runMutating() {
 	v.runReportExportFlow()
 	v.runParentCalendarReadFlow()
 
-	v.expect("Admin dashboard", http.MethodGet, "/dashboard/admin", "Admin", "Admin", nil, http.StatusOK)
 	v.expect("Teacher dashboard", http.MethodGet, "/dashboard/teacher", "Teacher", "Teacher", nil, http.StatusOK)
 	v.expect("Parent dashboard", http.MethodGet, "/dashboard/parent", "Parent", "Parent", nil, http.StatusOK)
-	v.expect("Principal can list Admin accounts", http.MethodGet, "/users?role=Admin&page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal can list staff", http.MethodGet, "/staff?page_size=20", "Principal", "Principal", nil, http.StatusOK)
-
-	v.expectDataID("Admin requests Parent account approval", http.MethodPost, "/users", "Admin", "Admin", map[string]any{
-		"name":                       "QA Pending Parent " + v.suffix,
-		"username":                   pendingUser,
-		"email":                      pendingEmail,
-		"password":                   pendingPass,
-		"role":                       "Parent",
-		"request_principal_approval": true,
-	}, http.StatusCreated, "pending_parent_user")
-	v.login("Pending Parent before approval", pendingUser, pendingPass, http.StatusUnauthorized)
-
-	_, approvals := v.expectAny("Principal lists account approvals", http.MethodGet, "/account-approvals", "Principal", "Principal", nil, http.StatusOK)
-	approvalID := findApprovalID(approvals, pendingEmail)
-	if approvalID == "" {
-		v.addFail("Find pending account approval", "GET /account-approvals", "Principal", "Could not find approval for "+pendingEmail)
-	} else {
-		v.ids["pending_parent_approval"] = approvalID
-		v.expect("Principal approves pending Parent account", http.MethodPut, "/account-approvals/"+approvalID, "Principal", "Principal", map[string]any{
-			"status":  "approved",
-			"remarks": "Local Docker verification approval",
-		}, http.StatusOK)
-		v.login("Approved pending Parent", pendingUser, pendingPass, http.StatusOK)
-	}
 
 	v.expect("Principal can list academic years", http.MethodGet, "/academic-years?page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal can list grades", http.MethodGet, "/grades?page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal can list sections", http.MethodGet, "/sections?page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal can list timetable slots", http.MethodGet, "/timetable/slots?page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Principal can list events", http.MethodGet, "/events?page_size=20", "Principal", "Principal", nil, http.StatusOK)
-	v.expect("Admin can list fee invoices", http.MethodGet, "/fees/invoices?page_size=20", "Admin", "Admin", nil, http.StatusOK)
+	v.expect("Principal can list fee invoices", http.MethodGet, "/fees/invoices?page_size=20", "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Parent can read linked students", http.MethodGet, "/me/students", "Parent", "Parent", nil, http.StatusOK)
 
 	v.runNegativeAndGapChecks()
@@ -331,8 +284,8 @@ func (v *verifier) runMutating() {
 func (v *verifier) runNegativeAndGapChecks() {
 	v.expect("Anonymous protected route is rejected", http.MethodGet, "/students", "", "Anonymous", nil, http.StatusUnauthorized)
 	if v.tokens["Parent"] != "" {
-		v.expect("Parent forbidden from Admin dashboard", http.MethodGet, "/dashboard/admin", "Parent", "Parent", nil, http.StatusForbidden)
-		v.expect("Parent forbidden from direct Admin payment settlement", http.MethodPost, "/fees/payments", "Parent", "Parent", map[string]any{
+		v.expect("Parent forbidden from Principal dashboard", http.MethodGet, "/dashboard/principal", "Parent", "Parent", nil, http.StatusForbidden)
+		v.expect("Parent forbidden from direct payment settlement", http.MethodPost, "/fees/payments", "Parent", "Parent", map[string]any{
 			"invoice_id":     "local-verifier-placeholder",
 			"receipt_number": "LOCAL-VERIFY",
 			"amount_paid":    1,
@@ -353,17 +306,17 @@ func (v *verifier) runNegativeAndGapChecks() {
 }
 
 func (v *verifier) runParentPaymentRequestFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Parent"] == "" || v.ids["parent_user"] == "" {
-		v.addFail("Parent payment request fixture", "local verifier", "Admin/Parent", "Admin token, Parent token, or Parent ID missing")
+	if v.tokens["Principal"] == "" || v.tokens["Parent"] == "" || v.ids["parent_user"] == "" {
+		v.addFail("Parent payment request fixture", "local verifier", "Principal/Parent", "Principal token, Parent token, or Parent ID missing")
 		return
 	}
 	v.loadAcademicFixtureIDs()
 	admissionNumber := strings.ToUpper(v.suffix) + "-FEE"
-	v.expectDataID("Admin creates fee category for Parent payment", http.MethodPost, "/fees/categories", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates fee category for Parent payment", http.MethodPost, "/fees/categories", "Principal", "Principal", map[string]any{
 		"category_name": "Local Verification Tuition " + v.suffix,
 		"frequency":     "one_time",
 	}, http.StatusCreated, "fee_category")
-	v.expectDataID("Admin creates student for Parent payment", http.MethodPost, "/students", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates student for Parent payment", http.MethodPost, "/students", "Principal", "Principal", map[string]any{
 		"first_name":         "Fee",
 		"last_name":          "Child " + v.suffix,
 		"date_of_birth":      "2015-01-01",
@@ -375,10 +328,10 @@ func (v *verifier) runParentPaymentRequestFlow() {
 	if v.ids["payment_student"] == "" || v.ids["fee_category"] == "" {
 		return
 	}
-	v.expect("Admin links Parent to fee student", http.MethodPost, "/parents/"+v.ids["parent_user"]+"/students", "Admin", "Admin", map[string]any{
+	v.expect("Principal links Parent to fee student", http.MethodPost, "/parents/"+v.ids["parent_user"]+"/students", "Principal", "Principal", map[string]any{
 		"admission_numbers": []string{admissionNumber},
 	}, http.StatusOK)
-	v.expectDataID("Admin creates invoice for Parent payment", http.MethodPost, "/fees/invoices", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates invoice for Parent payment", http.MethodPost, "/fees/invoices", "Principal", "Principal", map[string]any{
 		"student_id":       v.ids["payment_student"],
 		"academic_year_id": "academic-year-default",
 		"invoice_number":   "INV-" + strings.ToUpper(v.suffix),
@@ -403,20 +356,15 @@ func (v *verifier) runParentPaymentRequestFlow() {
 		"payment_date":   "2026-05-16",
 		"payment_mode":   "upi",
 		"transaction_id": "LOCAL-" + strings.ToUpper(v.suffix),
+		"proof_url":      "/uploads/local-verifier/payment-proof-" + v.suffix + ".png",
 	}, http.StatusCreated, "payment_request")
 	if v.ids["payment_request"] == "" {
 		return
 	}
-	v.expectDataID("Admin submits Parent payment request decision for Principal approval", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Admin", "Admin", map[string]any{
+	v.expect("Principal approves Parent payment request", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Principal", "Principal", map[string]any{
 		"status":        "approved",
 		"admin_remarks": "Verified by local Docker API verifier",
-	}, http.StatusCreated, "payment_decision_approval")
-	if v.ids["payment_decision_approval"] != "" {
-		v.expect("Principal approves Parent payment request decision", http.MethodPost, "/approvals/"+v.ids["payment_decision_approval"]+"/approve", "Principal", "Principal", map[string]any{
-			"note": "Approved by local Docker API verifier",
-		}, http.StatusOK)
-		v.expect("Principal applies Parent payment request decision", http.MethodPost, "/approvals/"+v.ids["payment_decision_approval"]+"/apply", "Principal", "Principal", map[string]any{}, http.StatusOK)
-	}
+	}, http.StatusOK)
 	v.expect("Parent sees invoice after approved request", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
 }
 
@@ -424,25 +372,25 @@ func (v *verifier) loadAcademicFixtureIDs() bool {
 	if v.ids["default_section"] != "" && v.ids["default_year"] != "" && v.ids["default_term"] != "" && v.ids["default_subject"] != "" {
 		return true
 	}
-	if v.tokens["Admin"] == "" {
-		v.addFail("Academic fixture lookup", "local verifier", "Admin", "Admin token missing")
+	if v.tokens["Principal"] == "" {
+		v.addFail("Academic fixture lookup", "local verifier", "Principal", "Principal token missing")
 		return false
 	}
 	if v.ids["default_section"] == "" {
-		_, sections := v.expectAny("Admin loads section for homework fixture", http.MethodGet, "/sections?page_size=1", "Admin", "Admin", nil, http.StatusOK)
+		_, sections := v.expectAny("Principal loads section for homework fixture", http.MethodGet, "/sections?page_size=1", "Principal", "Principal", nil, http.StatusOK)
 		v.ids["default_section"] = firstID(sections)
 		v.ids["default_grade"] = firstString(sections, "grade_id")
 	}
 	if v.ids["default_year"] == "" {
-		_, years := v.expectAny("Admin loads academic year for homework fixture", http.MethodGet, "/academic-years?page_size=1", "Admin", "Admin", nil, http.StatusOK)
+		_, years := v.expectAny("Principal loads academic year for homework fixture", http.MethodGet, "/academic-years?page_size=1", "Principal", "Principal", nil, http.StatusOK)
 		v.ids["default_year"] = firstID(years)
 	}
 	if v.ids["default_subject"] == "" {
-		_, subjects := v.expectAny("Admin loads subject for homework fixture", http.MethodGet, "/subjects?page_size=1", "Admin", "Admin", nil, http.StatusOK)
+		_, subjects := v.expectAny("Principal loads subject for homework fixture", http.MethodGet, "/subjects?page_size=1", "Principal", "Principal", nil, http.StatusOK)
 		v.ids["default_subject"] = firstID(subjects)
 	}
 	if v.ids["default_term"] == "" && v.ids["default_year"] != "" {
-		_, terms := v.expectAny("Admin loads term for homework fixture", http.MethodGet, "/academic-years/"+v.ids["default_year"]+"/terms?page_size=1", "Admin", "Admin", nil, http.StatusOK)
+		_, terms := v.expectAny("Principal loads term for homework fixture", http.MethodGet, "/academic-years/"+v.ids["default_year"]+"/terms?page_size=1", "Principal", "Principal", nil, http.StatusOK)
 		v.ids["default_term"] = firstID(terms)
 	}
 	missing := []string{}
@@ -452,7 +400,7 @@ func (v *verifier) loadAcademicFixtureIDs() bool {
 		}
 	}
 	if len(missing) > 0 {
-		v.addFail("Academic fixture lookup", "local verifier", "Admin", "Missing "+strings.Join(missing, ", "))
+		v.addFail("Academic fixture lookup", "local verifier", "Principal", "Missing "+strings.Join(missing, ", "))
 		return false
 	}
 	return true
@@ -462,14 +410,25 @@ func (v *verifier) ensureTeacherSubjectAssignment() bool {
 	if v.ids["teacher_subject"] != "" {
 		return true
 	}
-	if v.tokens["Admin"] == "" || v.ids["teacher_staff"] == "" {
-		v.addFail("Teacher subject assignment fixture", "local verifier", "Admin", "Admin token or teacher staff ID missing")
+	if v.tokens["Principal"] == "" || v.ids["teacher_staff"] == "" {
+		v.addFail("Teacher subject assignment fixture", "local verifier", "Principal", "Principal token or teacher staff ID missing")
 		return false
 	}
 	if !v.loadAcademicFixtureIDs() {
 		return false
 	}
-	v.expectDataID("Admin maps Teacher to default class subject", http.MethodPost, "/staff-subjects", "Admin", "Admin", map[string]any{
+	if v.ids["grade_subject"] == "" {
+		v.expectDataID("Principal maps default subject to attendance grade", http.MethodPost, "/grade-subjects", "Principal", "Principal", map[string]any{
+			"academic_year_id": v.ids["default_year"],
+			"grade_id":         v.ids["default_grade"],
+			"subject_id":       v.ids["default_subject"],
+			"is_mandatory":     true,
+		}, http.StatusCreated, "grade_subject")
+		if v.ids["grade_subject"] == "" {
+			return false
+		}
+	}
+	v.expectDataID("Principal maps Teacher to default class subject", http.MethodPost, "/staff-subjects", "Principal", "Principal", map[string]any{
 		"academic_year_id": v.ids["default_year"],
 		"staff_id":         v.ids["teacher_staff"],
 		"subject_id":       v.ids["default_subject"],
@@ -481,14 +440,14 @@ func (v *verifier) ensureTeacherSubjectAssignment() bool {
 }
 
 func (v *verifier) runAttendanceFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
-		v.addFail("Attendance fixture", "local verifier", "All roles", "Admin, Principal, Teacher, Parent, teacher staff, or linked student missing")
+	if v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
+		v.addFail("Attendance fixture", "local verifier", "All roles", "Principal, Teacher, Parent, teacher staff, or linked student missing")
 		return
 	}
 	if !v.ensureTeacherSubjectAssignment() {
 		return
 	}
-	v.expect("Admin assigns Teacher as class teacher for attendance", http.MethodPut, "/sections/"+v.ids["default_section"], "Admin", "Admin", map[string]any{
+	v.expect("Principal assigns Teacher as class teacher for attendance", http.MethodPut, "/sections/"+v.ids["default_section"], "Principal", "Principal", map[string]any{
 		"grade_id":         v.ids["default_grade"],
 		"academic_year_id": v.ids["default_year"],
 		"section_name":     "A",
@@ -540,15 +499,14 @@ func (v *verifier) runAttendanceFlow() {
 	v.expect("Principal reopens attendance correction", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/reopen", "Principal", "Principal", map[string]any{
 		"reason": "Local Docker verifier approved correction",
 	}, http.StatusOK)
-	v.expect("Admin reads attendance sessions", http.MethodGet, "/attendance/sessions?section_id="+v.ids["default_section"], "Admin", "Admin", nil, http.StatusOK)
 	v.expect("Principal reads attendance monitor sessions", http.MethodGet, "/attendance/sessions?section_id="+v.ids["default_section"], "Principal", "Principal", nil, http.StatusOK)
 	v.expect("Parent reads linked child attendance summary", http.MethodGet, "/attendance/summary?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
 	v.expect("Parent reads linked child attendance records", http.MethodGet, "/students/"+v.ids["payment_student"]+"/attendance?month=6&year=2026", "Parent", "Parent", nil, http.StatusOK)
 
-	_, tokenData := v.expectAny("Admin creates staff attendance QR token", http.MethodGet, "/attendance/staff/qr-token", "Admin", "Admin", nil, http.StatusOK)
+	_, tokenData := v.expectAny("Principal creates staff attendance QR token", http.MethodGet, "/attendance/staff/qr-token", "Principal", "Principal", nil, http.StatusOK)
 	token, ok := getString(tokenData, "token")
 	if !ok {
-		v.addFail("Staff attendance QR token lookup", "GET /attendance/staff/qr-token", "Admin", "QR token missing")
+		v.addFail("Staff attendance QR token lookup", "GET /attendance/staff/qr-token", "Principal", "QR token missing")
 		return
 	}
 	v.expect("Teacher scans staff attendance QR", http.MethodPost, "/attendance/staff/qr-scan", "Teacher", "Teacher", map[string]any{
@@ -560,15 +518,15 @@ func (v *verifier) runAttendanceFlow() {
 }
 
 func (v *verifier) runTeacherHomeworkFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
-		v.addFail("Teacher homework fixture", "local verifier", "Admin/Teacher/Parent", "Admin, Teacher, Parent, teacher staff, or linked student missing")
+	if v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
+		v.addFail("Teacher homework fixture", "local verifier", "Principal/Teacher/Parent", "Principal, Teacher, Parent, teacher staff, or linked student missing")
 		return
 	}
 	if !v.ensureTeacherSubjectAssignment() {
 		return
 	}
 	periodNumber := 100000 + int(time.Now().UnixNano()%900000)
-	v.expectDataID("Admin links Teacher to default class timetable", http.MethodPost, "/timetable/slots", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal links Teacher to default class timetable", http.MethodPost, "/timetable/slots", "Principal", "Principal", map[string]any{
 		"section_id":       v.ids["default_section"],
 		"academic_year_id": v.ids["default_year"],
 		"term_id":          v.ids["default_term"],
@@ -625,22 +583,22 @@ func (v *verifier) runTeacherHomeworkFlow() {
 }
 
 func (v *verifier) runExamScheduleNotificationFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" {
-		v.addFail("Exam schedule notification fixture", "local verifier", "Admin/Teacher/Parent", "Admin, Teacher, or Parent token missing")
+	if v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" {
+		v.addFail("Exam schedule notification fixture", "local verifier", "Principal/Teacher/Parent", "Principal, Teacher, or Parent token missing")
 		return
 	}
 	if !v.ensureTeacherSubjectAssignment() {
 		return
 	}
 	if v.ids["default_grade"] == "" {
-		_, sections := v.expectAny("Admin reloads section grade for exam schedule", http.MethodGet, "/sections?page_size=1", "Admin", "Admin", nil, http.StatusOK)
+		_, sections := v.expectAny("Principal reloads section grade for exam schedule", http.MethodGet, "/sections?page_size=1", "Principal", "Principal", nil, http.StatusOK)
 		v.ids["default_grade"] = firstString(sections, "grade_id")
 	}
 	if v.ids["default_grade"] == "" {
-		v.addFail("Exam schedule notification fixture", "local verifier", "Admin", "Missing default grade ID")
+		v.addFail("Exam schedule notification fixture", "local verifier", "Principal", "Missing default grade ID")
 		return
 	}
-	v.expectDataID("Admin creates exam type for schedule notification", http.MethodPost, "/exams/types", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates exam type for schedule notification", http.MethodPost, "/exams/types", "Principal", "Principal", map[string]any{
 		"name":              "Local Docker Exam Type " + v.suffix,
 		"weightage_percent": 10,
 		"is_board_exam":     false,
@@ -648,7 +606,7 @@ func (v *verifier) runExamScheduleNotificationFlow() {
 	if v.ids["exam_type"] == "" {
 		return
 	}
-	v.expectDataID("Admin creates exam for schedule notification", http.MethodPost, "/exams", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates exam for schedule notification", http.MethodPost, "/exams", "Principal", "Principal", map[string]any{
 		"academic_year_id": v.ids["default_year"],
 		"term_id":          v.ids["default_term"],
 		"exam_type_id":     v.ids["exam_type"],
@@ -659,7 +617,7 @@ func (v *verifier) runExamScheduleNotificationFlow() {
 	if v.ids["exam"] == "" {
 		return
 	}
-	v.expectDataID("Admin creates exam schedule and notifications", http.MethodPost, "/exams/schedules", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates exam schedule and notifications", http.MethodPost, "/exams/schedules", "Principal", "Principal", map[string]any{
 		"exam_id":    v.ids["exam"],
 		"grade_id":   v.ids["default_grade"],
 		"section_id": v.ids["default_section"],
@@ -678,8 +636,8 @@ func (v *verifier) runExamScheduleNotificationFlow() {
 }
 
 func (v *verifier) runStudentLeaveFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Parent"] == "" || v.ids["payment_student"] == "" {
-		v.addFail("Student leave fixture", "local verifier", "Admin/Parent", "Admin token, Parent token, or linked student ID missing")
+	if v.tokens["Principal"] == "" || v.tokens["Parent"] == "" || v.ids["payment_student"] == "" {
+		v.addFail("Student leave fixture", "local verifier", "Principal/Parent", "Principal token, Parent token, or linked student ID missing")
 		return
 	}
 	v.expect("Parent reads linked students before leave", http.MethodGet, "/me/students", "Parent", "Parent", nil, http.StatusOK)
@@ -695,20 +653,15 @@ func (v *verifier) runStudentLeaveFlow() {
 	}
 	v.expect("Parent lists own student leave requests", http.MethodGet, "/student-leave/applications?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
 	v.expect("Principal lists student leave requests", http.MethodGet, "/student-leave/applications?student_id="+v.ids["payment_student"], "Principal", "Principal", nil, http.StatusOK)
-	if v.tokens["Teacher"] != "" {
-		v.expect("Teacher cannot decide leave for unassigned student", http.MethodPut, "/student-leave/applications/"+v.ids["student_leave"]+"/decision", "Teacher", "Teacher", map[string]any{
-			"status": "approved",
-		}, http.StatusNotFound)
-	}
-	v.expect("Admin approves student leave request", http.MethodPut, "/student-leave/applications/"+v.ids["student_leave"]+"/decision", "Admin", "Admin", map[string]any{
+	v.expect("Teacher approves linked student leave request", http.MethodPut, "/student-leave/applications/"+v.ids["student_leave"]+"/decision", "Teacher", "Teacher", map[string]any{
 		"status": "approved",
 	}, http.StatusOK)
 	v.expect("Parent sees approved student leave request", http.MethodGet, "/student-leave/applications?student_id="+v.ids["payment_student"]+"&status=approved", "Parent", "Parent", nil, http.StatusOK)
 }
 
 func (v *verifier) runReportExportFlow() {
-	if v.tokens["Admin"] == "" || v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" {
-		v.addFail("Report export fixture", "local verifier", "All roles", "Admin, Principal, Teacher, or Parent token missing")
+	if v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" {
+		v.addFail("Report export fixture", "local verifier", "All roles", "Principal, Teacher, or Parent token missing")
 		return
 	}
 	v.expectDataID("Principal creates general report export", http.MethodPost, "/reports/exports", "Principal", "Principal", map[string]any{
@@ -720,15 +673,15 @@ func (v *verifier) runReportExportFlow() {
 	if v.ids["general_report_export"] != "" {
 		v.expect("Principal fetches generated report export", http.MethodGet, "/reports/exports/"+v.ids["general_report_export"], "Principal", "Principal", nil, http.StatusOK)
 	}
-	v.expectDataID("Admin creates fee report export", http.MethodPost, "/fees/reports/exports", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates fee report export", http.MethodPost, "/fees/reports/exports", "Principal", "Principal", map[string]any{
 		"report_title": "Local Docker Fee Summary",
 		"format":       "csv",
-		"scope":        "admin",
+		"scope":        "principal",
 	}, http.StatusCreated, "fee_report_export")
-	v.expectDataID("Admin creates attendance report export", http.MethodPost, "/attendance/reports/exports", "Admin", "Admin", map[string]any{
+	v.expectDataID("Principal creates attendance report export", http.MethodPost, "/attendance/reports/exports", "Principal", "Principal", map[string]any{
 		"report_title": "Local Docker Attendance Summary",
 		"format":       "csv",
-		"scope":        "admin",
+		"scope":        "principal",
 	}, http.StatusCreated, "attendance_report_export")
 	v.expectDataID("Principal creates student report export", http.MethodPost, "/student-reports/exports", "Principal", "Principal", map[string]any{
 		"report_title": "Local Docker Student Oversight",

@@ -959,7 +959,7 @@ func classResponse(section models.Section) gin.H {
 	if section.Grade != nil {
 		name = section.Grade.GradeName
 	}
-	return gin.H{
+	response := gin.H{
 		"id":               section.ID,
 		"name":             name,
 		"section":          section.SectionName,
@@ -967,6 +967,10 @@ func classResponse(section models.Section) gin.H {
 		"academic_year_id": section.AcademicYearID,
 		"created_at":       section.CreatedAt,
 	}
+	if section.CoTeacherID != nil {
+		response["co_teacher_id"] = *section.CoTeacherID
+	}
+	return response
 }
 
 func resolveRole(schoolID, role string) (models.Role, error) {
