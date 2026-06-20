@@ -161,6 +161,7 @@ type CreateFeeStructureRequest struct {
 	DueDay           int     `json:"due_day"`
 	LateFinePerDay   float64 `json:"late_fine_per_day"`
 	InstallmentCount int     `json:"installment_count"`
+	ReplaceExisting  bool    `json:"replace_existing"`
 }
 
 type CreateLeaveApplicationRequest struct {

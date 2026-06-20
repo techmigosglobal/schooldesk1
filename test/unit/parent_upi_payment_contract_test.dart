@@ -60,6 +60,54 @@ void main() {
       expect(routes, isNot(contains('razorpay')));
     });
 
+    test('principal can replace or delete fee structures with installments', () {
+      final form = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
+      ).readAsStringSync();
+      final screen = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
+      ).readAsStringSync();
+      final dto = File(
+        'school-backend/internal/models/dto.go',
+      ).readAsStringSync();
+      final handler = File(
+        'school-backend/internal/handlers/fee.go',
+      ).readAsStringSync();
+
+      expect(form, contains('Replace existing class/year fee structure'));
+      expect(form, contains('_confirmReplaceExisting'));
+      expect(form, contains('replace_existing'));
+      expect(form, contains('Per installment'));
+      expect(form, contains('Installments parents can pay'));
+
+      expect(screen, contains('_deleteFeeStructure'));
+      expect(screen, contains('Delete fee component'));
+      expect(screen, contains('/fees/structures/\$id'));
+
+      expect(dto, contains('ReplaceExisting  bool'));
+      expect(handler, contains('ReplaceExisting'));
+      expect(handler, contains('Delete(&models.FeeStructure{})'));
+      expect(handler, contains('replace_existing'));
+    });
+
+    test('parent payment flow presents installment payments', () {
+      final parentFees = File(
+        'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
+      ).readAsStringSync();
+      final paymentSelection = File(
+        'lib/features/finance/presentation/screens/parent_payment_screens/parent_payment_selection_screen.dart',
+      ).readAsStringSync();
+      final paymentForm = File(
+        'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
+      ).readAsStringSync();
+
+      expect(parentFees, contains('Pay installment'));
+      expect(parentFees, contains('_installmentLabel'));
+      expect(paymentSelection, contains('Select installment'));
+      expect(paymentSelection, contains('installment'));
+      expect(paymentForm, contains('Selected installment'));
+    });
+
     test(
       'Razorpay gateway code is removed from active app and backend config',
       () {

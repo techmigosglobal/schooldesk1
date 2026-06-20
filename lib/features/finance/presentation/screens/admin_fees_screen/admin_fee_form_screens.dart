@@ -113,12 +113,22 @@ class _AdminFeeStructureFormScreenState
   late String _selectedGradeId;
   late String _selectedCategoryId;
   late int _selectedInstallmentCount;
+  bool _replaceExisting = false;
   bool _saving = false;
 
   bool get _hasReferenceData =>
       widget.args.academicYears.isNotEmpty &&
       widget.args.grades.isNotEmpty &&
       widget.args.feeCategories.isNotEmpty;
+
+  double get _enteredAmount => double.tryParse(_amountController.text) ?? 0;
+
+  double get _perInstallmentAmount {
+    final count = _selectedInstallmentCount <= 0
+        ? 3
+        : _selectedInstallmentCount;
+    return _enteredAmount / count;
+  }
 
   @override
   void initState() {
@@ -136,7 +146,8 @@ class _AdminFeeStructureFormScreenState
       '${fee['fee_category_id'] ?? ''}',
       widget.args.feeCategories.map((category) => '${category['id']}'),
     );
-    _selectedInstallmentCount = (fee['installment_count'] as num?)?.toInt() ?? 3;
+    _selectedInstallmentCount =
+        (fee['installment_count'] as num?)?.toInt() ?? 3;
     _amountController = TextEditingController(
       text: _controllerNumber(fee['amount'] ?? fee['total'] ?? fee['tuition']),
     );
@@ -335,6 +346,7 @@ class _AdminFeeStructureFormScreenState
             final amount = double.tryParse(value ?? '') ?? 0;
             return amount <= 0 ? 'Enter a valid amount.' : null;
           },
+          onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -368,25 +380,70 @@ class _AdminFeeStructureFormScreenState
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
           value: _selectedInstallmentCount,
-          decoration: const InputDecoration(labelText: 'Installments (per academic year)'),
+          decoration: const InputDecoration(
+            labelText: 'Installments parents can pay',
+            helperText:
+                'Default is 3. This controls how parent dues are split.',
+          ),
           items: List.generate(12, (index) => index + 1)
               .map(
                 (count) => DropdownMenuItem(
                   value: count,
-                  child: Text('$count ${count == 1 ? 'Installment' : 'Installments'}'),
+                  child: Text(
+                    '$count ${count == 1 ? 'Installment' : 'Installments'}',
+                  ),
                 ),
               )
               .toList(),
           onChanged: _saving
               ? null
-              : (value) => setState(() => _selectedInstallmentCount = value ?? 3),
+              : (value) =>
+                    setState(() => _selectedInstallmentCount = value ?? 3),
         ),
+        const SizedBox(height: 12),
+        _buildInstallmentPreview(),
+        if (!widget.args.isEditing) ...[
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            value: _replaceExisting,
+            onChanged: _saving
+                ? null
+                : (value) => setState(() => _replaceExisting = value),
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Replace existing class/year fee structure'),
+            subtitle: const Text(
+              'Deletes all existing fee components for the selected class and academic year, then saves this new setup.',
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildInstallmentPreview() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.primary.withAlpha(12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Text(
+        'Per installment: INR ${_perInstallmentAmount.toStringAsFixed(0)} '
+        'x $_selectedInstallmentCount = INR ${_enteredAmount.toStringAsFixed(0)}',
+        style: GoogleFonts.dmSans(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: context.appTheme.primary,
+        ),
+      ),
     );
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_replaceExisting && !await _confirmReplaceExisting()) return;
     setState(() => _saving = true);
     try {
       final payload = {
@@ -397,6 +454,7 @@ class _AdminFeeStructureFormScreenState
         'due_day': int.parse(_dueDayController.text),
         'late_fine_per_day': double.tryParse(_lateFineController.text) ?? 0,
         'installment_count': _selectedInstallmentCount,
+        'replace_existing': _replaceExisting,
       };
       final id = '${widget.args.feeStructure?['id'] ?? ''}'.trim();
       if (widget.args.isEditing) {
@@ -414,6 +472,8 @@ class _AdminFeeStructureFormScreenState
         AdminFeeStructureFormResult(
           widget.args.isEditing
               ? 'Fee structure update submitted for Principal approval'
+              : _replaceExisting
+              ? 'Existing class fee structure replaced with the new setup'
               : 'Fee structure request submitted for Principal approval',
         ),
       );
@@ -422,6 +482,30 @@ class _AdminFeeStructureFormScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<bool> _confirmReplaceExisting() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Replace class fee structure?'),
+        content: const Text(
+          'This will delete all existing fee components for the selected class and academic year before saving this new setup. Existing generated invoices and payment records are not deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_sweep_rounded),
+            label: const Text('Replace'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 }
 
@@ -744,18 +828,23 @@ class _AdminInvoiceGenerationFormScreenState
         const SizedBox(height: 12),
         DropdownButtonFormField<int>(
           value: _selectedInstallmentCount,
-          decoration: const InputDecoration(labelText: 'Installment count (splits annual amount)'),
+          decoration: const InputDecoration(
+            labelText: 'Installment count (splits annual amount)',
+          ),
           items: List.generate(12, (index) => index + 1)
               .map(
                 (count) => DropdownMenuItem(
                   value: count,
-                  child: Text('$count ${count == 1 ? 'Installment' : 'Installments'}'),
+                  child: Text(
+                    '$count ${count == 1 ? 'Installment' : 'Installments'}',
+                  ),
                 ),
               )
               .toList(),
           onChanged: _generating
               ? null
-              : (value) => setState(() => _selectedInstallmentCount = value ?? 3),
+              : (value) =>
+                    setState(() => _selectedInstallmentCount = value ?? 3),
         ),
         const SizedBox(height: 12),
         SwitchListTile.adaptive(
@@ -798,7 +887,10 @@ class _AdminInvoiceGenerationFormScreenState
           Expanded(
             child: Text(
               'Estimated invoice is INR ${_estimatedTotal.toStringAsFixed(0)} per student for $_selectedTermLabel and the $scopeLabel.',
-              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
             ),
           ),
         ],
@@ -1161,7 +1253,10 @@ class _AdminPaymentRecordFormScreenState
         children: [
           Text(
             label,
-            style: GoogleFonts.dmSans(color: context.appTheme.muted, fontSize: 12),
+            style: GoogleFonts.dmSans(
+              color: context.appTheme.muted,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(

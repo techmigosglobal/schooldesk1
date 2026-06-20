@@ -144,14 +144,37 @@ func (h *FeeHandler) CreateFeeStructure(c *gin.Context) {
 		InstallmentCount: normalizeInstallmentCount(req.InstallmentCount),
 	}
 
-	if err := database.DB.Create(&structure).Error; err != nil {
+	replacedCount := int64(0)
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if req.ReplaceExisting {
+			result := tx.Where(
+				"school_id = ? AND academic_year_id = ? AND grade_id = ?",
+				structure.SchoolID,
+				structure.AcademicYearID,
+				structure.GradeID,
+			).Delete(&models.FeeStructure{})
+			if result.Error != nil {
+				return result.Error
+			}
+			replacedCount = result.RowsAffected
+		}
+		return tx.Create(&structure).Error
+	})
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create fee structure"})
 		return
 	}
 
 	id := structure.ID
 	auditAction(c, "fees", "create", "fee_structures", &id)
-	c.JSON(http.StatusCreated, models.APIResponse{Success: true, Data: structure})
+	c.JSON(http.StatusCreated, models.APIResponse{
+		Success: true,
+		Data:    structure,
+		Meta: gin.H{
+			"replace_existing": req.ReplaceExisting,
+			"replaced_count":   replacedCount,
+		},
+	})
 }
 
 func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {

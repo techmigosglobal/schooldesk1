@@ -274,7 +274,7 @@ class _ParentPaymentRequestFormScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Invoice Breakdown',
+            'Selected installment breakdown',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -288,7 +288,7 @@ class _ParentPaymentRequestFormScreenState
                 children: [
                   Expanded(
                     child: Text(
-                      '${fee['component'] ?? fee['invoiceNumber'] ?? 'Invoice'}',
+                      'Selected installment: ${fee['component'] ?? fee['invoiceNumber'] ?? 'Invoice'}',
                       style: GoogleFonts.dmSans(fontSize: 12),
                     ),
                   ),

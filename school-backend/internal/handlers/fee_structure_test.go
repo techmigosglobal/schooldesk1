@@ -142,13 +142,42 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 		t.Fatalf("selected installment_count should be preserved, got %d", customBody.Data.InstallmentCount)
 	}
 
+	replaceExisting := httptest.NewRecorder()
+	router.ServeHTTP(
+		replaceExisting,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/fees/structures",
+			strings.NewReader(`{"academic_year_id":"year-fees","grade_id":"grade-fees","fee_category_id":"cat-fees","amount":12000,"due_day":15,"installment_count":6,"replace_existing":true}`),
+		),
+	)
+	if replaceExisting.Code != http.StatusCreated {
+		t.Fatalf("replace existing status=%d body=%s", replaceExisting.Code, replaceExisting.Body.String())
+	}
+	var replacementCount int64
+	if err := db.Model(&models.FeeStructure{}).
+		Where("school_id = ? AND academic_year_id = ? AND grade_id = ?", school.ID, year.ID, grade.ID).
+		Count(&replacementCount).Error; err != nil {
+		t.Fatalf("count replacement structures: %v", err)
+	}
+	if replacementCount != 1 {
+		t.Fatalf("replace_existing should keep one class/year structure, got %d", replacementCount)
+	}
+	var replacement models.FeeStructure
+	if err := db.Where("school_id = ? AND academic_year_id = ? AND grade_id = ?", school.ID, year.ID, grade.ID).First(&replacement).Error; err != nil {
+		t.Fatalf("load replacement: %v", err)
+	}
+	if replacement.Amount != 12000 || replacement.InstallmentCount != 6 {
+		t.Fatalf("replacement did not preserve amount/installments: %+v", replacement)
+	}
+
 	deleteResp := httptest.NewRecorder()
-	router.ServeHTTP(deleteResp, httptest.NewRequest(http.MethodDelete, "/fees/structures/"+structure.ID, nil))
+	router.ServeHTTP(deleteResp, httptest.NewRequest(http.MethodDelete, "/fees/structures/"+replacement.ID, nil))
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete status=%d body=%s", deleteResp.Code, deleteResp.Body.String())
 	}
 	var count int64
-	db.Model(&models.FeeStructure{}).Where("id = ?", structure.ID).Count(&count)
+	db.Model(&models.FeeStructure{}).Where("id = ?", replacement.ID).Count(&count)
 	if count != 0 {
 		t.Fatalf("structure was not deleted")
 	}

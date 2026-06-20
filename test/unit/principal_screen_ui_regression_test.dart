@@ -645,6 +645,35 @@ void main() {
     expect(appNavigation, contains('route: AppRoutes.principalEventApprovals'));
   });
 
+  test('event approvals and school calendar keep empty/mobile states usable', () {
+    final approvals = File(
+      'lib/features/communication/presentation/screens/principal_event_approval_screen.dart',
+    ).readAsStringSync();
+    final calendar = File(
+      'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
+    ).readAsStringSync();
+
+    expect(approvals, contains('_buildEmptyState'));
+    expect(approvals, contains('No event approvals pending'));
+    expect(approvals, contains('Pull down or tap refresh'));
+    expect(approvals, contains('Refresh'));
+
+    expect(calendar, contains('_buildDisplayModeSelector'));
+    expect(calendar, contains('_buildStatusFilterStrip'));
+    expect(calendar, contains('_buildMonthStrip'));
+    expect(calendar, contains('_buildCompactCalendarMetrics'));
+    expect(calendar, contains('_resetCalendarFilters'));
+    expect(calendar, contains('Reset filters'));
+    expect(calendar, contains('No calendar entries match these filters'));
+    expect(calendar, contains('outsideMonth'));
+    expect(calendar, contains('event preview dots'));
+    expect(calendar, contains('childAspectRatio: compact ? 1.0 : 1.15'));
+    expect(
+      calendar,
+      isNot(contains("label: _filterLabel(_EventFilter.month)")),
+    );
+  });
+
   test('principal attendance UI uses directory workflow without QR display', () {
     final screenFile = File(
       'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',

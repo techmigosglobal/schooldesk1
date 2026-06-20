@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 
 class PrincipalEventApprovalScreen extends StatefulWidget {
   const PrincipalEventApprovalScreen({super.key});
@@ -130,6 +131,8 @@ class _PrincipalEventApprovalScreenState
                   style: TextStyle(color: context.appTheme.error),
                 ),
               )
+            : _posts.isEmpty
+            ? _buildEmptyState()
             : ListView.builder(
                 padding: const EdgeInsets.all(24.0),
                 itemCount: _posts.length,
@@ -170,6 +173,33 @@ class _PrincipalEventApprovalScreenState
                   );
                 },
               ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return RefreshIndicator(
+      onRefresh: _loadPosts,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 80),
+          const EmptyStateWidget(
+            icon: Icons.fact_check_outlined,
+            title: 'No event approvals pending',
+            description:
+                'Teacher and staff event posts that need Principal review will appear here. Pull down or tap refresh to check again.',
+          ),
+          const SizedBox(height: 18),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: _loadPosts,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Refresh'),
+            ),
+          ),
+        ],
       ),
     );
   }

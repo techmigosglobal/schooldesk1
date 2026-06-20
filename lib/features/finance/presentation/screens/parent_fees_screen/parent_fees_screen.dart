@@ -36,8 +36,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         .toList();
     if (pending.isEmpty) return null;
     // Sort by due date ascending to find the most imminent invoice.
-    pending.sort((a, b) =>
-        (_text(a['dueDate'])).compareTo(_text(b['dueDate'])));
+    pending.sort(
+      (a, b) => (_text(a['dueDate'])).compareTo(_text(b['dueDate'])),
+    );
     return pending.first;
   }
 
@@ -269,7 +270,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -422,7 +425,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   onPressed: () => _openPaymentRequestForm(),
                   icon: const Icon(Icons.payment_rounded, size: 18),
                   label: Text(
-                    'Pay Now — ${_money(_pendingAmount)}',
+                    'Pay installment — ${_money(_pendingAmount)}',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -535,7 +538,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        _money((_nextPendingFee?['amount'] as num?)?.toDouble() ?? pending),
+                        _money(
+                          (_nextPendingFee?['amount'] as num?)?.toDouble() ??
+                              pending,
+                        ),
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -560,9 +566,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () => _openPaymentRequestForm(
-                        singleFee: _nextPendingFee,
-                      ),
+                      onPressed: () =>
+                          _openPaymentRequestForm(singleFee: _nextPendingFee),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: context.appTheme.primary,
                         foregroundColor: context.appTheme.onPrimary,
@@ -573,7 +578,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                         elevation: 0,
                       ),
                       child: Text(
-                        'Pay Now',
+                        'Pay installment',
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -677,7 +682,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     ),
                   ),
                   child: Text(
-                    'Pay Now',
+                    'Pay installment',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
@@ -768,7 +773,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   isPaid
                       ? Icons.receipt_long_rounded
                       : Icons.pending_actions_rounded,
-                  color: isPaid ? context.appTheme.success : context.appTheme.warning,
+                  color: isPaid
+                      ? context.appTheme.success
+                      : context.appTheme.warning,
                   size: 20,
                 ),
               ),
@@ -804,7 +811,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       '${p['status']}',
                       style: GoogleFonts.ibmPlexSans(
                         fontSize: 11,
-                        color: isPaid ? context.appTheme.success : context.appTheme.warning,
+                        color: isPaid
+                            ? context.appTheme.success
+                            : context.appTheme.warning,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -819,7 +828,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: isPaid ? context.appTheme.success : context.appTheme.warning,
+                      color: isPaid
+                          ? context.appTheme.success
+                          : context.appTheme.warning,
                     ),
                   ),
                   if (isPaid)
@@ -874,7 +885,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           child: Text(
             'Fee structure will appear after invoices are published.',
             textAlign: TextAlign.center,
-            style: GoogleFonts.ibmPlexSans(fontSize: 14, color: context.appTheme.muted),
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 14,
+              color: context.appTheme.muted,
+            ),
           ),
         ),
       );

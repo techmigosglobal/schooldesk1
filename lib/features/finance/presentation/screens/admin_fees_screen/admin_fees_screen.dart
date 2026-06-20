@@ -398,10 +398,20 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                         '${_textValue(structure['category'], fallback: 'Fee')} - ${_textValue(structure['class'], fallback: 'Class pending')}',
                     subtitle:
                         '${_money(_numValue(structure['amount']))} | ${_textValue(structure['frequency'], fallback: 'frequency pending')} | due day ${structure['due_day'] ?? '-'}',
-                    trailing: TextButton.icon(
-                      onPressed: () => _openEditFeeStructureForm(structure),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: const Text('Prepare Update Request'),
+                    trailing: Wrap(
+                      spacing: 8,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => _openEditFeeStructureForm(structure),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Prepare Update Request'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => _deleteFeeStructure(structure),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('Delete fee component'),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -690,6 +700,43 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
   Future<void> _openEditFeeStructureForm(Map<String, dynamic> structure) =>
       _openFeeStructureForm(structure: structure);
+
+  Future<void> _deleteFeeStructure(Map<String, dynamic> structure) async {
+    final id = '${structure['id'] ?? ''}'.trim();
+    if (id.isEmpty) {
+      _snack('Fee structure ID is missing.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete fee component?'),
+        content: Text(
+          'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}. Existing generated invoices and payments are not deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.delete_outline_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await BackendApiClient.instance.deleteRaw('/fees/structures/$id');
+      if (!mounted) return;
+      await _loadData();
+      _snack('Fee component deleted.', success: true);
+    } catch (error) {
+      _snack('Unable to delete fee component: $error');
+    }
+  }
 
   Future<void> _openFeeStructureForm({Map<String, dynamic>? structure}) async {
     final result = await Navigator.pushNamed(

@@ -53,12 +53,9 @@ class _ParentPaymentSelectionScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Select Invoices',
-      subtitle: 'Choose the invoices you wish to pay',
-      drawer: ParentDrawer(
-        selectedIndex: 6,
-        onDestinationSelected: (i) {},
-      ),
+      title: 'Select installment',
+      subtitle: 'Choose the fee installment you want to pay now',
+      drawer: ParentDrawer(selectedIndex: 6, onDestinationSelected: (i) {}),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
@@ -220,9 +217,7 @@ class _ParentPaymentSelectionScreenState
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        border: Border(
-          top: BorderSide(color: context.appTheme.outlineVariant),
-        ),
+        border: Border(top: BorderSide(color: context.appTheme.outlineVariant)),
         boxShadow: [
           BoxShadow(
             color: context.appTheme.onSurface.withAlpha(10),
@@ -240,7 +235,7 @@ class _ParentPaymentSelectionScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Total Selected',
+                    'Selected installment total',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 13,
                       color: context.appTheme.muted,
@@ -265,8 +260,11 @@ class _ParentPaymentSelectionScreenState
                   ? null
                   : () {
                       final selectedFees = _pendingFees
-                          .where((fee) =>
-                              _selectedInvoiceIds.contains(fee['id']?.toString()))
+                          .where(
+                            (fee) => _selectedInvoiceIds.contains(
+                              fee['id']?.toString(),
+                            ),
+                          )
                           .map((fee) => Map<String, dynamic>.from(fee))
                           .toList();
                       _onProceedToPay(selectedFees);
@@ -284,7 +282,7 @@ class _ParentPaymentSelectionScreenState
                 elevation: 0,
               ),
               child: Text(
-                'Proceed to Pay',
+                'Pay installment',
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
