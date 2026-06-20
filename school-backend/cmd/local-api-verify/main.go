@@ -281,6 +281,7 @@ func (v *verifier) runMutating() {
 	}, http.StatusCreated, "parent_user")
 	v.login("Parent", parentUser, parentPass, http.StatusOK)
 	v.runParentPaymentRequestFlow()
+	v.runAttendanceFlow()
 	v.runStudentLeaveFlow()
 	v.runTeacherHomeworkFlow()
 	v.runExamScheduleNotificationFlow()
@@ -477,6 +478,85 @@ func (v *verifier) ensureTeacherSubjectAssignment() bool {
 		"is_primary":       true,
 	}, http.StatusCreated, "teacher_subject")
 	return v.ids["teacher_subject"] != ""
+}
+
+func (v *verifier) runAttendanceFlow() {
+	if v.tokens["Admin"] == "" || v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" || v.ids["teacher_staff"] == "" || v.ids["payment_student"] == "" {
+		v.addFail("Attendance fixture", "local verifier", "All roles", "Admin, Principal, Teacher, Parent, teacher staff, or linked student missing")
+		return
+	}
+	if !v.ensureTeacherSubjectAssignment() {
+		return
+	}
+	v.expect("Admin assigns Teacher as class teacher for attendance", http.MethodPut, "/sections/"+v.ids["default_section"], "Admin", "Admin", map[string]any{
+		"grade_id":         v.ids["default_grade"],
+		"academic_year_id": v.ids["default_year"],
+		"section_name":     "A",
+		"capacity":         40,
+		"class_teacher_id": v.ids["teacher_staff"],
+	}, http.StatusOK)
+
+	_, students := v.expectAny("Teacher lists attendance class roster", http.MethodGet, "/students?section_id="+v.ids["default_section"]+"&page_size=100", "Teacher", "Teacher", nil, http.StatusOK)
+	enrollmentID := findRowString(students, v.ids["payment_student"], "active_enrollment_id")
+	if enrollmentID == "" {
+		v.addFail("Attendance roster enrollment lookup", "GET /students", "Teacher", "Could not find active enrollment for local verifier student")
+		return
+	}
+	v.ids["payment_student_enrollment"] = enrollmentID
+
+	periodNumber := 200000 + int(time.Now().UnixNano()%700000)
+	v.expectDataID("Teacher creates attendance session", http.MethodPost, "/attendance/sessions", "Teacher", "Teacher", map[string]any{
+		"academic_year_id": v.ids["default_year"],
+		"section_id":       v.ids["default_section"],
+		"subject_id":       v.ids["default_subject"],
+		"staff_id":         v.ids["teacher_staff"],
+		"date":             "2026-06-20",
+		"period_number":    periodNumber,
+	}, http.StatusCreated, "attendance_session")
+	if v.ids["attendance_session"] == "" {
+		return
+	}
+
+	attendanceRows := []map[string]any{{
+		"student_id":    v.ids["payment_student"],
+		"enrollment_id": v.ids["payment_student_enrollment"],
+		"status":        "present",
+	}}
+	v.expect("Teacher saves attendance draft", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/mark", "Teacher", "Teacher", map[string]any{
+		"finalize":    false,
+		"attendances": attendanceRows,
+	}, http.StatusOK)
+	v.expect("Teacher submits final attendance", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/mark", "Teacher", "Teacher", map[string]any{
+		"finalize":    true,
+		"attendances": attendanceRows,
+	}, http.StatusOK)
+	v.expect("Teacher cannot edit locked attendance", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/mark", "Teacher", "Teacher", map[string]any{
+		"finalize":    true,
+		"attendances": attendanceRows,
+	}, http.StatusForbidden)
+	v.expect("Teacher requests attendance correction", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/correction-request", "Teacher", "Teacher", map[string]any{
+		"reason": "Local Docker verifier correction request",
+	}, http.StatusOK)
+	v.expect("Principal reopens attendance correction", http.MethodPost, "/attendance/sessions/"+v.ids["attendance_session"]+"/reopen", "Principal", "Principal", map[string]any{
+		"reason": "Local Docker verifier approved correction",
+	}, http.StatusOK)
+	v.expect("Admin reads attendance sessions", http.MethodGet, "/attendance/sessions?section_id="+v.ids["default_section"], "Admin", "Admin", nil, http.StatusOK)
+	v.expect("Principal reads attendance monitor sessions", http.MethodGet, "/attendance/sessions?section_id="+v.ids["default_section"], "Principal", "Principal", nil, http.StatusOK)
+	v.expect("Parent reads linked child attendance summary", http.MethodGet, "/attendance/summary?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
+	v.expect("Parent reads linked child attendance records", http.MethodGet, "/students/"+v.ids["payment_student"]+"/attendance?month=6&year=2026", "Parent", "Parent", nil, http.StatusOK)
+
+	_, tokenData := v.expectAny("Admin creates staff attendance QR token", http.MethodGet, "/attendance/staff/qr-token", "Admin", "Admin", nil, http.StatusOK)
+	token, ok := getString(tokenData, "token")
+	if !ok {
+		v.addFail("Staff attendance QR token lookup", "GET /attendance/staff/qr-token", "Admin", "QR token missing")
+		return
+	}
+	v.expect("Teacher scans staff attendance QR", http.MethodPost, "/attendance/staff/qr-scan", "Teacher", "Teacher", map[string]any{
+		"token": token,
+	}, http.StatusOK)
+	v.expect("Teacher reads own staff attendance today", http.MethodGet, "/attendance/staff/me/today", "Teacher", "Teacher", nil, http.StatusOK)
+	v.expect("Principal reads staff attendance monitor", http.MethodGet, "/attendance/staff?date=2026-06-20", "Principal", "Principal", nil, http.StatusOK)
+	v.expect("Principal exports staff QR daily logs", http.MethodGet, "/attendance/staff/qr-logs/export?date=2026-06-20", "Principal", "Principal", nil, http.StatusOK)
 }
 
 func (v *verifier) runTeacherHomeworkFlow() {
@@ -880,6 +960,28 @@ func firstString(data any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func findRowString(data any, id, key string) string {
+	rows, ok := data.([]any)
+	if !ok {
+		return ""
+	}
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(row["id"])) != strings.TrimSpace(id) {
+			continue
+		}
+		value, ok := row[key]
+		if !ok || value == nil {
+			return ""
+		}
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+	return ""
 }
 
 func hasNotification(data any, referenceType, referenceID string) bool {

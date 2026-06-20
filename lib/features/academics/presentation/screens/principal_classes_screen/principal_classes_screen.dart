@@ -4536,24 +4536,12 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
                                   const _SubjectSetupTip(),
                                   const SizedBox(height: 20),
                                   _SetupPrimaryButton(
-                                    label: 'Continue to fees',
-                                    icon: Icons.arrow_forward_rounded,
+                                    label: 'Save',
+                                    icon: Icons.save_rounded,
                                     saving: _saving,
                                     onPressed: _saving
                                         ? null
-                                        : () => Navigator.of(context)
-                                              .pushReplacement<bool, bool>(
-                                                MaterialPageRoute(
-                                                  builder: (_) =>
-                                                      _FeesSetupPage(
-                                                        classRow:
-                                                            widget.classRow,
-                                                        academicYears: widget
-                                                            .academicYears,
-                                                      ),
-                                                ),
-                                                result: true,
-                                              ),
+                                        : () => Navigator.of(context).pop(true),
                                   ),
                                 ],
                               ),

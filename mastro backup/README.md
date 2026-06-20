@@ -43,12 +43,6 @@ maestro test \
   Maestro/teacher_attendance_marking.yaml
 ```
 
-## Maestro Cloud through GitHub Actions
-
-The GitHub Actions workflow lives at `.github/workflows/maestro-cloud.yml`.
-It builds a Flutter debug APK with a public HTTPS backend URL, uploads the APK to
-Maestro Cloud, and runs every flow in this `Maestro/` directory via `config.yaml`.
-
 ## Maestro Studio ENV1
 
 Select `ENV1` in Maestro Studio and add these environment variables:
@@ -61,25 +55,6 @@ Select `ENV1` in Maestro Studio and add these environment variables:
 The flows use the same names everywhere. Each credential expression also has a
 default fallback, so Maestro will not type `undefined` if `ENV1` is missing a
 variable.
-
-Configure these GitHub Actions secrets before running it:
-
-- `MAESTRO_CLOUD_API_KEY`
-- `MAESTRO_PROJECT_ID`
-- `MAESTRO_PRINCIPAL_USERNAME`
-- `MAESTRO_PRINCIPAL_PASSWORD`
-- `MAESTRO_TEACHER_USERNAME`
-- `MAESTRO_TEACHER_PASSWORD`
-
-Configure `SCHOOLDESK_API_BASE_URL` as either a repository variable or secret.
-It must be an HTTPS backend URL reachable from Maestro Cloud, for example
-`https://example.com/api`.
-
-Optional repository variables:
-
-- `MAESTRO_DEVICE_MODEL`, defaults to `pixel_6`
-- `MAESTRO_DEVICE_OS`, defaults to `android-34`
-- `MAESTRO_TIMEOUT_MINUTES`, defaults to `90`
 
 ## Selector conventions
 

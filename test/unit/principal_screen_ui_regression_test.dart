@@ -182,7 +182,8 @@ void main() {
     expect(screen, contains('Available Subjects'));
     expect(screen, contains("Can't find the subject?"));
     expect(screen, contains('Subject Color'));
-    expect(screen, contains('Continue to fees'));
+    expect(screen, contains("label: 'Save'"));
+    expect(screen, isNot(contains('Continue to fees')));
     expect(screen, isNot(contains('View timetables')));
     expect(screen, isNot(contains('Setup timetable')));
     expect(screen, isNot(contains('_openTimetableSetup')));
@@ -513,10 +514,7 @@ void main() {
       expect(routes, isNot(contains('static const String guidedAssistant')));
       expect(guard, isNot(contains('AppRoutes.guidedAssistant')));
 
-      for (final route in <String>[
-        'principalExams',
-        'principalResults',
-      ]) {
+      for (final route in <String>['principalExams', 'principalResults']) {
         expect(dashboard, isNot(contains('AppRoutes.$route')));
         expect(routes, isNot(contains('static const String $route')));
         expect(guard, isNot(contains('AppRoutes.$route')));

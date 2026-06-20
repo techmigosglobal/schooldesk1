@@ -241,9 +241,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       error: _error,
       onRefresh: _loadDiary,
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _saveDiaryEntry(),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Period Diary'),
+        onPressed: _saving ? null : () => _saveDiaryEntry(),
+        icon: const Icon(Icons.save_rounded),
+        label: const Text('Save Diary'),
       ),
       child: TeacherFlowScrollView(
         children: [

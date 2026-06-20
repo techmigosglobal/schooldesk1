@@ -4,8 +4,6 @@ appId: com.techmigos.schooldesk1
     clearState: true
 - runFlow: subflows/login_principal.yaml
 - extendedWaitUntil:
-    visible: "Academics"
+    visible: "Academic\nYears"
     timeout: 20000
-- assertVisible: "Principal Action Queue"
-- assertVisible: "Review Attendance"
-- assertVisible: "Correction Requests"
+

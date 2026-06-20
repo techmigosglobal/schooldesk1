@@ -83,6 +83,11 @@ class _TeacherLeaveRequestFormScreenState
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
+    final validationError = _validateLeaveRequest();
+    if (validationError != null) {
+      setState(() => _error = validationError);
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -207,7 +212,9 @@ class _TeacherLeaveRequestFormScreenState
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
-                        onTap: _saving ? null : () => _pickDate(_fromDateController),
+                        onTap: _saving
+                            ? null
+                            : () => _pickDate(_fromDateController),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -223,7 +230,9 @@ class _TeacherLeaveRequestFormScreenState
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
-                        onTap: _saving ? null : () => _pickDate(_toDateController),
+                        onTap: _saving
+                            ? null
+                            : () => _pickDate(_toDateController),
                       ),
                     ),
                   ],
@@ -258,6 +267,7 @@ class _TeacherLeaveRequestFormScreenState
                   Text(
                     _error!,
                     style: TextStyle(color: context.appTheme.error),
+                    textAlign: TextAlign.center,
                   ),
                 ],
                 const SizedBox(height: 18),
@@ -289,7 +299,8 @@ class _TeacherLeaveRequestFormScreenState
   }
 
   Future<void> _pickDate(TextEditingController controller) async {
-    final initial = DateTime.tryParse(controller.text.trim()) ??
+    final initial =
+        DateTime.tryParse(controller.text.trim()) ??
         DateTime.now().add(const Duration(days: 1));
     final picked = await showDatePicker(
       context: context,
@@ -354,6 +365,42 @@ class _TeacherLeaveRequestFormScreenState
         fallback: 'Leave',
       ),
     );
+  }
+
+  String? _validateLeaveRequest() {
+    final from = DateTime.tryParse(_fromDateController.text.trim());
+    final to = DateTime.tryParse(_toDateController.text.trim());
+    if (from == null || to == null) {
+      return 'Select valid leave dates.';
+    }
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final fromOnly = DateTime(from.year, from.month, from.day);
+    final toOnly = DateTime(to.year, to.month, to.day);
+    if (fromOnly.isBefore(todayOnly)) {
+      return 'Leave cannot start before today.';
+    }
+    if (toOnly.isBefore(fromOnly)) {
+      return 'To date cannot be before from date.';
+    }
+    final requestedDays = _halfDay
+        ? 0.5
+        : toOnly.difference(fromOnly).inDays.toDouble() + 1;
+    final remaining = _remainingDaysFor(_leaveTypeId);
+    if (remaining != null && requestedDays > remaining) {
+      return 'Requested leave exceeds available balance.';
+    }
+    return null;
+  }
+
+  double? _remainingDaysFor(String leaveTypeId) {
+    for (final row in _balances) {
+      if (teacherFlowText(row['leave_type_id']) != leaveTypeId) continue;
+      final raw = row['remaining_days'] ?? row['balance'];
+      if (raw is num) return raw.toDouble();
+      return double.tryParse('$raw'.trim());
+    }
+    return null;
   }
 }
 

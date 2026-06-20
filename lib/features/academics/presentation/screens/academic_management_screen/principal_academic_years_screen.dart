@@ -1001,17 +1001,11 @@ class _YearListCard extends StatelessWidget {
                 Text(_rangeLabel(year), style: _mutedStyle(12)),
                 const SizedBox(height: 12),
                 Wrap(
-                  alignment: WrapAlignment.spaceBetween,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 12,
                   runSpacing: 10,
                   children: [
-                    SizedBox(
-                      width: 190,
-                      child: _isCurrent(year)
-                          ? const _CurrentChip()
-                          : const SizedBox.shrink(),
-                    ),
+                    if (_isCurrent(year)) const _CurrentChip(compact: true),
                     SizedBox(
                       width: 88,
                       child: _OutlineButton(label: 'View', onPressed: onView),
@@ -1071,7 +1065,8 @@ class _YearHeroCard extends StatelessWidget {
               ],
             ),
           ),
-          _StatusPill(status: _yearStatus(year)),
+          const SizedBox(width: 10),
+          Flexible(child: _StatusPill(status: _yearStatus(year))),
         ],
       ),
     );
@@ -1731,12 +1726,18 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _CurrentChip extends StatelessWidget {
-  const _CurrentChip();
+  final bool compact;
+
+  const _CurrentChip({this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      constraints: BoxConstraints(maxWidth: compact ? 118 : 220),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 14,
+        vertical: compact ? 8 : 10,
+      ),
       decoration: BoxDecoration(
         color: _ayGreen.withAlpha(20),
         borderRadius: BorderRadius.circular(9),
@@ -1744,11 +1745,19 @@ class _CurrentChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.bookmark_border_rounded, color: _ayGreen),
+          Icon(
+            Icons.bookmark_border_rounded,
+            color: _ayGreen,
+            size: compact ? 18 : 24,
+          ),
           const SizedBox(width: 8),
-          Text(
-            'Current Academic Year',
-            style: _labelStyle(15, color: _ayGreen),
+          Flexible(
+            child: Text(
+              compact ? 'Current' : 'Current Academic Year',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: _labelStyle(compact ? 13 : 15, color: _ayGreen),
+            ),
           ),
         ],
       ),

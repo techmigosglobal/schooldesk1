@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -285,15 +286,31 @@ class _LessonPlannerCard extends StatelessWidget {
             if (attachment.isNotEmpty) ...[
               const SizedBox(height: 10),
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () => _openAttachment(context, attachment),
                 icon: const Icon(Icons.attach_file_rounded, size: 18),
-                label: const Text('Attachment linked'),
+                label: const Text('Open attachment'),
               ),
             ],
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _openAttachment(BuildContext context, String attachment) async {
+    final uri = Uri.tryParse(attachment);
+    if (uri == null || !uri.hasScheme) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attachment link is not available.')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open attachment.')),
+      );
+    }
   }
 }
 

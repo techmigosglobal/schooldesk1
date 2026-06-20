@@ -90,9 +90,9 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _uploading = false);
@@ -104,12 +104,14 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Future<void> _loadPosts() async {
     setState(() => _loading = true);
     try {
-      final response = (await BackendApiClient.instance.dio
-              .get('/event-posts/teacher'))
-          .data;
+      final response = (await BackendApiClient.instance.dio.get(
+        '/event-posts/teacher',
+      )).data;
       if (!mounted) return;
       setState(() {
-        _posts = response is List ? response : (response['data'] as List? ?? []);
+        _posts = response is List
+            ? response
+            : (response['data'] as List? ?? []);
         _loading = false;
       });
     } catch (e) {
@@ -157,9 +159,8 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(isSubmit
-                ? 'Submitted for approval!'
-                : 'Draft saved!')),
+          content: Text(isSubmit ? 'Submitted for approval!' : 'Draft saved!'),
+        ),
       );
       _titleController.clear();
       _descController.clear();
@@ -189,8 +190,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           TabBar(
             controller: _tabController,
             labelColor: context.appTheme.primary,
-            unselectedLabelColor:
-                context.appTheme.onSurface.withOpacity(0.6),
+            unselectedLabelColor: context.appTheme.onSurface.withOpacity(0.6),
             tabs: const [
               Tab(text: 'Create Post', icon: Icon(Icons.add_box)),
               Tab(text: 'My Posts', icon: Icon(Icons.history)),
@@ -224,14 +224,14 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Create Event Post',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    'Create Event Post',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 20),
-                  if (_error != null)
-                    _ErrorBox(message: _error!),
+                  if (_error != null) _ErrorBox(message: _error!),
                   SchoolDeskTextField(
                     controller: _titleController,
                     label: 'Event Title *',
@@ -270,69 +270,77 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                   ),
                   const SizedBox(height: 20),
                   // ── Attachment section ──────────────────────────────
-                  Text('Attachments / Images',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    'Attachments / Images',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       OutlinedButton.icon(
                         onPressed: _uploading ? null : _pickImage,
                         icon: const Icon(Icons.photo_outlined, size: 18),
                         label: const Text('Pick Images'),
                       ),
-                      const SizedBox(width: 10),
                       OutlinedButton.icon(
                         onPressed: _uploading ? null : _pickFile,
                         icon: const Icon(Icons.attach_file_rounded, size: 18),
                         label: const Text('Pick File'),
                       ),
-                      if (_uploading) ...[
-                        const SizedBox(width: 10),
+                      if (_uploading)
                         const SizedBox.square(
                           dimension: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                      ],
                     ],
                   ),
                   if (_uploadedUrls.isNotEmpty) ...[
                     const SizedBox(height: 10),
-                    ..._uploadedUrls.asMap().entries.map((entry) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.check_circle,
-                                  color: Colors.green, size: 16),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  entry.value.split('/').last,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
+                    ..._uploadedUrls.asMap().entries.map(
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                entry.value.split('/').last,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 16),
-                                onPressed: () => setState(
-                                    () => _uploadedUrls.removeAt(entry.key)),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () => setState(
+                                () => _uploadedUrls.removeAt(entry.key),
                               ),
-                            ],
-                          ),
-                        )),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   // ── Destinations ───────────────────────────────────
-                  Text('Destinations *',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    'Destinations *',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   CheckboxListTile(
                     title: const Text('Parent Home Feed'),
                     value: _destParentHome,
@@ -355,14 +363,15 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                         setState(() => _destSchoolLanding = v ?? false),
                   ),
                   const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 12,
+                    runSpacing: 10,
                     children: [
                       OutlinedButton(
                         onPressed: _loading ? null : () => _submit(false),
                         child: const Text('Save Draft'),
                       ),
-                      const SizedBox(width: 12),
                       FilledButton(
                         onPressed: _loading ? null : () => _submit(true),
                         child: const Text('Submit for Approval'),
@@ -401,27 +410,38 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         return Card(
           margin: const EdgeInsets.only(bottom: 14),
           child: ListTile(
-            title: Text(post['title'] ?? 'No Title'),
+            title: Text(
+              post['title'] ?? 'No Title',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if ((post['description'] ?? '').isNotEmpty)
                   Text(post['description']),
                 if (media.isNotEmpty)
-                  Text('${media.length} attachment${media.length == 1 ? '' : 's'}'),
-                if (status == 'rejected' &&
-                    post['rejection_reason'] != null)
-                  Text('Reason: ${post['rejection_reason']}',
-                      style: const TextStyle(color: Colors.red)),
+                  Text(
+                    '${media.length} attachment${media.length == 1 ? '' : 's'}',
+                  ),
+                if (status == 'rejected' && post['rejection_reason'] != null)
+                  Text(
+                    'Reason: ${post['rejection_reason']}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
               ],
             ),
-            trailing: Chip(
-              label: Text(status.toUpperCase(),
-                  style:
-                      const TextStyle(fontSize: 10, color: Colors.white)),
-              backgroundColor: statusColor,
-              padding: EdgeInsets.zero,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            trailing: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Chip(
+                label: Text(
+                  status.toUpperCase(),
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                ),
+                backgroundColor: statusColor,
+                padding: EdgeInsets.zero,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
         );
@@ -431,9 +451,17 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   List<String> _labels(dynamic raw) {
     if (raw is List) {
-      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+      return raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
-    return raw.toString().split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    return raw
+        .toString()
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
   }
 }
 

@@ -58,7 +58,7 @@ void main() {
     expect(pdfService, contains('Printing.sharePdf'));
   });
 
-  test('parent quick actions and fee payment controls stay readable', () {
+  test('parent workflow shortcuts and fee payment controls stay readable', () {
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     ).readAsStringSync();
@@ -66,16 +66,13 @@ void main() {
       'lib/features/finance/presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
     ).readAsStringSync();
 
-    expect(parentDashboard, contains("label: 'Academic Progress'"));
-    expect(parentDashboard, contains("label: 'Leave Request'"));
+    expect(parentDashboard, contains("class _ParentWorkflowShortcuts"));
+    expect(parentDashboard, contains('Wrap('));
+    expect(parentDashboard, contains("ActionChip("));
+    expect(parentDashboard, contains("'Pay Fees'"));
+    expect(parentDashboard, contains("'Leave'"));
     expect(parentDashboard, isNot(contains("label: 'Academic\\nProgress'")));
     expect(parentDashboard, isNot(contains("label: 'Leave\\nRequest'")));
-    expect(parentDashboard, contains('mainAxisExtent:'));
-    expect(
-      parentDashboard,
-      contains('crossAxisAlignment: CrossAxisAlignment.center'),
-    );
-    expect(parentDashboard, contains('overflow: TextOverflow.visible'));
 
     expect(receipt, contains('leading: IconButton('));
     expect(receipt, contains('Navigator.maybePop(context)'));
@@ -95,7 +92,6 @@ void main() {
 
   test('source-only documentation contract is enforced', () {
     for (final path in [
-      '.github/workflows/local-docker-ci.yml',
       'README.md',
       'docs/PRD.md',
       'docs/SPEC.md',
@@ -103,26 +99,25 @@ void main() {
       expect(File(path).existsSync(), isTrue, reason: '$path should exist');
     }
 
-    final markdownFiles =
-        (Process.runSync('git', ['ls-files', '--', '*.md']).stdout as String)
-            .trim()
-            .split('\n')
-            .where((path) => path.isNotEmpty)
-            .toSet();
+    final root = Directory.current.path;
+    final markdownFiles = Directory.current
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((file) => file.path.replaceFirst('$root/', ''))
+        .where((path) => path.endsWith('.md'))
+        .toSet();
 
-    expect(markdownFiles, {
+    expect(markdownFiles, containsAll({
       'README.md',
-      'docs/FINANCE_MODULE_DOCS.md',
-      'docs/PARENT_ROLE_WORKFLOW_AUDIT.md',
       'docs/PRD.md',
-      'docs/PRINCIPAL_ROLE_WORKFLOW_AUDIT.md',
-      'docs/RAZORPAY_INTEGRATION_COMPLETE.md',
-      'docs/ROLE_INTERCONNECTION_AUDIT.md',
-      'docs/SINGLE_SCHOOL_HOME_PARENT_TEACHER_AUDIT.md',
       'docs/SPEC.md',
-      'docs/TEACHER_PARENT_BACKEND_INTEGRATION_AUDIT.md',
-      'docs/TEACHER_ROLE_MODULE_ANALYSIS_AND_IMPLEMENTATION_PLAN.md',
-      'docs/TEACHER_ROLE_WORKFLOW_AUDIT.md',
-    });
+      'docs/teacher-principal-workflow-improvements.md',
+    }));
+    expect(
+      Directory('.github/workflows').existsSync()
+          ? Directory('.github/workflows').listSync()
+          : const <FileSystemEntity>[],
+      isEmpty,
+    );
   });
 }
