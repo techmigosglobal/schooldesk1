@@ -21,14 +21,14 @@ fi
 echo "Running Maestro on ${ANDROID_SERIAL}"
 
 flows=(
-  "maestro/login_principal.yaml"
-  "maestro/create_teacher.yaml"
-  "maestro/principal_teacher_navigation.yaml"
-  "maestro/teacher_attendance_marking.yaml"
-  "maestro/teacher_principal_attendance_correction.yaml"
-  "maestro/teacher_principal_content_handoffs.yaml"
-  "maestro/teacher_leave_principal_approval.yaml"
-  "maestro/teacher_principal_communication.yaml"
+  "Maestro/login_principal.yaml"
+  "Maestro/create_teacher.yaml"
+  "Maestro/principal_teacher_navigation.yaml"
+  "Maestro/teacher_attendance_marking.yaml"
+  "Maestro/teacher_principal_attendance_correction.yaml"
+  "Maestro/teacher_principal_content_handoffs.yaml"
+  "Maestro/teacher_leave_principal_approval.yaml"
+  "Maestro/teacher_principal_communication.yaml"
 )
 
 for flow in "${flows[@]}"; do

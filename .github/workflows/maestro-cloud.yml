@@ -1,0 +1,167 @@
+name: Maestro Cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: Public SchoolDesk API base URL for the cloud test build
+        required: false
+        type: string
+      device_model:
+        description: Maestro Cloud Android device model
+        required: false
+        default: pixel_6
+        type: string
+      device_os:
+        description: Maestro Cloud Android OS
+        required: false
+        default: android-34
+        type: string
+      timeout_minutes:
+        description: Minutes to wait for Maestro Cloud results
+        required: false
+        default: "90"
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/maestro-cloud.yml"
+      - "android/**"
+      - "assets/**"
+      - "lib/**"
+      - "Maestro/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "third_party/flutter_plugins/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/maestro-cloud.yml"
+      - "android/**"
+      - "assets/**"
+      - "lib/**"
+      - "Maestro/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "third_party/flutter_plugins/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maestro-cloud-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Build Android and run Maestro Cloud
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+      MAESTRO_PROJECT_ID: ${{ secrets.MAESTRO_PROJECT_ID }}
+      PRINCIPAL_USERNAME: ${{ secrets.MAESTRO_PRINCIPAL_USERNAME }}
+      PRINCIPAL_PASSWORD: ${{ secrets.MAESTRO_PRINCIPAL_PASSWORD }}
+      TEACHER_USERNAME: ${{ secrets.MAESTRO_TEACHER_USERNAME }}
+      TEACHER_PASSWORD: ${{ secrets.MAESTRO_TEACHER_PASSWORD }}
+      SCHOOLDESK_API_BASE_URL: ${{ inputs.api_base_url || vars.SCHOOLDESK_API_BASE_URL || secrets.SCHOOLDESK_API_BASE_URL }}
+      MAESTRO_DEVICE_MODEL: ${{ inputs.device_model || vars.MAESTRO_DEVICE_MODEL || 'pixel_6' }}
+      MAESTRO_DEVICE_OS: ${{ inputs.device_os || vars.MAESTRO_DEVICE_OS || 'android-34' }}
+      MAESTRO_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes || vars.MAESTRO_TIMEOUT_MINUTES || '90' }}
+
+    steps:
+      - name: Check required configuration
+        shell: bash
+        run: |
+          missing=()
+          [[ -n "$MAESTRO_CLOUD_API_KEY" ]] || missing+=("MAESTRO_CLOUD_API_KEY")
+          [[ -n "$MAESTRO_PROJECT_ID" ]] || missing+=("MAESTRO_PROJECT_ID")
+          [[ -n "$SCHOOLDESK_API_BASE_URL" ]] || missing+=("SCHOOLDESK_API_BASE_URL")
+          [[ -n "$PRINCIPAL_USERNAME" ]] || missing+=("MAESTRO_PRINCIPAL_USERNAME")
+          [[ -n "$PRINCIPAL_PASSWORD" ]] || missing+=("MAESTRO_PRINCIPAL_PASSWORD")
+          [[ -n "$TEACHER_USERNAME" ]] || missing+=("MAESTRO_TEACHER_USERNAME")
+          [[ -n "$TEACHER_PASSWORD" ]] || missing+=("MAESTRO_TEACHER_PASSWORD")
+
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub Actions configuration:\n' >&2
+            printf ' - %s\n' "${missing[@]}" >&2
+            exit 1
+          fi
+
+          if [[ ! "$SCHOOLDESK_API_BASE_URL" =~ ^https:// ]]; then
+            echo "SCHOOLDESK_API_BASE_URL must be an HTTPS URL reachable by Maestro Cloud." >&2
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Check Maestro flow variables
+        shell: bash
+        run: |
+          for var_name in PRINCIPAL_USERNAME PRINCIPAL_PASSWORD TEACHER_USERNAME TEACHER_PASSWORD; do
+            pattern="\${$var_name}"
+            if ! grep -R --fixed-strings "$pattern" Maestro/*.yaml >/dev/null; then
+              echo "Expected Maestro flow placeholder not found: $pattern" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build debug APK for Maestro Cloud
+        run: |
+          flutter build apk --debug \
+            --dart-define=API_BASE_URL="$SCHOOLDESK_API_BASE_URL" \
+            --dart-define=APP_ENV=e2e \
+            --dart-define=ENABLE_LOGGING=false
+
+      - name: Upload debug APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schooldesk-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Run Maestro Cloud
+        id: maestro
+        uses: mobile-dev-inc/action-maestro-cloud@v3.0.1
+        with:
+          api-key: ${{ env.MAESTRO_CLOUD_API_KEY }}
+          project-id: ${{ env.MAESTRO_PROJECT_ID }}
+          app-file: build/app/outputs/flutter-apk/app-debug.apk
+          workspace: Maestro
+          device-model: ${{ env.MAESTRO_DEVICE_MODEL }}
+          device-os: ${{ env.MAESTRO_DEVICE_OS }}
+          timeout: ${{ env.MAESTRO_TIMEOUT_MINUTES }}
+          env: |
+            PRINCIPAL_USERNAME=${{ env.PRINCIPAL_USERNAME }}
+            PRINCIPAL_PASSWORD=${{ env.PRINCIPAL_PASSWORD }}
+            TEACHER_USERNAME=${{ env.TEACHER_USERNAME }}
+            TEACHER_PASSWORD=${{ env.TEACHER_PASSWORD }}
+
+      - name: Summarize Maestro Cloud result
+        if: always() && steps.maestro.outcome != 'skipped'
+        run: |
+          {
+            echo "### Maestro Cloud"
+            echo "- Console URL: ${{ steps.maestro.outputs.MAESTRO_CLOUD_CONSOLE_URL }}"
+            echo "- Upload status: ${{ steps.maestro.outputs.MAESTRO_CLOUD_UPLOAD_STATUS }}"
+            echo "- App binary ID: ${{ steps.maestro.outputs.MAESTRO_CLOUD_APP_BINARY_ID }}"
+          } >> "$GITHUB_STEP_SUMMARY"
