@@ -83,6 +83,7 @@ class AppRoutes {
       '/principal-school-profile-screen';
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
+  static const String principalTimetable = '/principal-timetable-screen';
   static const String systemMonitor = '/system-monitor-screen';
 
   static const String idCardGeneration = '/id-card-generation-screen';
@@ -111,6 +112,9 @@ class AppRoutes {
   static const String teacherPTM = '/teacher-ptm-screen';
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
+  static const String teacherPerformance = '/teacher-performance-screen';
+  static const String teacherStudentNotes = '/teacher-student-notes-screen';
+  static const String teacherDiscipline = '/teacher-discipline-screen';
 
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
@@ -215,6 +219,7 @@ class AppRoutes {
       args: _childAssignmentArgs(context, 'principal'),
     ),
     principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
+    principalTimetable: (context) => const AdminTimetableScreen(),
     principalAnalytics: (context) => PrincipalAnalyticsScreen(),
     systemMonitor: (context) => const SystemMonitorScreen(),
 
@@ -247,6 +252,9 @@ class AppRoutes {
     teacherPTM: (context) => const TeacherParentInteractionScreen(),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
+    teacherPerformance: (context) => const TeacherPerformanceScreen(),
+    teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
+    teacherDiscipline: (context) => const TeacherDisciplineScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),
 

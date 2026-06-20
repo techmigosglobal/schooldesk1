@@ -68,27 +68,59 @@ class _PrincipalEventApprovalScreenState
     final reasonController = TextEditingController();
     final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Reject Event Post'),
-          content: TextField(
-            controller: reasonController,
-            decoration: const InputDecoration(
-              labelText: 'Rejection Reason',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 3,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Reject'),
-            ),
-          ],
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            String? validationError;
+            return AlertDialog(
+              title: const Text('Reject Event Post'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Please provide a reason for rejection. This will be visible to the teacher.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Rejection Reason *',
+                      border: const OutlineInputBorder(),
+                      errorText: validationError,
+                    ),
+                    maxLines: 3,
+                    onChanged: (_) {
+                      if (validationError != null) {
+                        setDialogState(() => validationError = null);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (reasonController.text.trim().isEmpty) {
+                      setDialogState(
+                        () => validationError =
+                            'A rejection reason is required.',
+                      );
+                      return;
+                    }
+                    Navigator.pop(context, true);
+                  },
+                  child: const Text('Reject'),
+                ),
+              ],
+            );
+          },
         );
       },
     );

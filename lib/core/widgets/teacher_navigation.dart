@@ -176,6 +176,27 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherLessonPlanner,
             ),
             const SchoolDeskNavigationItem(
+              index: 25,
+              icon: Icons.insights_outlined,
+              activeIcon: Icons.insights_rounded,
+              label: 'Student Performance',
+              route: AppRoutes.teacherPerformance,
+            ),
+            const SchoolDeskNavigationItem(
+              index: 27,
+              icon: Icons.sticky_note_2_outlined,
+              activeIcon: Icons.sticky_note_2_rounded,
+              label: 'Student Notes',
+              route: AppRoutes.teacherStudentNotes,
+            ),
+            const SchoolDeskNavigationItem(
+              index: 28,
+              icon: Icons.shield_outlined,
+              activeIcon: Icons.shield_rounded,
+              label: 'Student Discipline',
+              route: AppRoutes.teacherDiscipline,
+            ),
+            const SchoolDeskNavigationItem(
               index: 24,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,

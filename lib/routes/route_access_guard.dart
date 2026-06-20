@@ -62,6 +62,7 @@ class RouteAccessGuard {
     AppRoutes.principalSubjects: {'principal'},
     AppRoutes.principalLessonPlanner: {'principal'},
     AppRoutes.principalEventApprovals: {'principal'},
+    AppRoutes.principalTimetable: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},
     AppRoutes.principalAccountCreate: {'principal'},
     AppRoutes.principalAccountEdit: {'principal'},
@@ -88,6 +89,9 @@ class RouteAccessGuard {
     AppRoutes.teacherEventPosts: {'teacher'},
     AppRoutes.teacherLessonPlanner: {'teacher'},
     AppRoutes.teacherPTM: {'teacher'},
+    AppRoutes.teacherPerformance: {'teacher'},
+    AppRoutes.teacherStudentNotes: {'teacher'},
+    AppRoutes.teacherDiscipline: {'teacher'},
     // Shared routes
     AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},
     AppRoutes.kioskQrAttendance: {'kiosk'},
