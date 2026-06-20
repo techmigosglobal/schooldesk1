@@ -41,6 +41,19 @@ The GitHub Actions workflow lives at `.github/workflows/maestro-cloud.yml`.
 It builds a Flutter debug APK with a public HTTPS backend URL, uploads the APK to
 Maestro Cloud, and runs every flow in this `Maestro/` directory.
 
+## Maestro Studio ENV1
+
+Select `ENV1` in Maestro Studio and add these environment variables:
+
+- `PRINCIPAL_USERNAME`: `principal`
+- `PRINCIPAL_PASSWORD`: `Principal@12345`
+- `TEACHER_USERNAME`: `teacher01`
+- `TEACHER_PASSWORD`: `Teacher@12345`
+
+The flows use the same names everywhere. Each credential expression also has a
+default fallback, so Maestro will not type `undefined` if `ENV1` is missing a
+variable.
+
 Configure these GitHub Actions secrets before running it:
 
 - `MAESTRO_CLOUD_API_KEY`

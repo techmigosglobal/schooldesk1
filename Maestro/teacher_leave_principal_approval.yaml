@@ -8,9 +8,9 @@ appId: com.techmigos.schooldesk1
 - tapOn:
     point: "84%,14%"
 - tapOn: "Username"
-- inputText: "${TEACHER_USERNAME}"
+- inputText: ${TEACHER_USERNAME || "teacher01"}
 - tapOn: "Password"
-- inputText: "${TEACHER_PASSWORD}"
+- inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
 - tapOn: "Sign in"
 - extendedWaitUntil:
     visible: "Teacher portal"
@@ -48,9 +48,9 @@ appId: com.techmigos.schooldesk1
 - tapOn:
     point: "84%,14%"
 - tapOn: "Username"
-- inputText: "${PRINCIPAL_USERNAME}"
+- inputText: ${PRINCIPAL_USERNAME || "principal"}
 - tapOn: "Password"
-- inputText: "${PRINCIPAL_PASSWORD}"
+- inputText: ${PRINCIPAL_PASSWORD || "Principal@12345"}
 - tapOn: "Sign in"
 - extendedWaitUntil:
     visible: "Principal portal"

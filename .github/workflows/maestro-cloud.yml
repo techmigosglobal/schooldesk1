@@ -116,9 +116,9 @@ jobs:
         shell: bash
         run: |
           for var_name in PRINCIPAL_USERNAME PRINCIPAL_PASSWORD TEACHER_USERNAME TEACHER_PASSWORD; do
-            pattern="\${$var_name}"
+            pattern="\${$var_name"
             if ! grep -R --fixed-strings "$pattern" Maestro/*.yaml >/dev/null; then
-              echo "Expected Maestro flow placeholder not found: $pattern" >&2
+              echo "Expected Maestro flow variable not found: $var_name" >&2
               exit 1
             fi
           done

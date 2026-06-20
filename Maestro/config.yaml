@@ -1,0 +1,23 @@
+flows:
+  - login_principal.yaml
+  - create_teacher.yaml
+  - principal_teacher_navigation.yaml
+  - teacher_attendance_marking.yaml
+  - teacher_principal_attendance_correction.yaml
+  - teacher_principal_content_handoffs.yaml
+  - teacher_leave_principal_approval.yaml
+  - teacher_principal_communication.yaml
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - login_principal
+    - create_teacher
+    - principal_teacher_navigation
+    - teacher_attendance_marking
+    - teacher_principal_attendance_correction
+    - teacher_principal_content_handoffs
+    - teacher_leave_principal_approval
+    - teacher_principal_communication
+platform:
+  android:
+    disableAnimations: true
