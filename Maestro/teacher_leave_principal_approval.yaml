@@ -13,7 +13,7 @@ appId: com.techmigos.schooldesk1
 - inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
 - tapOn: "Sign in"
 - extendedWaitUntil:
-    visible: "Teacher portal"
+    visible: "Quick Actions"
     timeout: 20000
 - tapOn:
     text: "Track Leave"
@@ -53,7 +53,7 @@ appId: com.techmigos.schooldesk1
 - inputText: ${PRINCIPAL_PASSWORD || "Principal@12345"}
 - tapOn: "Sign in"
 - extendedWaitUntil:
-    visible: "Principal portal"
+    visible: "Academics"
     timeout: 20000
 - tapOn:
     text: "Approval Center"

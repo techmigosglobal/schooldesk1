@@ -13,7 +13,7 @@ appId: com.techmigos.schooldesk1
 - inputText: ${TEACHER_PASSWORD || "Teacher@12345"}
 - tapOn: "Sign in"
 - extendedWaitUntil:
-    visible: "Teacher portal"
+    visible: "Quick Actions"
     timeout: 20000
 - tapOn:
     text: "Mark Student Attendance"
