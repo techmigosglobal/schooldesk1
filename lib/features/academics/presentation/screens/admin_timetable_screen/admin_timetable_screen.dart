@@ -7,10 +7,9 @@ import 'package:printing/printing.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
-import 'package:schooldesk1/core/widgets/erp_components.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _AdminTimetableHomeMode { classes, teachers, rooms }
@@ -128,7 +127,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF3F8FC),
       drawer: AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
-      bottomNavigationBar: const _AdminTimetableBottomBar(),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -3075,54 +3074,6 @@ class _ActionChipButton extends StatelessWidget {
       onPressed: onTap,
       icon: Icon(icon, size: 17),
       label: Text(label),
-    );
-  }
-}
-
-class _AdminTimetableBottomBar extends StatelessWidget {
-  const _AdminTimetableBottomBar();
-
-  @override
-  Widget build(BuildContext context) {
-    final currentRoute = ModalRoute.of(context)?.settings.name;
-    return SchoolDeskBottomNavigationBar(
-      items: [
-        SchoolDeskBottomNavItem(
-          label: 'Home',
-          icon: Icons.home_outlined,
-          activeIcon: Icons.home_rounded,
-          selected: currentRoute == AppRoutes.principalDashboard,
-          onTap: () => Navigator.of(
-            context,
-          ).pushNamedAndRemoveUntil(AppRoutes.principalDashboard, (_) => false),
-        ),
-        SchoolDeskBottomNavItem(
-          label: 'Search',
-          icon: Icons.search_rounded,
-          activeIcon: Icons.manage_search_rounded,
-          selected: currentRoute == AppRoutes.globalSearch,
-          onTap: () => Navigator.of(
-            context,
-          ).pushNamed(AppRoutes.globalSearch, arguments: 'principal'),
-        ),
-        SchoolDeskBottomNavItem(
-          label: 'Communication',
-          icon: Icons.forum_outlined,
-          activeIcon: Icons.forum_rounded,
-          selected: currentRoute == AppRoutes.communicationCenter,
-          onTap: () =>
-              Navigator.of(context).pushNamed(AppRoutes.communicationCenter),
-        ),
-        SchoolDeskBottomNavItem(
-          label: 'Profile',
-          icon: Icons.account_circle_outlined,
-          activeIcon: Icons.account_circle_rounded,
-          selected: currentRoute == AppRoutes.profileScreen,
-          onTap: () => Navigator.of(
-            context,
-          ).pushNamed(AppRoutes.profileScreen, arguments: 'principal'),
-        ),
-      ],
     );
   }
 }

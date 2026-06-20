@@ -180,6 +180,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalClasses,
             ),
             SchoolDeskNavigationItem(
+              index: 28,
+              icon: Icons.menu_book_outlined,
+              activeIcon: Icons.menu_book_rounded,
+              label: 'Subjects',
+              route: AppRoutes.principalSubjects,
+            ),
+            SchoolDeskNavigationItem(
               index: 5,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
@@ -192,6 +199,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               activeIcon: Icons.calendar_month_rounded,
               label: 'Timetable',
               route: AppRoutes.principalTimetable,
+            ),
+            SchoolDeskNavigationItem(
+              index: 29,
+              icon: Icons.monitor_outlined,
+              activeIcon: Icons.monitor_rounded,
+              label: 'Syllabus Monitor',
+              route: AppRoutes.syllabusMonitoring,
             ),
             SchoolDeskNavigationItem(
               index: 17,
