@@ -3503,17 +3503,42 @@ class _DetailChipSection extends StatelessWidget {
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
         .toList();
+    final isUnassigned =
+        visibleValues.length == 1 &&
+        visibleValues.first.toLowerCase() == 'not assigned';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _FieldLabel(title),
-        if (visibleValues.isEmpty)
-          Text(
-            emptyText,
-            style: GoogleFonts.dmSans(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: context.appTheme.muted,
+        const SizedBox(height: 8),
+        if (visibleValues.isEmpty || isUnassigned)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F8FF),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFB8CEF6)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 18,
+                  color: Color(0xFF2563EB),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    emptyText,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1E3A8A),
+                    ),
+                  ),
+                ),
+              ],
             ),
           )
         else
@@ -3522,12 +3547,20 @@ class _DetailChipSection extends StatelessWidget {
             runSpacing: 8,
             children: visibleValues
                 .map(
-                  (value) => Chip(
-                    label: Text(value, overflow: TextOverflow.ellipsis),
-                    backgroundColor: context.appTheme.primaryContainer
-                        .withAlpha(90),
-                    side: BorderSide(
-                      color: context.appTheme.primary.withAlpha(50),
+                  (value) => ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Chip(
+                      label: Text(
+                        value,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: GoogleFonts.dmSans(
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF1E3A8A),
+                        ),
+                      ),
+                      backgroundColor: const Color(0xFFF4F8FF),
+                      side: const BorderSide(color: Color(0xFFB8CEF6)),
                     ),
                   ),
                 )

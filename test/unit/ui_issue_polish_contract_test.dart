@@ -117,7 +117,24 @@ void main() {
     );
     expect(leaveForm, isNot(contains('Open from Teacher module')));
     expect(leaveForm, isNot(contains('Teacher module context required')));
-    expect(leaveForm, contains('Submit leave for principal/admin approval'));
+    expect(leaveForm, contains('Submit leave for principal approval'));
+  });
+
+  test('staff details assigned classes empty state stays readable', () {
+    final staffScreen = File(
+      'lib/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart',
+    ).readAsStringSync();
+
+    expect(staffScreen, contains("title: 'Assigned Classes'"));
+    expect(staffScreen, contains('width: double.infinity'));
+    expect(staffScreen, contains('BoxConstraints(maxWidth: 240)'));
+    expect(
+      staffScreen,
+      contains("visibleValues.first.toLowerCase() == 'not assigned'"),
+    );
+    expect(staffScreen, contains('Color(0xFF1E3A8A)'));
+    expect(staffScreen, contains('Icons.info_outline_rounded'));
+    expect(staffScreen, contains('No classes assigned'));
   });
 
   test('parent workflow shortcuts and fee payment controls stay readable', () {

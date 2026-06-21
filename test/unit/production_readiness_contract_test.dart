@@ -7,41 +7,39 @@ import 'backend_api_sources.dart';
 import 'backend_route_sources.dart';
 
 void main() {
-  test(
-    'teacher attendance is driven by staff timetable slots and enrollments',
-    () {
-      final source = File(
-        'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
-      ).readAsStringSync();
-      final api = readBackendApiSources();
+  test('teacher attendance is driven by class-day register and enrollments', () {
+    final source = File(
+      'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
+    ).readAsStringSync();
+    final api = readBackendApiSources();
 
-      expect(source, contains('RoleAccessService.initialize()'));
-      expect(source, contains('RoleAccessService.teacherStaffId'));
-      expect(source, contains('getTimetableSlots('));
-      expect(source, contains('staffId: _staffId'));
-      expect(source, contains('dayOfWeek: _selectedDate.weekday'));
-      expect(source, contains('_selectedSectionId'));
-      expect(source, contains('Class / Section'));
-      expect(source, contains('ChoiceChip'));
-      expect(source, contains('getStudentEnrollments(s.id)'));
-      expect(source, contains("'enrollment_missing': enrollmentId.isEmpty"));
-      expect(source, contains("throw Exception('Enrollment record missing"));
-      expect(source, contains('getAttendanceSessions('));
-      expect(source, contains('RoleAccessService.teacherClassId'));
-      expect(
-        source,
-        contains('Future<AttendanceSessionModel> _ensureSessionForSave'),
-      );
-      expect(source, contains('academicYearId: _academicYearId'));
-      expect(source, contains('periodNumber: _periodNumber'));
-      expect(source, contains('finalize: finalize'));
-      expect(source, contains('Request Correction'));
-      expect(source, isNot(contains("String _selectedClass =")));
-      expect(source, isNot(contains('getProfile()')));
-      expect(api, contains('final String timetableSlotId;'));
-      expect(api, contains("'timetable_slot_id': timetableSlotId"));
-    },
-  );
+    expect(source, contains('RoleAccessService.initialize()'));
+    expect(source, contains('RoleAccessService.teacherStaffId'));
+    expect(source, contains('staffId: _staffId'));
+    expect(source, contains('_selectedSectionId'));
+    expect(source, contains('Class / Section'));
+    expect(source, contains("'Daily attendance'"));
+    expect(source, contains("'Whole day'"));
+    expect(source, isNot(contains('ChoiceChip')));
+    expect(source, isNot(contains('getTimetableSlots(')));
+    expect(source, contains('getStudentEnrollments(s.id)'));
+    expect(source, contains("'enrollment_missing': enrollmentId.isEmpty"));
+    expect(source, contains("throw Exception('Enrollment record missing"));
+    expect(source, contains('getAttendanceSessions('));
+    expect(source, contains('RoleAccessService.teacherClassId'));
+    expect(
+      source,
+      contains('Future<AttendanceSessionModel> _ensureSessionForSave'),
+    );
+    expect(source, contains('academicYearId: _academicYearId'));
+    expect(source, contains('periodNumber: _periodNumber'));
+    expect(source, contains('finalize: finalize'));
+    expect(source, contains('Request Correction'));
+    expect(source, isNot(contains("String _selectedClass =")));
+    expect(source, isNot(contains('getProfile()')));
+    expect(api, contains('final String timetableSlotId;'));
+    expect(api, contains("'timetable_slot_id': timetableSlotId"));
+  });
 
   test('teacher communication is chat-first and scoped to real conversations', () {
     final source = File(

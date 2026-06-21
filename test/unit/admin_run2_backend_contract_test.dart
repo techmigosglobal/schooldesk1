@@ -172,12 +172,9 @@ void main() {
     expect(registry, isNot(contains('/parent-fees-screen/payment-processing')));
   });
 
-  test('admin timetable mutations persist through backend slot APIs', () {
+  test('principal timetable generation stays on approved backend paths', () {
     final source = File(
       'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
-    ).readAsStringSync();
-    final forms = File(
-      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart',
     ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -185,50 +182,34 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(source, contains('AppRoutes.adminTimetableGenerationForm'));
-    expect(source, contains('AppRoutes.adminTimetablePeriodForm'));
-    expect(source, contains('AppRoutes.adminTimetableSubstitutionForm'));
+    expect(source, contains('Generate Time Table'));
+    expect(source, contains('Generate from class CSV'));
+    expect(source, contains('BulkCsvImportTarget.classTimetables'));
+    expect(source, contains('applyPrePrimaryClassSchedule('));
+    expect(source, contains('generateSmartTimetable('));
+    expect(source, contains('DropdownButtonFormField<String>'));
     expect(source, isNot(contains('_showGenerateTimetableDialog')));
     expect(source, isNot(contains('_showAddPeriodDialog')));
     expect(source, isNot(contains('_showEditPeriodDialog')));
     expect(source, isNot(contains('_showSubstituteDialog')));
     expect(source, isNot(contains('showDialog(')));
     expect(source, isNot(contains('rootNavigator: true')));
-    expect(source, contains("deleteRaw('/timetable/slots/\$id'"));
+    expect(source, isNot(contains('Add single period')));
+    expect(source, isNot(contains('Add substitution')));
+    expect(source, isNot(contains('Single Period Modification')));
 
-    expect(forms, contains('AdminTimetableGenerationFormScreen'));
-    expect(forms, contains('AdminTimetablePeriodFormScreen'));
-    expect(forms, contains('AdminTimetableSubstitutionFormScreen'));
-    expect(forms, contains('suggestTimetableSlots('));
-    expect(forms, contains('generateTimetableSlots('));
-    expect(forms, contains("createRaw('/timetable/slots'"));
-    expect(forms, contains('updateRaw('));
-    expect(forms, contains("'/timetable/slots/\$id'"));
-    expect(forms, contains("createRaw('/timetable/substitutions'"));
-    expect(forms, contains("'timetable_slot_id':"));
-    expect(forms, contains("'substitute_staff_id':"));
-    expect(forms, isNot(contains('showDialog(')));
-    expect(forms, isNot(contains("'slot_id':")));
-    expect(forms, isNot(contains("'substitute_name':")));
-
-    expect(routes, contains('adminTimetableGenerationForm'));
-    expect(routes, contains('AdminTimetableGenerationFormScreen'));
-    expect(routes, contains('adminTimetablePeriodForm'));
-    expect(routes, contains('AdminTimetablePeriodFormScreen'));
-    expect(routes, contains('adminTimetableSubstitutionForm'));
-    expect(routes, contains('AdminTimetableSubstitutionFormScreen'));
-    expect(
-      guard,
-      contains('AppRoutes.adminTimetableGenerationForm: {\'admin\'}'),
-    );
-    expect(guard, contains('AppRoutes.adminTimetablePeriodForm: {\'admin\'}'));
-    expect(
-      guard,
-      contains('AppRoutes.adminTimetableSubstitutionForm: {\'admin\'}'),
-    );
-    expect(registry, contains('/admin-timetable-screen/generate'));
-    expect(registry, contains('/admin-timetable-screen/period'));
-    expect(registry, contains('/admin-timetable-screen/substitution'));
+    expect(routes, isNot(contains('adminTimetableGenerationForm')));
+    expect(routes, isNot(contains('AdminTimetableGenerationFormScreen')));
+    expect(routes, isNot(contains('adminTimetablePeriodForm')));
+    expect(routes, isNot(contains('AdminTimetablePeriodFormScreen')));
+    expect(routes, isNot(contains('adminTimetableSubstitutionForm')));
+    expect(routes, isNot(contains('AdminTimetableSubstitutionFormScreen')));
+    expect(guard, isNot(contains('AppRoutes.adminTimetableGenerationForm')));
+    expect(guard, isNot(contains('AppRoutes.adminTimetablePeriodForm')));
+    expect(guard, isNot(contains('AppRoutes.adminTimetableSubstitutionForm')));
+    expect(registry, isNot(contains('/admin-timetable-screen/generate')));
+    expect(registry, isNot(contains('/admin-timetable-screen/period')));
+    expect(registry, isNot(contains('/admin-timetable-screen/substitution')));
     expect(source, isNot(contains("'slot_id':")));
     expect(source, isNot(contains("'substitute_name':")));
   });

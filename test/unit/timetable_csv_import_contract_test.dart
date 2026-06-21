@@ -48,9 +48,20 @@ void main() {
     expect(adminTimetable, contains('BulkCsvImportService.importCsv'));
     expect(adminTimetable, contains('BulkCsvImportTarget.classTimetables'));
     expect(adminTimetable, contains('Generate from class CSV'));
+    expect(adminTimetable, contains('Generate Time Table'));
+    expect(adminTimetable, contains('DropdownButtonFormField<String>'));
+    expect(adminTimetable, contains("labelText: 'Class'"));
+    expect(adminTimetable, contains("value: 'smart'"));
+    expect(adminTimetable, contains('generateSmartTimetable('));
+    expect(adminTimetable, contains('applyPrePrimaryClassSchedule('));
+    expect(adminTimetable, isNot(contains('Add single period')));
+    expect(adminTimetable, isNot(contains('Add substitution')));
+    expect(adminTimetable, isNot(contains('Single Period Modification')));
+    expect(adminTimetable, isNot(contains('Preschool Schedule')));
+    expect(adminTimetable, isNot(contains('Apply preschool schedule')));
     expect(adminTimetable, contains('await _loadBackendTimetable();'));
     expect(adminTimetable, contains('api.getRooms()'));
-    expect(adminTimetable, contains('Class room:'));
+    expect(adminTimetable, contains('_buildClassDropdown'));
     expect(
       adminTimetableForms,
       contains("decoration: const InputDecoration(labelText: 'Room')"),

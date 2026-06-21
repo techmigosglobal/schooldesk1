@@ -311,6 +311,41 @@ func TestTeacherCannotEnterMarksForUnassignedSchedule(t *testing.T) {
 	}
 }
 
+func TestTeacherLeaveApplicationIsPendingForPrincipalApproval(t *testing.T) {
+	f := setupSchoolScopeFixture(t)
+	handler := NewLeaveHandler()
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/leave/applications", handler.CreateLeaveApplication)
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.GET("/leave/applications", handler.GetLeaveApplications)
+
+	create := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/leave/applications", strings.NewReader(`{"staff_id":"`+f.teacherStaffID+`","leave_type_id":"`+f.currentLeaveTypeID+`","from_date":"2026-05-21","to_date":"2026-05-21","reason":"Medical appointment"}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("teacher leave create status=%d body=%s", create.Code, create.Body.String())
+	}
+
+	pending := httptest.NewRecorder()
+	principalRouter.ServeHTTP(pending, httptest.NewRequest(http.MethodGet, "/leave/applications?status=pending", nil))
+	if pending.Code != http.StatusOK {
+		t.Fatalf("principal pending leave status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	rows := decodePolicyList(t, pending.Body.String())
+	found := false
+	for _, row := range rows {
+		if row["staff_id"] == f.teacherStaffID &&
+			row["leave_type_id"] == f.currentLeaveTypeID &&
+			row["status"] == "pending" &&
+			strings.Contains(row["reason"].(string), "Medical appointment") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("principal pending approvals should include created teacher leave, rows=%v", rows)
+	}
+}
+
 func TestAdminExamMarksAreUpsertedAndScheduleMarksReadable(t *testing.T) {
 	f := setupSchoolScopeFixture(t)
 	router := scopedPolicyRouter("Admin", "user-policy-admin", "", "", "admin@policy.test", f.schoolID)

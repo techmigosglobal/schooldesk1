@@ -148,6 +148,12 @@ void main() {
     expect(screen, contains('No pending actions'));
     expect(screen, contains('Quick Actions'));
     expect(screen, contains('Edit Class'));
+    expect(screen, contains('Open roster'));
+    expect(screen, contains('Setup subjects'));
+    expect(screen, contains('Setup fees'));
+    expect(screen, isNot(contains("child: Text('Open attendance')")));
+    expect(screen, isNot(contains("child: Text('Save note')")));
+    expect(screen, isNot(contains("child: Text('Send observation')")));
     expect(screen, contains('Save changes'));
     expect(screen, contains('Remove class'));
     expect(screen, contains('updatePrincipalClassSetup('));
@@ -396,7 +402,6 @@ void main() {
     );
     expect(source, contains('label: SchoolDeskGlossary.academicManagement'));
     expect(source, contains('route: AppRoutes.academicManagement'));
-
   });
 
   test('principal top bar notifications are backed by backend unread state', () {
@@ -691,44 +696,71 @@ void main() {
     expect(teacherCalendarFile.existsSync(), isFalse);
   });
 
-  test('principal attendance UI uses directory workflow without QR display', () {
-    final screenFile = File(
-      'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
-    );
-    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-    final client = readBackendApiSources();
-    final backendRoutes = readBackendRouteSources();
+  test(
+    'principal attendance UI uses mobile monitor workflow without QR display',
+    () {
+      final screenFile = File(
+        'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
+      );
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final client = readBackendApiSources();
+      final backendRoutes = readBackendRouteSources();
 
-    expect(screenFile.existsSync(), isTrue);
-    final screen = screenFile.readAsStringSync();
-    expect(screen, contains('Student Attendance Monitor'));
-    expect(
-      screen,
-      contains('Class-period status, correction review, and registers'),
-    );
-    expect(screen, contains('PrincipalDirectoryScaffold'));
-    expect(screen, contains('PrincipalDetailPage'));
-    expect(screen, isNot(contains('Daily Staff QR')));
-    expect(screen, isNot(contains('QrImageView')));
-    expect(screen, contains('_AttendanceView.classes'));
-    expect(screen, contains('_classAttendanceCards'));
-    expect(screen, contains('_openClassesHub'));
-    expect(screen, contains("class_hub_action': action"));
-    expect(screen, contains("source': 'principal_attendance'"));
-    expect(screen, contains("_AttendanceView.students"));
-    expect(screen, contains('Class attendance register'));
-    expect(screen, contains('Open class in Classes Hub'));
-    expect(screen, isNot(contains('PrincipalInputPage')));
-    expect(screen, isNot(contains('Create Attendance Report')));
-    expect(screen, isNot(contains('createReportExport')));
-    expect(routes, contains('PrincipalAttendanceScreen'));
-    expect(routes, contains('principalAttendance'));
-    expect(client, contains('Future<List<AttendanceSessionModel>>'));
-    expect(client, contains('getStaffAttendanceForDate'));
-    expect(client, contains('getStudentAttendanceRecords'));
-    expect(backendRoutes, contains('attendance.GET("/sessions"'));
-    expect(backendRoutes, contains('attendance.GET("/reports/exports"'));
-  });
+      expect(screenFile.existsSync(), isTrue);
+      final screen = screenFile.readAsStringSync();
+      expect(screen, contains('Student Attendance Monitor'));
+      expect(screen, contains('Welcome back, Principal'));
+      expect(screen, contains('Today at a glance'));
+      expect(screen, contains('Recent Students'));
+      expect(screen, contains('Attendance Insights'));
+      expect(screen, contains('Daily Attendance Report'));
+      expect(screen, contains('Class Attendance Report'));
+      expect(screen, contains('Daily Summary'));
+      expect(screen, contains('Exceptions Report'));
+      expect(screen, contains('Staff Check-in Report'));
+      expect(screen, contains('Export / Share Reports'));
+      expect(screen, contains('Search by name or admission no.'));
+      expect(screen, contains('_StudentDetailPage'));
+      expect(screen, isNot(contains('PrincipalDirectoryScaffold')));
+      expect(screen, isNot(contains('PrincipalDetailPage')));
+      expect(screen, isNot(contains('Daily Staff QR')));
+      expect(screen, isNot(contains('QrImageView')));
+      expect(screen, contains('_AttendanceView.classes'));
+      expect(screen, contains('PageView'));
+      expect(screen, contains('PopScope'));
+      expect(screen, contains('_setView'));
+      expect(screen, contains('_recordsByStudent'));
+      expect(screen, contains('_loadRecordsForStudents'));
+      expect(screen, contains('_StudentAttendanceMeta'));
+      expect(screen, contains('_AttendanceHistoryLine'));
+      expect(screen, contains("record['marked_at']"));
+      expect(screen, contains('ShareExportService'));
+      expect(screen, contains('PdfService.getInstance()'));
+      expect(screen, contains("'/attendance/reports/exports'"));
+      expect(screen, isNot(contains('_openClassesHub')));
+      expect(screen, isNot(contains("class_hub_action': action")));
+      expect(screen, isNot(contains("source': 'principal_attendance'")));
+      expect(screen, contains("_AttendanceView.students"));
+      expect(screen, contains("_AttendanceView.reports"));
+      expect(screen, contains("_AttendanceView.monitor"));
+      expect(screen, contains('Staff Check-in'));
+      expect(screen, isNot(contains('Open class in Classes Hub')));
+      expect(screen, contains('Reopen Attendance'));
+      expect(screen, contains('Send Reminder'));
+      expect(screen, contains('Export Class Register'));
+      expect(screen, contains('Audit Trail'));
+      expect(screen, isNot(contains('PrincipalInputPage')));
+      expect(screen, isNot(contains('Create Attendance Report')));
+      expect(screen, contains('createReportExport'));
+      expect(routes, contains('PrincipalAttendanceScreen'));
+      expect(routes, contains('principalAttendance'));
+      expect(client, contains('Future<List<AttendanceSessionModel>>'));
+      expect(client, contains('getStaffAttendanceForDate'));
+      expect(client, contains('getStudentAttendanceRecords'));
+      expect(backendRoutes, contains('attendance.GET("/sessions"'));
+      expect(backendRoutes, contains('attendance.GET("/reports/exports"'));
+    },
+  );
 
   test('principal staff and guardian v1 routes match app calls', () {
     final backendRoutes = readBackendRouteSources();

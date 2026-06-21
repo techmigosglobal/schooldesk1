@@ -20,14 +20,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   bool _saving = false;
   String? _error;
   String _classLabel = 'Assigned class';
-  String _subjectLabel = 'Subject';
-  String _timeLabel = 'First period';
+  String _subjectLabel = 'Daily attendance';
+  String _timeLabel = 'Whole day';
   AttendanceSessionModel? _session;
   List<_AttendanceStudent> _students = [];
   DateTime _selectedDate = DateTime.now();
   String _selectedSectionId = '';
-  String _selectedSlotId = '';
-  List<Map<String, dynamic>> _slots = const [];
   String _sectionId = '';
   String _staffId = '';
   String _subjectId = '';
@@ -68,43 +66,17 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         );
       }
 
-      // Load timetable slots for the teacher's section on the selected day.
-      // This is optional — attendance can be taken even without a timetable slot.
-      List<Map<String, dynamic>> slots = [];
+      String effectiveAcademicYearId = '';
       try {
-        slots = await api.getTimetableSlots(
-          sectionId: sectionId,
-          dayOfWeek: _selectedDate.weekday,
-        );
-      } catch (_) {
-        slots = [];
-      }
-      _slots = slots;
-
-      // Pick the best matching slot for this section (or empty if none).
-      final slot = _pickAttendanceSlot(slots);
-      final subjectId = teacherFlowText(slot['subject_id']);
-      final academicYearId = teacherFlowText(slot['academic_year_id']);
-      final slotId = teacherFlowText(slot['id'] ?? slot['slot_id']);
-      // Default to period 1 if no slot is available.
-      final periodNumber = slot.isNotEmpty
-          ? teacherFlowInt(slot['period_number'])
-          : 1;
-      final effectivePeriodNumber = periodNumber < 1 ? 1 : periodNumber;
-
-      String effectiveAcademicYearId = academicYearId;
-      if (effectiveAcademicYearId.isEmpty) {
-        try {
-          final years = await api.getAcademicYears();
-          final active = years.where((y) => y.isCurrent);
-          if (active.isNotEmpty) {
-            effectiveAcademicYearId = active.first.id;
-          } else if (years.isNotEmpty) {
-            effectiveAcademicYearId = years.first.id;
-          }
-        } catch (_) {
-          // If we can't get academic year, proceed with empty — backend may still accept.
+        final years = await api.getAcademicYears();
+        final active = years.where((y) => y.isCurrent);
+        if (active.isNotEmpty) {
+          effectiveAcademicYearId = active.first.id;
+        } else if (years.isNotEmpty) {
+          effectiveAcademicYearId = years.first.id;
         }
+      } catch (_) {
+        // If we can't get academic year, proceed with empty — backend may still accept.
       }
 
       // Load students for the class-teacher's section.
@@ -140,12 +112,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         date: date,
       );
 
-      // Match an existing session by slot id or period number.
-      final matching = sessions.where(
-        (session) =>
-            (slotId.isNotEmpty && session.timetableSlotId == slotId) ||
-            session.periodNumber == effectivePeriodNumber,
-      );
+      final matching = sessions.where((session) => session.periodNumber == 1);
 
       // Use an existing session only. New sessions are created on Save Draft or Submit Final.
       final session = matching.isNotEmpty ? matching.first : null;
@@ -156,17 +123,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         _selectedSectionId = sectionId;
         _sectionId = sectionId;
         _staffId = staffId;
-        _subjectId = subjectId;
+        _subjectId = '';
         _academicYearId = effectiveAcademicYearId;
-        _timetableSlotId = slotId;
-        _periodNumber = effectivePeriodNumber;
+        _timetableSlotId = '';
+        _periodNumber = 1;
         _classLabel = _classLabelForSection(sectionId);
-        _subjectLabel = slot.isNotEmpty
-            ? _subjectLabelFromSlot(slot)
-            : 'Class Attendance';
-        _timeLabel = slot.isNotEmpty
-            ? _timeLabelFromSlot(slot)
-            : 'Period $effectivePeriodNumber';
+        _subjectLabel = 'Daily attendance';
+        _timeLabel = 'Whole day';
         _session = session;
         _students = attendanceRows;
         _loading = false;
@@ -232,25 +195,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       return;
     }
-    final missingReason = _students.where(
-      (student) => student.requiresReason && student.reason.trim().isEmpty,
-    );
-    if (missingReason.isNotEmpty) {
-      final student = missingReason.first;
-      await _editReason(student);
-      if (!mounted) return;
-      final updated = _students.where((row) => row.id == student.id).first;
-      if (updated.reason.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Reason is required for ${student.name}.'),
-            backgroundColor: context.appTheme.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    }
     final missing = _students.where((student) => student.enrollmentMissing);
     if (missing.isNotEmpty) {
       throw Exception('Enrollment record missing for ${missing.first.name}');
@@ -265,7 +209,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
           'student_id': student.id,
           'enrollment_id': enrollmentId,
           'status': student.status,
-          'reason': student.reason,
+          'reason': '',
           'enrollment_missing': enrollmentId.isEmpty,
         };
       }).toList();
@@ -398,12 +342,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (_session?.isFinalized ?? false) return;
     setState(() {
       _students = _students
-          .map(
-            (student) => student.copyWith(
-              status: status,
-              reason: _statusRequiresReason(status) ? student.reason : '',
-            ),
-          )
+          .map((student) => student.copyWith(status: status, reason: ''))
           .toList();
     });
   }
@@ -434,68 +373,15 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Future<void> _markOne(_AttendanceStudent student, String status) async {
     if (_session?.isFinalized ?? false) return;
-    String reason = student.reason;
-    if (_statusRequiresReason(status)) {
-      reason = await _reasonForStatus(student, status) ?? student.reason;
-      if (reason.trim().isEmpty) return;
-    } else {
-      reason = '';
-    }
     setState(() {
       _students = _students
           .map(
             (row) => row.id == student.id
-                ? row.copyWith(status: status, reason: reason)
+                ? row.copyWith(status: status, reason: '')
                 : row,
           )
           .toList();
     });
-  }
-
-  Future<void> _editReason(_AttendanceStudent student) async {
-    final reason = await _reasonForStatus(student, student.status);
-    if (reason == null) return;
-    setState(() {
-      _students = _students
-          .map(
-            (row) => row.id == student.id ? row.copyWith(reason: reason) : row,
-          )
-          .toList();
-    });
-  }
-
-  Future<String?> _reasonForStatus(
-    _AttendanceStudent student,
-    String status,
-  ) async {
-    final controller = TextEditingController(text: student.reason);
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${_statusLabel(status)} reason'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'Reason',
-            hintText: 'Required for ${_statusLabel(status)}',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return reason;
   }
 
   @override
@@ -553,7 +439,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               TeacherFlowMetric(
                 label: 'Present',
                 value:
-                    '${_students.where((s) => s.status == 'present' || s.status == 'late').length}',
+                    '${_students.where((s) => s.status == 'present').length}',
                 icon: Icons.check_circle_rounded,
                 color: Colors.green,
                 tone: const Color(0xFFEAFBF0),
@@ -571,13 +457,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 icon: Icons.cancel_rounded,
                 color: context.appTheme.error,
                 tone: const Color(0xFFFFEEEE),
-              ),
-              TeacherFlowMetric(
-                label: 'Late',
-                value: '${_students.where((s) => s.status == 'late').length}',
-                icon: Icons.schedule_rounded,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
               ),
             ],
           ),
@@ -640,16 +519,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                           status: option['status']!,
                           label: option['label']!,
                           color: _statusColor(option['status']!),
-                        ),
-                      if (student.requiresReason)
-                        TextButton.icon(
-                          onPressed: locked ? null : () => _editReason(student),
-                          icon: const Icon(Icons.notes_rounded, size: 16),
-                          label: Text(
-                            student.reason.trim().isEmpty
-                                ? 'Add reason'
-                                : 'Edit reason',
-                          ),
                         ),
                     ],
                   ),
@@ -747,34 +616,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
   }
 
-  Map<String, dynamic> _pickAttendanceSlot(List<Map<String, dynamic>> slots) {
-    if (slots.isEmpty) return const {};
-    final selectedSection = _selectedSectionId.isNotEmpty
-        ? _selectedSectionId
-        : RoleAccessService.teacherClassId;
-    if (_selectedSlotId.isNotEmpty) {
-      final selected = slots.where(
-        (slot) =>
-            teacherFlowText(slot['id'] ?? slot['slot_id']) == _selectedSlotId &&
-            teacherFlowText(slot['section_id']) == selectedSection,
-      );
-      if (selected.isNotEmpty) return selected.first;
-    }
-    final ownClassSlots = slots
-        .where((slot) => teacherFlowText(slot['section_id']) == selectedSection)
-        .toList();
-    if (ownClassSlots.isNotEmpty) {
-      final firstPeriod = ownClassSlots.where(
-        (slot) => teacherFlowInt(slot['period_number']) == 1,
-      );
-      return firstPeriod.isNotEmpty ? firstPeriod.first : ownClassSlots.first;
-    }
-    final firstPeriod = slots.where(
-      (slot) => teacherFlowInt(slot['period_number']) == 1,
-    );
-    return firstPeriod.isNotEmpty ? firstPeriod.first : slots.first;
-  }
-
   String _attendanceEnrollmentId(
     List<Map<String, dynamic>> enrollments, {
     required String sectionId,
@@ -818,36 +659,15 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
   }
 
-  String _subjectLabelFromSlot(Map<String, dynamic> slot) {
-    final subject = teacherFlowMap(slot['subject']);
-    final label = teacherFlowText(
-      subject['subject_name'] ?? slot['subject_name'] ?? slot['subject_id'],
-    );
-    return label.isEmpty ? RoleAccessService.teacherSubject : label;
-  }
-
-  String _timeLabelFromSlot(Map<String, dynamic> slot) {
-    final start = teacherFlowText(slot['start_time']);
-    final end = teacherFlowText(slot['end_time']);
-    if (start.isEmpty && end.isEmpty) {
-      return 'Period ${teacherFlowInt(slot['period_number'])}';
-    }
-    return [start, end].where((part) => part.isNotEmpty).join(' - ');
-  }
-
   Widget _selectionPanel() {
     final classOptions = _attendanceClassOptions;
     final selectedSection = _selectedSectionId.isNotEmpty
         ? _selectedSectionId
         : RoleAccessService.teacherClassId;
-    final sectionSlots = _slots
-        .where((slot) => teacherFlowText(slot['section_id']) == selectedSection)
-        .toList();
     return TeacherFlowCard(
       icon: Icons.tune_rounded,
       title: 'Attendance selection',
-      subtitle:
-          '${teacherFlowDate(_selectedDate)} · ${sectionSlots.length} period${sectionSlots.length == 1 ? '' : 's'}',
+      subtitle: '${teacherFlowDate(_selectedDate)} · Whole day',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -882,30 +702,11 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
                 if (value == null || value == _selectedSectionId) return;
                 setState(() {
                   _selectedSectionId = value;
-                  _selectedSlotId = '';
                   _session = null;
                   _students = [];
                 });
                 _loadFlow();
               },
-            ),
-          ],
-          if (sectionSlots.length > 1) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: sectionSlots.map((slot) {
-                final id = teacherFlowText(slot['id'] ?? slot['slot_id']);
-                return ChoiceChip(
-                  label: Text(_timeLabelFromSlot(slot)),
-                  selected: _selectedSlotId == id,
-                  onSelected: (_) {
-                    setState(() => _selectedSlotId = id);
-                    _loadFlow();
-                  },
-                );
-              }).toList(),
             ),
           ],
         ],
@@ -923,7 +724,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     if (picked == null) return;
     setState(() {
       _selectedDate = picked;
-      _selectedSlotId = '';
     });
     await _loadFlow();
   }
@@ -958,20 +758,12 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   static const _attendanceStatusOptions = [
     {'status': 'present', 'label': 'Present'},
     {'status': 'absent', 'label': 'Absent'},
-    {'status': 'late', 'label': 'Late'},
-    {'status': 'leave', 'label': 'Leave'},
-    {'status': 'half_day', 'label': 'Half Day'},
   ];
-
-  static bool _statusRequiresReason(String status) {
-    return const {'absent', 'late', 'leave', 'half_day'}.contains(status);
-  }
 
   static String _statusLabel(String status) {
     return switch (status) {
       'not_started' => 'Not Started',
       'needs_review' => 'Needs Review',
-      'half_day' => 'Half Day',
       'submitted' => 'Submitted',
       'reopened' => 'Reopened',
       'corrected' => 'Corrected',
@@ -979,8 +771,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       'unmarked' => 'Not Marked',
       'present' => 'Present',
       'absent' => 'Absent',
-      'late' => 'Late',
-      'leave' => 'Leave',
       _ => teacherFlowTitleCase(status),
     };
   }
@@ -990,9 +780,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       'unmarked' => Colors.blueGrey,
       'present' => Colors.green,
       'absent' => Colors.red,
-      'late' => Colors.orange,
-      'leave' => Colors.blue,
-      'half_day' => Colors.purple,
       _ => teacherFlowAccent,
     };
   }
@@ -1032,9 +819,6 @@ class _AttendanceStudent {
     this.status = 'unmarked',
     this.reason = '',
   });
-
-  bool get requiresReason =>
-      _TeacherAttendanceScreenState._statusRequiresReason(status);
 
   Color get statusColor {
     return _TeacherAttendanceScreenState._statusColor(status);

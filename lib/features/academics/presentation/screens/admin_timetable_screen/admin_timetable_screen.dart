@@ -9,7 +9,6 @@ import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
-import 'package:schooldesk1/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 enum _AdminTimetableHomeMode { classes, teachers, rooms }
@@ -60,13 +59,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   int _filterDay = 0;
   _AdminTimetableHomeMode _homeMode = _AdminTimetableHomeMode.classes;
   _AdminTimetableDetailMode _detailMode = _AdminTimetableDetailMode.home;
-  Map<String, dynamic>? _selectedPeriod;
 
   List<Map<String, dynamic>> _slots = [];
-  List<Map<String, dynamic>> _subjects = [];
   List<Map<String, dynamic>> _terms = [];
   List<Map<String, dynamic>> _rooms = [];
-  List<Map<String, dynamic>> _substitutions = [];
   List<SectionModel> _sections = [];
   List<StaffModel> _staff = [];
   List<AcademicYearModel> _academicYears = [];
@@ -91,24 +87,20 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           : await api.getTerms(currentYear.id);
       final results = await Future.wait<Object>([
         api.getTimetableSlots(),
-        api.getSubstitutions(),
         api.getSections(),
         api.getStaff(page: 1, pageSize: 300, status: 'active'),
-        api.getRawList('/subjects'),
         api.getRooms(),
       ]);
-      final sections = results[2] as List<SectionModel>;
-      final staff = (results[3] as PaginatedList<StaffModel>).data;
+      final sections = results[1] as List<SectionModel>;
+      final staff = (results[2] as PaginatedList<StaffModel>).data;
       if (!mounted) return;
       setState(() {
         _academicYears = academicYears;
         _terms = terms;
         _slots = (results[0] as List<Map<String, dynamic>>)..sort(_slotSort);
-        _substitutions = results[1] as List<Map<String, dynamic>>;
         _sections = sections;
         _staff = staff;
-        _subjects = results[4] as List<Map<String, dynamic>>;
-        _rooms = results[5] as List<Map<String, dynamic>>;
+        _rooms = results[3] as List<Map<String, dynamic>>;
         _reconcileSelections();
         _loading = false;
       });
@@ -263,20 +255,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             itemBuilder: (context) => const [
               PopupMenuItem(
                 value: 'pre_primary',
-                child: Text('Apply preschool schedule'),
-              ),
-              PopupMenuItem(
-                value: 'generate',
-                child: Text('Generate Timetable'),
+                child: Text('Generate Time Table'),
               ),
               PopupMenuItem(
                 value: 'import',
                 child: Text('Generate from class CSV'),
-              ),
-              PopupMenuItem(value: 'add', child: Text('Add single period')),
-              PopupMenuItem(
-                value: 'substitute',
-                child: Text('Add substitution'),
               ),
             ],
           ),
@@ -418,44 +401,87 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _buildClassList() {
     final rows = _classRows.where(_matchesSearch).toList();
     if (rows.isEmpty) return _emptyPanel('No class timetables found');
+    final selectedRow =
+        rows.any((row) => _text(row['section_id']) == _selectedSectionId)
+        ? _selectedClassRow
+        : rows.first;
+    final selectedSectionId = _text(selectedRow?['section_id']);
+    final periods = _periodsForClass(selectedSectionId, _selectedDay);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle('Classes'),
+        _sectionTitle('Select Class'),
         const SizedBox(height: 10),
-        for (final row in rows)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _TimetableCard(
-              icon: Icons.groups_2_outlined,
-              title: _text(row['class_name'], fallback: 'Class'),
-              subtitle: (() {
-                final ct = _text(row['class_teacher'], fallback: 'Pending');
-                final co = _text(row['co_teacher'], fallback: '');
-                return '${_int(row['slot_count'])} Periods / Week - Class teacher: $ct${co.isEmpty ? '' : ' + Co-teacher: $co'}';
-              })(),
-              status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
-              statusColor: _int(row['slot_count']) > 0
-                  ? context.appTheme.success
-                  : context.appTheme.warning,
-              chips: [
-                _MiniPill(
-                  icon: Icons.co_present_outlined,
-                  label: _text(
-                    row['class_teacher'],
-                    fallback: 'Class teacher pending',
-                  ),
+        _buildClassDropdown(rows, selectedSectionId),
+        if (selectedRow != null) ...[
+          const SizedBox(height: 14),
+          _classSummaryCard(selectedRow),
+          const SizedBox(height: 14),
+          _buildDayChips(),
+          const SizedBox(height: 14),
+          periods.isEmpty
+              ? _classEmptyState(selectedRow)
+              : _schedulePanel(
+                  title: '${_dayLabel(_selectedDay)} Schedule',
+                  rows: periods,
+                  columns: const [
+                    'Time',
+                    'Period',
+                    'Subject',
+                    'Teacher',
+                    'Room',
+                  ],
+                  onRowTap: _openDayDetails,
                 ),
-                _MiniPill(
-                  icon: Icons.meeting_room_outlined,
-                  label:
-                      'Class room: ${_text(row['room_name'], fallback: _capacityLabel(row))}',
-                ),
-              ],
-              onTap: () => _openClass(row),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => setState(
+              () => _detailMode = _AdminTimetableDetailMode.classWeek,
             ),
+            icon: const Icon(Icons.calendar_view_week_rounded),
+            label: const Text('View Full Week'),
           ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildClassDropdown(
+    List<Map<String, dynamic>> rows,
+    String selectedSectionId,
+  ) {
+    return Container(
+      decoration: _softDecoration(),
+      padding: const EdgeInsets.all(12),
+      child: DropdownButtonFormField<String>(
+        initialValue:
+            rows.any((row) => _text(row['section_id']) == selectedSectionId)
+            ? selectedSectionId
+            : _text(rows.first['section_id']),
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Class',
+          prefixIcon: Icon(Icons.groups_2_outlined),
+        ),
+        items: [
+          for (final row in rows)
+            DropdownMenuItem(
+              value: _text(row['section_id']),
+              child: Text(
+                '${_text(row['class_name'], fallback: 'Class')} - ${_int(row['slot_count'])} periods',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (value) {
+          final next = value ?? '';
+          if (next.isEmpty) return;
+          setState(() {
+            _selectedSectionId = next;
+            _detailMode = _AdminTimetableDetailMode.home;
+          });
+        },
+      ),
     );
   }
 
@@ -639,19 +665,15 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 rows: periods,
                 columns: const ['Period', 'Time', 'Subject', 'Teacher', 'Room'],
               ),
-        if (_selectedPeriod != null && !_isBreakSlot(_selectedPeriod!)) ...[
-          const SizedBox(height: 14),
-          _adminSelectedPeriodTools(_selectedPeriod!),
-        ],
         const SizedBox(height: 14),
         OutlinedButton.icon(
-          onPressed: _openGenerateTimetableForm,
-          icon: const Icon(Icons.account_tree_outlined),
-          label: const Text('Go to Classes Hub'),
+          onPressed: _openPrePrimaryScheduleSheet,
+          icon: const Icon(Icons.auto_awesome_rounded),
+          label: const Text('Generate Time Table'),
         ),
         const SizedBox(height: 8),
         Text(
-          'Make timetable changes from Classes Hub > Step 3 (Timetable) or Principal timetable tools.',
+          'Use Generate Time Table to rebuild this class schedule from principal-controlled settings.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: const Color(0xFF667989),
@@ -765,7 +787,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _classSummaryCard(Map<String, dynamic> row) {
     return _TimetableCard(
       icon: Icons.groups_2_outlined,
-      title: _selectedClassLabel,
+      title: _text(row['class_name'], fallback: _selectedClassLabel),
       subtitle: _text(row['class_teacher'], fallback: 'Class Teacher pending'),
       status: _int(row['slot_count']) > 0 ? 'Active' : 'Pending',
       statusColor: _int(row['slot_count']) > 0
@@ -869,43 +891,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _adminSelectedPeriodTools(Map<String, dynamic> period) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _softDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Single Period Modification',
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFF172B3A),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => _openEditPeriodForm(period),
-                  icon: const Icon(Icons.edit_calendar_outlined),
-                  label: const Text('Edit period'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton.filledTonal(
-                tooltip: 'Delete period',
-                onPressed: () => _deletePeriod(period),
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -1193,9 +1178,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _openGenerateTimetableForm,
-            icon: const Icon(Icons.account_tree_outlined),
-            label: const Text('Go to Classes Hub'),
+            onPressed: _openPrePrimaryScheduleSheet,
+            icon: const Icon(Icons.auto_awesome_rounded),
+            label: const Text('Generate Time Table'),
           ),
           const SizedBox(height: 8),
           Text(
@@ -1225,7 +1210,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _buildInfoCard() {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
-      onTap: _openGenerateTimetableForm,
+      onTap: _openPrePrimaryScheduleSheet,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -1263,33 +1248,14 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         runSpacing: 8,
         children: [
           _ActionChipButton(
-            icon: Icons.child_care_rounded,
-            label: 'Preschool Schedule',
-            onTap: _openPrePrimaryScheduleSheet,
-          ),
-          _ActionChipButton(
             icon: Icons.auto_awesome_rounded,
-            label: 'Generate Timetable',
-            onTap: _openGenerateTimetableForm,
-          ),
-          _ActionChipButton(
-            icon: Icons.add_rounded,
-            label: 'Single Period',
-            onTap: _openAddPeriodForm,
+            label: 'Generate Time Table',
+            onTap: _openPrePrimaryScheduleSheet,
           ),
           _ActionChipButton(
             icon: Icons.upload_file_rounded,
             label: 'Generate from class CSV',
             onTap: _importTimetableCsv,
-          ),
-          _ActionChipButton(
-            icon: Icons.swap_horiz_rounded,
-            label: 'Substitution',
-            onTap: _openSubstitutionForm,
-          ),
-          _MiniPill(
-            icon: Icons.swap_calls_rounded,
-            label: '${_substitutions.length} substitutions',
           ),
         ],
       ),
@@ -1463,7 +1429,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                                   _homeMode = mode;
                                   _filterDay = day;
                                   if (day > 0) _selectedDay = day;
-                                  _selectedPeriod = null;
                                   if (mode == _AdminTimetableHomeMode.classes &&
                                       sectionId.isNotEmpty) {
                                     _selectedSectionId = sectionId;
@@ -1536,31 +1501,15 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     switch (value) {
       case 'pre_primary':
         _openPrePrimaryScheduleSheet();
-      case 'generate':
-        _openGenerateTimetableForm();
       case 'import':
         _importTimetableCsv();
-      case 'add':
-        _openAddPeriodForm();
-      case 'substitute':
-        _openSubstitutionForm();
     }
-  }
-
-  void _openClass(Map<String, dynamic> row) {
-    setState(() {
-      _homeMode = _AdminTimetableHomeMode.classes;
-      _selectedSectionId = _text(row['section_id']);
-      _selectedPeriod = null;
-      _detailMode = _AdminTimetableDetailMode.classDay;
-    });
   }
 
   void _openTeacher(Map<String, dynamic> row) {
     setState(() {
       _homeMode = _AdminTimetableHomeMode.teachers;
       _selectedStaffId = _text(row['staff_id']);
-      _selectedPeriod = null;
       _detailMode = _AdminTimetableDetailMode.teacher;
     });
   }
@@ -1569,14 +1518,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     setState(() {
       _homeMode = _AdminTimetableHomeMode.rooms;
       _selectedRoomId = _text(row['room_id']);
-      _selectedPeriod = null;
       _detailMode = _AdminTimetableDetailMode.room;
     });
   }
 
   void _openDayDetails(Map<String, dynamic> period) {
     setState(() {
-      _selectedPeriod = period;
       _selectedSectionId = _text(
         period['section_id'],
         fallback: _selectedSectionId,
@@ -1605,28 +1552,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     Navigator.of(context).maybePop();
   }
 
-  Future<void> _openGenerateTimetableForm() async {
-    if (_selectedSection == null) {
-      _showSnack('Select a class before generating timetable.');
-      return;
-    }
-    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
-      MaterialPageRoute(
-        builder: (_) => AdminTimetableGenerationFormScreen(
-          args: AdminTimetableGenerationFormArgs(
-            classLabel: _selectedClassLabel,
-            section: _selectedSection,
-            academicYear: _currentAcademicYear,
-            termId: _currentTermId,
-            dayLabel: _dayLabel(_selectedDay),
-            dayNumber: _selectedDay,
-          ),
-        ),
-      ),
-    );
-    await _handleTimetableResult(result);
-  }
-
   Future<void> _importTimetableCsv() async {
     final imported = await BulkCsvImportService.importCsv(
       context,
@@ -1653,10 +1578,17 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       return;
     }
 
+    var generationMode = 'preschool';
     var scheduleType = _defaultPrePrimaryScheduleType(section);
     var teacherId = section.classTeacherId.trim().isNotEmpty
         ? section.classTeacherId.trim()
         : _staff.first.id;
+    var workingDays = <int>{1, 2, 3, 4, 5};
+    var periodsPerDayText = '7';
+    var startTimeText = '09:00';
+    var durationText = '35';
+    var gapText = '5';
+    var regenerateScope = true;
     var saving = false;
 
     final result = await showModalBottomSheet<Map<String, dynamic>>(
@@ -1687,7 +1619,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Apply Preschool Schedule',
+                              'Generate Time Table',
                               style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(fontWeight: FontWeight.w900),
                             ),
@@ -1710,9 +1642,32 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                       ),
                       const SizedBox(height: 14),
                       DropdownButtonFormField<String>(
+                        initialValue: generationMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Generation mode',
+                          prefixIcon: Icon(Icons.tune_rounded),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'preschool',
+                            child: Text('Preschool activity preset'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'smart',
+                            child: Text('Custom smart timetable'),
+                          ),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) => setSheetState(
+                                () => generationMode = value ?? generationMode,
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
                         initialValue: scheduleType,
                         decoration: const InputDecoration(
-                          labelText: 'Schedule type',
+                          labelText: 'Preschool preset',
                           prefixIcon: Icon(Icons.child_care_rounded),
                         ),
                         items: const [
@@ -1729,7 +1684,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                             child: Text('Junior KG'),
                           ),
                         ],
-                        onChanged: saving
+                        onChanged: saving || generationMode != 'preschool'
                             ? null
                             : (value) => setSheetState(
                                 () => scheduleType = value ?? scheduleType,
@@ -1760,6 +1715,106 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                               ),
                       ),
                       const SizedBox(height: 14),
+                      if (generationMode == 'smart') ...[
+                        Text(
+                          'Working days',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (
+                              var index = 0;
+                              index < _dayShortLabels.length;
+                              index++
+                            )
+                              FilterChip(
+                                label: Text(_dayShortLabels[index]),
+                                selected: workingDays.contains(index + 1),
+                                onSelected: saving
+                                    ? null
+                                    : (selected) => setSheetState(() {
+                                        if (selected) {
+                                          workingDays.add(index + 1);
+                                        } else if (workingDays.length > 1) {
+                                          workingDays.remove(index + 1);
+                                        }
+                                      }),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: periodsPerDayText,
+                                enabled: !saving,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Periods / day',
+                                ),
+                                onChanged: (value) => periodsPerDayText = value,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: startTimeText,
+                                enabled: !saving,
+                                decoration: const InputDecoration(
+                                  labelText: 'Start time',
+                                  helperText: 'HH:MM',
+                                ),
+                                onChanged: (value) => startTimeText = value,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: durationText,
+                                enabled: !saving,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Period minutes',
+                                ),
+                                onChanged: (value) => durationText = value,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextFormField(
+                                initialValue: gapText,
+                                enabled: !saving,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: 'Gap minutes',
+                                ),
+                                onChanged: (value) => gapText = value,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Replace existing class timetable'),
+                          value: regenerateScope,
+                          onChanged: saving
+                              ? null
+                              : (value) => setSheetState(
+                                  () => regenerateScope = value,
+                                ),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -1771,51 +1826,62 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Monday-Friday preview',
+                              generationMode == 'preschool'
+                                  ? 'Monday-Friday preview'
+                                  : 'Custom backend generation preview',
                               style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(fontWeight: FontWeight.w900),
                             ),
                             const SizedBox(height: 8),
-                            for (final slot in preset)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 3,
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 92,
-                                      child: Text(
-                                        '${slot.$1}-${slot.$2}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w800,
-                                              color: const Color(0xFF667989),
-                                            ),
+                            if (generationMode == 'preschool')
+                              for (final slot in preset)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 3,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      SizedBox(
+                                        width: 92,
+                                        child: Text(
+                                          '${slot.$1}-${slot.$2}',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                                color: const Color(0xFF667989),
+                                              ),
+                                        ),
                                       ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        slot.$3,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w800,
-                                            ),
+                                      Expanded(
+                                        child: Text(
+                                          slot.$3,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                    ],
+                                  ),
+                                )
+                            else
+                              Text(
+                                '${workingDays.length} day(s), ${_safePositiveInt(periodsPerDayText, 7)} periods/day, ${startTimeText.trim()} start, ${_safePositiveInt(durationText, 35)} min periods, ${_safeNonNegativeInt(gapText, 5)} min gaps.',
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
                               ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'This replaces existing Monday-Friday periods for this class and maps every activity to the selected teacher.',
+                        generationMode == 'preschool'
+                            ? 'This replaces existing Monday-Friday periods for this class and maps every activity to the selected teacher.'
+                            : 'This uses the backend smart timetable generator for the selected class, term, working days, and timing pattern.',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: const Color(0xFF667989),
                           fontWeight: FontWeight.w700,
@@ -1829,16 +1895,43 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                             : () async {
                                 setSheetState(() => saving = true);
                                 try {
-                                  final data = await BackendApiClient.instance
-                                      .applyPrePrimaryClassSchedule(
-                                        sectionId: section.id,
-                                        academicYearId: year.id,
-                                        termId: _currentTermId,
-                                        staffId: teacherId,
-                                        scheduleType: scheduleType,
-                                      );
+                                  final data = generationMode == 'preschool'
+                                      ? await BackendApiClient.instance
+                                            .applyPrePrimaryClassSchedule(
+                                              sectionId: section.id,
+                                              academicYearId: year.id,
+                                              termId: _currentTermId,
+                                              staffId: teacherId,
+                                              scheduleType: scheduleType,
+                                            )
+                                      : await BackendApiClient.instance
+                                            .generateSmartTimetable(
+                                              sectionId: section.id,
+                                              academicYearId: year.id,
+                                              termId: _currentTermId,
+                                              days: workingDays.toList()
+                                                ..sort(),
+                                              periodsPerDay: _safePositiveInt(
+                                                periodsPerDayText,
+                                                7,
+                                              ),
+                                              startTime: startTimeText.trim(),
+                                              periodDurationMinutes:
+                                                  _safePositiveInt(
+                                                    durationText,
+                                                    35,
+                                                  ),
+                                              gapMinutes: _safeNonNegativeInt(
+                                                gapText,
+                                                5,
+                                              ),
+                                              regenerateScope: regenerateScope,
+                                            );
                                   if (sheetContext.mounted) {
-                                    Navigator.pop(sheetContext, data);
+                                    Navigator.pop(sheetContext, {
+                                      ...data,
+                                      'generation_mode': generationMode,
+                                    });
                                   }
                                 } catch (error) {
                                   setSheetState(() => saving = false);
@@ -1864,7 +1957,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                                 ),
                               )
                             : const Icon(Icons.done_all_rounded),
-                        label: Text(saving ? 'Applying...' : 'Apply to Class'),
+                        label: Text(
+                          saving ? 'Generating...' : 'Generate Time Table',
+                        ),
                       ),
                     ],
                   ),
@@ -1879,118 +1974,18 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     if (result == null || !mounted) return;
     await _loadBackendTimetable();
     if (!mounted) return;
-    final slots = _int(result['total_slots']);
+    final slots = _int(result['total_slots'] ?? result['created']);
+    final mode = _text(result['generation_mode']);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Preschool schedule applied: $slots periods linked to teacher and class.',
+          mode == 'smart'
+              ? 'Time table generated: $slots periods created for class.'
+              : 'Time table generated: $slots periods linked to teacher and class.',
         ),
         backgroundColor: context.appTheme.success,
       ),
     );
-  }
-
-  Future<void> _openAddPeriodForm() async {
-    if (_selectedSection == null) {
-      _showSnack('Select a class before adding a period.');
-      return;
-    }
-    final periods = _periodsForClass(_selectedSectionId, _selectedDay);
-    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
-      MaterialPageRoute(
-        builder: (_) => AdminTimetablePeriodFormScreen(
-          args: AdminTimetablePeriodFormArgs(
-            classLabel: _selectedClassLabel,
-            section: _selectedSection,
-            academicYear: _currentAcademicYear,
-            termId: _currentTermId,
-            dayLabel: _dayLabel(_selectedDay),
-            dayNumber: _selectedDay,
-            nextPeriodNumber: periods.length + 1,
-            subjects: _subjects,
-            staff: _staff,
-            rooms: _rooms,
-          ),
-        ),
-      ),
-    );
-    await _handleTimetableResult(result);
-  }
-
-  Future<void> _openEditPeriodForm(Map<String, dynamic> period) async {
-    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
-      MaterialPageRoute(
-        builder: (_) => AdminTimetablePeriodFormScreen(
-          args: AdminTimetablePeriodFormArgs(
-            classLabel: _selectedClassLabel,
-            section: _selectedSection,
-            academicYear: _currentAcademicYear,
-            termId: _currentTermId,
-            dayLabel: _dayLabel(_selectedDay),
-            dayNumber: _selectedDay,
-            nextPeriodNumber: _int(period['period_number']),
-            subjects: _subjects,
-            staff: _staff,
-            rooms: _rooms,
-            period: period,
-          ),
-        ),
-      ),
-    );
-    await _handleTimetableResult(result);
-  }
-
-  Future<void> _openSubstitutionForm({Map<String, dynamic>? period}) async {
-    final result = await Navigator.of(context).push<AdminTimetableFormResult>(
-      MaterialPageRoute(
-        builder: (_) => AdminTimetableSubstitutionFormScreen(
-          args: AdminTimetableSubstitutionFormArgs(
-            classLabel: _selectedClassLabel,
-            dayLabel: _dayLabel(_selectedDay),
-            periods: _periodsForClass(_selectedSectionId, _selectedDay),
-            staff: _staff,
-            initialPeriod: period,
-          ),
-        ),
-      ),
-    );
-    await _handleTimetableResult(result);
-  }
-
-  Future<void> _handleTimetableResult(Object? result) async {
-    if (!mounted || result is! AdminTimetableFormResult) return;
-    await _loadBackendTimetable();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(result.message),
-        backgroundColor: context.appTheme.success,
-      ),
-    );
-  }
-
-  Future<void> _deletePeriod(Map<String, dynamic> period) async {
-    final id = _text(period['id']);
-    if (id.isEmpty) return;
-    try {
-      await BackendApiClient.instance.deleteRaw('/timetable/slots/$id');
-      await _loadBackendTimetable();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Timetable period deleted'),
-          backgroundColor: context.appTheme.success,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to delete timetable period: $error'),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-    }
   }
 
   Future<void> _openTeacherWeekPreview() async {
@@ -2740,6 +2735,16 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
         .replaceAll(RegExp(r'^-+|-+$'), '');
     return cleaned.isEmpty ? 'timetable' : cleaned;
+  }
+
+  int _safePositiveInt(String value, int fallback) {
+    final parsed = int.tryParse(value.trim()) ?? fallback;
+    return parsed <= 0 ? fallback : parsed;
+  }
+
+  int _safeNonNegativeInt(String value, int fallback) {
+    final parsed = int.tryParse(value.trim()) ?? fallback;
+    return parsed < 0 ? fallback : parsed;
   }
 
   String _defaultPrePrimaryScheduleType(SectionModel section) {

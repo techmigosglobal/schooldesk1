@@ -133,8 +133,15 @@ func (h *TeacherSelfHandler) RecallLeaveApplication(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	var application models.LeaveApplication
 	if err := database.DB.
-		Joins("JOIN leave_types ON leave_types.id = leave_applications.leave_type_id").
-		Where("leave_applications.id = ? AND leave_applications.staff_id = ? AND leave_types.school_id = ?", id, staffID, schoolID).
+		Joins("JOIN staffs ON staffs.id = leave_applications.staff_id").
+		Joins("LEFT JOIN leave_types ON leave_types.id = leave_applications.leave_type_id").
+		Where(
+			"leave_applications.id = ? AND leave_applications.staff_id = ? AND staffs.school_id = ? AND (leave_applications.leave_type_id = '' OR leave_types.school_id = ?)",
+			id,
+			staffID,
+			schoolID,
+			schoolID,
+		).
 		First(&application).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			fail(c, http.StatusNotFound, "Leave application not found")

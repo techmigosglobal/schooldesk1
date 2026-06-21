@@ -66,7 +66,7 @@ class _TeacherAttendanceHistoryScreenState
     final classes = RoleAccessService.teacherClassTeacherClasses;
     return TeacherFlowScaffold(
       title: 'Attendance History',
-      subtitle: 'Submitted sessions and review',
+      subtitle: 'Class day registers and review',
       selectedIndex: 20,
       loading: _loading,
       error: _error,
@@ -107,9 +107,9 @@ class _TeacherAttendanceHistoryScreenState
           if (_sessions.isEmpty)
             const TeacherFlowCard(
               icon: Icons.fact_check_outlined,
-              title: 'No attendance sessions found.',
+              title: 'No daily attendance found.',
               subtitle:
-                  'Submitted sessions for the selected class and date will appear here.',
+                  'Submitted class attendance for the selected date will appear here.',
             )
           else
             ..._sessions.map((session) {
@@ -121,9 +121,9 @@ class _TeacherAttendanceHistoryScreenState
                   icon: session.isFinalized
                       ? Icons.lock_rounded
                       : Icons.pending_actions_rounded,
-                  title: 'Period ${session.periodNumber}',
+                  title: 'Daily attendance',
                   subtitle:
-                      'Present ${session.presentCount} · Absent/Late $absent · Total ${session.totalStudents}',
+                      'Class day register · Present ${session.presentCount} · Absent $absent · Total ${session.totalStudents}',
                   status: session.isFinalized ? 'Submitted' : 'Pending',
                   statusColor: session.isFinalized
                       ? Colors.green

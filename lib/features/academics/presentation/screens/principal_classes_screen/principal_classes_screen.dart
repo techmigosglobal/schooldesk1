@@ -1655,10 +1655,6 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                         value: 'students',
                         child: Text('Open roster'),
                       ),
-                      PopupMenuItem(
-                        value: 'attendance',
-                        child: Text('Open attendance'),
-                      ),
                       PopupMenuDivider(),
                       PopupMenuItem(
                         value: 'subjects',
@@ -1668,7 +1664,6 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                         value: 'setup_fees',
                         child: Text('Setup fees'),
                       ),
-                      PopupMenuItem(value: 'note', child: Text('Save note')),
                       PopupMenuDivider(),
                       PopupMenuItem(
                         value: 'delete',
@@ -2512,14 +2507,9 @@ class _ClassDetailPage extends StatelessWidget {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'edit', child: Text('Edit class')),
               PopupMenuItem(value: 'students', child: Text('Open roster')),
-              PopupMenuItem(
-                value: 'attendance',
-                child: Text('Open attendance'),
-              ),
               PopupMenuDivider(),
               PopupMenuItem(value: 'subjects', child: Text('Setup subjects')),
               PopupMenuItem(value: 'setup_fees', child: Text('Setup fees')),
-              PopupMenuItem(value: 'note', child: Text('Send observation')),
               PopupMenuDivider(),
               PopupMenuItem(value: 'delete', child: Text('Remove class')),
             ],

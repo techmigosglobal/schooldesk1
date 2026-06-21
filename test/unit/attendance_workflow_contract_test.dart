@@ -23,7 +23,10 @@ void main() {
       expect(teacherAttendance, contains('Save Draft'));
       expect(teacherAttendance, contains('Submit Final'));
       expect(teacherAttendance, contains('Request Correction'));
-      expect(teacherAttendance, contains("'reason': student.reason"));
+      expect(teacherAttendance, contains("'Daily attendance'"));
+      expect(teacherAttendance, contains("'Whole day'"));
+      expect(teacherAttendance, isNot(contains('ChoiceChip')));
+      expect(teacherAttendance, contains("'reason': ''"));
       expect(teacherAttendance, isNot(contains("'remarks':")));
       expect(teacherAttendance, isNot(contains("this.status = 'present'")));
       expect(teacherAttendance, contains("this.status = 'unmarked'"));
@@ -44,8 +47,13 @@ void main() {
           ),
         ),
       );
-      expect(teacherAttendance, contains("'status': 'leave'"));
-      expect(teacherAttendance, contains("'status': 'half_day'"));
+      expect(teacherAttendance, contains("'status': 'present'"));
+      expect(teacherAttendance, contains("'status': 'absent'"));
+      expect(teacherAttendance, isNot(contains("'status': 'late'")));
+      expect(teacherAttendance, isNot(contains("'status': 'leave'")));
+      expect(teacherAttendance, isNot(contains("'status': 'half_day'")));
+      expect(teacherAttendance, isNot(contains('Add reason')));
+      expect(teacherAttendance, isNot(contains('Edit reason')));
       expect(api, contains('bool finalize = true'));
       expect(api, contains("'finalize': finalize"));
       expect(api, contains('requestAttendanceCorrection'));
@@ -56,6 +64,21 @@ void main() {
     },
   );
 
+  test('teacher attendance history presents class-day register, not periods', () {
+    final teacherHistory = File(
+      'lib/features/attendance/presentation/screens/teacher_attendance_history_screen/teacher_attendance_history_screen.dart',
+    ).readAsStringSync();
+
+    expect(teacherHistory, contains("title: 'Daily attendance'"));
+    expect(teacherHistory, contains('Class day register'));
+    expect(teacherHistory, contains('Absent \$absent'));
+    expect(
+      teacherHistory,
+      isNot(contains("'Period \${session.periodNumber}'")),
+    );
+    expect(teacherHistory, isNot(contains('Absent/Late')));
+  });
+
   test(
     'principal attendance screen is a student monitor with reopen and staff check-in separation',
     () {
@@ -63,21 +86,34 @@ void main() {
         'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
       ).readAsStringSync();
 
-      expect(
-        principalAttendance,
-        contains("title: 'Student Attendance Monitor'"),
-      );
-      expect(principalAttendance, contains('Staff Check-in Monitor'));
+      expect(principalAttendance, contains('Student Attendance Monitor'));
+      expect(principalAttendance, contains('Today at a glance'));
+      expect(principalAttendance, contains('Recent Students'));
+      expect(principalAttendance, contains('Attendance Insights'));
+      expect(principalAttendance, contains('Daily Attendance Report'));
+      expect(principalAttendance, contains('Class Attendance Report'));
+      expect(principalAttendance, contains('Search by name or admission no.'));
+      expect(principalAttendance, contains('_StudentDetailPage'));
+      expect(principalAttendance, contains('PageView'));
+      expect(principalAttendance, contains('PopScope'));
+      expect(principalAttendance, contains('_recordsByStudent'));
+      expect(principalAttendance, contains('_latestStudentRecord'));
+      expect(principalAttendance, contains('_StudentAttendanceMeta'));
+      expect(principalAttendance, contains('_AttendanceHistoryLine'));
+      expect(principalAttendance, contains("record['marked_at']"));
+      expect(principalAttendance, contains('ShareExportService'));
+      expect(principalAttendance, contains('PdfService.getInstance()'));
+      expect(principalAttendance, contains("'/attendance/reports/exports'"));
+      expect(principalAttendance, contains('Staff Check-in'));
       expect(principalAttendance, contains('Reopen Attendance'));
       expect(principalAttendance, contains('Send Reminder'));
       expect(principalAttendance, contains('Export Class Register'));
       expect(principalAttendance, contains('Audit Trail'));
       expect(principalAttendance, contains('Incomplete'));
-      expect(principalAttendance, contains('_unmarkedCount'));
-      expect(principalAttendance, contains("label: 'Subject'"));
-      expect(principalAttendance, contains("label: 'Teacher'"));
-      expect(principalAttendance, isNot(contains("label: 'Subject ID'")));
-      expect(principalAttendance, isNot(contains("label: 'Staff ID'")));
+      expect(principalAttendance, contains('_sessionStaffLabel'));
+      expect(principalAttendance, isNot(contains("'Subject ID'")));
+      expect(principalAttendance, isNot(contains("'Staff ID'")));
+      expect(principalAttendance, isNot(contains('Open class in Classes Hub')));
       expect(principalAttendance, contains('reopenAttendanceSession'));
       expect(principalAttendance, contains('Not Started'));
       expect(principalAttendance, contains('Needs Review'));

@@ -14,6 +14,15 @@ void main() {
     final form = File(
       'lib/features/leave/presentation/screens/teacher_leave_screen/teacher_leave_request_form_screen.dart',
     ).readAsStringSync();
+    final backendLeave = File(
+      'school-backend/internal/handlers/leave.go',
+    ).readAsStringSync();
+    final backendDto = File(
+      'school-backend/internal/models/dto.go',
+    ).readAsStringSync();
+    final teacherSelf = File(
+      'school-backend/internal/handlers/teacher_self.go',
+    ).readAsStringSync();
     final api = readBackendApiSources();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -40,6 +49,19 @@ void main() {
     expect(form, contains('LeaveApplicationRequest('));
     expect(form, contains('staffId: _staffId'));
     expect(form, contains('leaveTypeId: _leaveTypeId'));
+    expect(form, contains('_selectableLeaveTypes'));
+    expect(form, contains('General leave request'));
+    expect(form, contains('No type needed'));
+    expect(
+      form,
+      isNot(
+        contains(
+          'Leave types are not configured yet. Ask Principal to add leave types.',
+        ),
+      ),
+    );
+    expect(form, contains("type['leave_id']"));
+    expect(form, contains("type['code']"));
     expect(form, contains('halfDay: _halfDay'));
     expect(form, isNot(contains('substituteCtrl')));
     expect(form, isNot(contains('showModalBottomSheet(')));
@@ -56,5 +78,14 @@ void main() {
     expect(guard, contains('AppRoutes.teacherLeaveRequestForm: {\'teacher\'}'));
     expect(registry, contains('/teacher-leave-screen/request'));
     expect(main, contains('leave.GET("/balances"'));
+    expect(backendDto, contains('LeaveTypeID string `json:"leave_type_id"`'));
+    expect(
+      backendLeave,
+      contains(
+        'strings.TrimSpace(leaveTypeID) != "" && !leaveTypeBelongsToSchool',
+      ),
+    );
+    expect(backendLeave, contains('LEFT JOIN leave_types'));
+    expect(teacherSelf, contains('LEFT JOIN leave_types'));
   });
 }

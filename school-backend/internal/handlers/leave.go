@@ -321,8 +321,12 @@ func scopedStaffLeaveQuery(c *gin.Context) *gorm.DB {
 	query := database.DB.
 		Model(&models.LeaveApplication{}).
 		Joins("JOIN staffs ON staffs.id = leave_applications.staff_id").
-		Joins("JOIN leave_types ON leave_types.id = leave_applications.leave_type_id").
-		Where("staffs.school_id = ? AND leave_types.school_id = ?", scopedSchoolID(c), scopedSchoolID(c))
+		Joins("LEFT JOIN leave_types ON leave_types.id = leave_applications.leave_type_id").
+		Where(
+			"staffs.school_id = ? AND (leave_applications.leave_type_id = '' OR leave_types.school_id = ?)",
+			scopedSchoolID(c),
+			scopedSchoolID(c),
+		)
 	switch currentRole(c) {
 	case "admin", "principal":
 		return query
@@ -360,7 +364,10 @@ func scopedStaffLeaveBalanceQuery(c *gin.Context) *gorm.DB {
 
 func canSubmitStaffLeave(c *gin.Context, staffID, leaveTypeID string) bool {
 	schoolID := scopedSchoolID(c)
-	if !leaveTypeBelongsToSchool(leaveTypeID, schoolID) || !staffBelongsToSchool(staffID, schoolID) {
+	if !staffBelongsToSchool(staffID, schoolID) {
+		return false
+	}
+	if strings.TrimSpace(leaveTypeID) != "" && !leaveTypeBelongsToSchool(leaveTypeID, schoolID) {
 		return false
 	}
 	switch currentRole(c) {

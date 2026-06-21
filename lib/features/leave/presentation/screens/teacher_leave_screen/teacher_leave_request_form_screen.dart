@@ -133,9 +133,15 @@ class _TeacherLeaveRequestFormScreenState
         child: SizedBox.shrink(),
       );
     }
+    final leaveTypeOptions = _selectableLeaveTypes();
+    final selectedLeaveTypeId =
+        leaveTypeOptions.any((type) => _leaveTypeIdFrom(type) == _leaveTypeId)
+        ? _leaveTypeId
+        : null;
+    final hasLeaveTypes = leaveTypeOptions.isNotEmpty;
     return TeacherFlowScaffold(
       title: 'Apply Leave',
-      subtitle: 'Submit leave for principal/admin approval',
+      subtitle: 'Submit leave for principal approval',
       selectedIndex: 10,
       child: TeacherFlowScrollView(
         children: [
@@ -152,29 +158,40 @@ class _TeacherLeaveRequestFormScreenState
             key: _formKey,
             child: Column(
               children: [
-                DropdownButtonFormField<String>(
-                  value: _leaveTypeId.isEmpty ? null : _leaveTypeId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Leave type',
-                    prefixIcon: Icon(Icons.category_rounded),
+                if (hasLeaveTypes) ...[
+                  DropdownButtonFormField<String>(
+                    value: selectedLeaveTypeId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Leave type',
+                      prefixIcon: Icon(Icons.category_rounded),
+                    ),
+                    items: leaveTypeOptions
+                        .map(
+                          (type) => DropdownMenuItem(
+                            value: _leaveTypeIdFrom(type),
+                            child: Text(_leaveTypeName(type)),
+                          ),
+                        )
+                        .toList(),
+                    validator: (value) =>
+                        (value ?? '').isEmpty ? 'Select leave type.' : null,
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _leaveTypeId = value ?? ''),
                   ),
-                  items: _leaveTypes
-                      .where((type) => _leaveTypeIdFrom(type).isNotEmpty)
-                      .map(
-                        (type) => DropdownMenuItem(
-                          value: _leaveTypeIdFrom(type),
-                          child: Text(_leaveTypeName(type)),
-                        ),
-                      )
-                      .toList(),
-                  validator: (value) =>
-                      (value ?? '').isEmpty ? 'Select leave type.' : null,
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() => _leaveTypeId = value ?? ''),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ] else ...[
+                  TeacherFlowCard(
+                    icon: Icons.event_note_rounded,
+                    title: 'General leave request',
+                    subtitle:
+                        'Leave types are not configured. Submit your dates and reason directly for principal approval.',
+                    status: 'No type needed',
+                    statusColor: teacherFlowAccent,
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Row(
                   children: [
                     Expanded(
@@ -238,7 +255,11 @@ class _TeacherLeaveRequestFormScreenState
                       (value ?? '').trim().isEmpty ? 'Enter reason.' : null,
                 ),
                 const SizedBox(height: 12),
-                _BalancePreview(leaveTypeId: _leaveTypeId, balances: _balances),
+                if (hasLeaveTypes)
+                  _BalancePreview(
+                    leaveTypeId: _leaveTypeId,
+                    balances: _balances,
+                  ),
                 if (_error != null) ...[
                   SizedBox(height: 12),
                   Text(
@@ -267,8 +288,14 @@ class _TeacherLeaveRequestFormScreenState
     );
   }
 
-  String _firstLeaveTypeId() {
-    for (final type in _leaveTypes) {
+  List<Map<String, dynamic>> _selectableLeaveTypes() {
+    return _leaveTypes
+        .where((type) => _leaveTypeIdFrom(type).isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String _firstLeaveTypeId([List<Map<String, dynamic>>? types]) {
+    for (final type in types ?? _selectableLeaveTypes()) {
       final id = _leaveTypeIdFrom(type);
       if (id.isNotEmpty) return id;
     }
@@ -311,23 +338,41 @@ class _TeacherLeaveRequestFormScreenState
               fallback: RoleAccessService.teacherName,
             )
           : _staffName;
-      final types = _leaveTypes.isEmpty
+      final rawTypes = _leaveTypes.isEmpty
           ? await BackendApiClient.instance.getLeaveTypes()
           : _leaveTypes;
-      final balances = _balances.isEmpty && staffId.isNotEmpty
-          ? await BackendApiClient.instance.getLeaveBalances(staffId: staffId)
-          : _balances;
+      final types = rawTypes
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      var balances = _balances;
+      if (_balances.isEmpty && staffId.isNotEmpty) {
+        try {
+          balances = await BackendApiClient.instance.getLeaveBalances(
+            staffId: staffId,
+          );
+        } catch (_) {
+          balances = const [];
+        }
+      }
+      final selectableTypes = types
+          .where((type) => _leaveTypeIdFrom(type).isNotEmpty)
+          .toList();
       if (!mounted) return;
       setState(() {
         _staffId = staffId;
         _staffName = staffName;
         _leaveTypes = types;
         _balances = balances;
-        _leaveTypeId = _firstLeaveTypeId();
+        _leaveTypeId =
+            selectableTypes.any(
+              (type) => _leaveTypeIdFrom(type) == _leaveTypeId,
+            )
+            ? _leaveTypeId
+            : _firstLeaveTypeId(selectableTypes);
         _loadingContext = false;
-        if (_staffId.isEmpty || _leaveTypes.isEmpty) {
-          _error =
-              'Leave context is incomplete. Refresh this screen after teacher profile sync.';
+        if (_staffId.isEmpty) {
+          _error = 'Teacher profile is still syncing. Refresh and try again.';
         }
       });
       return;
@@ -352,7 +397,9 @@ class _TeacherLeaveRequestFormScreenState
   }
 
   String _leaveTypeIdFrom(Map<String, dynamic> type) {
-    return teacherFlowText(type['id'] ?? type['leave_type_id']);
+    return teacherFlowText(
+      type['id'] ?? type['leave_type_id'] ?? type['leave_id'] ?? type['code'],
+    );
   }
 
   String _leaveTypeName(Map<String, dynamic> type) {
@@ -363,7 +410,10 @@ class _TeacherLeaveRequestFormScreenState
           type['type_name'],
       fallback: teacherFlowText(
         type['id'] ?? type['leave_type_id'],
-        fallback: 'Leave',
+        fallback: teacherFlowText(
+          type['leave_id'] ?? type['code'],
+          fallback: 'Leave',
+        ),
       ),
     );
   }

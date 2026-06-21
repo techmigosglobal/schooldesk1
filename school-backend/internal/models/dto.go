@@ -167,7 +167,7 @@ type CreateFeeStructureRequest struct {
 
 type CreateLeaveApplicationRequest struct {
 	StaffID     string `json:"staff_id" binding:"required"`
-	LeaveTypeID string `json:"leave_type_id" binding:"required"`
+	LeaveTypeID string `json:"leave_type_id"`
 	FromDate    string `json:"from_date" binding:"required"`
 	ToDate      string `json:"to_date" binding:"required"`
 	HalfDay     bool   `json:"half_day"`

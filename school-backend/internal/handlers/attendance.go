@@ -262,12 +262,8 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 	}
 	for _, att := range req.Attendances {
 		status := normalizeStudentAttendanceStatus(att.Status)
-		if !validAttendanceStatus(status) {
+		if !validStudentAttendanceStatus(status) {
 			fail(c, http.StatusBadRequest, "Invalid attendance status")
-			return
-		}
-		if studentAttendanceReasonRequired(status) && strings.TrimSpace(att.Reason) == "" {
-			fail(c, http.StatusBadRequest, "reason is required for "+studentAttendanceReasonStatusLabel(status))
 			return
 		}
 		if err := validateStudentEnrollmentForSession(scopedSchoolID(c), session, att.StudentID, att.EnrollmentID); err != nil {
@@ -285,10 +281,10 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 		}
 		for _, att := range req.Attendances {
 			status := normalizeStudentAttendanceStatus(att.Status)
-			if !validAttendanceStatus(status) {
+			if !validStudentAttendanceStatus(status) {
 				return errInvalidAttendanceStatus
 			}
-			if strings.EqualFold(status, "present") || strings.EqualFold(status, "late") {
+			if strings.EqualFold(status, "present") {
 				presentCount++
 			}
 			attendance := models.StudentAttendance{
@@ -296,7 +292,7 @@ func (h *AttendanceHandler) MarkStudentAttendance(c *gin.Context) {
 				StudentID:    att.StudentID,
 				EnrollmentID: att.EnrollmentID,
 				Status:       status,
-				Reason:       strings.TrimSpace(att.Reason),
+				Reason:       "",
 				MarkedAt:     now,
 				MarkedBy:     &markedBy,
 			}
@@ -462,33 +458,20 @@ func validAttendanceStatus(status string) bool {
 	}
 }
 
-func normalizeStudentAttendanceStatus(status string) string {
-	status = strings.ToLower(strings.TrimSpace(status))
-	status = strings.ReplaceAll(status, "-", "_")
-	status = strings.ReplaceAll(status, " ", "_")
-	return status
-}
-
-func studentAttendanceReasonRequired(status string) bool {
+func validStudentAttendanceStatus(status string) bool {
 	switch normalizeStudentAttendanceStatus(status) {
-	case "absent", "late", "leave", "half_day":
+	case "present", "absent":
 		return true
 	default:
 		return false
 	}
 }
 
-func studentAttendanceReasonStatusLabel(status string) string {
-	switch normalizeStudentAttendanceStatus(status) {
-	case "half_day":
-		return "Half Day"
-	default:
-		label := strings.ReplaceAll(normalizeStudentAttendanceStatus(status), "_", " ")
-		if label == "" {
-			return "attendance status"
-		}
-		return strings.Title(label)
-	}
+func normalizeStudentAttendanceStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	status = strings.ReplaceAll(status, "-", "_")
+	status = strings.ReplaceAll(status, " ", "_")
+	return status
 }
 
 func normalizeAttendanceSessionLifecycle(session *models.AttendanceSession) {

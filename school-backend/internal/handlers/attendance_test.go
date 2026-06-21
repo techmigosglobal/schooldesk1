@@ -202,7 +202,7 @@ func TestTeacherCanSaveDraftThenSubmitFinalAttendance(t *testing.T) {
 	assert.NotNil(t, submitted.SubmittedAt)
 }
 
-func TestAttendanceRequiresReasonForNonPresentStatuses(t *testing.T) {
+func TestTeacherAttendanceAcceptsAbsentWithoutReason(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	session := models.AttendanceSession{
 		BaseModel:      models.BaseModel{ID: "attendance-reason-session"},
@@ -223,8 +223,37 @@ func TestAttendanceRequiresReasonForNonPresentStatuses(t *testing.T) {
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
 
+	assert.Equal(t, http.StatusOK, resp.Code)
+
+	var saved models.StudentAttendance
+	assert.NoError(t, database.DB.First(&saved, "session_id = ? AND student_id = ?", session.ID, f.studentID).Error)
+	assert.Equal(t, "absent", saved.Status)
+	assert.Empty(t, saved.Reason)
+}
+
+func TestTeacherAttendanceRejectsNonBinaryStudentStatuses(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	session := models.AttendanceSession{
+		BaseModel:      models.BaseModel{ID: "attendance-binary-session"},
+		SectionID:      f.sectionID,
+		AcademicYearID: f.yearID,
+		SubjectID:      f.subjectID,
+		StaffID:        f.teacherStaffID,
+		Date:           time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC),
+		PeriodNumber:   1,
+		Status:         "draft",
+	}
+	assert.NoError(t, database.DB.Create(&session).Error)
+
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/attendance/sessions/:session_id/mark", NewAttendanceHandler().MarkStudentAttendance)
+
+	body := `{"finalize":false,"attendances":[{"student_id":"` + f.studentID + `","enrollment_id":"` + f.enrollmentID + `","status":"late"}]}`
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, httptest.NewRequest(http.MethodPost, "/attendance/sessions/"+session.ID+"/mark", strings.NewReader(body)))
+
 	assert.Equal(t, http.StatusBadRequest, resp.Code)
-	assert.Contains(t, resp.Body.String(), "reason is required")
+	assert.Contains(t, resp.Body.String(), "Invalid attendance status")
 }
 
 func TestTeacherRequestsCorrectionAndPrincipalReopenStoresReason(t *testing.T) {

@@ -1,12 +1,14 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
-import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 
-enum _AttendanceView { classes, sessions, students, reports }
+enum _AttendanceView { classes, monitor, students, reports }
 
 class PrincipalAttendanceScreen extends StatefulWidget {
   const PrincipalAttendanceScreen({super.key});
@@ -19,11 +21,13 @@ class PrincipalAttendanceScreen extends StatefulWidget {
 class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   bool _loading = true;
   bool _detailLoading = false;
+  bool _exporting = false;
   String? _error;
   String _search = '';
   _AttendanceView _view = _AttendanceView.classes;
   String _selectedSectionId = '';
   String _selectedStudentId = '';
+  late final PageController _pageController;
 
   List<StaffAttendanceModel> _staffAttendance = [];
   List<StaffModel> _staff = [];
@@ -31,13 +35,22 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   List<AttendanceSessionModel> _sessions = [];
   List<StudentModel> _sectionStudents = [];
   List<Map<String, dynamic>> _studentAttendanceRecords = [];
+  final Map<String, List<StudentModel>> _studentsBySection = {};
+  final Map<String, List<Map<String, dynamic>>> _recordsByStudent = {};
 
   String get _todayText => DateTime.now().toIso8601String().split('T').first;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -73,13 +86,26 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = 'Unable to load attendance directory from backend. $error';
+        _error = 'Unable to load attendance dashboard. $error';
         _loading = false;
       });
     }
   }
 
   Future<void> _loadSectionStudents(String sectionId) async {
+    final cached = _studentsBySection[sectionId];
+    if (cached != null) {
+      setState(() {
+        _sectionStudents = cached;
+        _selectedStudentId =
+            _selectedStudentId.isNotEmpty &&
+                cached.any((student) => student.id == _selectedStudentId)
+            ? _selectedStudentId
+            : (cached.isEmpty ? '' : cached.first.id);
+      });
+      await _loadRecordsForStudents(cached);
+      return;
+    }
     setState(() => _detailLoading = true);
     try {
       final response = await BackendApiClient.instance.getStudents(
@@ -89,6 +115,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       );
       if (!mounted) return;
       setState(() {
+        _studentsBySection[sectionId] = response.data;
         _sectionStudents = response.data;
         _selectedStudentId =
             _selectedStudentId.isNotEmpty &&
@@ -97,6 +124,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
             : (response.data.isEmpty ? '' : response.data.first.id);
         _detailLoading = false;
       });
+      await _loadRecordsForStudents(response.data);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -122,6 +150,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           );
       if (!mounted) return;
       setState(() {
+        _recordsByStudent[studentId] = records;
         _studentAttendanceRecords = records;
         _detailLoading = false;
       });
@@ -135,89 +164,202 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     }
   }
 
+  Future<void> _loadRecordsForStudents(List<StudentModel> students) async {
+    final missing = students
+        .where((student) => !_recordsByStudent.containsKey(student.id))
+        .take(30)
+        .toList();
+    if (missing.isEmpty) return;
+    final results = await Future.wait(
+      missing.map((student) async {
+        try {
+          final records = await BackendApiClient.instance
+              .getStudentAttendanceRecords(
+                student.id,
+                month: DateTime.now().month,
+                year: DateTime.now().year,
+              );
+          return _StudentRecordLoad.success(student.id, records);
+        } catch (error) {
+          return _StudentRecordLoad.failure(student.id, error);
+        }
+      }),
+    );
+    if (!mounted) return;
+    final failures = results.where((result) => result.error != null).toList();
+    setState(() {
+      for (final result in results.where((result) => result.error == null)) {
+        _recordsByStudent[result.studentId] = result.records;
+      }
+    });
+    if (failures.isNotEmpty) {
+      _showSnack(
+        '${failures.length} student attendance row${failures.length == 1 ? '' : 's'} could not be loaded.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cards = _directoryCards;
-    return PrincipalDirectoryScaffold(
-      title: 'Student Attendance Monitor',
-      subtitle: 'Class-period status, correction review, and registers',
-      loading: _loading,
-      error: _error,
-      onRefresh: _load,
-      filters: _buildFilters(),
-      isEmpty: !_loading && _error == null && cards.isEmpty,
-      emptyState: const EmptyStateWidget(
-        icon: Icons.fact_check_outlined,
-        title: 'No attendance rows found',
-        description: 'Refresh the directory or adjust the attendance filters.',
-      ),
-      slivers: [
-        SliverToBoxAdapter(
-          child: PrincipalDirectoryMetricStrip(metrics: _metrics),
+    return PopScope(
+      canPop: _view == _AttendanceView.classes,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _setView(_AttendanceView.classes);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7FAFE),
+        body: SafeArea(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+              ? _errorView()
+              : Column(
+                  children: [
+                    _topBar(),
+                    _searchAndTabs(),
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          setState(() => _view = _AttendanceView.values[index]);
+                        },
+                        children: [
+                          _viewPage(_classesDashboard()),
+                          _viewPage(_monitorView()),
+                          _viewPage(_studentsView()),
+                          _viewPage(_reportsView()),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
         ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-          sliver: SliverList.builder(
-            itemCount: cards.length,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.only(bottom: 13),
-              child: cards[index],
-            ),
+        bottomNavigationBar: _bottomBar(),
+      ),
+    );
+  }
+
+  Widget _viewPage(Widget child) {
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        slivers: [
+          SliverToBoxAdapter(child: child),
+          const SliverToBoxAdapter(child: SizedBox(height: 88)),
+        ],
+      ),
+    );
+  }
+
+  Widget _errorView() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(22),
+      children: [
+        _topBar(),
+        const SizedBox(height: 32),
+        _SoftCard(
+          child: Column(
+            children: [
+              const Icon(
+                Icons.cloud_off_rounded,
+                color: Color(0xFFEF4444),
+                size: 36,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Attendance data unavailable',
+                style: _UiText.title,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: _UiText.caption,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  List<PrincipalDirectoryMetric> get _metrics => [
-    PrincipalDirectoryMetric(
-      label: 'Sessions Today',
-      value: '${_sessions.length}',
-      icon: Icons.fact_check_outlined,
-      color: context.appTheme.primary,
-      tone: const Color(0xFFEFF6FF),
-    ),
-    PrincipalDirectoryMetric(
-      label: 'Present Today',
-      value: '$_presentStudentsToday',
-      icon: Icons.groups_outlined,
-      color: context.appTheme.success,
-      tone: const Color(0xFFECFDF3),
-    ),
-    PrincipalDirectoryMetric(
-      label: 'Marked Today',
-      value: '$_markedStudentsToday/$_expectedStudentsToday',
-      icon: Icons.how_to_reg_outlined,
-      color: Colors.teal,
-      tone: const Color(0xFFE6FFFB),
-    ),
-    PrincipalDirectoryMetric(
-      label: 'Staff Check-in Monitor',
-      value:
-          '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length}',
-      icon: Icons.badge_outlined,
-      color: Colors.indigo,
-      tone: const Color(0xFFEAF0FF),
-    ),
-    PrincipalDirectoryMetric(
-      label: 'Exceptions',
-      value: '${_exceptions.length}',
-      icon: Icons.warning_amber_rounded,
-      color: _exceptions.isEmpty
-          ? context.appTheme.success
-          : context.appTheme.warning,
-      tone: const Color(0xFFFFF7ED),
-    ),
-  ];
-
-  Widget _buildFilters() {
+  Widget _topBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 4, 22, 4),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_screenTitle, style: _UiText.headline),
+                const SizedBox(height: 4),
+                Text(_screenSubtitle, style: _UiText.caption),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _load,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String get _screenTitle {
+    return switch (_view) {
+      _AttendanceView.classes => 'Student Attendance Monitor',
+      _AttendanceView.monitor => 'Monitor',
+      _AttendanceView.students => 'Students',
+      _AttendanceView.reports => 'Reports',
+    };
+  }
+
+  String get _screenSubtitle {
+    return switch (_view) {
+      _AttendanceView.classes => 'Welcome back, Principal',
+      _AttendanceView.monitor => 'Class registers and correction review',
+      _AttendanceView.students => 'Search and inspect student attendance',
+      _AttendanceView.reports => 'Attendance insights and exports',
+    };
+  }
+
+  Widget _searchAndTabs() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
       child: Column(
         children: [
-          PrincipalDirectorySearchBox(
-            hint: 'Search class, staff, student, status...',
-            onChanged: (value) => setState(() => _search = value),
+          Row(
+            children: [
+              Expanded(
+                child: _SearchBox(
+                  hint: _view == _AttendanceView.students
+                      ? 'Search by name or admission no.'
+                      : 'Search classes, students, staff...',
+                  onChanged: (value) => setState(() => _search = value),
+                ),
+              ),
+              if (_view == _AttendanceView.students) ...[
+                const SizedBox(width: 10),
+                _IconSquare(
+                  icon: Icons.filter_alt_outlined,
+                  onTap: () => _showSnack('Filters are applied by class chips'),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -226,402 +368,492 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               children: [
-                _modeChip(
-                  _AttendanceView.classes,
-                  'Classes',
-                  Icons.apartment_outlined,
+                _SegmentChip(
+                  label: 'Classes',
+                  selected: _view == _AttendanceView.classes,
+                  onTap: () => _setView(_AttendanceView.classes),
                 ),
-                _modeChip(
-                  _AttendanceView.sessions,
-                  'Monitor',
-                  Icons.list_alt_outlined,
+                _SegmentChip(
+                  label: 'Monitor',
+                  selected: _view == _AttendanceView.monitor,
+                  onTap: () => _setView(_AttendanceView.monitor),
                 ),
-                _modeChip(
-                  _AttendanceView.students,
-                  'Students',
-                  Icons.groups_outlined,
+                _SegmentChip(
+                  label: 'Students',
+                  selected: _view == _AttendanceView.students,
+                  onTap: () => _setView(_AttendanceView.students),
                 ),
-                _modeChip(
-                  _AttendanceView.reports,
-                  'Reports',
-                  Icons.summarize_outlined,
+                _SegmentChip(
+                  label: 'Reports',
+                  selected: _view == _AttendanceView.reports,
+                  onTap: () => _setView(_AttendanceView.reports),
                 ),
               ],
             ),
           ),
-          if (_view == _AttendanceView.students && _sections.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 42,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  for (final section in _sections)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: PrincipalDirectoryChip(
-                        label: _sectionLabel(section.id),
-                        selected: _selectedSectionId == section.id,
-                        icon: Icons.apartment_rounded,
-                        onTap: () async {
-                          setState(() => _selectedSectionId = section.id);
-                          await _loadSectionStudents(section.id);
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );
   }
 
-  Widget _modeChip(_AttendanceView view, String label, IconData icon) {
+  void _setView(_AttendanceView view) {
+    final index = _AttendanceView.values.indexOf(view);
+    setState(() => _view = view);
+    if (!_pageController.hasClients) return;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  Widget _classesDashboard() {
+    final recent = _filteredStudents.take(4).toList();
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: PrincipalDirectoryChip(
-        label: label,
-        icon: icon,
-        selected: _view == view,
-        onTap: () => setState(() => _view = view),
-      ),
-    );
-  }
-
-  List<Widget> get _directoryCards {
-    final rows = switch (_view) {
-      _AttendanceView.classes => _classAttendanceCards,
-      _AttendanceView.sessions => _sessions.map(_sessionCard).toList(),
-      _AttendanceView.students =>
-        _detailLoading
-            ? [_loadingCard('Loading students', 'Fetching selected class roll')]
-            : _sectionStudents.map(_studentCard).toList(),
-      _AttendanceView.reports => _attendanceViewCards,
-    };
-    final query = _search.trim().toLowerCase();
-    if (query.isEmpty) return rows;
-    return rows.where((card) => _widgetText(card).contains(query)).toList();
-  }
-
-  List<Widget> get _classAttendanceCards {
-    final sections = _sections.isEmpty
-        ? _sessions
-              .map((session) => session.sectionId)
-              .where((id) => id.trim().isNotEmpty)
-              .toSet()
-              .map((id) => _AttendanceSectionSummary(id, _sectionLabel(id)))
-              .toList()
-        : _sections.map((section) {
-            return _AttendanceSectionSummary(
-              section.id,
-              _sectionLabel(section.id),
-            );
-          }).toList();
-    sections.sort((left, right) => left.label.compareTo(right.label));
-    return [for (final section in sections) _classAttendanceCard(section)];
-  }
-
-  List<Widget> get _attendanceViewCards => [
-    _reportCard('Daily attendance view', 'pdf'),
-    _reportCard('Class attendance register', 'csv'),
-    for (final session in _exceptions) _exceptionCard(session),
-  ];
-
-  Widget _classAttendanceCard(_AttendanceSectionSummary section) {
-    final sessions = _sessions
-        .where((session) => session.sectionId == section.sectionId)
-        .toList();
-    final present = sessions.fold(0, (sum, row) => sum + _effectivePresentCount(row));
-    final total = sessions.fold(0, (sum, row) => sum + _effectiveTotalStudents(row));
-    final percent = total <= 0 ? 0 : (present / total) * 100;
-    final status = sessions.isEmpty
-        ? 'Not Started'
-        : sessions.any((row) => row.status == 'needs_review')
-        ? 'Needs Review'
-        : sessions.any((row) => row.status == 'draft')
-        ? 'Draft'
-        : sessions.any((row) => row.status == 'reopened')
-        ? 'Reopened'
-        : 'Submitted';
-    final statusColor = total <= 0
-        ? context.appTheme.warning
-        : percent < 75
-        ? context.appTheme.warning
-        : context.appTheme.success;
-    return PrincipalDirectoryCard(
-      icon: Icons.apartment_outlined,
-      title: section.label,
-      subtitle: sessions.isEmpty
-          ? 'No attendance sessions returned for today'
-          : '${sessions.length} sessions | $present/$total marked present',
-      status: status,
-      statusColor: statusColor,
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.percent_rounded,
-          label: '${percent.toStringAsFixed(0)}%',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.fact_check_outlined,
-          label: '${sessions.length} sessions',
-        ),
-      ],
-      trailing: IconButton(
-        tooltip: 'Open class in Classes Hub',
-        icon: const Icon(Icons.account_tree_outlined),
-        onPressed: () =>
-            _openClassesHub(action: 'attendance', sectionId: section.sectionId),
-      ),
-      onTap: () async {
-        setState(() {
-          _selectedSectionId = section.sectionId;
-          _view = _AttendanceView.students;
-        });
-        await _loadSectionStudents(section.sectionId);
-      },
-    );
-  }
-
-  Widget _exceptionCard(AttendanceSessionModel session) {
-    final incomplete = _isIncompleteSession(session);
-    return PrincipalDirectoryCard(
-      icon: incomplete
-          ? Icons.radio_button_unchecked_rounded
-          : Icons.warning_amber_rounded,
-      title: _sectionLabel(session.sectionId),
-      subtitle: incomplete
-          ? 'Period ${session.periodNumber} | ${_sessionStaffLabel(session)} has not submitted final attendance'
-          : 'Period ${session.periodNumber} | ${session.presentCount}/${session.totalStudents} present',
-      status: incomplete ? 'Incomplete' : 'Review',
-      statusColor: context.appTheme.warning,
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.event_available_outlined,
-          label: _dateOnly(session.date),
-        ),
-        PrincipalInfoPill(
-          icon: Icons.groups_outlined,
-          label: incomplete
-              ? '${_unmarkedCount(session)} unmarked'
-              : '${_attendancePercent(session).toStringAsFixed(0)}%',
-        ),
-      ],
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: principalDirectoryMuted,
-      ),
-      onTap: () => _openSessionDetail(session),
-    );
-  }
-
-  Widget _sessionCard(AttendanceSessionModel session) {
-    final status = _sessionStatusLabel(session);
-    final counts = _sessionStatusCounts(session);
-    return PrincipalDirectoryCard(
-      icon: Icons.fact_check_outlined,
-      title: _sectionLabel(session.sectionId),
-      subtitle:
-          'Teacher ${_sessionStaffLabel(session)} | Period ${session.periodNumber} | ${_dateOnly(session.date)}',
-      status: status,
-      statusColor: _sessionStatusColor(session),
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.check_circle_outline,
-          label: 'Present ${counts['present']}',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.cancel_outlined,
-          label: 'Absent ${counts['absent']}',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.schedule_outlined,
-          label: 'Late ${counts['late']}',
-        ),
-        PrincipalInfoPill(
-          icon: Icons.event_available_outlined,
-          label: 'Leave ${counts['leave']}',
-        ),
-        if (_isIncompleteSession(session))
-          PrincipalInfoPill(
-            icon: Icons.radio_button_unchecked_rounded,
-            label: '${_unmarkedCount(session)} unmarked',
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('Today at a glance', action: 'View all'),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 0.9,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            children: [
+              _MetricTile(
+                icon: Icons.calendar_month_rounded,
+                value: '${_sessions.length}',
+                label: 'Sessions\nToday',
+                color: const Color(0xFF1976E8),
+                tone: const Color(0xFFEAF3FF),
+              ),
+              _MetricTile(
+                icon: Icons.check_circle_outline_rounded,
+                value: '$_presentStudentsToday',
+                label: 'Present\nToday',
+                color: const Color(0xFF24A765),
+                tone: const Color(0xFFEAFBF2),
+              ),
+              _MetricTile(
+                icon: Icons.groups_2_outlined,
+                value: '$_markedStudentsToday/$_expectedStudentsToday',
+                label: 'Marked\nToday',
+                color: const Color(0xFF10A7A7),
+                tone: const Color(0xFFE7FBFA),
+              ),
+            ],
           ),
-        PrincipalInfoPill(
-          icon: Icons.menu_book_outlined,
-          label: _sessionSubjectLabel(session),
-        ),
-      ],
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: principalDirectoryMuted,
+          const SizedBox(height: 10),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.9,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            children: [
+              _MetricTile(
+                icon: Icons.badge_outlined,
+                value:
+                    '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length}',
+                label: 'Staff Check-in\nMonitor',
+                color: const Color(0xFF6557E8),
+                tone: const Color(0xFFF0EEFF),
+                compact: true,
+              ),
+              _MetricTile(
+                icon: Icons.warning_amber_rounded,
+                value: '${_exceptions.length}',
+                label: 'Exceptions',
+                color: const Color(0xFFF59E0B),
+                tone: const Color(0xFFFFF5E5),
+                compact: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _sectionHeader('Recent Students', action: 'View all'),
+          const SizedBox(height: 12),
+          _SoftCard(
+            padding: EdgeInsets.zero,
+            child: recent.isEmpty
+                ? const _EmptyLine('No students loaded for selected class.')
+                : Column(
+                    children: [
+                      for (var i = 0; i < recent.length; i++)
+                        _StudentRow(
+                          student: recent[i],
+                          sectionLabel: _sectionLabel(
+                            recent[i].currentSectionId ?? _selectedSectionId,
+                          ),
+                          percent: recent[i].attendancePercent,
+                          onTap: () => _openStudent(recent[i]),
+                          showDivider: i != recent.length - 1,
+                        ),
+                    ],
+                  ),
+          ),
+        ],
       ),
-      onTap: () => _openSessionDetail(session),
     );
   }
 
-  Widget _studentCard(StudentModel student) {
-    final selected = _selectedStudentId == student.id;
-    return PrincipalDirectoryCard(
-      icon: Icons.person_outline_rounded,
-      title: student.fullName.isEmpty ? student.id : student.fullName,
-      subtitle: 'Admission ${student.admissionNumber} | ${student.status}',
-      status: selected ? 'Selected' : student.status,
-      statusColor: selected
-          ? context.appTheme.primary
-          : context.appTheme.success,
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.apartment_rounded,
-          label: _sectionLabel(student.currentSectionId ?? _selectedSectionId),
-        ),
-        PrincipalInfoPill(
-          icon: Icons.percent_rounded,
-          label: '${student.attendancePercent.toStringAsFixed(0)}%',
-        ),
-      ],
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: principalDirectoryMuted,
+  Widget _monitorView() {
+    final sessions = _filteredSessions;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('Class Registers', action: _todayText),
+          const SizedBox(height: 12),
+          if (sessions.isEmpty)
+            const _SoftCard(child: _EmptyLine('No sessions found today.'))
+          else
+            for (final session in sessions)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SoftCard(
+                  child: Row(
+                    children: [
+                      _IconBubble(
+                        icon: _isIncompleteSession(session)
+                            ? Icons.pending_actions_rounded
+                            : Icons.fact_check_rounded,
+                        color: _sessionStatusColor(session),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _sectionLabel(session.sectionId),
+                              style: _UiText.title,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_sessionStaffLabel(session)} · ${_attendancePercent(session).toStringAsFixed(0)}%',
+                              style: _UiText.caption,
+                            ),
+                          ],
+                        ),
+                      ),
+                      _StatusPill(
+                        label: _sessionStatusLabel(session),
+                        color: _sessionStatusColor(session),
+                      ),
+                      IconButton(
+                        onPressed: () => _openSessionDetail(session),
+                        icon: const Icon(Icons.chevron_right_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        ],
       ),
-      selected: selected,
-      onTap: () async {
-        await _loadStudentAttendance(student.id);
-        if (!mounted) return;
-        _openStudentDetail(student);
-      },
     );
   }
 
-  Widget _reportCard(String title, String format) {
-    return PrincipalDirectoryCard(
-      icon: format == 'pdf'
-          ? Icons.picture_as_pdf_outlined
-          : Icons.table_chart_outlined,
-      title: title,
-      subtitle:
-          'View class-wise attendance for ${_sectionLabel(_selectedSectionId)}',
-      status: 'View',
-      statusColor: context.appTheme.primary,
-      chips: [
-        PrincipalInfoPill(
-          icon: Icons.calendar_today_outlined,
-          label: _todayText,
-        ),
-        PrincipalInfoPill(
-          icon: Icons.apartment_rounded,
-          label: _sectionLabel(_selectedSectionId),
-        ),
-      ],
-      trailing: IconButton(
-        tooltip: 'Open class in Classes Hub',
-        icon: const Icon(Icons.account_tree_outlined),
-        onPressed: () => _openClassesHub(action: 'attendance'),
+  Widget _studentsView() {
+    final students = _filteredStudents;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 38,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                _SegmentChip(
+                  label: 'All Classes',
+                  selected: _selectedSectionId.isEmpty,
+                  onTap: () => setState(() => _selectedSectionId = ''),
+                ),
+                for (final section in _sections)
+                  _SegmentChip(
+                    label: _sectionLabel(section.id).replaceAll(' - ', ' '),
+                    selected: _selectedSectionId == section.id,
+                    onTap: () async {
+                      setState(() => _selectedSectionId = section.id);
+                      await _loadSectionStudents(section.id);
+                    },
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('All Students (${students.length})', style: _UiText.section),
+          const SizedBox(height: 12),
+          if (_detailLoading)
+            const _SoftCard(child: _EmptyLine('Loading students...'))
+          else if (students.isEmpty)
+            const _SoftCard(child: _EmptyLine('No students found.'))
+          else
+            for (final student in students)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SoftCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      _StudentRow(
+                        student: student,
+                        sectionLabel: _sectionLabel(
+                          student.currentSectionId ?? _selectedSectionId,
+                        ),
+                        percent: _studentAttendancePercent(student),
+                        onTap: () => _openStudent(student),
+                      ),
+                      _StudentAttendanceMeta(
+                        record: _latestStudentRecord(student.id),
+                        dateLabel: _recordDate,
+                        timeLabel: _recordTime,
+                        statusLabel: _recordStatus,
+                        teacherLabel: _recordTeacher,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        ],
       ),
-      onTap: () => _openReportDetail(title, format),
     );
   }
 
-  Widget _loadingCard(String title, String subtitle) {
-    return PrincipalDirectoryCard(
-      icon: Icons.hourglass_top_rounded,
-      title: title,
-      subtitle: subtitle,
-      status: 'Loading',
-      statusColor: context.appTheme.primary,
+  Widget _reportsView() {
+    final reports = [
+      _ReportItem(
+        'Daily Attendance Report',
+        'View class-wise attendance for today',
+        Icons.calendar_month_rounded,
+        const Color(0xFF1976E8),
+        () => _openReportDetail('Daily Attendance Report', 'pdf'),
+      ),
+      _ReportItem(
+        'Class Attendance Report',
+        'Detailed report for a specific class',
+        Icons.assignment_rounded,
+        const Color(0xFF6557E8),
+        () => _openReportDetail('Class Attendance Report', 'csv'),
+      ),
+      _ReportItem(
+        'Daily Summary',
+        'Overall attendance summary for today',
+        Icons.summarize_rounded,
+        const Color(0xFF13B8A6),
+        () => _openReportDetail('Daily Summary', 'pdf'),
+      ),
+      _ReportItem(
+        'Exceptions Report',
+        'Students with attendance issues',
+        Icons.warning_amber_rounded,
+        const Color(0xFFF97316),
+        () => _openReportDetail('Exceptions Report', 'csv'),
+      ),
+      _ReportItem(
+        'Staff Check-in Report',
+        'View staff check-in activity',
+        Icons.badge_rounded,
+        const Color(0xFF8B5CF6),
+        () => _openReportDetail('Staff Check-in Report', 'pdf'),
+      ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SoftCard(
+            color: const Color(0xFFEAF5FF),
+            child: Row(
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Attendance Insights', style: _UiText.title),
+                      SizedBox(height: 8),
+                      Text(
+                        'Get complete attendance reports and analytics for your school.',
+                        style: _UiText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                _IconBubble(
+                  icon: Icons.analytics_outlined,
+                  color: const Color(0xFF1976E8),
+                  large: true,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text('Daily Reports', style: _UiText.section),
+          const SizedBox(height: 12),
+          for (final item in reports)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ReportRow(item: item),
+            ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _exporting
+                  ? null
+                  : () => _exportAttendanceReport('Attendance Summary', 'pdf'),
+              icon: const Icon(Icons.ios_share_rounded),
+              label: Text(
+                _exporting ? 'Preparing...' : 'Export / Share Reports',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title, {String action = ''}) {
+    return Row(
+      children: [
+        Expanded(child: Text(title, style: _UiText.section)),
+        if (action.isNotEmpty) Text(action, style: _UiText.link),
+      ],
+    );
+  }
+
+  Widget _bottomBar() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFEAF0F7))),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _BottomItem(
+                icon: Icons.home_rounded,
+                label: 'Classes',
+                selected: _view == _AttendanceView.classes,
+                onTap: () => _setView(_AttendanceView.classes),
+              ),
+              _BottomItem(
+                icon: Icons.groups_2_outlined,
+                label: 'Students',
+                selected: _view == _AttendanceView.students,
+                onTap: () => _setView(_AttendanceView.students),
+              ),
+              _BottomItem(
+                icon: Icons.fact_check_outlined,
+                label: 'Monitor',
+                selected: _view == _AttendanceView.monitor,
+                onTap: () => _setView(_AttendanceView.monitor),
+              ),
+              _BottomItem(
+                icon: Icons.summarize_outlined,
+                label: 'Reports',
+                selected: _view == _AttendanceView.reports,
+                onTap: () => _setView(_AttendanceView.reports),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openStudent(StudentModel student) async {
+    if (_recordsByStudent.containsKey(student.id)) {
+      _studentAttendanceRecords = _recordsByStudent[student.id] ?? const [];
+    } else {
+      await _loadStudentAttendance(student.id);
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => _StudentDetailPage(
+          student: student,
+          sectionLabel: _sectionLabel(student.currentSectionId ?? ''),
+          records: _studentAttendanceRecords,
+          onReopen: _sessions.isEmpty
+              ? null
+              : () => _openSessionDetail(_sessions.first),
+        ),
+      ),
     );
   }
 
   Future<void> _openSessionDetail(AttendanceSessionModel session) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalDetailPage(
-          title: _sectionLabel(session.sectionId),
+    final reason = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PrincipalDetailCard(
-              title: 'Attendance Session',
-              trailing: PrincipalStatusPill(
-                label: _sessionStatusLabel(session),
-                color: _sessionStatusColor(session),
-              ),
-              children: [
-                PrincipalDetailRow(
-                  label: 'Date',
-                  value: _dateOnly(session.date),
-                ),
-                PrincipalDetailRow(
-                  label: 'Period',
-                  value: '${session.periodNumber}',
-                ),
-                PrincipalDetailRow(
-                  label: 'Present',
-                  value: '${session.presentCount}/${session.totalStudents}',
-                ),
-                PrincipalDetailRow(
-                  label: 'Attendance',
-                  value: '${_attendancePercent(session).toStringAsFixed(1)}%',
-                ),
-                PrincipalDetailRow(
-                  label: 'Subject',
-                  value: _sessionSubjectLabel(session),
-                ),
-                PrincipalDetailRow(
-                  label: 'Teacher',
-                  value: _sessionStaffLabel(session),
-                ),
-                PrincipalDetailRow(
-                  label: 'Reopen reason',
-                  value: session.reopenReason.isEmpty
-                      ? 'Not reopened'
-                      : session.reopenReason,
-                ),
-                PrincipalDetailRow(
-                  label: 'Correction request',
-                  value: session.correctionReason.isEmpty
-                      ? 'None'
-                      : session.correctionReason,
-                ),
-                PrincipalActionTile(
-                  icon: Icons.lock_open_rounded,
-                  title: 'Reopen Attendance',
-                  subtitle: 'Allow the assigned teacher to submit a correction',
-                  onTap: () => _reopenAttendance(session),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.notifications_active_outlined,
-                  title: 'Send Reminder',
-                  subtitle: 'Notify teacher ${_sessionStaffLabel(session)}',
-                  onTap: () => _showSnack(
-                    'Reminder queued for ${_sessionStaffLabel(session)}',
-                    success: true,
-                  ),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.table_chart_outlined,
-                  title: 'Export Class Register',
-                  subtitle: 'Open the attendance register export',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openReportDetail('Class attendance register', 'csv');
-                  },
-                ),
-                PrincipalActionTile(
-                  icon: Icons.history_rounded,
-                  title: 'Audit Trail',
-                  subtitle: _auditTrailSummary(session),
-                ),
-              ],
+            Text(_sectionLabel(session.sectionId), style: _UiText.headline),
+            const SizedBox(height: 8),
+            Text(
+              '${_sessionStaffLabel(session)} · ${_sessionStatusLabel(session)} · ${_attendancePercent(session).toStringAsFixed(0)}%',
+              style: _UiText.caption,
+            ),
+            const SizedBox(height: 18),
+            ListTile(
+              leading: const Icon(Icons.lock_open_rounded),
+              title: const Text('Reopen Attendance'),
+              subtitle: const Text('Allow the teacher to submit a correction'),
+              onTap: () async {
+                final entered = await _promptReason('Reopen Attendance');
+                if (!mounted) return;
+                Navigator.pop(context, entered);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_active_outlined),
+              title: const Text('Send Reminder'),
+              subtitle: Text('Notify ${_sessionStaffLabel(session)}'),
+              onTap: () {
+                Navigator.pop(context);
+                _showSnack(
+                  'Reminder queued for ${_sessionStaffLabel(session)}',
+                  success: true,
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart_outlined),
+              title: const Text('Export Class Register'),
+              subtitle: const Text('Open attendance register export'),
+              onTap: () {
+                Navigator.pop(context);
+                _openReportDetail('Class Attendance Report', 'csv');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history_rounded),
+              title: const Text('Audit Trail'),
+              subtitle: Text(_auditTrailSummary(session)),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _reopenAttendance(AttendanceSessionModel session) async {
-    final reason = await _promptReason('Reopen Attendance');
     if (reason == null || reason.trim().isEmpty) return;
     try {
       await BackendApiClient.instance.reopenAttendanceSession(
@@ -630,7 +862,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       );
       if (!mounted) return;
       _showSnack('Attendance reopened', success: true);
-      Navigator.pop(context);
       await _load();
     } catch (error) {
       _showSnack('Unable to reopen attendance: $error');
@@ -666,112 +897,225 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     ).whenComplete(controller.dispose);
   }
 
-  Future<void> _openStudentDetail(StudentModel student) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalDetailPage(
-          title: student.fullName.isEmpty
-              ? 'Student Attendance'
-              : student.fullName,
-          children: [
-            PrincipalDetailCard(
-              title: 'Student Summary',
-              trailing: PrincipalStatusPill(
-                label: student.status,
-                color: context.appTheme.primary,
-              ),
-              children: [
-                PrincipalDetailRow(
-                  label: 'Admission',
-                  value: student.admissionNumber,
-                ),
-                PrincipalDetailRow(
-                  label: 'Class',
-                  value: _sectionLabel(
-                    student.currentSectionId ?? _selectedSectionId,
-                  ),
-                ),
-                PrincipalDetailRow(
-                  label: 'Attendance',
-                  value: '${student.attendancePercent.toStringAsFixed(1)}%',
-                ),
-              ],
-            ),
-            PrincipalDetailCard(
-              title: 'Current Month',
-              children: _studentAttendanceRecords.isEmpty
-                  ? const [Text('No day-wise attendance records returned yet.')]
-                  : [
-                      for (final record in _studentAttendanceRecords.take(16))
-                        PrincipalActionTile(
-                          icon: Icons.event_available_outlined,
-                          title: _text(
-                            record['date'],
-                            fallback: 'Attendance record',
-                          ),
-                          subtitle: _text(
-                            record['status'],
-                            fallback: 'status pending',
-                          ),
-                        ),
-                    ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _openReportDetail(String title, String format) async {
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => PrincipalDetailPage(
-          title: title,
-          children: [
-            PrincipalDetailCard(
-              title: 'Report Export',
-              children: [
-                PrincipalDetailRow(
-                  label: 'Format',
-                  value: format.toUpperCase(),
-                ),
-                PrincipalDetailRow(label: 'Date', value: _todayText),
-                PrincipalDetailRow(
-                  label: 'Class',
-                  value: _sectionLabel(_selectedSectionId),
-                ),
-                PrincipalActionTile(
-                  icon: Icons.account_tree_outlined,
-                  title: 'Open class in Classes Hub',
-                  subtitle:
-                      'Attendance changes should start from the selected class',
-                  onTap: () {
-                    Navigator.pop(context);
-                    _openClassesHub(action: 'attendance');
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+    await _exportAttendanceReport(title, format);
   }
 
-  void _openClassesHub({String action = 'details', String sectionId = ''}) {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.principalClasses,
-      arguments: {
-        'class_hub_action': action,
-        'action': action,
-        'selectedStep': action == 'attendance' ? 'section_setup' : action,
-        'section_id': sectionId.isEmpty ? _selectedSectionId : sectionId,
-        'sectionId': sectionId.isEmpty ? _selectedSectionId : sectionId,
-        'classId': sectionId.isEmpty ? _selectedSectionId : sectionId,
-        'source': 'principal_attendance',
-      },
+  Future<void> _exportAttendanceReport(String title, String format) async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    final normalizedFormat = format == 'zip' ? 'pdf' : format.toLowerCase();
+    try {
+      final rows = _studentReportRows();
+      final export = await BackendApiClient.instance.createReportExport(
+        '/attendance/reports/exports',
+        reportTitle: title,
+        format: normalizedFormat == 'csv' ? 'csv' : 'pdf',
+        reportType: 'attendance',
+        scope: 'principal_attendance',
+        parameters: {
+          'section_id': _selectedSectionId,
+          'date': _todayText,
+          'student_count': rows.length,
+          'sessions': _sessions.length,
+        },
+      );
+      if (normalizedFormat == 'csv') {
+        final bytes = Uint8List.fromList(utf8.encode(_attendanceCsv()));
+        await const ShareExportService().shareBytes(
+          bytes: bytes,
+          fileName:
+              'attendance_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv',
+          mimeType: 'text/csv',
+          title: title,
+          subject: title,
+          text: 'Attendance export generated from SchoolDesk.',
+        );
+      } else {
+        final bytes = await PdfService.getInstance().generateAttendanceReport(
+          className: _sectionLabel(_selectedSectionId),
+          month: DateFormat('dd MMM yyyy').format(DateTime.now()),
+          students: rows,
+          schoolName: 'SchoolDesk',
+        );
+        if (!mounted) return;
+        await PdfService.getInstance().previewDocument(context, bytes, title);
+      }
+      if (!mounted) return;
+      _showSnack(
+        'Export ready${_text(export['download_url']).isEmpty ? '' : ': ${export['download_url']}'}',
+        success: true,
+      );
+    } catch (error) {
+      _showSnack('Unable to export report: $error');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  List<StudentModel> get _filteredStudents {
+    final query = _search.trim().toLowerCase();
+    return _sectionStudents.where((student) {
+      final inSection =
+          _selectedSectionId.isEmpty ||
+          student.currentSectionId == null ||
+          student.currentSectionId == _selectedSectionId;
+      if (!inSection) return false;
+      if (query.isEmpty) return true;
+      final haystack =
+          '${student.fullName} ${student.admissionNumber} ${student.studentCode} ${_sectionLabel(student.currentSectionId ?? '')}'
+              .toLowerCase();
+      return haystack.contains(query);
+    }).toList();
+  }
+
+  Map<String, dynamic>? _latestStudentRecord(String studentId) {
+    final records = _recordsByStudent[studentId] ?? const [];
+    if (records.isEmpty) return null;
+    final sorted = [...records];
+    sorted.sort((a, b) => _recordDateTime(b).compareTo(_recordDateTime(a)));
+    return sorted.first;
+  }
+
+  DateTime _recordDateTime(Map<String, dynamic> row) {
+    final marked = DateTime.tryParse(_text(row['marked_at']));
+    if (marked != null) return marked;
+    final session = row['session'] is Map
+        ? Map<String, dynamic>.from(row['session'] as Map)
+        : const <String, dynamic>{};
+    return DateTime.tryParse(_text(session['date'])) ?? DateTime(1970);
+  }
+
+  String _recordDate(Map<String, dynamic> row) {
+    final session = row['session'] is Map
+        ? Map<String, dynamic>.from(row['session'] as Map)
+        : const <String, dynamic>{};
+    final raw = _text(session['date'], fallback: _text(row['date']));
+    if (raw.isEmpty) return _dateOnly(_text(row['marked_at']));
+    return raw.split('T').first;
+  }
+
+  String _recordTime(Map<String, dynamic> row) {
+    final markedAt = DateTime.tryParse(_text(row['marked_at']));
+    if (markedAt == null) return 'Time not recorded';
+    return DateFormat('hh:mm a').format(markedAt.toLocal());
+  }
+
+  String _recordTeacher(Map<String, dynamic> row) {
+    final markedBy = _text(row['marked_by']);
+    if (markedBy.isNotEmpty) return markedBy;
+    final session = row['session'] is Map
+        ? Map<String, dynamic>.from(row['session'] as Map)
+        : const <String, dynamic>{};
+    final staff = session['staff'] is Map
+        ? Map<String, dynamic>.from(session['staff'] as Map)
+        : const <String, dynamic>{};
+    final staffName = [
+      staff['first_name'],
+      staff['last_name'],
+    ].where((part) => _text(part).isNotEmpty).join(' ');
+    return staffName.isEmpty ? 'Teacher' : staffName;
+  }
+
+  String _recordStatus(Map<String, dynamic> row) {
+    final status = _text(
+      row['status'],
+      fallback: 'unmarked',
+    ).replaceAll('_', ' ').trim();
+    if (status.isEmpty) return 'Unmarked';
+    return status[0].toUpperCase() + status.substring(1);
+  }
+
+  double _studentAttendancePercent(StudentModel student) {
+    final records = _recordsByStudent[student.id] ?? const [];
+    if (records.isEmpty) return student.attendancePercent;
+    final present = records.where((row) {
+      final status = _text(row['status']).toLowerCase();
+      return status == 'present' || status == 'late';
+    }).length;
+    return (present / records.length) * 100;
+  }
+
+  List<Map<String, dynamic>> _studentReportRows() {
+    final students = _filteredStudents.isEmpty
+        ? _sectionStudents
+        : _filteredStudents;
+    return students.map((student) {
+      final records = _recordsByStudent[student.id] ?? const [];
+      final present = records.where((row) {
+        final status = _text(row['status']).toLowerCase();
+        return status == 'present' || status == 'late';
+      }).length;
+      final absent = records.where((row) {
+        final status = _text(row['status']).toLowerCase();
+        return status == 'absent';
+      }).length;
+      final total = records.length;
+      final percentage = total == 0
+          ? student.attendancePercent
+          : (present / total) * 100;
+      return {
+        'name': student.fullName,
+        'present': present,
+        'absent': absent,
+        'total': total,
+        'percentage': percentage.toStringAsFixed(0),
+      };
+    }).toList();
+  }
+
+  String _attendanceCsv() {
+    final buffer = StringBuffer(
+      'student,admission,class,date,time,status,teacher,session_id\n',
     );
+    for (final student in _filteredStudents) {
+      final records = _recordsByStudent[student.id] ?? const [];
+      if (records.isEmpty) {
+        buffer.writeln(
+          [
+            student.fullName,
+            student.admissionNumber,
+            _sectionLabel(student.currentSectionId ?? _selectedSectionId),
+            '',
+            '',
+            'No records',
+            '',
+            '',
+          ].map(_csvCell).join(','),
+        );
+      }
+      for (final row in records) {
+        buffer.writeln(
+          [
+            student.fullName,
+            student.admissionNumber,
+            _sectionLabel(student.currentSectionId ?? _selectedSectionId),
+            _recordDate(row),
+            _recordTime(row),
+            _recordStatus(row),
+            _recordTeacher(row),
+            _text(row['session_id']),
+          ].map(_csvCell).join(','),
+        );
+      }
+    }
+    return buffer.toString();
+  }
+
+  String _csvCell(Object? value) {
+    final text = _text(value).replaceAll('"', '""');
+    return '"$text"';
+  }
+
+  List<AttendanceSessionModel> get _filteredSessions {
+    final query = _search.trim().toLowerCase();
+    return _sessions.where((session) {
+      if (query.isEmpty) return true;
+      final haystack =
+          '${_sectionLabel(session.sectionId)} ${_sessionStaffLabel(session)} ${_sessionStatusLabel(session)}'
+              .toLowerCase();
+      return haystack.contains(query);
+    }).toList();
   }
 
   List<AttendanceSessionModel> get _exceptions => _sessions
@@ -790,10 +1134,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     (sum, session) => sum + _effectivePresentCount(session),
   );
 
-  int get _markedStudentsToday => _sessions.fold(
-    0,
-    (sum, session) => sum + _effectiveMarkedCount(session),
-  );
+  int get _markedStudentsToday =>
+      _sessions.fold(0, (sum, session) => sum + _effectiveMarkedCount(session));
 
   int get _expectedStudentsToday => _sessions.fold(
     0,
@@ -820,14 +1162,15 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     if (session.studentAttendances.isNotEmpty) {
       return session.studentAttendances.length;
     }
-    if (session.sectionId == _selectedSectionId && _sectionStudents.isNotEmpty) {
+    if (session.sectionId == _selectedSectionId &&
+        _sectionStudents.isNotEmpty) {
       return _sectionStudents.length;
     }
     return 0;
   }
 
   String _sectionLabel(String sectionId) {
-    if (sectionId.trim().isEmpty) return 'All classes';
+    if (sectionId.trim().isEmpty) return 'All Classes';
     for (final section in _sections) {
       if (section.id == sectionId) {
         final grade = section.gradeName.trim();
@@ -861,17 +1204,17 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   Color _sessionStatusColor(AttendanceSessionModel session) {
-    if (_isIncompleteSession(session)) return context.appTheme.warning;
+    if (_isIncompleteSession(session)) return const Color(0xFFF59E0B);
     return switch (session.status) {
-      'submitted' => context.appTheme.success,
-      'corrected' => context.appTheme.success,
-      'draft' => context.appTheme.warning,
-      'reopened' => context.appTheme.warning,
-      'needs_review' => context.appTheme.error,
+      'submitted' => const Color(0xFF24A765),
+      'corrected' => const Color(0xFF24A765),
+      'draft' => const Color(0xFFF59E0B),
+      'reopened' => const Color(0xFFF59E0B),
+      'needs_review' => const Color(0xFFEF4444),
       _ =>
         session.totalStudents > 0
-            ? context.appTheme.success
-            : context.appTheme.warning,
+            ? const Color(0xFF24A765)
+            : const Color(0xFFF59E0B),
     };
   }
 
@@ -884,17 +1227,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       return true;
     }
     return _effectiveMarkedCount(session) < total;
-  }
-
-  int _unmarkedCount(AttendanceSessionModel session) {
-    final total = _effectiveTotalStudents(session);
-    if (session.studentAttendances.isEmpty) {
-      return (total - _effectiveMarkedCount(session)).clamp(0, total);
-    }
-    return session.studentAttendances.where((row) {
-      final status = _text(row['status']).toLowerCase().replaceAll('-', '_');
-      return status == 'unmarked' || status.isEmpty;
-    }).length;
   }
 
   Map<String, int> _sessionStatusCounts(AttendanceSessionModel session) {
@@ -935,13 +1267,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     return _staffLabel(session.staffId);
   }
 
-  String _sessionSubjectLabel(AttendanceSessionModel session) {
-    if (session.subjectName.trim().isNotEmpty) {
-      return session.subjectName.trim();
-    }
-    return session.subjectId;
-  }
-
   String _auditTrailSummary(AttendanceSessionModel session) {
     final parts = <String>[
       'Status ${_sessionStatusLabel(session)}',
@@ -952,7 +1277,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       if (session.correctedAt.isNotEmpty)
         'Corrected ${_dateOnly(session.correctedAt)}',
     ];
-    return parts.join(' | ');
+    return parts.join(' · ');
   }
 
   String _dateOnly(String value) {
@@ -961,16 +1286,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     return text.split('T').first;
   }
 
-  String _widgetText(Widget widget) => widget.toStringDeep().toLowerCase();
-
   void _showSnack(String message, {bool success = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: success
-            ? context.appTheme.success
-            : context.appTheme.error,
+            ? const Color(0xFF24A765)
+            : const Color(0xFFEF4444),
       ),
     );
   }
@@ -981,9 +1304,810 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 }
 
-class _AttendanceSectionSummary {
-  final String sectionId;
-  final String label;
+class _StudentDetailPage extends StatelessWidget {
+  final StudentModel student;
+  final String sectionLabel;
+  final List<Map<String, dynamic>> records;
+  final VoidCallback? onReopen;
 
-  const _AttendanceSectionSummary(this.sectionId, this.label);
+  const _StudentDetailPage({
+    required this.student,
+    required this.sectionLabel,
+    required this.records,
+    this.onReopen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final present = records.where((row) {
+      final status = _detailText(row['status']).toLowerCase();
+      return status == 'present' || status == 'late';
+    }).length;
+    final percent = records.isEmpty
+        ? student.attendancePercent
+        : (present / records.length) * 100;
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7FAFE),
+      appBar: AppBar(
+        title: Text(
+          student.fullName.isEmpty ? 'Student Detail' : student.fullName,
+        ),
+        actions: [
+          IconButton(
+            onPressed: onReopen,
+            icon: const Icon(Icons.more_vert_rounded),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        children: [
+          _SoftCard(
+            child: Row(
+              children: [
+                _Avatar(name: student.fullName, large: true),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(student.fullName, style: _UiText.headline),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Admission ${student.admissionNumber} · $sectionLabel',
+                        style: _UiText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                _StatusPill(
+                  label: student.status,
+                  color: const Color(0xFF24A765),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SoftCard(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Attendance', style: _UiText.section),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${percent.toStringAsFixed(1)}%',
+                        style: _UiText.big,
+                      ),
+                      const Text('Overall Attendance', style: _UiText.caption),
+                    ],
+                  ),
+                ),
+                SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: CircularProgressIndicator(
+                    value: (percent / 100).clamp(0, 1),
+                    strokeWidth: 7,
+                    backgroundColor: const Color(0xFFE9EEF6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text('Recent Weekdays', style: _UiText.section),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              for (final day in _weekItems())
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _DayTile(day: day),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          const Text('Day-wise Attendance History', style: _UiText.section),
+          const SizedBox(height: 12),
+          _SoftCard(
+            child: records.isEmpty
+                ? const _EmptyLine('No recent attendance activity.')
+                : Column(
+                    children: [
+                      for (final record in records.take(5))
+                        _AttendanceHistoryLine(record: record),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<_WeekDay> _weekItems() {
+    final now = DateTime.now();
+    final weekdays = <DateTime>[];
+    var cursor = now;
+    while (weekdays.length < 5) {
+      if (cursor.weekday >= DateTime.monday &&
+          cursor.weekday <= DateTime.friday) {
+        weekdays.add(cursor);
+      }
+      cursor = cursor.subtract(const Duration(days: 1));
+    }
+    return weekdays.reversed.map((date) {
+      final key = DateFormat('yyyy-MM-dd').format(date);
+      final matching = records.where((row) => _detailRecordDate(row) == key);
+      final status = matching.isEmpty
+          ? 'unmarked'
+          : _detailText(matching.first['status'], fallback: 'unmarked');
+      return _WeekDay(date: date, status: status);
+    }).toList();
+  }
+
+  static String _detailRecordDate(Map<String, dynamic> row) {
+    final session = row['session'] is Map
+        ? Map<String, dynamic>.from(row['session'] as Map)
+        : const <String, dynamic>{};
+    final raw = _detailText(
+      session['date'],
+      fallback: _detailText(row['date']),
+    );
+    if (raw.isNotEmpty) return raw.split('T').first;
+    return _detailText(row['marked_at']).split('T').first;
+  }
+
+  static String _detailText(Object? value, {String fallback = ''}) {
+    final text = '${value ?? ''}'.trim();
+    return text.isEmpty || text == 'null' ? fallback : text;
+  }
+}
+
+class _UiText {
+  static const headline = TextStyle(
+    fontSize: 20,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF111827),
+    height: 1.15,
+  );
+  static const title = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF1F2937),
+  );
+  static const section = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF1F2937),
+  );
+  static const caption = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    color: Color(0xFF6B7280),
+    height: 1.35,
+  );
+  static const link = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w800,
+    color: Color(0xFF1976E8),
+  );
+  static const big = TextStyle(
+    fontSize: 27,
+    fontWeight: FontWeight.w900,
+    color: Color(0xFF111827),
+  );
+}
+
+class _SoftCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color color;
+
+  const _SoftCard({
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.color = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFEAF0F7)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A0F172A),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SearchBox extends StatelessWidget {
+  final String hint;
+  final ValueChanged<String> onChanged;
+
+  const _SearchBox({required this.hint, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon: const Icon(Icons.search_rounded),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFEAF0F7)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Color(0xFFEAF0F7)),
+        ),
+      ),
+    );
+  }
+}
+
+class _SegmentChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _SegmentChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onTap(),
+        showCheckmark: false,
+        selectedColor: const Color(0xFF1976E8),
+        backgroundColor: Colors.white,
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : const Color(0xFF4B5563),
+          fontWeight: FontWeight.w800,
+          fontSize: 12,
+        ),
+        side: const BorderSide(color: Color(0xFFEAF0F7)),
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+  final Color color;
+  final Color tone;
+  final bool compact;
+
+  const _MetricTile({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.color,
+    required this.tone,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: tone,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.12)),
+      ),
+      child: compact
+          ? Row(
+              children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(value, style: _UiText.big.copyWith(fontSize: 21)),
+                      Text(label, style: _UiText.caption),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: color, size: 24),
+                const Spacer(),
+                Text(value, style: _UiText.big.copyWith(fontSize: 22)),
+                const SizedBox(height: 2),
+                Text(label, style: _UiText.caption),
+              ],
+            ),
+    );
+  }
+}
+
+class _StudentRow extends StatelessWidget {
+  final StudentModel student;
+  final String sectionLabel;
+  final double percent;
+  final VoidCallback onTap;
+  final bool showDivider;
+
+  const _StudentRow({
+    required this.student,
+    required this.sectionLabel,
+    required this.percent,
+    required this.onTap,
+    this.showDivider = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                _Avatar(name: student.fullName),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(student.fullName, style: _UiText.title),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Adm ${student.admissionNumber} · $sectionLabel',
+                        style: _UiText.caption,
+                      ),
+                    ],
+                  ),
+                ),
+                _StatusPill(
+                  label: student.status,
+                  color: const Color(0xFF24A765),
+                ),
+                const SizedBox(width: 10),
+                Text('${percent.toStringAsFixed(0)}%', style: _UiText.caption),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF94A3B8),
+                ),
+              ],
+            ),
+          ),
+          if (showDivider)
+            const Divider(height: 1, indent: 62, color: Color(0xFFEAF0F7)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudentAttendanceMeta extends StatelessWidget {
+  final Map<String, dynamic>? record;
+  final String Function(Map<String, dynamic>) dateLabel;
+  final String Function(Map<String, dynamic>) timeLabel;
+  final String Function(Map<String, dynamic>) statusLabel;
+  final String Function(Map<String, dynamic>) teacherLabel;
+
+  const _StudentAttendanceMeta({
+    required this.record,
+    required this.dateLabel,
+    required this.timeLabel,
+    required this.statusLabel,
+    required this.teacherLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final row = record;
+    final text = row == null
+        ? 'No attendance marked yet'
+        : '${dateLabel(row)} · ${timeLabel(row)} · ${statusLabel(row)} · ${teacherLabel(row)}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(62, 0, 12, 12),
+      child: Text(text, style: _UiText.caption),
+    );
+  }
+}
+
+class _AttendanceHistoryLine extends StatelessWidget {
+  final Map<String, dynamic> record;
+
+  const _AttendanceHistoryLine({required this.record});
+
+  @override
+  Widget build(BuildContext context) {
+    final date = _StudentDetailPage._detailRecordDate(record);
+    final markedAt = DateTime.tryParse(
+      _StudentDetailPage._detailText(record['marked_at']),
+    );
+    final time = markedAt == null
+        ? 'Time not recorded'
+        : DateFormat('hh:mm a').format(markedAt.toLocal());
+    final status = _StudentDetailPage._detailText(
+      record['status'],
+      fallback: 'unmarked',
+    ).replaceAll('_', ' ');
+    final teacher = _teacherLabel(record);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _IconBubble(
+            icon: Icons.event_available_rounded,
+            color: _statusColor(status),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$date · $time', style: _UiText.title),
+                const SizedBox(height: 3),
+                Text(
+                  '${_labelize(status)} · Marked by $teacher',
+                  style: _UiText.caption,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _teacherLabel(Map<String, dynamic> row) {
+    final markedBy = _StudentDetailPage._detailText(row['marked_by']);
+    if (markedBy.isNotEmpty) return markedBy;
+    final session = row['session'] is Map
+        ? Map<String, dynamic>.from(row['session'] as Map)
+        : const <String, dynamic>{};
+    final staff = session['staff'] is Map
+        ? Map<String, dynamic>.from(session['staff'] as Map)
+        : const <String, dynamic>{};
+    final name = [staff['first_name'], staff['last_name']]
+        .where((part) => _StudentDetailPage._detailText(part).isNotEmpty)
+        .join(' ');
+    return name.isEmpty ? 'Teacher' : name;
+  }
+
+  static Color _statusColor(String status) {
+    return switch (status.toLowerCase()) {
+      'present' => const Color(0xFF24A765),
+      'absent' => const Color(0xFFEF4444),
+      'leave' => const Color(0xFFF97316),
+      'late' => const Color(0xFF8B5CF6),
+      _ => const Color(0xFF64748B),
+    };
+  }
+
+  static String _labelize(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return 'Unmarked';
+    return text[0].toUpperCase() + text.substring(1);
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  final String name;
+  final bool large;
+
+  const _Avatar({required this.name, this.large = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
+    final size = large ? 72.0 : 38.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFFE8F2FF),
+        border: Border.all(color: Colors.white, width: 3),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        initial,
+        style: TextStyle(
+          color: const Color(0xFF1976E8),
+          fontWeight: FontWeight.w900,
+          fontSize: large ? 28 : 16,
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusPill({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.11),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label.isEmpty ? 'Active' : label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _IconBubble extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool large;
+
+  const _IconBubble({
+    required this.icon,
+    required this.color,
+    this.large = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: large ? 68 : 42,
+      height: large ? 68 : 42,
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(large ? 18 : 12),
+      ),
+      child: Icon(icon, color: color, size: large ? 34 : 22),
+    );
+  }
+}
+
+class _IconSquare extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _IconSquare({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFEAF0F7)),
+        ),
+        child: Icon(icon),
+      ),
+    );
+  }
+}
+
+class _ReportItem {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ReportItem(
+    this.title,
+    this.subtitle,
+    this.icon,
+    this.color,
+    this.onTap,
+  );
+}
+
+class _ReportRow extends StatelessWidget {
+  final _ReportItem item;
+
+  const _ReportRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SoftCard(
+      padding: const EdgeInsets.all(12),
+      child: InkWell(
+        onTap: item.onTap,
+        child: Row(
+          children: [
+            _IconBubble(icon: item.icon, color: item.color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.title, style: _UiText.title),
+                  const SizedBox(height: 3),
+                  Text(item.subtitle, style: _UiText.caption),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF64748B)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyLine extends StatelessWidget {
+  final String text;
+
+  const _EmptyLine(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Center(child: Text(text, style: _UiText.caption)),
+    );
+  }
+}
+
+class _BottomItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _BottomItem({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFF1976E8) : const Color(0xFF64748B);
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        width: 76,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeekDay {
+  final DateTime date;
+  final String status;
+
+  const _WeekDay({required this.date, required this.status});
+}
+
+class _StudentRecordLoad {
+  final String studentId;
+  final List<Map<String, dynamic>> records;
+  final Object? error;
+
+  const _StudentRecordLoad._({
+    required this.studentId,
+    required this.records,
+    this.error,
+  });
+
+  factory _StudentRecordLoad.success(
+    String studentId,
+    List<Map<String, dynamic>> records,
+  ) {
+    return _StudentRecordLoad._(studentId: studentId, records: records);
+  }
+
+  factory _StudentRecordLoad.failure(String studentId, Object error) {
+    return _StudentRecordLoad._(
+      studentId: studentId,
+      records: const [],
+      error: error,
+    );
+  }
+}
+
+class _DayTile extends StatelessWidget {
+  final _WeekDay day;
+
+  const _DayTile({required this.day});
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = switch (day.status) {
+      'present' => const Color(0xFF24A765),
+      'absent' => const Color(0xFFEF4444),
+      'leave' => const Color(0xFFF97316),
+      'unmarked' => const Color(0xFF94A3B8),
+      _ => const Color(0xFF8B5CF6),
+    };
+    final label = day.status.trim().isEmpty
+        ? 'Unmarked'
+        : day.status[0].toUpperCase() + day.status.substring(1);
+    return _SoftCard(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      child: Column(
+        children: [
+          Text(
+            ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'][day.date.weekday - 1],
+            style: _UiText.caption,
+          ),
+          const SizedBox(height: 8),
+          Icon(
+            Icons.check_circle_outline_rounded,
+            color: statusColor,
+            size: 21,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: _UiText.caption.copyWith(fontSize: 10, color: statusColor),
+          ),
+        ],
+      ),
+    );
+  }
 }
