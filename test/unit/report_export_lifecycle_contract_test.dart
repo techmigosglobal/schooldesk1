@@ -30,9 +30,7 @@ void main() {
     final reportCardGenerator = File(
       'lib/features/reports/presentation/screens/report_card_generator_screen/report_card_generator_screen.dart',
     ).readAsStringSync();
-    final syllabus = File(
-      'lib/features/academics/presentation/screens/syllabus_monitoring_screen/syllabus_monitoring_screen.dart',
-    ).readAsStringSync();
+
     final studentOversight = File(
       'lib/features/people/presentation/screens/student_oversight_screen/student_oversight_screen.dart',
     ).readAsStringSync();
@@ -58,7 +56,6 @@ void main() {
       teacherReports,
       parentProgress,
       reportCardGenerator,
-      syllabus,
       studentOversight,
     ]) {
       expect(source, contains('createReportExport('));

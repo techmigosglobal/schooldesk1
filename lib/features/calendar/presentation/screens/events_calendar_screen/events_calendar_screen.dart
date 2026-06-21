@@ -205,7 +205,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Future<void> _openCreateEvent() async {
-    final saved = await Navigator.of(context).push<bool>(
+    final saved = await Navigator.of(context).push<_EventFormResult>(
       MaterialPageRoute(
         builder: (_) => _EventFormPage(
           academicYears: _academicYears,
@@ -214,8 +214,23 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
       ),
     );
-    if (saved == true) {
+    if (saved != null) {
+      setState(() {
+        _selectedAcademicYearId = saved.academicYearId.isEmpty
+            ? _selectedAcademicYearId
+            : saved.academicYearId;
+        _selectedMonth = saved.startDate.month;
+        _filter = _EventFilter.month;
+        _displayMode = _EventsDisplayMode.calendar;
+      });
       await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Event created and calendar refreshed'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -237,7 +252,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Future<void> _openEditEvent(_PrincipalEvent event) async {
-    final saved = await Navigator.of(context).push<bool>(
+    final saved = await Navigator.of(context).push<_EventFormResult>(
       MaterialPageRoute(
         builder: (_) => _EventFormPage(
           academicYears: _academicYears,
@@ -249,7 +264,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
       ),
     );
-    if (saved == true) {
+    if (saved != null) {
+      setState(() {
+        _selectedAcademicYearId = saved.academicYearId.isEmpty
+            ? _selectedAcademicYearId
+            : saved.academicYearId;
+        _selectedMonth = saved.startDate.month;
+        _filter = _EventFilter.month;
+        _displayMode = _EventsDisplayMode.calendar;
+      });
       await _loadData();
     }
   }
@@ -1514,7 +1537,7 @@ class _EventDetailPage extends StatelessWidget {
           : const [],
       onMenuSelected: (value) async {
         if (value == 'edit') {
-          final saved = await Navigator.of(context).push<bool>(
+          final saved = await Navigator.of(context).push<_EventFormResult>(
             MaterialPageRoute(
               builder: (_) => _EventFormPage(
                 academicYears: academicYears,
@@ -1526,7 +1549,7 @@ class _EventDetailPage extends StatelessWidget {
               ),
             ),
           );
-          if (saved == true && context.mounted) Navigator.pop(context, true);
+          if (saved != null && context.mounted) Navigator.pop(context, true);
           return;
         }
         if (value == 'approve' || value == 'cancel' || value == 'delete') {
@@ -1574,6 +1597,16 @@ class _EventDetailPage extends StatelessWidget {
       ],
     );
   }
+}
+
+class _EventFormResult {
+  final DateTime startDate;
+  final String academicYearId;
+
+  const _EventFormResult({
+    required this.startDate,
+    required this.academicYearId,
+  });
 }
 
 class _EventFormPage extends StatefulWidget {
@@ -1719,7 +1752,15 @@ class _EventFormPageState extends State<_EventFormPage> {
       } else {
         await BackendApiClient.instance.updateRaw('/events/$eventId', payload);
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(
+          context,
+          _EventFormResult(
+            startDate: _startDate,
+            academicYearId: _academicYearId,
+          ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1872,24 +1913,19 @@ class _EventFormPageState extends State<_EventFormPage> {
                     }),
             ),
             const SizedBox(height: 14),
-            Row(
+            _ResponsivePickerGrid(
               children: [
-                Expanded(
-                  child: _PickerTile(
-                    label: 'Start date',
-                    value: _formatDate(_startDate),
-                    icon: Icons.event_rounded,
-                    onTap: _saving ? null : _pickStartDate,
-                  ),
+                _PickerTile(
+                  label: 'Start date',
+                  value: _formatDate(_startDate),
+                  icon: Icons.event_rounded,
+                  onTap: _saving ? null : _pickStartDate,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _PickerTile(
-                    label: 'End date',
-                    value: _formatDate(_endDate),
-                    icon: Icons.event_available_rounded,
-                    onTap: _saving ? null : _pickEndDate,
-                  ),
+                _PickerTile(
+                  label: 'End date',
+                  value: _formatDate(_endDate),
+                  icon: Icons.event_available_rounded,
+                  onTap: _saving ? null : _pickEndDate,
                 ),
               ],
             ),
@@ -1903,24 +1939,19 @@ class _EventFormPageState extends State<_EventFormPage> {
               ),
             ] else ...[
               const SizedBox(height: 14),
-              Row(
+              _ResponsivePickerGrid(
                 children: [
-                  Expanded(
-                    child: _PickerTile(
-                      label: 'Start time',
-                      value: _formatTimeOfDay(_startTime),
-                      icon: Icons.schedule_rounded,
-                      onTap: _saving ? null : () => _pickTime(start: true),
-                    ),
+                  _PickerTile(
+                    label: 'Start time',
+                    value: _formatTimeOfDay(_startTime),
+                    icon: Icons.schedule_rounded,
+                    onTap: _saving ? null : () => _pickTime(start: true),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _PickerTile(
-                      label: 'End time',
-                      value: _formatTimeOfDay(_endTime),
-                      icon: Icons.schedule_send_rounded,
-                      onTap: _saving ? null : () => _pickTime(start: false),
-                    ),
+                  _PickerTile(
+                    label: 'End time',
+                    value: _formatTimeOfDay(_endTime),
+                    icon: Icons.schedule_send_rounded,
+                    onTap: _saving ? null : () => _pickTime(start: false),
                   ),
                 ],
               ),
@@ -2031,6 +2062,38 @@ class _EventFormPageState extends State<_EventFormPage> {
   }
 }
 
+class _ResponsivePickerGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _ResponsivePickerGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < 360) {
+          return Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                children[i],
+              ],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(width: 10),
+              Expanded(child: children[i]),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _PickerTile extends StatelessWidget {
   final String label;
   final String value;
@@ -2050,7 +2113,7 @@ class _PickerTile extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 64),
+        constraints: const BoxConstraints(minHeight: 68),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
@@ -2075,13 +2138,17 @@ class _PickerTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      color: principalDirectoryText,
-                      fontWeight: FontWeight.w900,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryText,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ],

@@ -7,13 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart' as share_plus;
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -537,7 +537,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Remove'),
           ),
@@ -566,7 +568,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: failures.isEmpty ? context.appTheme.success : context.appTheme.warning,
+        backgroundColor: failures.isEmpty
+            ? context.appTheme.success
+            : context.appTheme.warning,
       ),
     );
   }
@@ -902,20 +906,13 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final bytes = Uint8List.fromList(
         utf8.encode(_buildStudentDirectoryCsv(students)),
       );
-      await share_plus.SharePlus.instance.share(
-        share_plus.ShareParams(
-          title: 'Student Directory CSV',
-          subject: 'Student Directory CSV',
-          text: 'Student directory export generated from SchoolDesk.',
-          files: [
-            share_plus.XFile.fromData(
-              bytes,
-              mimeType: 'text/csv',
-              name: fileName,
-            ),
-          ],
-          fileNameOverrides: [fileName],
-        ),
+      await const ShareExportService().shareBytes(
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: 'text/csv',
+        title: 'Student Directory CSV',
+        subject: 'Student Directory CSV',
+        text: 'Student directory export generated from SchoolDesk.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1262,7 +1259,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Remove'),
           ),

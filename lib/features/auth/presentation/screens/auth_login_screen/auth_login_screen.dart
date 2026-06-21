@@ -86,6 +86,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
   String _dashboardRouteFor(String roleName) {
     switch (roleName.trim().toLowerCase()) {
       case AppConstants.rolePrincipal:
+      case AppConstants.roleAdmin:
         return AppRoutes.principalDashboard;
       case AppConstants.roleTeacher:
         return AppRoutes.teacherDashboard;

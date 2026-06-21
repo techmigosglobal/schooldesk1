@@ -1,5 +1,8 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -918,7 +921,15 @@ class _ReportCardGeneratorScreenState extends State<ReportCardGeneratorScreen>
           name: 'ReportCard_${student['name']}_$_selectedExam',
         );
         successCount++;
-      } catch (_) {}
+      } catch (error) {
+        if (EnvConfig.enableLogging) {
+          developer.log(
+            'Bulk report card generation failed for student: ${student['name']}',
+            name: 'ReportCardGeneratorScreen',
+            error: error,
+          );
+        }
+      }
     }
 
     setState(() {

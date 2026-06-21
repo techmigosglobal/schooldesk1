@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 
 /// Theme provider for app-wide dark/light mode toggle.
 class ThemeProvider extends ChangeNotifier {
@@ -74,7 +77,14 @@ class AppSettingsProvider extends ChangeNotifier {
     if (raw != null) {
       try {
         provider._settings = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      } catch (_) {}
+      } catch (error) {
+        if (EnvConfig.enableLogging) {
+          developer.log(
+            'Failed to parse saved settings: $error',
+            name: 'AppSettingsProvider',
+          );
+        }
+      }
     }
     // Set defaults
     provider._settings.putIfAbsent('font_size', () => 'medium');

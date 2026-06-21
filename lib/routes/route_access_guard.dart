@@ -61,7 +61,6 @@ class RouteAccessGuard {
     AppRoutes.principalAttendance: {'principal'},
     AppRoutes.principalSubjects: {'principal'},
     AppRoutes.principalLessonPlanner: {'principal'},
-    AppRoutes.syllabusMonitoring: {'principal'},
     AppRoutes.principalEventApprovals: {'principal'},
     AppRoutes.principalTimetable: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},
@@ -92,8 +91,6 @@ class RouteAccessGuard {
     AppRoutes.teacherPerformance: {'teacher'},
     AppRoutes.teacherStudentNotes: {'teacher'},
     AppRoutes.teacherDiscipline: {'teacher'},
-    AppRoutes.teacherMarkEntry: {'teacher'},
-    AppRoutes.teacherSyllabus: {'teacher'},
     // Shared routes
     AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},
     AppRoutes.kioskQrAttendance: {'kiosk'},
@@ -194,6 +191,7 @@ class RouteAccessGuard {
   static String? dashboardForRole(String? role) {
     switch (_normalizeRole(role)) {
       case 'principal':
+      case 'admin':
         return AppRoutes.principalDashboard;
       case 'teacher':
         return AppRoutes.teacherDashboard;
@@ -207,6 +205,9 @@ class RouteAccessGuard {
   }
 
   static String _normalizeRole(String? role) {
-    return (role ?? '').trim().toLowerCase();
+    final raw = (role ?? '').trim().toLowerCase();
+    // Admin has principal-level access across all routes.
+    if (raw == 'admin') return 'principal';
+    return raw;
   }
 }

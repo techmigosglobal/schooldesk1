@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
@@ -61,17 +62,17 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
       final school = results[0] as Map<String, dynamic>;
       final profile = results[1] as UserResponse;
       setState(() {
-        _schoolName = _text(school['name'], fallback: 'School');
-        _schoolSubtitle = _text(
+        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolSubtitle = safeText(
           school['affiliation_board'],
-          fallback: _text(
+          fallback: safeText(
             school['school_type'],
             fallback: 'Manage school details',
           ),
         );
-        _schoolLogo = _text(school['logo_url'], fallback: '');
+        _schoolLogo = safeText(school['logo_url'], fallback: '');
         _userName = profile.name.trim().isEmpty
-            ? _text(profile.username, fallback: 'Principal')
+            ? safeText(profile.username, fallback: 'Principal')
             : profile.name.trim();
         _userSubtitle = profile.roleName.trim().isEmpty
             ? 'Principal'
@@ -112,7 +113,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
             ),
       userName: _userName,
       userSubtitle: _userSubtitle,
-      initials: _initials(_userName, fallback: 'PR'),
+      initials: safeInitials(_userName, fallback: 'PR'),
       portalIcon: Icons.account_balance_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -199,13 +200,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               activeIcon: Icons.calendar_month_rounded,
               label: 'Timetable',
               route: AppRoutes.principalTimetable,
-            ),
-            SchoolDeskNavigationItem(
-              index: 29,
-              icon: Icons.monitor_outlined,
-              activeIcon: Icons.monitor_rounded,
-              label: 'Syllabus Monitor',
-              route: AppRoutes.syllabusMonitoring,
             ),
             SchoolDeskNavigationItem(
               index: 17,
@@ -341,20 +335,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
   }
 }
 
-String _text(dynamic value, {required String fallback}) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? fallback : text;
-}
-
-String _initials(String name, {required String fallback}) {
-  final parts = name
-      .split(RegExp(r'\s+'))
-      .where((part) => part.trim().isNotEmpty)
-      .take(2)
-      .map((part) => part.trim()[0].toUpperCase())
-      .join();
-  return parts.isEmpty ? fallback : parts;
-}
 
 class PrincipalShellBottomBar extends StatelessWidget {
   const PrincipalShellBottomBar({super.key});

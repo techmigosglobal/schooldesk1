@@ -206,13 +206,6 @@ class SchoolDeskScreenRegistry {
       feature: SchoolDeskFeature.adminFees,
     ),
     SchoolDeskScreenMetadata(
-      route: '/syllabus-monitoring-screen',
-      title: SchoolDeskGlossary.syllabusRecords,
-      module: 'Academics',
-      portal: 'principal',
-      feature: SchoolDeskFeature.syllabusRecords,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/communication-center-screen',
       title: SchoolDeskGlossary.communicationCenter,
       module: 'Communication',
@@ -445,18 +438,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-mark-entry-screen',
-      title: 'Mark Entry',
-      module: 'Academics',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-syllabus-screen',
-      title: 'Syllabus',
-      module: 'Academics',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/parent-dashboard-screen',
       title: 'Parent Dashboard',
       module: 'Overview',
@@ -585,19 +566,7 @@ class SchoolDeskScreenRegistry {
       module: 'Child Academics',
       portal: 'parent',
     ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-exam-schedule-screen',
-      title: 'Exam Schedule',
-      module: 'Child Academics',
-      portal: 'parent',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-report-cards-screen',
-      title: 'Report Cards',
-      module: 'Child Academics',
-      portal: 'parent',
-      feature: SchoolDeskFeature.reportsExports,
-    ),
+
     SchoolDeskScreenMetadata(
       route: '/parent-ptm-booking-screen',
       title: 'PTM Booking',
@@ -611,12 +580,7 @@ class SchoolDeskScreenRegistry {
       module: 'Student Support',
       portal: 'parent',
     ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-discipline-screen',
-      title: 'Discipline',
-      module: 'Child Academics',
-      portal: 'parent',
-    ),
+
     SchoolDeskScreenMetadata(
       route: '/teacher-event-posts-screen',
       title: 'Event Posts',

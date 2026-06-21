@@ -1,11 +1,13 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:share_plus/share_plus.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -33,7 +35,10 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   void initState() {
     super.initState();
     _load();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollRecentScans());
+    _pollingTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _pollRecentScans(),
+    );
   }
 
   @override
@@ -77,7 +82,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
       if (!mounted) return;
       setState(() => _recent = rows);
-    } catch (_) {
+    } catch (error) {
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Staff QR polling failed: $error',
+          name: 'StaffQrAttendancePanel',
+        );
+      }
       if (!mounted) return;
       setState(() => _recent = const []);
     }
@@ -93,7 +104,14 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       } else {
         setState(() => _recent = rows);
       }
-    } catch (_) {}
+    } catch (error) {
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Staff QR poll scan check failed: $error',
+          name: 'StaffQrAttendancePanel',
+        );
+      }
+    }
   }
 
   Future<void> _exportDailyQrLog() async {
@@ -105,20 +123,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         date: date,
       );
       final fileName = 'staff_qr_logs_$date.csv';
-      await SharePlus.instance.share(
-        ShareParams(
-          title: 'Staff QR logs',
-          subject: 'Staff QR logs for $date',
-          text: 'Daily staff QR attendance log exported from SchoolDesk.',
-          files: [
-            XFile.fromData(
-              Uint8List.fromList(bytes),
-              mimeType: 'text/csv',
-              name: fileName,
-            ),
-          ],
-          fileNameOverrides: [fileName],
-        ),
+      await const ShareExportService().shareBytes(
+        bytes: Uint8List.fromList(bytes),
+        fileName: fileName,
+        mimeType: 'text/csv',
+        title: 'Staff QR logs',
+        subject: 'Staff QR logs for $date',
+        text: 'Daily staff QR attendance log exported from SchoolDesk.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -357,9 +368,7 @@ class _QrBlock extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   'QR refreshes every 5 seconds',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: color),
                 ),
               ],
             ),

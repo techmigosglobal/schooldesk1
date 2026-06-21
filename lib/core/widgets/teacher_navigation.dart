@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class TeacherDrawer extends StatefulWidget {
@@ -50,10 +51,10 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       final school = await BackendApiClient.instance.getCurrentSchool();
       if (!mounted) return;
       setState(() {
-        _schoolName = _text(school['name'], fallback: 'School');
-        _schoolSubtitle = _text(
+        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolSubtitle = safeText(
           school['affiliation_board'],
-          fallback: _text(school['school_type'], fallback: 'Teacher workspace'),
+          fallback: safeText(school['school_type'], fallback: 'Teacher workspace'),
         );
       });
     } catch (_) {
@@ -85,7 +86,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
       organizationSubtitle: _schoolSubtitle,
       userName: teacherName,
       userSubtitle: 'Class Teacher - $className',
-      initials: _initials(teacherName, fallback: 'TE'),
+      initials: safeInitials(teacherName, fallback: 'TE'),
       portalIcon: Icons.cast_for_education_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -160,20 +161,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               activeIcon: Icons.assignment_rounded,
               label: 'Homework',
               route: AppRoutes.teacherHomework,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 31,
-              icon: Icons.edit_note_outlined,
-              activeIcon: Icons.edit_note_rounded,
-              label: 'Marks Entry',
-              route: AppRoutes.teacherMarkEntry,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 32,
-              icon: Icons.checklist_outlined,
-              activeIcon: Icons.checklist_rounded,
-              label: 'Syllabus',
-              route: AppRoutes.teacherSyllabus,
             ),
             const SchoolDeskNavigationItem(
               index: 22,
@@ -311,17 +298,3 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
   }
 }
 
-String _text(dynamic value, {required String fallback}) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? fallback : text;
-}
-
-String _initials(String name, {required String fallback}) {
-  final parts = name
-      .split(RegExp(r'\s+'))
-      .where((part) => part.trim().isNotEmpty)
-      .take(2)
-      .map((part) => part.trim()[0].toUpperCase())
-      .join();
-  return parts.isEmpty ? fallback : parts;
-}

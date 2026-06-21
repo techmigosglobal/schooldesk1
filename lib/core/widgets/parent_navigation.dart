@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
 
 class ParentDrawer extends StatefulWidget {
@@ -61,15 +62,16 @@ class _ParentDrawerState extends State<ParentDrawer> {
       final profile = results[1] as UserResponse;
       final childNames = RoleAccessService.parentChildNames;
       setState(() {
-        _schoolName = _text(school['name'], fallback: 'School');
-        _schoolSubtitle = _text(
+        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolSubtitle = safeText(
           school['affiliation_board'],
-          fallback: _text(school['school_type'], fallback: 'Family access'),
+          fallback: safeText(school['school_type'], fallback: 'Family access'),
         );
         _userId = profile.id;
-        _userName = profile.name.trim().isEmpty
-            ? _text(profile.username, fallback: 'Parent')
-            : profile.name.trim();
+        _userName = safeText(
+          profile.name,
+          fallback: safeText(profile.username, fallback: 'Parent'),
+        );
         _userSubtitle = childNames.isEmpty
             ? 'Parent Portal'
             : 'Parent - ${childNames.join(', ')}';
@@ -101,7 +103,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
       organizationSubtitle: _schoolSubtitle,
       userName: _userName,
       userSubtitle: _userSubtitle,
-      initials: _initials(_userName, fallback: 'PA'),
+      initials: safeInitials(_userName, fallback: 'PA'),
       portalIcon: Icons.family_restroom_rounded,
       selectedIndex: widget.selectedIndex,
       onDestinationSelected: widget.onDestinationSelected,
@@ -299,19 +301,4 @@ class _ParentDrawerState extends State<ParentDrawer> {
       ],
     );
   }
-}
-
-String _text(dynamic value, {required String fallback}) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? fallback : text;
-}
-
-String _initials(String name, {required String fallback}) {
-  final parts = name
-      .split(RegExp(r'\s+'))
-      .where((part) => part.trim().isNotEmpty)
-      .take(2)
-      .map((part) => part.trim()[0].toUpperCase())
-      .join();
-  return parts.isEmpty ? fallback : parts;
 }

@@ -109,8 +109,7 @@ void main() {
         'teacherMyAttendance',
         'teacherHomework',
         'teacherDiary',
-        'teacherMarkEntry',
-        'teacherSyllabus',
+
         'teacherEventPosts',
         'teacherLessonPlanner',
         'teacherPerformance',

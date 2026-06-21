@@ -42,7 +42,7 @@ class _TeacherReportsScreenState extends State<TeacherReportsScreen> {
       type: 'marks',
       icon: Icons.edit_note_rounded,
       color: context.appTheme.secondary,
-      description: 'Teacher-scoped marks entry summary',
+      description: 'Exam marks and grades summary',
     ),
     _TeacherReportType(
       title: 'Student Support Report',

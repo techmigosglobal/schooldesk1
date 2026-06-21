@@ -267,7 +267,9 @@ void main() {
     expect(screen, contains('title: \'Academic Performance\''));
     expect(screen, contains('title: \'Documents\''));
     expect(screen, contains('title: \'Medical Notes\''));
-    expect(screen, contains('share_plus.XFile.fromData'));
+    expect(screen, contains('ShareExportService'));
+    expect(screen, contains('shareBytes('));
+    expect(screen, isNot(contains('XFile.fromData')));
     expect(screen, isNot(contains('Enter first and last name')));
   });
 
@@ -385,13 +387,6 @@ void main() {
     final source = File(
       'lib/core/widgets/app_navigation.dart',
     ).readAsStringSync();
-    final registry = File(
-      'lib/routes/schooldesk_screen_registry.dart',
-    ).readAsStringSync();
-    final availability = File(
-      'lib/core/services/feature_availability_service.dart',
-    ).readAsStringSync();
-
     expect(source, isNot(contains("label: 'Staff Management'")));
     expect(source, isNot(contains("label: 'Student Management'")));
     expect(source, isNot(contains("label: 'User Management'")));
@@ -401,10 +396,7 @@ void main() {
     );
     expect(source, contains('label: SchoolDeskGlossary.academicManagement'));
     expect(source, contains('route: AppRoutes.academicManagement'));
-    expect(registry, contains('feature: SchoolDeskFeature.syllabusRecords'));
-    expect(availability, contains('SchoolDeskFeature.syllabusRecords'));
-    expect(availability, contains("label: 'Syllabus records'"));
-    expect(availability, contains('isAvailable: true'));
+
   });
 
   test('principal top bar notifications are backed by backend unread state', () {
@@ -891,7 +883,6 @@ void main() {
     expect(screen, contains('PrincipalDetailPage'));
     expect(screen, contains('Mapped'));
     expect(screen, contains('Class Coverage'));
-    expect(screen, contains('Syllabus Pending'));
     expect(screen, contains('Total Subjects'));
     expect(screen, contains('Core Subjects'));
     expect(screen, contains('Teacher Load'));
@@ -900,7 +891,6 @@ void main() {
     expect(screen, contains('Open Classes Hub'));
     expect(screen, contains('Subject-wise Topper List'));
     expect(screen, contains('Weak Subject Detection'));
-    expect(screen, contains('Syllabus Completion Tracker'));
     expect(screen, contains('Teacher Performance'));
     expect(screen, contains('Homework Consistency'));
     expect(screen, isNot(contains('Create Subject')));

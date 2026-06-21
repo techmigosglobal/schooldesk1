@@ -2,7 +2,6 @@ enum SchoolDeskFeature {
   adminStudents,
   adminStaff,
   adminFees,
-  syllabusRecords,
   principalAnalytics,
   teacherParentMeetings,
   parentStudentLeave,
@@ -45,14 +44,6 @@ class FeatureAvailabilityService {
       feature: SchoolDeskFeature.adminFees,
       label: 'Fees and finance',
       isAvailable: true,
-    ),
-    SchoolDeskFeature.syllabusRecords: FeatureAvailabilityState(
-      feature: SchoolDeskFeature.syllabusRecords,
-      label: 'Syllabus records',
-      isAvailable: true,
-      reason: 'Principal syllabus records read from the live syllabus backend.',
-      recommendedAction:
-          'Keep Principal read coverage in local Docker module verification.',
     ),
     SchoolDeskFeature.principalAnalytics: FeatureAvailabilityState(
       feature: SchoolDeskFeature.principalAnalytics,

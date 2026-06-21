@@ -15,7 +15,6 @@ class StorageKeys {
   static const String concessionRequests = 'principal_concession_requests';
   static const String timetable = 'principal_timetable';
   static const String substituteRequests = 'principal_substitute_requests';
-  static const String syllabusData = 'principal_syllabus_data';
   static const String examSchedule = 'principal_exam_schedule';
   static const String examResults = 'principal_exam_results';
   static const String complaints = 'principal_complaints';

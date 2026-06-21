@@ -53,9 +53,6 @@ class _TeacherLeaveRequestFormScreenState
   bool _saving = false;
   String? _error;
 
-  bool get _missingRequiredContext =>
-      _staffId.trim().isEmpty || _leaveTypes.isEmpty;
-
   @override
   void initState() {
     super.initState();
@@ -86,6 +83,13 @@ class _TeacherLeaveRequestFormScreenState
     final validationError = _validateLeaveRequest();
     if (validationError != null) {
       setState(() => _error = validationError);
+      return;
+    }
+    if (_staffId.trim().isEmpty) {
+      setState(
+        () =>
+            _error = 'Teacher profile is still syncing. Refresh and try again.',
+      );
       return;
     }
     setState(() {
@@ -129,36 +133,9 @@ class _TeacherLeaveRequestFormScreenState
         child: SizedBox.shrink(),
       );
     }
-    if (_missingRequiredContext) {
-      return TeacherFlowScaffold(
-        title: 'Apply Leave',
-        subtitle: 'Teacher module context required',
-        selectedIndex: 10,
-        child: TeacherFlowScrollView(
-          children: [
-            TeacherFlowCard(
-              icon: Icons.info_outline_rounded,
-              title: 'Open from Teacher module',
-              subtitle:
-                  'Please open this screen from the related Teacher module.',
-              body: TeacherFlowActionWrap(
-                actions: [
-                  TeacherFlowAction(
-                    label: 'Back',
-                    icon: Icons.arrow_back_rounded,
-                    onTap: () => Navigator.maybePop(context),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return TeacherFlowScaffold(
       title: 'Apply Leave',
-      subtitle: 'Submit leave for admin review',
+      subtitle: 'Submit leave for principal/admin approval',
       selectedIndex: 10,
       child: TeacherFlowScrollView(
         children: [
@@ -320,9 +297,20 @@ class _TeacherLeaveRequestFormScreenState
   Future<void> _loadMissingContext() async {
     try {
       await RoleAccessService.initialize();
+      final dashboard = _staffId.isEmpty || _staffName.isEmpty
+          ? await BackendApiClient.instance.getDashboard('teacher')
+          : const <String, dynamic>{};
       final staffId = _staffId.isEmpty
-          ? RoleAccessService.teacherStaffId
+          ? _resolveStaffIdFromDashboard(dashboard)
           : _staffId;
+      final staffName = _staffName.isEmpty
+          ? teacherFlowText(
+              dashboard['staff_name'] ??
+                  dashboard['teacher_name'] ??
+                  dashboard['name'],
+              fallback: RoleAccessService.teacherName,
+            )
+          : _staffName;
       final types = _leaveTypes.isEmpty
           ? await BackendApiClient.instance.getLeaveTypes()
           : _leaveTypes;
@@ -332,13 +320,15 @@ class _TeacherLeaveRequestFormScreenState
       if (!mounted) return;
       setState(() {
         _staffId = staffId;
-        _staffName = _staffName.isEmpty
-            ? RoleAccessService.teacherName
-            : _staffName;
+        _staffName = staffName;
         _leaveTypes = types;
         _balances = balances;
         _leaveTypeId = _firstLeaveTypeId();
         _loadingContext = false;
+        if (_staffId.isEmpty || _leaveTypes.isEmpty) {
+          _error =
+              'Leave context is incomplete. Refresh this screen after teacher profile sync.';
+        }
       });
       return;
     } catch (error) {
@@ -348,6 +338,17 @@ class _TeacherLeaveRequestFormScreenState
         _error = error.toString();
       });
     }
+  }
+
+  String _resolveStaffIdFromDashboard(Map<String, dynamic> dashboard) {
+    return teacherFlowText(
+      RoleAccessService.teacherStaffId.isNotEmpty
+          ? RoleAccessService.teacherStaffId
+          : dashboard['staff_id'] ??
+                dashboard['teacher_id'] ??
+                dashboard['id'] ??
+                dashboard['linked_id'],
+    );
   }
 
   String _leaveTypeIdFrom(Map<String, dynamic> type) {

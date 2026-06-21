@@ -71,7 +71,9 @@ void main() {
     expect(qrPanel, isNot(contains('Future.wait<Object>([')));
     expect(qrPanel, contains('_loadRecentScans'));
     expect(qrPanel, contains('_exportDailyQrLog'));
-    expect(qrPanel, contains('SharePlus.instance.share'));
+    expect(qrPanel, contains('ShareExportService'));
+    expect(qrPanel, contains('shareBytes('));
+    expect(qrPanel, isNot(contains('XFile.fromData')));
 
     expect(api, contains('Future<StaffQrTokenModel> getStaffQrToken()'));
     expect(api, contains('Future<StaffAttendanceModel> scanStaffQr'));
@@ -91,6 +93,36 @@ void main() {
     expect(handler, contains('payload.SchoolID != schoolID'));
     expect(handler, contains('staffQRRefreshSeconds = 5'));
     expect(handler, contains('ExportStaffQRDailyLogs'));
+  });
+
+  test('role shell Home actions reset to dashboard routes', () {
+    final moduleScaffold = File(
+      'lib/core/widgets/erp_module_scaffold.dart',
+    ).readAsStringSync();
+    final principalNav = File(
+      'lib/core/widgets/app_navigation.dart',
+    ).readAsStringSync();
+    final teacherFlow = File(
+      'lib/core/widgets/teacher_flow_ui.dart',
+    ).readAsStringSync();
+
+    expect(
+      moduleScaffold,
+      contains(
+        'navigator.pushNamedAndRemoveUntil(target, (existing) => false)',
+      ),
+    );
+    expect(
+      moduleScaffold,
+      contains('target == RouteAccessGuard.dashboardForRole(role)'),
+    );
+    expect(
+      principalNav,
+      contains(
+        'navigator.pushNamedAndRemoveUntil(destination.route, (_) => false)',
+      ),
+    );
+    expect(teacherFlow, contains('route: AppRoutes.teacherDashboard'));
   });
 
   test('staff QR display uses separate kiosk login and teacher scan identity', () {

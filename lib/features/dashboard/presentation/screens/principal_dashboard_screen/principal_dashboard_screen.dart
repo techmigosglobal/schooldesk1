@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
@@ -24,6 +25,7 @@ class PrincipalDashboardScreen extends StatefulWidget {
 class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   bool _loading = true;
   bool _setupLoading = false;
+  String? _setupError;
   String? _error;
   int _selectedTab = 0;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
@@ -45,11 +47,17 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
       // ── Phase 1: Critical data ──────────────────────────────────────────────
       // Only 3 calls needed to paint the dashboard. Render immediately.
-      final criticalResults = await Future.wait<Object>([
-        api.getDashboard('principal'),
-        api.getCurrentSchool(),
-        api.getProfile(),
-      ]);
+      final criticalResults =
+          await Future.wait<Object>([
+            api.getDashboard('principal'),
+            api.getCurrentSchool(),
+            api.getProfile(),
+          ]).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => throw TimeoutException(
+              'Dashboard data took too long. Check your connection.',
+            ),
+          );
 
       final dashboard = Map<String, dynamic>.from(criticalResults[0] as Map);
       final school = Map<String, dynamic>.from(criticalResults[1] as Map);
@@ -70,6 +78,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       // ── Phase 2: Optional data ──────────────────────────────────────────────
       // Fires in background after the UI is visible. Does not block rendering.
       _loadSetupData(api, dashboard, school, profile);
+    } on TimeoutException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            error.message ??
+            'Dashboard data took too long. Check your connection.';
+        _loading = false;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -137,7 +153,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
           request: api.getNotifications(),
           fallback: <Map<String, dynamic>>[],
         ),
-      ]);
+      ]).timeout(const Duration(seconds: 45));
 
       if (!mounted) return;
 
@@ -167,9 +183,12 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         );
         _setupLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _setupLoading = false);
+      setState(() {
+        _setupLoading = false;
+        _setupError = 'Some school data couldn\'t be loaded.';
+      });
     }
   }
 
@@ -181,12 +200,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     try {
       return await request;
     } catch (error, stackTrace) {
-      developer.log(
-        'Principal dashboard optional load failed: $label',
-        name: 'PrincipalDashboardScreen',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Principal dashboard optional load failed: $label',
+          name: 'PrincipalDashboardScreen',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return fallback;
     }
   }
@@ -237,7 +258,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             children: [
               _PrincipalAppHeader(
                 data: _data,
-                onViewProfile: () => _open(AppRoutes.principalSchoolProfile),
                 onNotifications: () =>
                     _open(AppRoutes.notificationCenter, arguments: 'principal'),
               ),
@@ -388,6 +408,43 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else if (_setupError != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Material(
+                    color: const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            size: 18,
+                            color: Color(0xFF92400E),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _setupError!,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              setState(() => _setupError = null);
+                              _loadDashboard();
+                            },
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 )
@@ -839,12 +896,10 @@ class _PrincipalHomePatternPainter extends CustomPainter {
 
 class _PrincipalAppHeader extends StatelessWidget {
   final _PrincipalHomeData data;
-  final VoidCallback onViewProfile;
   final VoidCallback onNotifications;
 
   const _PrincipalAppHeader({
     required this.data,
-    required this.onViewProfile,
     required this.onNotifications,
   });
 
@@ -947,11 +1002,7 @@ class _PrincipalAppHeader extends StatelessWidget {
                         ],
                       ),
                       const Spacer(),
-                      _SchoolIdentityBanner(
-                        data: data,
-                        compact: compact,
-                        onViewProfile: onViewProfile,
-                      ),
+                      _SchoolIdentityBanner(data: data, compact: compact),
                     ],
                   ),
                 ),
@@ -967,13 +1018,8 @@ class _PrincipalAppHeader extends StatelessWidget {
 class _SchoolIdentityBanner extends StatelessWidget {
   final _PrincipalHomeData data;
   final bool compact;
-  final VoidCallback onViewProfile;
 
-  const _SchoolIdentityBanner({
-    required this.data,
-    required this.compact,
-    required this.onViewProfile,
-  });
+  const _SchoolIdentityBanner({required this.data, required this.compact});
 
   @override
   Widget build(BuildContext context) {
@@ -1019,41 +1065,6 @@ class _SchoolIdentityBanner extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-          SizedBox(width: compact ? 8 : 12),
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: compact ? 100 : 114,
-              maxWidth: compact ? 116 : 136,
-            ),
-            child: SizedBox(
-              height: compact ? 44 : 48,
-              child: FilledButton(
-                onPressed: onViewProfile,
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.appTheme.surface,
-                  foregroundColor: const Color(0xFF111827),
-                  elevation: 0,
-                  padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    'View Profile',
-                    maxLines: 1,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: const Color(0xFF111827),
-                      fontWeight: FontWeight.w900,
-                      fontSize: compact ? 13 : 14,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                ),
-              ),
             ),
           ),
         ],

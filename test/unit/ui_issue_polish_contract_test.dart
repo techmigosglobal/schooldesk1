@@ -58,6 +58,68 @@ void main() {
     expect(pdfService, contains('Printing.sharePdf'));
   });
 
+  test('share exports use temporary files instead of in-memory XFiles', () {
+    final shareService = File('lib/core/services/share_export_service.dart');
+    final staffQr = File(
+      'lib/core/widgets/staff_qr_attendance_panel.dart',
+    ).readAsStringSync();
+    final oversight = File(
+      'lib/features/people/presentation/screens/student_oversight_screen/student_oversight_screen.dart',
+    ).readAsStringSync();
+
+    expect(shareService.existsSync(), isTrue);
+    final source = shareService.readAsStringSync();
+    expect(source, contains('class ShareExportService'));
+    expect(source, contains('getTemporaryDirectory()'));
+    expect(source, contains('XFile(file.path'));
+    expect(source, contains('SharePlus.instance.share'));
+    expect(source, contains('_safeFileName(fileName)'));
+    expect(source, contains("trimmed.contains('/')"));
+    expect(source, contains("trimmed.contains('\\\\')"));
+    expect(source, contains("trimmed.contains('..')"));
+
+    for (final source in [staffQr, oversight]) {
+      expect(source, contains('ShareExportService'));
+      expect(source, contains('shareBytes('));
+      expect(source, isNot(contains('XFile.fromData')));
+    }
+  });
+
+  test(
+    'event calendar keeps compact text readable and shows created event month',
+    () {
+      final calendar = File(
+        'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
+      ).readAsStringSync();
+
+      expect(calendar, contains('_EventFormResult'));
+      expect(calendar, contains('_selectedMonth = saved.startDate.month'));
+      expect(calendar, contains('_filter = _EventFilter.month'));
+      expect(calendar, contains('Event created and calendar refreshed'));
+      expect(calendar, contains('_ResponsivePickerGrid'));
+      expect(
+        calendar,
+        contains('constraints: const BoxConstraints(minHeight: 68)'),
+      );
+      expect(calendar, contains('FittedBox('));
+    },
+  );
+
+  test('teacher leave request form resolves direct route context', () {
+    final leaveForm = File(
+      'lib/features/leave/presentation/screens/teacher_leave_screen/teacher_leave_request_form_screen.dart',
+    ).readAsStringSync();
+
+    expect(leaveForm, contains('_resolveStaffIdFromDashboard'));
+    expect(
+      leaveForm,
+      contains("BackendApiClient.instance.getDashboard('teacher')"),
+    );
+    expect(leaveForm, isNot(contains('Open from Teacher module')));
+    expect(leaveForm, isNot(contains('Teacher module context required')));
+    expect(leaveForm, contains('Submit leave for principal/admin approval'));
+  });
+
   test('parent workflow shortcuts and fee payment controls stay readable', () {
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
@@ -91,11 +153,7 @@ void main() {
   });
 
   test('source-only documentation contract is enforced', () {
-    for (final path in [
-      'README.md',
-      'docs/PRD.md',
-      'docs/SPEC.md',
-    ]) {
+    for (final path in ['README.md', 'docs/PRD.md', 'docs/SPEC.md']) {
       expect(File(path).existsSync(), isTrue, reason: '$path should exist');
     }
 
@@ -107,12 +165,15 @@ void main() {
         .where((path) => path.endsWith('.md'))
         .toSet();
 
-    expect(markdownFiles, containsAll({
-      'README.md',
-      'docs/PRD.md',
-      'docs/SPEC.md',
-      'docs/teacher-principal-workflow-improvements.md',
-    }));
+    expect(
+      markdownFiles,
+      containsAll({
+        'README.md',
+        'docs/PRD.md',
+        'docs/SPEC.md',
+        'docs/teacher-principal-workflow-improvements.md',
+      }),
+    );
     expect(
       Directory('.github/workflows').existsSync()
           ? Directory('.github/workflows').listSync()

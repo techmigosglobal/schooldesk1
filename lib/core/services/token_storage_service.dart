@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -52,12 +53,14 @@ class TokenStorageService {
     try {
       return await _storage.read(key: key);
     } on PlatformException catch (error, stackTrace) {
-      developer.log(
-        'Secure auth storage could not be read. Clearing stored session.',
-        name: 'TokenStorageService',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Secure auth storage could not be read. Clearing stored session.',
+          name: 'TokenStorageService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       await clear();
       return null;
     }
@@ -73,12 +76,14 @@ class TokenStorageService {
     try {
       await _storage.write(key: key, value: value);
     } on PlatformException catch (error, stackTrace) {
-      developer.log(
-        'Secure auth storage value could not be saved.',
-        name: 'TokenStorageService',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Secure auth storage value could not be saved.',
+          name: 'TokenStorageService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       rethrow;
     }
   }
@@ -93,12 +98,14 @@ class TokenStorageService {
     try {
       await _storage.delete(key: key);
     } on PlatformException catch (error, stackTrace) {
-      developer.log(
-        'Secure auth storage value could not be cleared.',
-        name: 'TokenStorageService',
-        error: error,
-        stackTrace: stackTrace,
-      );
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Secure auth storage value could not be cleared.',
+          name: 'TokenStorageService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
     }
   }
 }

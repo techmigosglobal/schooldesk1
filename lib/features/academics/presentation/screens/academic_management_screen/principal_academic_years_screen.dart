@@ -1,7 +1,10 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
@@ -521,7 +524,14 @@ class _AcademicYearUsersExportScreenState
         total += result.total;
       }
       if (mounted) setState(() => _total = total);
-    } catch (_) {}
+    } catch (error) {
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Failed to load user count for export: $error',
+          name: 'AcademicYearUsersExportScreen',
+        );
+      }
+    }
   }
 
   @override

@@ -51,7 +51,6 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
     'Teacher': [
       'Dashboard',
       'Attendance',
-      'Syllabus',
       'Exams',
       'Communication',
     ],

@@ -904,16 +904,6 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
               '${_num(row['value']).round()} weak score signal(s)',
         ),
         _AnalyticsListCard(
-          title: 'Syllabus Completion Tracker',
-          icon: Icons.track_changes_rounded,
-          rows: _asListMap(_analytics['syllabus_completion_tracker']),
-          empty: 'No syllabus tracker data yet.',
-          labelBuilder: (row) =>
-              _text(row['subject_name'], fallback: 'Subject'),
-          subLabelBuilder: (row) =>
-              '${_num(row['completion_percent']).round()}% complete · ${_int(row['topics_completed'])}/${_int(row['topics_total'])} topics',
-        ),
-        _AnalyticsListCard(
           title: 'Teacher Performance',
           icon: Icons.groups_3_rounded,
           rows: _asListMap(_analytics['teacher_performance']),
@@ -1923,15 +1913,6 @@ class SubjectCommandCard extends StatelessWidget {
                         '${_num(data['average_student_score']).toStringAsFixed(0)}%',
                     tone: const Color(0xFFEFF6FF),
                     color: context.appTheme.primary,
-                  ),
-                  _MetricTile(
-                    width: width,
-                    icon: Icons.track_changes_rounded,
-                    label: 'Syllabus Pending',
-                    value:
-                        '${_num(data['pending_syllabus_percent']).toStringAsFixed(0)}%',
-                    tone: const Color(0xFFFFF7ED),
-                    color: context.appTheme.warning,
                   ),
                   _MetricTile(
                     width: width,

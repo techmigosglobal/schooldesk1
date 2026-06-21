@@ -18,6 +18,7 @@ class AppConstants {
   static const String rolePrincipal = 'principal';
   static const String roleTeacher = 'teacher';
   static const String roleParent = 'parent';
+  static const String roleAdmin = 'admin';
 
   // Pagination
   static const int defaultPageSize = 20;

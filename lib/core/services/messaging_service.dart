@@ -1,5 +1,8 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 
@@ -233,7 +236,14 @@ class MessagingService extends ChangeNotifier {
           priority: NotificationPriority.medium,
         ),
       );
-    } catch (_) {}
+    } catch (error) {
+      if (EnvConfig.enableLogging) {
+        developer.log(
+          'Failed to trigger notification: $error',
+          name: 'MessagingService',
+        );
+      }
+    }
   }
 
   Future<void> markConversationRead(String conversationId, String role) async {

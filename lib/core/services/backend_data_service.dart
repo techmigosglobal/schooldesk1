@@ -12,7 +12,6 @@ class BackendDataService {
   static const String kConcessionRequests = 'principal_concession_requests';
   static const String kTimetable = 'principal_timetable';
   static const String kSubstituteRequests = 'principal_substitute_requests';
-  static const String kSyllabusData = 'principal_syllabus_data';
   static const String kExamSchedule = 'principal_exam_schedule';
   static const String kExamResults = 'principal_exam_results';
   static const String kComplaints = 'principal_complaints';
@@ -231,8 +230,6 @@ class BackendDataService {
         return await _api.getTimetableSlots();
       case kSubstituteRequests:
         return await _api.getSubstitutions();
-      case kSyllabusData:
-        return await _api.getRawList('/syllabus');
       case kExamSchedule:
         return (await _api.getRawList(
           '/exams/schedules',
@@ -405,9 +402,6 @@ class BackendDataService {
       case kAcademicCurriculum:
       case kSharedCurriculum:
         await saveAcademicCurriculumRecord(latest);
-        return;
-      case kSyllabusData:
-        await _saveFrontendRecord('/syllabus', latest);
         return;
       case kSharedSchoolNotices:
       case kNotices:
