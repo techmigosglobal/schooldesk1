@@ -15,6 +15,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _slots = const [];
+  bool _usingAssignedClassFallback = false;
 
   @override
   void initState() {
@@ -32,12 +33,11 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
       if (!RoleAccessService.hasTeacherStaffLink) {
         throw Exception(RoleAccessService.teacherScopeStatus);
       }
-      final slots = await BackendApiClient.instance.getTimetableSlots(
-        staffId: RoleAccessService.teacherStaffId,
-      );
+      final slots = await _loadTeacherTimetableSlots();
       if (!mounted) return;
       setState(() {
-        _slots = slots;
+        _slots = slots.rows;
+        _usingAssignedClassFallback = slots.usedClassFallback;
         _loading = false;
       });
     } catch (error) {
@@ -47,6 +47,27 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
         _error = error.toString().replaceFirst('Exception: ', '');
       });
     }
+  }
+
+  Future<_TeacherTimetableLoadResult> _loadTeacherTimetableSlots() async {
+    final staffScopedSlots = await BackendApiClient.instance.getTimetableSlots(
+      staffId: RoleAccessService.teacherStaffId,
+    );
+    if (staffScopedSlots.isNotEmpty ||
+        RoleAccessService.teacherClassId.trim().isEmpty) {
+      return _TeacherTimetableLoadResult(
+        rows: staffScopedSlots,
+        usedClassFallback: false,
+      );
+    }
+
+    final classScopedSlots = await BackendApiClient.instance.getTimetableSlots(
+      sectionId: RoleAccessService.teacherClassId,
+    );
+    return _TeacherTimetableLoadResult(
+      rows: classScopedSlots,
+      usedClassFallback: classScopedSlots.isNotEmpty,
+    );
   }
 
   Map<int, List<Map<String, dynamic>>> get _slotsByDay {
@@ -119,6 +140,9 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
               subjects: subjects,
               date: _weekLabel(),
               mappedSubjects: RoleAccessService.teacherSubjectIds.length,
+              sourceLabel: _usingAssignedClassFallback
+                  ? 'Timetable source: assigned class'
+                  : 'Timetable source: teacher slots',
             ),
             const SizedBox(height: 16),
 
@@ -190,12 +214,14 @@ class _FullDayClassCard extends StatelessWidget {
   final List<String> subjects;
   final String date;
   final int mappedSubjects;
+  final String sourceLabel;
 
   const _FullDayClassCard({
     required this.classLabel,
     required this.subjects,
     required this.date,
     required this.mappedSubjects,
+    required this.sourceLabel,
   });
 
   @override
@@ -267,6 +293,14 @@ class _FullDayClassCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          Text(
+            sourceLabel,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           if (subjects.isNotEmpty) ...[
             const SizedBox(height: 14),
             Text(
@@ -306,6 +340,16 @@ class _FullDayClassCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TeacherTimetableLoadResult {
+  final List<Map<String, dynamic>> rows;
+  final bool usedClassFallback;
+
+  const _TeacherTimetableLoadResult({
+    required this.rows,
+    required this.usedClassFallback,
+  });
 }
 
 class _DayScheduleCard extends StatelessWidget {

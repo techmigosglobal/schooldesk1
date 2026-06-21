@@ -255,14 +255,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
             timeLabel: teacherFlowDate(DateTime.now()),
             actions: [
               TeacherFlowAction(
-                label: 'Save Diary',
-                icon: Icons.save_rounded,
-                filled: true,
-                onTap: _saving ? null : _saveDiaryEntry,
-              ),
-              TeacherFlowAction(
                 label: 'Homework',
                 icon: Icons.assignment_turned_in_rounded,
+                filled: true,
                 onTap: () =>
                     Navigator.pushNamed(context, AppRoutes.teacherHomework),
               ),
@@ -279,11 +274,11 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 tone: const Color(0xFFEAF3FF),
               ),
               TeacherFlowMetric(
-                label: 'Archived',
+                label: 'Past Entries',
                 value: '${_entries.where((row) => !_isTodayEntry(row)).length}',
-                icon: Icons.task_alt_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFEAFBF5),
+                icon: Icons.history_rounded,
+                color: Colors.indigo,
+                tone: const Color(0xFFEAF0FF),
               ),
             ],
           ),

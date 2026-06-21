@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -445,6 +447,10 @@ class _TeacherLessonPlannerScreenState
                             icon: const Icon(Icons.check, size: 16),
                             label: const Text('Complete'),
                           ),
+                    onTap: () => _openAttachment(
+                      context,
+                      '${p['attachment_url'] ?? ''}',
+                    ),
                   ),
                 );
               }),
@@ -452,6 +458,22 @@ class _TeacherLessonPlannerScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _openAttachment(BuildContext context, String attachment) async {
+    final uri = resolveAttachmentUrl(attachment);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attachment link is not available.')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open attachment.')),
+      );
+    }
   }
 
   Future<void> _pickDate(TextEditingController controller) async {

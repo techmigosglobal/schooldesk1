@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/status_badge_widget.dart';
@@ -295,8 +296,8 @@ class _LessonPlannerCard extends StatelessWidget {
   }
 
   Future<void> _openAttachment(BuildContext context, String attachment) async {
-    final uri = Uri.tryParse(attachment);
-    if (uri == null || !uri.hasScheme) {
+    final uri = resolveAttachmentUrl(attachment);
+    if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Attachment link is not available.')),
       );

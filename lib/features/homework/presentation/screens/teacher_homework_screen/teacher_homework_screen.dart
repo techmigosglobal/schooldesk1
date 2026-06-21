@@ -28,7 +28,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     _loadHomework();
   }
 
-  Future<void> _loadHomework() async {
+  Future<void> _loadHomework({bool forceRefresh = false}) async {
     setState(() {
       _loading = true;
       _error = null;
@@ -123,7 +123,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
         homework: homework,
       ),
     );
-    if (result != null) await _loadHomework();
+    if (result != null) await _loadHomework(forceRefresh: true);
   }
 
   Future<void> _deleteHomework(Map<String, dynamic> row) async {
@@ -160,7 +160,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Homework deleted successfully')),
       );
-      await _loadHomework();
+      await _loadHomework(forceRefresh: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -314,7 +314,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                           arguments: TeacherHomeworkSubmissionsArgs(
                             homework: row,
                           ),
-                        ).then((_) => _loadHomework()),
+                        ).then((_) => _loadHomework(forceRefresh: true)),
                       ),
                       TeacherFlowAction(
                         label: 'Delete',

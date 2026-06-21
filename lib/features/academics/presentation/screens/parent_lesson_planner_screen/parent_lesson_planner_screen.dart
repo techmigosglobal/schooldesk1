@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 
@@ -168,20 +170,23 @@ class _PlannerCard extends StatelessWidget {
     );
   }
 
-  void _openAttachment(BuildContext context, String url) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Lesson Plan Attachment'),
-        content: SelectableText(url),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _openAttachment(
+    BuildContext context,
+    String attachmentUrl,
+  ) async {
+    final uri = resolveAttachmentUrl(attachmentUrl);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attachment link is not available.')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open attachment.')),
+      );
+    }
   }
 
   String? _nested(dynamic obj, String key) {

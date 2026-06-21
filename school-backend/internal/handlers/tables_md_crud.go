@@ -270,7 +270,7 @@ func (h *TablesMDCRUDHandler) Update(c *gin.Context) {
 		return
 	}
 
-	query := h.scopedQuery(c).Where(quoteHandlerIdentifier(h.resource.PrimaryKey)+" = ?", id)
+	query := h.recordIDQuery(c, id)
 	if err := query.Updates(payload).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to update "+h.resource.Module)
 		return
@@ -541,9 +541,7 @@ func (h *TablesMDCRUDHandler) mirrorLegacyID(payload map[string]interface{}) {
 
 func (h *TablesMDCRUDHandler) loadByID(c *gin.Context, id string) (map[string]interface{}, bool) {
 	var row map[string]interface{}
-	err := h.scopedQuery(c).
-		Where(quoteHandlerIdentifier(h.resource.PrimaryKey)+" = ?", id).
-		Take(&row).Error
+	err := h.recordIDQuery(c, id).Take(&row).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			fail(c, http.StatusNotFound, h.resource.Module+" not found")
@@ -556,6 +554,19 @@ func (h *TablesMDCRUDHandler) loadByID(c *gin.Context, id string) (map[string]in
 		row["id"] = row[h.resource.PrimaryKey]
 	}
 	return row, true
+}
+
+func (h *TablesMDCRUDHandler) recordIDQuery(c *gin.Context, id string) *gorm.DB {
+	query := h.scopedQuery(c)
+	if h.resource.Table == "homework" && h.columnSet["id"] {
+		return query.Where(
+			"("+quoteHandlerIdentifier(h.resource.PrimaryKey)+" = ? OR "+
+				quoteHandlerIdentifier("id")+" = ?)",
+			id,
+			id,
+		)
+	}
+	return query.Where(quoteHandlerIdentifier(h.resource.PrimaryKey)+" = ?", id)
 }
 
 func (h *TablesMDCRUDHandler) scopedQuery(c *gin.Context) *gorm.DB {

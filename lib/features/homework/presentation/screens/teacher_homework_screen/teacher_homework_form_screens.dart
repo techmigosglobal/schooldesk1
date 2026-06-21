@@ -75,6 +75,11 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   bool get _missingRequiredContext =>
       _teacherStaffId.trim().isEmpty || _assignedClasses.isEmpty;
 
+  String get _homeworkRecordId {
+    final homework = widget.args.homework;
+    return teacherFlowText(homework?['homework_id'] ?? homework?['id']);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -201,7 +206,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       _error = null;
     });
     try {
-      final homeworkId = teacherFlowText(widget.args.homework?['id']);
+      final homeworkId = _homeworkRecordId;
       if (homeworkId.isEmpty) {
         await BackendApiClient.instance.createHomework(
           title: _titleController.text.trim(),

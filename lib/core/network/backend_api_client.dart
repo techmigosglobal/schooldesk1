@@ -74,6 +74,8 @@ class BackendApiClient {
     return _instance!;
   }
 
+  String get baseUrl => _dio.options.baseUrl;
+
   static Future<void> initialize() async {
     final client = instance;
     await client.installPersistentCache();

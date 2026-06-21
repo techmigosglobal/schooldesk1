@@ -136,7 +136,11 @@ class _AdminTimetableGenerationFormScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _contextHeader(context, widget.args.classLabel, widget.args.dayLabel),
+                  _contextHeader(
+                    context,
+                    widget.args.classLabel,
+                    widget.args.dayLabel,
+                  ),
                   const SizedBox(height: 14),
                   Row(
                     children: [
@@ -238,7 +242,10 @@ class _AdminTimetableGenerationFormScreenState
     }
     final preview = _preview;
     if (preview == null) {
-      return _softPanel(context, 'Preview backend-generated periods before applying.');
+      return _softPanel(
+        context,
+        'Preview backend-generated periods before applying.',
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -260,7 +267,9 @@ class _AdminTimetableGenerationFormScreenState
   }
 
   Widget _suggestionRow(TimetableSuggestionModel suggestion) {
-    final color = suggestion.blocking ? context.appTheme.warning : context.appTheme.success;
+    final color = suggestion.blocking
+        ? context.appTheme.warning
+        : context.appTheme.success;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(10),
@@ -400,8 +409,41 @@ class _AdminTimetablePeriodFormScreenState
       widget.args.section != null &&
       widget.args.academicYear != null &&
       widget.args.termId.trim().isNotEmpty &&
-      widget.args.subjects.isNotEmpty &&
+      _mappedSubjectOptions.isNotEmpty &&
       widget.args.staff.isNotEmpty;
+
+  String get _selectedClassGradeId => _textValue(widget.args.section?.gradeId);
+
+  List<Map<String, dynamic>> get _mappedSubjectOptions {
+    return widget.args.subjects
+        .where(_subjectIsMappedToSelectedClass)
+        .toList(growable: false);
+  }
+
+  bool _subjectIsMappedToSelectedClass(Map<String, dynamic> subject) {
+    final gradeId = _selectedClassGradeId;
+    final academicYearId = _textValue(widget.args.academicYear?.id);
+    final directGradeId = _textValue(subject['grade_id']);
+    final directYearId = _textValue(subject['academic_year_id']);
+    if (directGradeId.isNotEmpty || directYearId.isNotEmpty) {
+      return (directGradeId.isEmpty || directGradeId == gradeId) &&
+          (directYearId.isEmpty || directYearId == academicYearId);
+    }
+
+    final mappings = _listValue(
+      subject['grade_subjects'] ??
+          subject['grade_subject_mappings'] ??
+          subject['mappings'],
+    );
+    if (mappings.isEmpty) return true;
+    return mappings.any((mapping) {
+      final row = _mapValue(mapping);
+      final rowGradeId = _textValue(row['grade_id']);
+      final rowYearId = _textValue(row['academic_year_id']);
+      return rowGradeId == gradeId &&
+          (rowYearId.isEmpty || rowYearId == academicYearId);
+    });
+  }
 
   @override
   void initState() {
@@ -419,7 +461,7 @@ class _AdminTimetablePeriodFormScreenState
     );
     _subjectId = _initialId(
       _textValue(period['subject_id']),
-      widget.args.subjects.map((subject) => '${subject['id']}'),
+      _mappedSubjectOptions.map((subject) => '${subject['id']}'),
     );
     _staffId = _initialId(
       _textValue(period['staff_id']),
@@ -455,7 +497,11 @@ class _AdminTimetablePeriodFormScreenState
               key: _formKey,
               child: Column(
                 children: [
-                  _contextHeader(context, widget.args.classLabel, widget.args.dayLabel),
+                  _contextHeader(
+                    context,
+                    widget.args.classLabel,
+                    widget.args.dayLabel,
+                  ),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _periodController,
@@ -472,7 +518,7 @@ class _AdminTimetablePeriodFormScreenState
                     initialValue: _subjectId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Subject'),
-                    items: widget.args.subjects
+                    items: _mappedSubjectOptions
                         .map(
                           (subject) => DropdownMenuItem(
                             value: '${subject['id']}',
@@ -487,6 +533,11 @@ class _AdminTimetablePeriodFormScreenState
                     onChanged: _saving
                         ? null
                         : (value) => setState(() => _subjectId = value ?? ''),
+                  ),
+                  const SizedBox(height: 8),
+                  _softPanel(
+                    context,
+                    'Only subjects mapped to this class grade can be scheduled.',
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
@@ -572,13 +623,25 @@ class _AdminTimetablePeriodFormScreenState
           : const SchoolDeskStatusPanel.empty(
               title: 'Setup data required',
               message:
-                  'Class, term, subject, and staff setup are required before editing periods.',
+                  'Class, term, mapped subject, and staff setup are required before editing periods.',
             ),
     );
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || !_ready) return;
+    final selectedSubject = widget.args.subjects.firstWhere(
+      (subject) => _textValue(subject['id']) == _subjectId,
+      orElse: () => const <String, dynamic>{},
+    );
+    if (selectedSubject.isEmpty ||
+        !_subjectIsMappedToSelectedClass(selectedSubject)) {
+      _showError(
+        context,
+        'Map ${_subjectNameById(_subjectId)} to ${widget.args.section!.gradeName} for ${widget.args.academicYear!.yearLabel} first; subject must be mapped before scheduling.',
+      );
+      return;
+    }
     final payload = {
       'section_id': widget.args.section!.id,
       'academic_year_id': widget.args.academicYear!.id,
@@ -617,6 +680,14 @@ class _AdminTimetablePeriodFormScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _subjectNameById(String id) {
+    final subject = widget.args.subjects.firstWhere(
+      (row) => _textValue(row['id']) == id,
+      orElse: () => const <String, dynamic>{},
+    );
+    return subject.isEmpty ? 'this subject' : _subjectName(subject);
   }
 }
 
@@ -879,7 +950,11 @@ class _TimetableFormScaffold extends StatelessWidget {
   }
 }
 
-Widget _contextHeader(BuildContext context, String classLabel, String dayLabel) {
+Widget _contextHeader(
+  BuildContext context,
+  String classLabel,
+  String dayLabel,
+) {
   return Row(
     children: [
       Icon(Icons.calendar_view_week_rounded, color: context.appTheme.primary),
@@ -898,7 +973,10 @@ Widget _contextHeader(BuildContext context, String classLabel, String dayLabel) 
             ),
             Text(
               dayLabel,
-              style: GoogleFonts.dmSans(color: context.appTheme.muted, fontSize: 12),
+              style: GoogleFonts.dmSans(
+                color: context.appTheme.muted,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -954,6 +1032,19 @@ String _roomName(Map<String, dynamic> room) {
 String _textValue(Object? value, {String fallback = ''}) {
   final text = '${value ?? ''}'.trim();
   return text.isEmpty || text == 'null' ? fallback : text;
+}
+
+Map<String, dynamic> _mapValue(Object? value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return value.map((key, val) => MapEntry('$key', val));
+  }
+  return const <String, dynamic>{};
+}
+
+List<dynamic> _listValue(Object? value) {
+  if (value is List) return value;
+  return const <dynamic>[];
 }
 
 String? _required(String? value, String message) {

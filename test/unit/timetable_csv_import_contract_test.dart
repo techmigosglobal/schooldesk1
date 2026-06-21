@@ -36,7 +36,7 @@ void main() {
     expect(importer, contains('long_break_start_time'));
     expect(importer, contains('long_break_end_time'));
     expect(importer, contains('Lunch Break'));
-    expect(importer, contains("route: AppRoutes.adminTimetable"));
+    expect(importer, contains("route: AppRoutes.principalClasses"));
     expect(importer, contains('getTerms(year.id)'));
     expect(importer, contains('section.academicYearId != academicYearId'));
     expect(importer, contains('working_days'));
@@ -91,5 +91,40 @@ void main() {
     expect(teacherTimetable, contains('RoleAccessService.teacherSubjectIds'));
     expect(teacherTimetable, isNot(contains('Quick Actions')));
     expect(teacherTimetable, isNot(contains('_buildQuickActions')));
+  });
+
+  test('teacher timetable falls back to assigned class slots', () {
+    final teacherTimetable = File(
+      'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
+    ).readAsStringSync();
+
+    expect(teacherTimetable, contains('_loadTeacherTimetableSlots'));
+    expect(teacherTimetable, contains('staffScopedSlots'));
+    expect(teacherTimetable, contains('classScopedSlots'));
+    expect(teacherTimetable, contains('RoleAccessService.teacherClassId'));
+    expect(
+      teacherTimetable,
+      contains('sectionId: RoleAccessService.teacherClassId'),
+    );
+    expect(teacherTimetable, contains('Timetable source: assigned class'));
+  });
+
+  test('add period filters subjects to mapped grade-year subjects', () {
+    final adminTimetableForms = File(
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart',
+    ).readAsStringSync();
+
+    expect(adminTimetableForms, contains('_mappedSubjectOptions'));
+    expect(adminTimetableForms, contains('_subjectIsMappedToSelectedClass'));
+    expect(adminTimetableForms, contains('_selectedClassGradeId'));
+    expect(
+      adminTimetableForms,
+      contains(r'Map ${_subjectNameById(_subjectId)} to'),
+    );
+    expect(
+      adminTimetableForms,
+      contains('Only subjects mapped to this class grade can be scheduled.'),
+    );
+    expect(adminTimetableForms, contains('subject must be mapped'));
   });
 }

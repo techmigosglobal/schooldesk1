@@ -65,8 +65,8 @@ void main() {
       'lib/features/shared/presentation/screens/school_gallery_screen.dart',
     ).readAsStringSync();
 
-    expect(parentDashboard, contains('/event-posts/home-feed'));
-    expect(parentLessonPlanner, contains('/lesson-planners/parent'));
+    expect(parentDashboard, contains('getHomeFeedEventPosts()'));
+    expect(parentLessonPlanner, contains('getParentLessonPlanners()'));
     expect(
       parentDashboard,
       isNot(contains('/api/v1/event-posts?destination=PARENTS_HOME')),
@@ -76,8 +76,8 @@ void main() {
       landing,
       isNot(contains('/api/v1/event-posts?destination=SCHOOL_LANDING')),
     );
-    expect(approval, contains('/event-posts/pending'));
-    expect(gallery, contains('/event-posts/gallery'));
+    expect(approval, contains('getPendingEventPosts()'));
+    expect(gallery, contains('getGalleryEventPosts()'));
     expect(gallery, contains('GridView.builder'));
   });
 
@@ -124,5 +124,28 @@ void main() {
     );
     expect(handler, isNot(contains('Preload("Class")')));
     expect(handler, contains('Preload("Grade")'));
+  });
+
+  test('lesson planner attachment links are normalized before opening', () {
+    final principal = File(
+      'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',
+    ).readAsStringSync();
+    final parent = File(
+      'lib/features/academics/presentation/screens/parent_lesson_planner_screen/parent_lesson_planner_screen.dart',
+    ).readAsStringSync();
+    final teacher = File(
+      'lib/features/academics/presentation/screens/lesson_planner_screen.dart',
+    ).readAsStringSync();
+    final resolver = File(
+      'lib/core/utils/attachment_url_resolver.dart',
+    ).readAsStringSync();
+
+    expect(resolver, contains('resolveAttachmentUrl'));
+    expect(resolver, contains('BackendApiClient.instance.baseUrl'));
+    expect(resolver, contains('uri.hasScheme'));
+    expect(principal, contains('resolveAttachmentUrl(attachment)'));
+    expect(parent, contains('resolveAttachmentUrl(attachmentUrl)'));
+    expect(teacher, contains('resolveAttachmentUrl('));
+    expect(principal, contains('Attachment link is not available.'));
   });
 }
