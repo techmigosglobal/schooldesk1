@@ -29,6 +29,7 @@ func NewAttendanceHandler() *AttendanceHandler {
 }
 
 const staffQRRefreshSeconds = 5
+const staffQRScanGraceSeconds = 10
 
 var (
 	errInvalidStaffQRToken = errors.New("invalid staff qr token")
@@ -649,7 +650,7 @@ func verifyStaffQRToken(token string, now time.Time) (staffQRPayload, error) {
 	if _, err := time.Parse("2006-01-02", payload.Date); err != nil {
 		return staffQRPayload{}, errInvalidStaffQRToken
 	}
-	if now.Unix() > payload.ExpiresAt {
+	if now.Unix() > payload.ExpiresAt+staffQRScanGraceSeconds {
 		return staffQRPayload{}, errExpiredStaffQRToken
 	}
 	if payload.IssuedAt > now.Add(2*time.Minute).Unix() || payload.ExpiresAt <= payload.IssuedAt {

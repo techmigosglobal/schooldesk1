@@ -23,7 +23,7 @@ class StaffQrAttendancePanel extends StatefulWidget {
 class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   StaffQrTokenModel? _token;
   List<StaffAttendanceModel> _recent = const [];
-  Timer? _timer;
+  Timer? _ticker;
   Timer? _pollingTimer;
   bool _loading = true;
   bool _refreshing = false;
@@ -43,7 +43,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _ticker?.cancel();
     _pollingTimer?.cancel();
     super.dispose();
   }
@@ -65,7 +65,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         _loading = false;
         _refreshing = false;
       });
-      _startCountdown();
+      _startLiveTicker();
       _loadRecentScans();
     } catch (error) {
       if (!mounted) return;
@@ -158,16 +158,15 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     return '${now.year}-$month-$day';
   }
 
-  void _startCountdown() {
-    _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+  void _startLiveTicker() {
+    _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
       final token = _token;
-      if (token == null || !mounted) return;
+      if (token == null) return;
       final next = token.secondsRemaining;
       setState(() => _secondsLeft = next);
-      if (next <= 0) {
-        _timer?.cancel();
-        _load(quiet: true);
+      if (next <= 1 && !_refreshing) {
+        unawaited(_load(quiet: true));
       }
     });
   }

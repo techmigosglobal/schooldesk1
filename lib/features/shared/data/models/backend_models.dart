@@ -1225,6 +1225,9 @@ class LeaveApplicationModel {
   final String id;
   final String staffId;
   final String leaveTypeId;
+  final String staffName;
+  final String staffDesignation;
+  final String leaveTypeName;
   final String fromDate;
   final String toDate;
   final bool halfDay;
@@ -1232,11 +1235,15 @@ class LeaveApplicationModel {
   final String? reason;
   final String status;
   final String? rejectionReason;
+  final String appliedAt;
 
   const LeaveApplicationModel({
     required this.id,
     required this.staffId,
     required this.leaveTypeId,
+    required this.staffName,
+    required this.staffDesignation,
+    required this.leaveTypeName,
     required this.fromDate,
     required this.toDate,
     required this.halfDay,
@@ -1244,21 +1251,44 @@ class LeaveApplicationModel {
     this.reason,
     required this.status,
     this.rejectionReason,
+    required this.appliedAt,
   });
 
-  factory LeaveApplicationModel.fromJson(Map<String, dynamic> json) =>
-      LeaveApplicationModel(
-        id: json['id'] as String,
-        staffId: json['staff_id'] as String,
-        leaveTypeId: json['leave_type_id'] as String,
-        fromDate: json['from_date'] as String,
-        toDate: json['to_date'] as String,
-        halfDay: json['half_day'] as bool? ?? false,
-        totalDays: (json['total_days'] as num?)?.toDouble() ?? 0,
-        reason: json['reason'] as String?,
-        status: json['status'] as String? ?? 'pending',
-        rejectionReason: json['rejection_reason'] as String?,
-      );
+  factory LeaveApplicationModel.fromJson(Map<String, dynamic> json) {
+    final staff = _mapValue(json['staff']);
+    final leaveType = _mapValue(json['leave_type']);
+    final staffName = [
+      '${staff['first_name'] ?? ''}'.trim(),
+      '${staff['last_name'] ?? ''}'.trim(),
+    ].where((part) => part.isNotEmpty).join(' ');
+    return LeaveApplicationModel(
+      id: '${json['id'] ?? ''}',
+      staffId: '${json['staff_id'] ?? ''}',
+      leaveTypeId: '${json['leave_type_id'] ?? ''}',
+      staffName: staffName.isNotEmpty
+          ? staffName
+          : '${json['staff_name'] ?? json['teacher_name'] ?? ''}'.trim(),
+      staffDesignation: '${staff['designation'] ?? json['designation'] ?? ''}'
+          .trim(),
+      leaveTypeName:
+          '${leaveType['leave_name'] ?? json['leave_type_name'] ?? json['leave_name'] ?? ''}'
+              .trim(),
+      fromDate: '${json['from_date'] ?? ''}',
+      toDate: '${json['to_date'] ?? ''}',
+      halfDay: json['half_day'] as bool? ?? false,
+      totalDays: (json['total_days'] as num?)?.toDouble() ?? 0,
+      reason: json['reason'] as String?,
+      status: json['status'] as String? ?? 'pending',
+      rejectionReason: json['rejection_reason'] as String?,
+      appliedAt: '${json['applied_at'] ?? json['created_at'] ?? ''}',
+    );
+  }
+
+  static Map<String, dynamic> _mapValue(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return const {};
+  }
 }
 
 class LeaveApplicationRequest {

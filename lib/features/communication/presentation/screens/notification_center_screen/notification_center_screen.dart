@@ -48,7 +48,9 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     });
     try {
       _service = await NotificationService.getInstance();
-      if (forceRefresh) await _service?.refresh();
+      if (forceRefresh || widget.role.trim().toLowerCase() == 'principal') {
+        await _service?.refresh();
+      }
     } catch (error) {
       _error = error.toString();
     }

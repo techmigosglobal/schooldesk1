@@ -8,7 +8,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 
-enum _AttendanceView { classes, monitor, students, reports }
+enum _AttendanceView { staff, students, classes, monitor, reports }
 
 class PrincipalAttendanceScreen extends StatefulWidget {
   const PrincipalAttendanceScreen({super.key});
@@ -24,7 +24,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   bool _exporting = false;
   String? _error;
   String _search = '';
-  _AttendanceView _view = _AttendanceView.classes;
+  _AttendanceView _view = _AttendanceView.staff;
   String _selectedSectionId = '';
   String _selectedStudentId = '';
   late final PageController _pageController;
@@ -202,9 +202,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _view == _AttendanceView.classes,
+      canPop: true,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _setView(_AttendanceView.classes);
+        if (!didPop) _setView(_AttendanceView.staff);
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF7FAFE),
@@ -216,27 +216,17 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               : Column(
                   children: [
                     _topBar(),
-                    _searchAndTabs(),
-                    Expanded(
-                      child: PageView(
-                        controller: _pageController,
-                        onPageChanged: (index) {
-                          setState(() => _view = _AttendanceView.values[index]);
-                        },
-                        children: [
-                          _viewPage(_classesDashboard()),
-                          _viewPage(_monitorView()),
-                          _viewPage(_studentsView()),
-                          _viewPage(_reportsView()),
-                        ],
-                      ),
-                    ),
+                    _modePicker(),
+                    Expanded(child: _viewPage(_activePrincipalView())),
                   ],
                 ),
         ),
-        bottomNavigationBar: _bottomBar(),
       ),
     );
+  }
+
+  Widget _activePrincipalView() {
+    return _view == _AttendanceView.staff ? _staffView() : _studentsView();
   }
 
   Widget _viewPage(Widget child) {
@@ -321,23 +311,25 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 
   String get _screenTitle {
     return switch (_view) {
+      _AttendanceView.staff => 'Attendance',
       _AttendanceView.classes => 'Student Attendance Monitor',
       _AttendanceView.monitor => 'Monitor',
-      _AttendanceView.students => 'Students',
+      _AttendanceView.students => 'Student Attendance',
       _AttendanceView.reports => 'Reports',
     };
   }
 
   String get _screenSubtitle {
     return switch (_view) {
+      _AttendanceView.staff => 'Select staff or student attendance',
       _AttendanceView.classes => 'Welcome back, Principal',
       _AttendanceView.monitor => 'Class registers and correction review',
-      _AttendanceView.students => 'Search and inspect student attendance',
+      _AttendanceView.students => 'Choose a class to inspect marked students',
       _AttendanceView.reports => 'Attendance insights and exports',
     };
   }
 
-  Widget _searchAndTabs() {
+  Widget _modePicker() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 6, 20, 16),
       child: Column(
@@ -345,68 +337,94 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           Row(
             children: [
               Expanded(
-                child: _SearchBox(
-                  hint: _view == _AttendanceView.students
-                      ? 'Search by name or admission no.'
-                      : 'Search classes, students, staff...',
-                  onChanged: (value) => setState(() => _search = value),
+                child: _ModeCard(
+                  icon: Icons.badge_outlined,
+                  title: 'Staff Attendance',
+                  subtitle:
+                      '${_staffAttendance.where((row) => row.checkedIn).length}/${_staff.length} checked in',
+                  selected: _view == _AttendanceView.staff,
+                  onTap: () => _setView(_AttendanceView.staff),
                 ),
               ),
-              if (_view == _AttendanceView.students) ...[
-                const SizedBox(width: 10),
-                _IconSquare(
-                  icon: Icons.filter_alt_outlined,
-                  onTap: () => _showSnack('Filters are applied by class chips'),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 42,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              children: [
-                _SegmentChip(
-                  label: 'Classes',
-                  selected: _view == _AttendanceView.classes,
-                  onTap: () => _setView(_AttendanceView.classes),
-                ),
-                _SegmentChip(
-                  label: 'Monitor',
-                  selected: _view == _AttendanceView.monitor,
-                  onTap: () => _setView(_AttendanceView.monitor),
-                ),
-                _SegmentChip(
-                  label: 'Students',
+              const SizedBox(width: 12),
+              Expanded(
+                child: _ModeCard(
+                  icon: Icons.groups_2_outlined,
+                  title: 'Student Attendance',
+                  subtitle: _selectedSectionId.isEmpty
+                      ? 'Select a class'
+                      : _sectionLabel(_selectedSectionId),
                   selected: _view == _AttendanceView.students,
                   onTap: () => _setView(_AttendanceView.students),
                 ),
-                _SegmentChip(
-                  label: 'Reports',
-                  selected: _view == _AttendanceView.reports,
-                  onTap: () => _setView(_AttendanceView.reports),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (_view == _AttendanceView.students) ...[
+            const SizedBox(height: 14),
+            _SearchBox(
+              hint: 'Search by name or admission no.',
+              onChanged: (value) => setState(() => _search = value),
+            ),
+          ],
         ],
       ),
     );
   }
 
   void _setView(_AttendanceView view) {
-    final index = _AttendanceView.values.indexOf(view);
     setState(() => _view = view);
-    if (!_pageController.hasClients) return;
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
+  }
+
+  Widget _staffView() {
+    final attendanceByStaffId = {
+      for (final row in _staffAttendance) row.staffId: row,
+    };
+    final rows = _staff;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionHeader('Staff Attendance Record', action: _todayText),
+          const SizedBox(height: 12),
+          _SoftCard(
+            child: Row(
+              children: [
+                _IconBubble(
+                  icon: Icons.verified_rounded,
+                  color: const Color(0xFF24A765),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${_staffAttendance.where((row) => row.checkedIn).length} checked in · ${(_staff.length - _staffAttendance.where((row) => row.checkedIn).length).clamp(0, _staff.length)} pending',
+                    style: _UiText.title,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (rows.isEmpty)
+            const _SoftCard(child: _EmptyLine('No staff records found.'))
+          else
+            for (final staff in rows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _SoftCard(
+                  child: _StaffAttendanceRow(
+                    staff: staff,
+                    attendance: attendanceByStaffId[staff.id],
+                  ),
+                ),
+              ),
+        ],
+      ),
     );
   }
 
+  // ignore: unused_element
   Widget _classesDashboard() {
     final recent = _filteredStudents.take(4).toList();
     return Padding(
@@ -502,6 +520,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _monitorView() {
     final sessions = _filteredSessions;
     return Padding(
@@ -567,37 +586,68 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            height: 38,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              children: [
-                _SegmentChip(
-                  label: 'All Classes',
-                  selected: _selectedSectionId.isEmpty,
-                  onTap: () => setState(() => _selectedSectionId = ''),
-                ),
-                for (final section in _sections)
-                  _SegmentChip(
-                    label: _sectionLabel(section.id).replaceAll(' - ', ' '),
-                    selected: _selectedSectionId == section.id,
-                    onTap: () async {
-                      setState(() => _selectedSectionId = section.id);
-                      await _loadSectionStudents(section.id);
-                    },
-                  ),
-              ],
+          DropdownButtonFormField<String>(
+            value: _selectedSectionId.isEmpty ? null : _selectedSectionId,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Select Class',
+              prefixIcon: Icon(Icons.class_rounded),
+              border: OutlineInputBorder(),
             ),
+            items: _sections
+                .map(
+                  (section) => DropdownMenuItem(
+                    value: section.id,
+                    child: Text(_sectionLabel(section.id)),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) async {
+              if (value == null || value == _selectedSectionId) return;
+              setState(() => _selectedSectionId = value);
+              await _loadSectionStudents(value);
+            },
           ),
-          const SizedBox(height: 20),
-          Text('All Students (${students.length})', style: _UiText.section),
+          const SizedBox(height: 16),
+          _sectionHeader(
+            _selectedSectionId.isEmpty
+                ? 'Select a class'
+                : '${_sectionLabel(_selectedSectionId)} Students',
+            action: '${students.length}',
+          ),
           const SizedBox(height: 12),
-          if (_detailLoading)
+          if (_selectedSectionId.isEmpty)
+            const _SoftCard(
+              child: _EmptyLine('Choose a class to see student attendance.'),
+            )
+          else if (_detailLoading)
             const _SoftCard(child: _EmptyLine('Loading students...'))
           else if (students.isEmpty)
             const _SoftCard(child: _EmptyLine('No students found.'))
-          else
+          else ...[
+            _SoftCard(
+              color: const Color(0xFFEAF5FF),
+              child: Row(
+                children: [
+                  _IconBubble(
+                    icon: Icons.fact_check_rounded,
+                    color: const Color(0xFF1976E8),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Marked today: $_markedStudentsToday/$_expectedStudentsToday',
+                      style: _UiText.title,
+                    ),
+                  ),
+                  _StatusPill(
+                    label: '$_presentStudentsToday Present',
+                    color: const Color(0xFF24A765),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
             for (final student in students)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
@@ -624,11 +674,13 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                   ),
                 ),
               ),
+          ],
         ],
       ),
     );
   }
 
+  // ignore: unused_element
   Widget _reportsView() {
     final reports = [
       _ReportItem(
@@ -732,6 +784,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _bottomBar() {
     return Container(
       decoration: const BoxDecoration(
@@ -1565,6 +1618,7 @@ class _SearchBox extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _SegmentChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -1906,6 +1960,7 @@ class _IconBubble extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _IconSquare extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -1976,6 +2031,129 @@ class _ReportRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ModeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFF1976E8) : const Color(0xFF64748B);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected ? const Color(0xFF1976E8) : const Color(0xFFEAF0F7),
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF1976E8).withOpacity(0.12),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ]
+              : const [],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 10),
+            Text(title, style: _UiText.title),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: _UiText.caption,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StaffAttendanceRow extends StatelessWidget {
+  final StaffModel staff;
+  final StaffAttendanceModel? attendance;
+
+  const _StaffAttendanceRow({required this.staff, required this.attendance});
+
+  @override
+  Widget build(BuildContext context) {
+    final checkedIn = attendance?.checkedIn ?? false;
+    final color = checkedIn ? const Color(0xFF24A765) : const Color(0xFFF59E0B);
+    final subtitleParts = [
+      if ((staff.designation ?? '').trim().isNotEmpty)
+        staff.designation!.trim(),
+      if (staff.staffCode.trim().isNotEmpty) staff.staffCode.trim(),
+    ];
+    return Row(
+      children: [
+        _IconBubble(
+          icon: checkedIn ? Icons.check_circle_rounded : Icons.schedule_rounded,
+          color: color,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                staff.fullName.isEmpty
+                    ? attendance?.staffName ?? staff.id
+                    : staff.fullName,
+                style: _UiText.title,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitleParts.isEmpty
+                    ? 'Staff member'
+                    : subtitleParts.join(' · '),
+                style: _UiText.caption,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            _StatusPill(
+              label: checkedIn ? 'Checked In' : 'Pending',
+              color: color,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              attendance?.checkInTimeLabel ?? '--:--',
+              style: _UiText.caption,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

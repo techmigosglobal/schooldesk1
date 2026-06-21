@@ -23,6 +23,15 @@ void main() {
     final teacherSelf = File(
       'school-backend/internal/handlers/teacher_self.go',
     ).readAsStringSync();
+    final approvalCenter = File(
+      'lib/features/people/presentation/screens/approval_center_screen/approval_center_screen.dart',
+    ).readAsStringSync();
+    final notificationCenter = File(
+      'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
+    ).readAsStringSync();
+    final backendModels = File(
+      'lib/features/shared/data/models/backend_models.dart',
+    ).readAsStringSync();
     final api = readBackendApiSources();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
@@ -38,6 +47,8 @@ void main() {
     expect(screen, contains('getLeaveApplications(staffId: staffId)'));
     expect(screen, contains('_recallApplication'));
     expect(screen, contains("label: 'Recall'"));
+    expect(screen, contains("label: 'Apply Leave'"));
+    expect(screen, isNot(contains('FloatingActionButton.extended')));
     expect(screen, isNot(contains('showModalBottomSheet(')));
     expect(screen, isNot(contains("staff_id': 'self'")));
     expect(screen, isNot(contains('NotificationService')));
@@ -87,5 +98,20 @@ void main() {
     );
     expect(backendLeave, contains('LEFT JOIN leave_types'));
     expect(teacherSelf, contains('LEFT JOIN leave_types'));
+    expect(backendModels, contains('final String staffName;'));
+    expect(backendModels, contains('final String leaveTypeName;'));
+    expect(backendModels, contains("json['staff']"));
+    expect(backendModels, contains("json['leave_type']"));
+    expect(approvalCenter, contains('_staffLeaveApprovalFromModel'));
+    expect(approvalCenter, contains("Teacher: \$teacherName"));
+    expect(
+      approvalCenter,
+      contains("'/leave/applications/\${row.id}/approve'"),
+    );
+    expect(
+      notificationCenter,
+      contains("widget.role.trim().toLowerCase() == 'principal'"),
+    );
+    expect(notificationCenter, contains('await _service?.refresh()'));
   });
 }

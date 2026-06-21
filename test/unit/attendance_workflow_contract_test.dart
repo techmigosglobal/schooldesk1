@@ -79,46 +79,46 @@ void main() {
     expect(teacherHistory, isNot(contains('Absent/Late')));
   });
 
-  test(
-    'principal attendance screen is a student monitor with reopen and staff check-in separation',
-    () {
-      final principalAttendance = File(
-        'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
-      ).readAsStringSync();
+  test('principal attendance screen separates staff and class-wise students', () {
+    final principalAttendance = File(
+      'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
+    ).readAsStringSync();
 
-      expect(principalAttendance, contains('Student Attendance Monitor'));
-      expect(principalAttendance, contains('Today at a glance'));
-      expect(principalAttendance, contains('Recent Students'));
-      expect(principalAttendance, contains('Attendance Insights'));
-      expect(principalAttendance, contains('Daily Attendance Report'));
-      expect(principalAttendance, contains('Class Attendance Report'));
-      expect(principalAttendance, contains('Search by name or admission no.'));
-      expect(principalAttendance, contains('_StudentDetailPage'));
-      expect(principalAttendance, contains('PageView'));
-      expect(principalAttendance, contains('PopScope'));
-      expect(principalAttendance, contains('_recordsByStudent'));
-      expect(principalAttendance, contains('_latestStudentRecord'));
-      expect(principalAttendance, contains('_StudentAttendanceMeta'));
-      expect(principalAttendance, contains('_AttendanceHistoryLine'));
-      expect(principalAttendance, contains("record['marked_at']"));
-      expect(principalAttendance, contains('ShareExportService'));
-      expect(principalAttendance, contains('PdfService.getInstance()'));
-      expect(principalAttendance, contains("'/attendance/reports/exports'"));
-      expect(principalAttendance, contains('Staff Check-in'));
-      expect(principalAttendance, contains('Reopen Attendance'));
-      expect(principalAttendance, contains('Send Reminder'));
-      expect(principalAttendance, contains('Export Class Register'));
-      expect(principalAttendance, contains('Audit Trail'));
-      expect(principalAttendance, contains('Incomplete'));
-      expect(principalAttendance, contains('_sessionStaffLabel'));
-      expect(principalAttendance, isNot(contains("'Subject ID'")));
-      expect(principalAttendance, isNot(contains("'Staff ID'")));
-      expect(principalAttendance, isNot(contains('Open class in Classes Hub')));
-      expect(principalAttendance, contains('reopenAttendanceSession'));
-      expect(principalAttendance, contains('Not Started'));
-      expect(principalAttendance, contains('Needs Review'));
-    },
-  );
+    expect(
+      principalAttendance,
+      contains("enum _AttendanceView { staff, students"),
+    );
+    expect(principalAttendance, contains('Staff Attendance'));
+    expect(principalAttendance, contains('Student Attendance'));
+    expect(principalAttendance, contains('Staff Attendance Record'));
+    expect(principalAttendance, contains('Select Class'));
+    expect(
+      principalAttendance,
+      contains('Choose a class to see student attendance.'),
+    );
+    expect(principalAttendance, contains('Marked today:'));
+    expect(principalAttendance, contains('Search by name or admission no.'));
+    expect(principalAttendance, contains('_StaffAttendanceRow'));
+    expect(principalAttendance, contains('getStaffAttendanceForDate'));
+    expect(principalAttendance, contains('getStudents('));
+    expect(principalAttendance, contains('_StudentDetailPage'));
+    expect(principalAttendance, contains('PopScope'));
+    expect(principalAttendance, contains('_recordsByStudent'));
+    expect(principalAttendance, contains('_latestStudentRecord'));
+    expect(principalAttendance, contains('_StudentAttendanceMeta'));
+    expect(principalAttendance, contains('_AttendanceHistoryLine'));
+    expect(principalAttendance, contains("record['marked_at']"));
+    expect(principalAttendance, contains('Reopen Attendance'));
+    expect(principalAttendance, contains('Send Reminder'));
+    expect(principalAttendance, contains('Incomplete'));
+    expect(principalAttendance, contains('_sessionStaffLabel'));
+    expect(principalAttendance, isNot(contains("'Subject ID'")));
+    expect(principalAttendance, isNot(contains("'Staff ID'")));
+    expect(principalAttendance, isNot(contains('Open class in Classes Hub')));
+    expect(principalAttendance, contains('reopenAttendanceSession'));
+    expect(principalAttendance, contains('Not Started'));
+    expect(principalAttendance, contains('Needs Review'));
+  });
 
   test('parent attendance is child scoped and uses actual day-wise records', () {
     final parentAttendance = File(

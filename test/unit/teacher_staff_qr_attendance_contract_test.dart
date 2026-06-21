@@ -66,6 +66,9 @@ void main() {
     expect(qrPanel, contains('StaffQrAttendancePanel'));
     expect(qrPanel, contains('QrImageView'));
     expect(qrPanel, contains('secondsRemaining'));
+    expect(qrPanel, contains('_startLiveTicker'));
+    expect(qrPanel, contains('Timer.periodic(const Duration(seconds: 1)'));
+    expect(qrPanel, contains('unawaited(_load(quiet: true))'));
     expect(qrPanel, contains('Recent scans'));
     expect(qrPanel, contains('Semantics('));
     expect(qrPanel, isNot(contains('Future.wait<Object>([')));
@@ -92,6 +95,7 @@ void main() {
     expect(handler, contains('currentStaffID(c)'));
     expect(handler, contains('payload.SchoolID != schoolID'));
     expect(handler, contains('staffQRRefreshSeconds = 5'));
+    expect(handler, contains('staffQRScanGraceSeconds = 10'));
     expect(handler, contains('ExportStaffQRDailyLogs'));
   });
 

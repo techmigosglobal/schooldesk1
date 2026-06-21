@@ -344,6 +344,21 @@ func TestTeacherLeaveApplicationIsPendingForPrincipalApproval(t *testing.T) {
 	if !found {
 		t.Fatalf("principal pending approvals should include created teacher leave, rows=%v", rows)
 	}
+
+	var principalNotification models.NotificationLog
+	if err := database.DB.
+		Where("school_id = ? AND recipient_user_id = ? AND reference_type = ? AND reference_id = ?", f.schoolID, "user-policy-principal", "leave", f.teacherStaffID).
+		First(&principalNotification).Error; err == nil {
+		t.Fatalf("teacher leave notification should reference application id, got staff id: %+v", principalNotification)
+	}
+	if err := database.DB.
+		Where("school_id = ? AND recipient_user_id = ? AND reference_type = ? AND title = ?", f.schoolID, "user-policy-principal", "leave", "Teacher leave approval pending").
+		First(&principalNotification).Error; err != nil {
+		t.Fatalf("principal notification not created for teacher leave: %v", err)
+	}
+	if principalNotification.Category != "pending_approval" || principalNotification.Route != "/approval-center-screen" {
+		t.Fatalf("unexpected principal leave notification: %+v", principalNotification)
+	}
 }
 
 func TestAdminExamMarksAreUpsertedAndScheduleMarksReadable(t *testing.T) {

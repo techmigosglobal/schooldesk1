@@ -139,11 +139,6 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
       loading: _loading,
       error: _error,
       onRefresh: _loadLeave,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _staffId.isEmpty ? null : _openApply,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Apply'),
-      ),
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(

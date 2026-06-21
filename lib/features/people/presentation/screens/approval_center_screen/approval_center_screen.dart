@@ -187,26 +187,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       final sources = await Future.wait([
         _loadApprovalSource('Staff leave', () async {
           final leaves = await BackendApiClient.instance.getLeaveApplications();
-          return leaves
-              .map(
-                (l) => {
-                  'id': l.id,
-                  'type': 'leave',
-                  'requesterName': l.staffId,
-                  'requesterRole': 'Teacher',
-                  'requesterClass': 'Dept: School',
-                  'submittedDate': l.fromDate.split('T').first,
-                  'summary':
-                      '${l.leaveTypeId} - ${l.totalDays.toStringAsFixed(1)} day(s)',
-                  'details':
-                      'From: ${l.fromDate.split('T').first}\nTo: ${l.toDate.split('T').first}\nReason: ${l.reason ?? ''}',
-                  'status': l.status,
-                  'remarks': l.rejectionReason,
-                  'actionDate': null,
-                  'decisionPath': null,
-                },
-              )
-              .toList();
+          return leaves.map((l) => _staffLeaveApprovalFromModel(l)).toList();
         }),
         _loadApprovalSource(
           'Account approvals',
@@ -296,6 +277,39 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   Future<List<Map<String, dynamic>>> _loadStudentLeaveApprovals() async {
     final rows = await BackendApiClient.instance.getStudentLeaveApplications();
     return rows.map(_studentLeaveApprovalFromRow).toList();
+  }
+
+  Map<String, dynamic> _staffLeaveApprovalFromModel(LeaveApplicationModel row) {
+    final teacherName = row.staffName.trim().isNotEmpty
+        ? row.staffName.trim()
+        : _text(row.staffId, fallback: 'Teacher');
+    final leaveType = row.leaveTypeName.trim().isNotEmpty
+        ? row.leaveTypeName.trim()
+        : _text(row.leaveTypeId, fallback: 'Leave request');
+    final fromDate = _dateOnly(row.fromDate);
+    final toDate = _dateOnly(row.toDate);
+    final submitted = _dateOnly(row.appliedAt).isNotEmpty
+        ? _dateOnly(row.appliedAt)
+        : fromDate;
+    return {
+      'id': row.id,
+      'type': 'leave',
+      'requesterName': teacherName,
+      'requesterRole': 'Teacher',
+      'requesterClass': row.staffDesignation.trim().isEmpty
+          ? 'Staff leave'
+          : row.staffDesignation.trim(),
+      'submittedDate': submitted,
+      'summary': '$leaveType - ${row.totalDays.toStringAsFixed(1)} day(s)',
+      'details':
+          'Teacher: $teacherName\nFrom: $fromDate\nTo: $toDate\nReason: ${row.reason ?? ''}',
+      'status': _approvalStatus(row.status),
+      'remarks': _text(row.rejectionReason).isEmpty
+          ? null
+          : _text(row.rejectionReason),
+      'actionDate': null,
+      'decisionPath': '/leave/applications/${row.id}/approve',
+    };
   }
 
   Future<_ApprovalSourceResult> _loadApprovalSource(

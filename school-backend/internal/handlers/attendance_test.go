@@ -457,6 +457,13 @@ func TestStaffQRScanRejectsExpiredWrongSchoolAndUnlinkedTeacher(t *testing.T) {
 		ExpiresAt: now.Add(-time.Minute).Unix(),
 		Nonce:     "expired-token",
 	})
+	graceToken := signedStaffQRTokenForTest(t, staffQRPayload{
+		SchoolID:  f.schoolID,
+		Date:      dateText,
+		IssuedAt:  now.Add(-time.Minute).Unix(),
+		ExpiresAt: now.Add(-5 * time.Second).Unix(),
+		Nonce:     "grace-token",
+	})
 	validWrongSchoolToken := signedStaffQRTokenForTest(t, staffQRPayload{
 		SchoolID:  "school-other",
 		Date:      dateText,
@@ -474,6 +481,7 @@ func TestStaffQRScanRejectsExpiredWrongSchoolAndUnlinkedTeacher(t *testing.T) {
 
 	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
 	teacherRouter.POST("/attendance/staff/qr-scan", h.ScanStaffQR)
+	assert.Equal(t, http.StatusOK, postStaffQRForTest(teacherRouter, graceToken).Code)
 	assert.Equal(t, http.StatusBadRequest, postStaffQRForTest(teacherRouter, expiredToken).Code)
 	assert.Equal(t, http.StatusForbidden, postStaffQRForTest(teacherRouter, validWrongSchoolToken).Code)
 
