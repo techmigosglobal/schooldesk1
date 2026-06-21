@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -77,14 +76,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Future<void> _uploadFile(String path, String name) async {
     setState(() => _uploading = true);
     try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(path, filename: name),
-      });
-      final response = await BackendApiClient.instance.dio.post(
-        '/uploads',
-        data: formData,
+      final url = await BackendApiClient.instance.uploadFile(
+        path,
+        filename: name,
       );
-      final url = response.data['url']?.toString() ?? '';
       if (url.isNotEmpty && mounted) {
         setState(() => _uploadedUrls.add(url));
       }
@@ -104,14 +99,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Future<void> _loadPosts() async {
     setState(() => _loading = true);
     try {
-      final response = (await BackendApiClient.instance.dio.get(
-        '/event-posts/teacher',
-      )).data;
+      final response = await BackendApiClient.instance.getTeacherEventPosts();
       if (!mounted) return;
       setState(() {
-        _posts = response is List
-            ? response
-            : (response['data'] as List? ?? []);
+        _posts = response;
         _loading = false;
       });
     } catch (e) {
@@ -143,18 +134,15 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _error = null;
     });
     try {
-      await BackendApiClient.instance.dio.post(
-        '/event-posts',
-        data: {
-          'title': _titleController.text.trim(),
-          'description': _descController.text.trim(),
-          'event_date': _dateController.text.trim().isEmpty
-              ? DateTime.now().toIso8601String()
-              : '${_dateController.text.trim()}T00:00:00Z',
-          'media_urls': _uploadedUrls.join(','),
-          'destinations': destinations,
-          'is_submit': isSubmit,
-        },
+      await BackendApiClient.instance.createEventPost(
+        title: _titleController.text.trim(),
+        description: _descController.text.trim(),
+        eventDate: _dateController.text.trim().isEmpty
+            ? DateTime.now().toIso8601String()
+            : '${_dateController.text.trim()}T00:00:00Z',
+        mediaUrls: _uploadedUrls,
+        destinations: destinations,
+        isSubmit: isSubmit,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

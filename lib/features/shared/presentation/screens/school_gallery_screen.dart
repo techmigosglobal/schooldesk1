@@ -31,18 +31,10 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
       _error = null;
     });
     try {
-      final response = (await BackendApiClient.instance.dio.get(
-        '/event-posts/gallery',
-      )).data;
+      final posts = await BackendApiClient.instance.getGalleryEventPosts();
       if (!mounted) return;
-      final rows = response is List
-          ? response
-          : (response['data'] as List? ?? const []);
       setState(() {
-        _posts = rows
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
+        _posts = posts;
         _loading = false;
       });
     } catch (_) {

@@ -116,10 +116,10 @@ void main() {
       final apiClient = readBackendApiSources();
       final main = readBackendRouteSources();
 
-      expect(teacherChat, contains("createRaw('/messages'"));
-      expect(parentChat, contains("createRaw('/messages'"));
-      expect(teacherChat, contains("updateRaw('/messages/\$id'"));
-      expect(parentChat, contains("updateRaw('/messages/\$id'"));
+      expect(teacherChat, contains('sendChatMessage('));
+      expect(parentChat, contains('sendChatMessage('));
+      expect(teacherChat, contains('markChatMessageRead('));
+      expect(parentChat, contains('markChatMessageRead('));
       expect(crud, contains('updateMessageReadReceipt'));
       expect(crud, contains('notifyMessageCreated(*message)'));
       expect(notifications, contains('createNotificationLogsForRolesTx('));

@@ -20,6 +20,9 @@ void main() {
       expect(source, contains('getTimetableSlots('));
       expect(source, contains('staffId: _staffId'));
       expect(source, contains('dayOfWeek: _selectedDate.weekday'));
+      expect(source, contains('_selectedSectionId'));
+      expect(source, contains('Class / Section'));
+      expect(source, contains('ChoiceChip'));
       expect(source, contains('getStudentEnrollments(s.id)'));
       expect(source, contains("'enrollment_missing': enrollmentId.isEmpty"));
       expect(source, contains("throw Exception('Enrollment record missing"));
@@ -44,6 +47,9 @@ void main() {
     final source = File(
       'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
     ).readAsStringSync();
+    final api = File(
+      'lib/core/network/api_modules/communications_api.dart',
+    ).readAsStringSync();
     final sharedWidgets = File(
       'lib/features/communication/presentation/widgets/chat_shared_widgets.dart',
     ).readAsStringSync();
@@ -53,14 +59,14 @@ void main() {
     expect(source, contains("text: 'Notices'"));
     expect(source, contains("api.getStaff(status: 'active'"));
     expect(source, contains('parentAccounts'));
-    expect(source, contains("getRawList('/message-conversations')"));
-    expect(source, contains("getRawList('/messages')"));
+    expect(source, contains('getMessageConversations()'));
+    expect(source, contains('getChatMessages()'));
     expect(source, contains('getCommunications()'));
     expect(source, contains('RoleAccessService.teacherStaffId'));
-    expect(source, contains("createRaw('/messages'"));
-    expect(source, contains("updateRaw('/messages/\$id'"));
-    expect(source, contains("'conversation_id': conversationId"));
-    expect(source, contains("'sender_role': 'Teacher'"));
+    expect(source, contains('sendChatMessage('));
+    expect(source, contains('markChatMessageRead('));
+    expect(api, contains("'conversation_id': conversationId"));
+    expect(api, contains("'sender_role': senderRole"));
     expect(source, contains('LayoutBuilder('));
     expect(source, contains('_showMobileConversationList'));
     expect(source, contains('_showMobileDirectList'));

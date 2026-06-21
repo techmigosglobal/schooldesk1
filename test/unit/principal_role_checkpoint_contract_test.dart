@@ -54,4 +54,18 @@ void main() {
     expect(academics, contains('principal_lesson_planner_screen.dart'));
     expect(backendRoutes, contains('lessonPlanners.GET("/principal"'));
   });
+
+  test('principal lesson planner review filters match backend statuses', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',
+    ).readAsStringSync();
+
+    expect(screen, contains("_statusFilter = 'all'"));
+    expect(screen, contains("value: 'uploaded'"));
+    expect(screen, contains("label: Text('Needs review')"));
+    expect(screen, contains("value: 'completed'"));
+    expect(screen, contains("label: 'Needs review'"));
+    expect(screen, contains("label: 'Completion'"));
+    expect(screen, isNot(contains("value: 'planned'")));
+  });
 }

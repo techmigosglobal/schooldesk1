@@ -97,8 +97,8 @@ class _PrincipalChatCommunicationsScreenState
     try {
       final api = BackendApiClient.instance;
       final profile = await api.getProfile();
-      final conversations = await api.getRawList('/message-conversations');
-      final messages = await api.getRawList('/messages');
+      final conversations = await api.getMessageConversations();
+      final messages = await api.getChatMessages();
       final directMessages = await api.getCommunications();
       final announcements = await api.getAnnouncements();
       final teachers = await api.getUsers(
@@ -1553,16 +1553,13 @@ class _PrincipalChatCommunicationsScreenState
     if (thread == null || profile == null || text.isEmpty) return;
     setState(() => _sending = true);
     try {
-      await BackendApiClient.instance.createRaw('/messages', {
-        'conversation_id': thread.id,
-        'sender_id': profile.id,
-        'sender_role': 'Principal',
-        'sender_name': _text(profile.name, fallback: 'Principal'),
-        'body': text,
-        'message': text,
-        'is_read': false,
-        'sent_at': DateTime.now().toUtc().toIso8601String(),
-      });
+      await BackendApiClient.instance.sendChatMessage(
+        conversationId: thread.id,
+        senderId: profile.id,
+        senderRole: 'Principal',
+        senderName: _text(profile.name, fallback: 'Principal'),
+        body: text,
+      );
       _messageController.clear();
       await _loadData();
       if (!mounted) return;
@@ -1598,10 +1595,7 @@ class _PrincipalChatCommunicationsScreenState
   }
 
   Future<void> _markParentMessageRead(_ChatMessage message) async {
-    await BackendApiClient.instance.updateRaw('/messages/${message.id}', {
-      'is_read': true,
-      'read_at': DateTime.now().toUtc().toIso8601String(),
-    });
+    await BackendApiClient.instance.markChatMessageRead(message.id);
     await _loadData();
   }
 

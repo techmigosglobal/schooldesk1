@@ -54,4 +54,15 @@ void main() {
       expect(source, contains("'$key'"));
     }
   });
+
+  test('teacher class hub exposes leave alongside class workflows', () {
+    final source = File(
+      'lib/features/academics/presentation/screens/teacher_classes_screen/teacher_classes_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("label: 'Homework'"));
+    expect(source, contains("label: 'Diary'"));
+    expect(source, contains("label: 'Track Leave'"));
+    expect(source, contains('AppRoutes.teacherLeave'));
+  });
 }

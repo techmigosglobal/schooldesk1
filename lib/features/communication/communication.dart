@@ -8,4 +8,3 @@ export 'presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_scre
 export 'presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart';
 export 'presentation/screens/teacher_communication_screen/teacher_communication_screen.dart';
 export 'presentation/screens/teacher_parent_interaction_screen/teacher_parent_interaction_screen.dart';
-export 'presentation/screens/teacher_ptm_screen/teacher_ptm_screen.dart';

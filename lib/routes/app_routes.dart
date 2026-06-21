@@ -109,12 +109,13 @@ class AppRoutes {
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
   static const String teacherReports = '/teacher-reports-screen';
   static const String teacherDiary = '/teacher-diary-screen';
-  static const String teacherPTM = '/teacher-ptm-screen';
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
   static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDiscipline = '/teacher-discipline-screen';
+  static const String teacherMarkEntry = '/teacher-mark-entry-screen';
+  static const String teacherSyllabus = '/teacher-syllabus-screen';
   static const String syllabusMonitoring = '/syllabus-monitoring-screen';
 
   // Parent Module Routes
@@ -250,12 +251,13 @@ class AppRoutes {
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
     teacherReports: (context) => const TeacherReportsScreen(),
     teacherDiary: (context) => const TeacherDiaryScreen(),
-    teacherPTM: (context) => const TeacherParentInteractionScreen(),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
     teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherDiscipline: (context) => const TeacherDisciplineScreen(),
+    teacherMarkEntry: (context) => const AdminExamsScreen(),
+    teacherSyllabus: (context) => const SyllabusMonitoringScreen(),
     syllabusMonitoring: (context) => const SyllabusMonitoringScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),

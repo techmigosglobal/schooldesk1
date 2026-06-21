@@ -109,8 +109,13 @@ void main() {
         'teacherMyAttendance',
         'teacherHomework',
         'teacherDiary',
+        'teacherMarkEntry',
+        'teacherSyllabus',
         'teacherEventPosts',
         'teacherLessonPlanner',
+        'teacherPerformance',
+        'teacherStudentNotes',
+        'teacherDiscipline',
         'schoolGallery',
         'teacherCommunication',
         'teacherParentInteraction',
@@ -133,14 +138,39 @@ void main() {
         isNot(contains('AppRoutes.teacherPTM')),
         reason: 'TeacherPTM is no longer part of Teacher navigation',
       );
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
+      final communicationBarrel = File(
+        'lib/features/communication/communication.dart',
+      ).readAsStringSync();
+      expect(
+        routes,
+        isNot(contains('teacherPTM')),
+        reason: 'TeacherParentInteraction is the canonical PTM route',
+      );
+      expect(
+        guard,
+        isNot(contains('teacherPTM')),
+        reason: 'Duplicate TeacherPTM route should not stay guard-active',
+      );
+      expect(
+        registry,
+        isNot(contains('/teacher-ptm-screen')),
+        reason: 'Duplicate PTM screen metadata should be retired',
+      );
+      expect(
+        communicationBarrel,
+        isNot(contains('teacher_ptm_screen.dart')),
+        reason: 'Duplicate PTM screen should not be exported',
+      );
       for (final removedRouteName in [
-        'teacherStudentNotes',
-        'teacherDiscipline',
-        'teacherPerformance',
-        'teacherMarkEntry',
         'teacherStudyMaterials',
         'teacherStudyMaterialForm',
-        'teacherSyllabus',
       ]) {
         expect(
           teacherNavigationSource,
@@ -148,6 +178,21 @@ void main() {
           reason: '$removedRouteName is no longer part of Teacher navigation',
         );
       }
+
+      expect(
+        teacherNavigationSource,
+        contains(
+          "label: 'Diary',\n              route: AppRoutes.teacherDiary",
+        ),
+        reason: 'Diary drawer item must open Class Diary, not Homework',
+      );
+      expect(
+        teacherNavigationSource,
+        contains(
+          "label: 'Homework',\n              route: AppRoutes.teacherHomework",
+        ),
+        reason: 'Homework should stay reachable as its own drawer item',
+      );
     },
   );
 }

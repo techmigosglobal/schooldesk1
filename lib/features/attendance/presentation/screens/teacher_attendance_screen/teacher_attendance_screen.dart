@@ -25,6 +25,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   AttendanceSessionModel? _session;
   List<_AttendanceStudent> _students = [];
   DateTime _selectedDate = DateTime.now();
+  String _selectedSectionId = '';
   String _selectedSlotId = '';
   List<Map<String, dynamic>> _slots = const [];
   String _sectionId = '';
@@ -52,7 +53,14 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       if (staffId.isEmpty) {
         throw Exception('Teacher staff profile is not linked to this login.');
       }
-      final sectionId = RoleAccessService.teacherClassId;
+      final classOptions = _attendanceClassOptions;
+      final sectionId = _selectedSectionId.isNotEmpty
+          ? _selectedSectionId
+          : (RoleAccessService.teacherClassId.isNotEmpty
+                ? RoleAccessService.teacherClassId
+                : _sectionIdFromClassRow(
+                    classOptions.isEmpty ? const {} : classOptions.first,
+                  ));
       if (sectionId.isEmpty) {
         throw Exception(
           'You are not assigned as a class teacher to any section.\n'
@@ -145,6 +153,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
       if (!mounted) return;
       setState(() {
+        _selectedSectionId = sectionId;
         _sectionId = sectionId;
         _staffId = staffId;
         _subjectId = subjectId;
@@ -536,8 +545,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             metrics: [
               TeacherFlowMetric(
                 label: 'Marked',
-                value:
-                    '${_markedStudents.length}/${_students.length}',
+                value: '${_markedStudents.length}/${_students.length}',
                 icon: Icons.how_to_reg_rounded,
                 color: Colors.indigo,
                 tone: const Color(0xFFEAF0FF),
@@ -741,21 +749,19 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
 
   Map<String, dynamic> _pickAttendanceSlot(List<Map<String, dynamic>> slots) {
     if (slots.isEmpty) return const {};
+    final selectedSection = _selectedSectionId.isNotEmpty
+        ? _selectedSectionId
+        : RoleAccessService.teacherClassId;
     if (_selectedSlotId.isNotEmpty) {
       final selected = slots.where(
         (slot) =>
             teacherFlowText(slot['id'] ?? slot['slot_id']) == _selectedSlotId &&
-            teacherFlowText(slot['section_id']) ==
-                RoleAccessService.teacherClassId,
+            teacherFlowText(slot['section_id']) == selectedSection,
       );
       if (selected.isNotEmpty) return selected.first;
     }
     final ownClassSlots = slots
-        .where(
-          (slot) =>
-              teacherFlowText(slot['section_id']) ==
-              RoleAccessService.teacherClassId,
-        )
+        .where((slot) => teacherFlowText(slot['section_id']) == selectedSection)
         .toList();
     if (ownClassSlots.isNotEmpty) {
       final firstPeriod = ownClassSlots.where(
@@ -830,7 +836,10 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
   }
 
   Widget _selectionPanel() {
-    final selectedSection = RoleAccessService.teacherClassId;
+    final classOptions = _attendanceClassOptions;
+    final selectedSection = _selectedSectionId.isNotEmpty
+        ? _selectedSectionId
+        : RoleAccessService.teacherClassId;
     final sectionSlots = _slots
         .where((slot) => teacherFlowText(slot['section_id']) == selectedSection)
         .toList();
@@ -851,6 +860,36 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
               ),
             ],
           ),
+          if (classOptions.length > 1) ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: selectedSection.isEmpty ? null : selectedSection,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Class / Section',
+                prefixIcon: Icon(Icons.class_rounded),
+              ),
+              items: classOptions
+                  .map(
+                    (row) => DropdownMenuItem(
+                      value: _sectionIdFromClassRow(row),
+                      child: Text(_classLabelFromRow(row)),
+                    ),
+                  )
+                  .where((item) => item.value?.trim().isNotEmpty == true)
+                  .toList(),
+              onChanged: (value) {
+                if (value == null || value == _selectedSectionId) return;
+                setState(() {
+                  _selectedSectionId = value;
+                  _selectedSlotId = '';
+                  _session = null;
+                  _students = [];
+                });
+                _loadFlow();
+              },
+            ),
+          ],
           if (sectionSlots.length > 1) ...[
             const SizedBox(height: 10),
             Wrap(
@@ -895,6 +934,25 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     );
     if (match.isNotEmpty) return teacherFlowText(match.first['label']);
     return RoleAccessService.teacherClassName;
+  }
+
+  List<Map<String, dynamic>> get _attendanceClassOptions {
+    final classTeacherClasses = RoleAccessService.teacherClassTeacherClasses;
+    if (classTeacherClasses.isNotEmpty) return classTeacherClasses;
+    return RoleAccessService.assignedTeacherClasses;
+  }
+
+  String _sectionIdFromClassRow(Map<String, dynamic> row) {
+    return teacherFlowText(row['id'] ?? row['section_id']);
+  }
+
+  String _classLabelFromRow(Map<String, dynamic> row) {
+    final label = teacherFlowText(row['label']);
+    if (label.isNotEmpty) return label;
+    final grade = teacherFlowText(row['grade_name'] ?? row['class_name']);
+    final section = teacherFlowText(row['section_name'] ?? row['section']);
+    final joined = [grade, section].where((part) => part.isNotEmpty).join(' ');
+    return joined.isEmpty ? 'Class / Section' : joined;
   }
 
   static const _attendanceStatusOptions = [

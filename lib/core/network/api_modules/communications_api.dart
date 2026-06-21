@@ -131,6 +131,42 @@ extension BackendCommunicationsApi on BackendApiClient {
     return normalized;
   }
 
+  Future<List<Map<String, dynamic>>> getMessageConversations() {
+    return getRawList('/message-conversations');
+  }
+
+  Future<List<Map<String, dynamic>>> getChatMessages() {
+    return getRawList('/messages');
+  }
+
+  Future<Map<String, dynamic>> sendChatMessage({
+    required String conversationId,
+    required String senderId,
+    required String senderRole,
+    required String body,
+    String senderName = '',
+    DateTime? sentAt,
+  }) {
+    final text = body.trim();
+    return createRaw('/messages', {
+      'conversation_id': conversationId,
+      'sender_id': senderId,
+      'sender_role': senderRole,
+      if (senderName.trim().isNotEmpty) 'sender_name': senderName.trim(),
+      'message': text,
+      'body': text,
+      'is_read': false,
+      'sent_at': (sentAt ?? DateTime.now()).toUtc().toIso8601String(),
+    });
+  }
+
+  Future<Map<String, dynamic>> markChatMessageRead(String messageId) {
+    return updateRaw('/messages/$messageId', {
+      'is_read': true,
+      'read_at': DateTime.now().toIso8601String(),
+    });
+  }
+
   Future<void> markNotificationRead(String notificationId) async {
     try {
       final response = await SchoolDeskApi.instance.client.markNotificationRead(

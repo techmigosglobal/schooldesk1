@@ -32,14 +32,10 @@ class _PrincipalEventApprovalScreenState
       _error = null;
     });
     try {
-      final response = (await BackendApiClient.instance.dio.get(
-        '/event-posts/pending',
-      )).data;
+      final posts = await BackendApiClient.instance.getPendingEventPosts();
       if (!mounted) return;
       setState(() {
-        _posts = response is List
-            ? response
-            : (response['data'] as List? ?? []);
+        _posts = posts;
         _loading = false;
       });
     } catch (e) {
@@ -53,7 +49,7 @@ class _PrincipalEventApprovalScreenState
 
   Future<void> _approveStatus(String id) async {
     try {
-      await BackendApiClient.instance.dio.post('/event-posts/$id/approve');
+      await BackendApiClient.instance.approveEventPost(id);
       _changed = true;
       await _loadPosts();
     } catch (e) {
@@ -109,8 +105,8 @@ class _PrincipalEventApprovalScreenState
                   onPressed: () {
                     if (reasonController.text.trim().isEmpty) {
                       setDialogState(
-                        () => validationError =
-                            'A rejection reason is required.',
+                        () =>
+                            validationError = 'A rejection reason is required.',
                       );
                       return;
                     }
@@ -127,9 +123,9 @@ class _PrincipalEventApprovalScreenState
 
     if (confirmed == true && reasonController.text.trim().isNotEmpty) {
       try {
-        await BackendApiClient.instance.dio.post(
-          '/event-posts/$id/reject',
-          data: {'reason': reasonController.text.trim()},
+        await BackendApiClient.instance.rejectEventPost(
+          id,
+          reason: reasonController.text.trim(),
         );
         _changed = true;
         await _loadPosts();

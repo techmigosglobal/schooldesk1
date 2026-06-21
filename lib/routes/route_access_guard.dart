@@ -30,7 +30,7 @@ class RouteAccessGuard {
 
   static const Map<String, Set<String>> _routeRoles = {
     AppRoutes.idCardGeneration: {'principal'},
-    AppRoutes.reportCardGenerator: {'principal'},
+    AppRoutes.reportCardGenerator: {'principal', 'teacher'},
     // Principal routes
     AppRoutes.principalDashboard: {'principal'},
     AppRoutes.staffManagement: {'principal'},
@@ -89,10 +89,11 @@ class RouteAccessGuard {
     AppRoutes.teacherDiary: {'teacher'},
     AppRoutes.teacherEventPosts: {'teacher'},
     AppRoutes.teacherLessonPlanner: {'teacher'},
-    AppRoutes.teacherPTM: {'teacher'},
     AppRoutes.teacherPerformance: {'teacher'},
     AppRoutes.teacherStudentNotes: {'teacher'},
     AppRoutes.teacherDiscipline: {'teacher'},
+    AppRoutes.teacherMarkEntry: {'teacher'},
+    AppRoutes.teacherSyllabus: {'teacher'},
     // Shared routes
     AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},
     AppRoutes.kioskQrAttendance: {'kiosk'},

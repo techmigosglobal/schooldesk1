@@ -4,6 +4,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 class TeacherDiaryScreen extends StatefulWidget {
   const TeacherDiaryScreen({super.key});
@@ -235,7 +236,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
       title: 'Class Diary',
-      subtitle: 'Record today, next class, and practice work',
+      subtitle: 'Record classwork, next plans, and teacher notes',
       selectedIndex: 3,
       loading: _loading,
       error: _error,
@@ -260,9 +261,10 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
                 onTap: _saving ? null : _saveDiaryEntry,
               ),
               TeacherFlowAction(
-                label: 'No Practice',
+                label: 'Homework',
                 icon: Icons.assignment_turned_in_rounded,
-                onTap: _saving ? null : () => _saveDiaryEntry(noPractice: true),
+                onTap: () =>
+                    Navigator.pushNamed(context, AppRoutes.teacherHomework),
               ),
             ],
           ),
@@ -323,7 +325,8 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     return TeacherFlowCard(
       icon: Icons.edit_note_rounded,
       title: 'Complete this period',
-      subtitle: 'Record what was taught before leaving the class workflow.',
+      subtitle:
+          'Use Homework for formal assignments with due dates and submissions.',
       body: Column(
         children: [
           DropdownButtonFormField<String>(
@@ -383,8 +386,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
             minLines: 2,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: 'Practice work',
-              prefixIcon: Icon(Icons.assignment_rounded),
+              labelText: 'Informal practice note',
+              helperText: 'Formal student work belongs in Homework.',
+              prefixIcon: Icon(Icons.note_alt_rounded),
             ),
           ),
           const SizedBox(height: 10),

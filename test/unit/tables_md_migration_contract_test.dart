@@ -41,24 +41,50 @@ void main() {
     expect(envConfig, contains('v1BaseUrlFrom(_configuredApiBaseUrl)'));
   });
 
-  test('active UI files do not import Dio directly for migrated API roots', () {
-    final activeUiFiles = Directory('lib/features')
-        .listSync(recursive: true)
-        .whereType<File>()
-        .where((file) => file.path.endsWith('.dart'));
+  test('migrated event and lesson planner UI avoids direct Dio calls', () {
+    final migratedUiFiles = [
+      File(
+        'lib/features/academics/presentation/screens/lesson_planner_screen.dart',
+      ),
+      File(
+        'lib/features/academics/presentation/screens/parent_lesson_planner_screen/parent_lesson_planner_screen.dart',
+      ),
+      File(
+        'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',
+      ),
+      File(
+        'lib/features/communication/presentation/screens/principal_event_approval_screen.dart',
+      ),
+      File(
+        'lib/features/communication/presentation/screens/event_post_screen.dart',
+      ),
+      File(
+        'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+      ),
+      File(
+        'lib/features/shared/presentation/screens/school_gallery_screen.dart',
+      ),
+    ];
 
-    for (final file in activeUiFiles) {
+    for (final file in migratedUiFiles) {
       final source = file.readAsStringSync();
       expect(
         source,
         isNot(contains("package:dio/dio.dart")),
-        reason: '${file.path} must use the generated API facade, not Dio.',
+        reason:
+            '${file.path} must use BackendApiClient facade methods, not Dio.',
+      );
+      expect(
+        source,
+        isNot(contains('.dio.')),
+        reason:
+            '${file.path} must use BackendApiClient facade methods, not Dio.',
       );
     }
   });
 
   test(
-    'retired modules are not exposed through active routes or API groups',
+    'lesson planner remains active while transport and library stay retired',
     () {
       final appRoutes = File('lib/routes/app_routes.dart').readAsStringSync();
       final teacherNavigation = File(
@@ -66,13 +92,13 @@ void main() {
       ).readAsStringSync();
       final main = readBackendRouteSources();
 
-      expect(appRoutes, isNot(contains('/teacher-lesson-planner-screen')));
+      expect(appRoutes, contains('/teacher-lesson-planner-screen'));
+      expect(appRoutes, contains('/principal-lesson-planner-screen'));
       expect(appRoutes, isNot(contains('/teacher-resources-screen')));
-      expect(
-        teacherNavigation,
-        isNot(contains('/teacher-lesson-planner-screen')),
-      );
+      expect(teacherNavigation, contains('AppRoutes.teacherLessonPlanner'));
       expect(teacherNavigation, isNot(contains('/teacher-resources-screen')));
+      expect(main, contains('lessonPlanners.GET("/principal"'));
+      expect(main, contains('lessonPlanners.GET("/teacher"'));
       expect(main, isNot(contains('api.Group("/transport")')));
       expect(main, isNot(contains('api.Group("/library")')));
     },

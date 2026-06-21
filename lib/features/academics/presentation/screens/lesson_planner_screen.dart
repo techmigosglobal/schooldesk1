@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -72,14 +71,10 @@ class _TeacherLessonPlannerScreenState
   Future<void> _uploadFile(String path, String name) async {
     setState(() => _uploading = true);
     try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(path, filename: name),
-      });
-      final response = await BackendApiClient.instance.dio.post(
-        '/uploads',
-        data: formData,
+      final url = await BackendApiClient.instance.uploadFile(
+        path,
+        filename: name,
       );
-      final url = response.data['url']?.toString() ?? '';
       if (url.isNotEmpty && mounted) {
         setState(() {
           _attachmentUrl = url;
@@ -106,15 +101,14 @@ class _TeacherLessonPlannerScreenState
     });
     try {
       await RoleAccessService.initialize();
-      final response = await BackendApiClient.instance.dio.get(
-        '/lesson-planners/teacher',
-      );
+      final response = await BackendApiClient.instance
+          .getTeacherLessonPlanners();
       if (!mounted) return;
       final classes = await _loadAssignedClasses();
       setState(() {
         _classes = classes;
         _selectedSectionId = _resolveSelectedSectionId(classes);
-        _planners = response.data['data'] ?? [];
+        _planners = response;
         _loading = false;
       });
     } catch (e) {
@@ -138,9 +132,7 @@ class _TeacherLessonPlannerScreenState
 
     try {
       final sections = await BackendApiClient.instance.getSections();
-      final bySectionId = {
-        for (final section in sections) section.id: section,
-      };
+      final bySectionId = {for (final section in sections) section.id: section};
       return assigned.map((row) {
         final sectionId = _sectionId(row);
         final section = bySectionId[sectionId];
@@ -161,8 +153,7 @@ class _TeacherLessonPlannerScreenState
   String? _resolveSelectedSectionId(List<Map<String, dynamic>> classes) {
     if (classes.isEmpty) return null;
     final current = _selectedSectionId;
-    if (current != null &&
-        classes.any((row) => _sectionId(row) == current)) {
+    if (current != null && classes.any((row) => _sectionId(row) == current)) {
       return current;
     }
     return _sectionId(classes.first);
@@ -183,20 +174,17 @@ class _TeacherLessonPlannerScreenState
       _error = null;
     });
     try {
-      await BackendApiClient.instance.dio.post(
-        '/lesson-planners',
-        data: {
-          'grade_id': gradeId,
-          'section_id': sectionId,
-          'week_start_date': _startDateController.text.trim().isEmpty
-              ? DateTime.now().toIso8601String()
-              : '${_startDateController.text.trim()}T00:00:00Z',
-          'week_end_date': _endDateController.text.trim().isEmpty
-              ? DateTime.now().add(const Duration(days: 6)).toIso8601String()
-              : '${_endDateController.text.trim()}T23:59:59Z',
-          'attachment_url': _attachmentUrl ?? '',
-          'note': _noteController.text.trim(),
-        },
+      await BackendApiClient.instance.createLessonPlanner(
+        gradeId: gradeId,
+        sectionId: sectionId,
+        weekStartDate: _startDateController.text.trim().isEmpty
+            ? DateTime.now().toIso8601String()
+            : '${_startDateController.text.trim()}T00:00:00Z',
+        weekEndDate: _endDateController.text.trim().isEmpty
+            ? DateTime.now().add(const Duration(days: 6)).toIso8601String()
+            : '${_endDateController.text.trim()}T23:59:59Z',
+        attachmentUrl: _attachmentUrl ?? '',
+        note: _noteController.text.trim(),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -222,7 +210,7 @@ class _TeacherLessonPlannerScreenState
   Future<void> _markComplete(String id) async {
     setState(() => _loading = true);
     try {
-      await BackendApiClient.instance.dio.post('/lesson-planners/$id/complete');
+      await BackendApiClient.instance.completeLessonPlanner(id);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -312,7 +300,8 @@ class _TeacherLessonPlannerScreenState
                           .toList(),
                       onChanged: _classes.isEmpty
                           ? null
-                          : (value) => setState(() => _selectedSectionId = value),
+                          : (value) =>
+                                setState(() => _selectedSectionId = value),
                     ),
                     const SizedBox(height: 14),
                     // Week start date

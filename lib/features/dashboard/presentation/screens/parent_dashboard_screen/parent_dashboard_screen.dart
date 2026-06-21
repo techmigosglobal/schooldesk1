@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -44,14 +43,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       final results = await Future.wait([
         api.getDashboard('parent'),
         api.getMyStudents(),
-        api.dio
-            .get('/event-posts/home-feed')
-            .catchError(
-              (_) => Response(
-                requestOptions: RequestOptions(path: ''),
-                data: [],
-              ),
-            ),
+        api.getHomeFeedEventPosts().catchError(
+          (_) => const <Map<String, dynamic>>[],
+        ),
       ]);
 
       if (!mounted) return;
@@ -70,12 +64,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           ? dashboardChildren
           : linkedChildren;
 
-      final res1 = results[2] is Response
-          ? (results[2] as Response).data
-          : results[2];
-      final rawEvents = res1 is List
-          ? res1
-          : (res1 is Map ? (res1['data'] as List? ?? []) : []);
+      final rawEvents = (results[2] as List).whereType<Map<String, dynamic>>();
 
       final List<Map<String, dynamic>> feedItems = [];
       for (final ev in rawEvents) {

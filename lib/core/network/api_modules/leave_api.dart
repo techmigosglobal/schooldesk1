@@ -161,6 +161,20 @@ extension BackendLeaveApi on BackendApiClient {
     }
   }
 
+  Future<void> recallLeaveApplication(String id) async {
+    try {
+      final response = await _dio.post('/leave/applications/$id/recall');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to recall leave application',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<void> decideLeaveApplication(
     String id, {
     required String status,

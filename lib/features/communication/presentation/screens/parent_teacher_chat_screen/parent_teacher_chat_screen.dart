@@ -128,8 +128,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     final api = BackendApiClient.instance;
     final profile = await api.getProfile();
     final children = await api.getMyStudents();
-    final conversations = await api.getRawList('/message-conversations');
-    final messages = await api.getRawList('/messages');
+    final conversations = await api.getMessageConversations();
+    final messages = await api.getChatMessages();
     final directMessages = await api.getCommunications();
     final ptmSlots = await api.getRawList('/parent-teacher-meetings');
     final timetableRows = <Map<String, dynamic>>[];
@@ -378,9 +378,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       for (final msg in msgs.where((msg) => msg['sender'] == 'teacher')) {
         final id = msg['id']?.toString() ?? '';
         if (id.isNotEmpty) {
-          await BackendApiClient.instance.updateRaw('/messages/$id', {
-            'is_read': true,
-          });
+          await BackendApiClient.instance.markChatMessageRead(id);
         }
       }
       setState(() {});
@@ -618,7 +616,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
             Text(
               'Teachers appear here from your child timetable, PTM slots, or an existing chat.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),
@@ -682,7 +683,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
                       decoration: BoxDecoration(
                         color: Colors.green,
                         shape: BoxShape.circle,
-                        border: Border.all(color: context.appTheme.surface, width: 2),
+                        border: Border.all(
+                          color: context.appTheme.surface,
+                          width: 2,
+                        ),
                       ),
                     ),
                   ),
@@ -807,10 +811,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: unread ? context.appTheme.infoContainer : context.appTheme.surface,
+        color: unread
+            ? context.appTheme.infoContainer
+            : context.appTheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: unread ? context.appTheme.info.withAlpha(70) : context.appTheme.outlineVariant,
+          color: unread
+              ? context.appTheme.info.withAlpha(70)
+              : context.appTheme.outlineVariant,
         ),
       ),
       child: Column(
@@ -823,7 +831,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
                     ? Icons.call_received_rounded
                     : Icons.call_made_rounded,
                 size: 16,
-                color: incoming ? context.appTheme.info : context.appTheme.success,
+                color: incoming
+                    ? context.appTheme.info
+                    : context.appTheme.success,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -839,7 +849,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
               ),
               Text(
                 _directMessageDate(message),
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
             ],
           ),
@@ -1025,8 +1038,8 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       attachmentWidget: type == 'file'
           ? _buildFileAttachment(msg, isParent)
           : type == 'image'
-              ? _buildImageAttachment(msg)
-              : null,
+          ? _buildImageAttachment(msg)
+          : null,
     );
   }
 
@@ -1084,7 +1097,11 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
         height: 120,
         color: context.appTheme.surfaceVariant,
         child: Center(
-          child: Icon(Icons.image_rounded, size: 40, color: context.appTheme.muted),
+          child: Icon(
+            Icons.image_rounded,
+            size: 40,
+            color: context.appTheme.muted,
+          ),
         ),
       ),
     );
@@ -1107,15 +1124,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
 
     final now = DateTime.now();
     final conversationId = await _conversationIdForTeacher(teacherId);
-    await BackendApiClient.instance.createRaw('/messages', {
-      'conversation_id': conversationId,
-      'sender_id': _parentUserId,
-      'sender_role': 'Parent',
-      'sender_name': 'Parent',
-      'body': text,
-      'is_read': false,
-      'sent_at': now.toUtc().toIso8601String(),
-    });
+    await BackendApiClient.instance.sendChatMessage(
+      conversationId: conversationId,
+      senderId: _parentUserId,
+      senderRole: 'Parent',
+      senderName: 'Parent',
+      body: text,
+      sentAt: now,
+    );
     await _loadData();
     final index = _teachers.indexWhere((teacher) => teacher['id'] == teacherId);
     if (index >= 0) {
@@ -1147,7 +1163,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
         });
     return created['id'].toString();
   }
-
 
   void _showTeacherInfo(int index) {
     final t = _teachers[index];
@@ -1190,7 +1205,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
             ),
             Text(
               '${t['subject']} • Class ${t['class']}',
-              style: GoogleFonts.dmSans(fontSize: 14, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                color: context.appTheme.muted,
+              ),
             ),
             const SizedBox(height: 8),
             Container(
@@ -1396,7 +1414,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
               const SizedBox(height: 10),
               Text(
                 _durationLabel(slot),
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
             ],
           ),
@@ -1695,10 +1716,14 @@ class _PtmFilterPill extends StatelessWidget {
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF1A6B4A) : context.appTheme.surfaceVariant,
+          color: selected
+              ? const Color(0xFF1A6B4A)
+              : context.appTheme.surfaceVariant,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? const Color(0xFF1A6B4A) : context.appTheme.outlineVariant,
+            color: selected
+                ? const Color(0xFF1A6B4A)
+                : context.appTheme.outlineVariant,
           ),
         ),
         child: Text(
@@ -1826,5 +1851,3 @@ String _ptmInitials(String value) {
       .join();
   return parts.isEmpty ? 'T' : parts;
 }
-
-

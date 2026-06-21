@@ -34,16 +34,7 @@ class _PrincipalLessonPlannerScreenState
       _error = null;
     });
     try {
-      final response = await BackendApiClient.instance.dio.get(
-        '/lesson-planners/principal',
-      );
-      final data = response.data is Map
-          ? Map<String, dynamic>.from(response.data as Map)
-          : const <String, dynamic>{};
-      final rows = (data['data'] as List? ?? const [])
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList();
+      final rows = await BackendApiClient.instance.getPrincipalLessonPlanners();
       if (!mounted) return;
       setState(() {
         _planners = rows;
@@ -63,7 +54,7 @@ class _PrincipalLessonPlannerScreenState
     return _planners.where((planner) {
       final status = _text(
         planner['status'],
-        fallback: 'planned',
+        fallback: 'uploaded',
       ).trim().toLowerCase();
       if (_statusFilter != 'all' && status != _statusFilter) return false;
       if (normalizedQuery.isEmpty) return true;
@@ -138,8 +129,8 @@ class _PrincipalLessonPlannerScreenState
               setState(() => _statusFilter = values.first),
           segments: const [
             ButtonSegment(value: 'all', label: Text('All')),
-            ButtonSegment(value: 'planned', label: Text('Planned')),
-            ButtonSegment(value: 'completed', label: Text('Done')),
+            ButtonSegment(value: 'uploaded', label: Text('Needs review')),
+            ButtonSegment(value: 'completed', label: Text('Completed')),
           ],
         ),
       ],
@@ -154,17 +145,23 @@ class _LessonPlannerSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final classes = planners
-        .map(_classLabel)
-        .where((v) => v.isNotEmpty)
-        .toSet();
     final completed = planners
         .where(
           (planner) =>
-              _text(planner['status'], fallback: 'planned').toLowerCase() ==
+              _text(planner['status'], fallback: 'uploaded').toLowerCase() ==
               'completed',
         )
         .length;
+    final needsReview = planners
+        .where(
+          (planner) =>
+              _text(planner['status'], fallback: 'uploaded').toLowerCase() ==
+              'uploaded',
+        )
+        .length;
+    final completion = planners.isEmpty
+        ? '0%'
+        : '${((completed / planners.length) * 100).round()}%';
     return Row(
       children: [
         Expanded(
@@ -177,16 +174,16 @@ class _LessonPlannerSummary extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _SummaryTile(
-            label: 'Classes',
-            value: classes.length.toString(),
-            icon: Icons.class_rounded,
+            label: 'Needs review',
+            value: needsReview.toString(),
+            icon: Icons.rate_review_rounded,
           ),
         ),
         const SizedBox(width: 10),
         Expanded(
           child: _SummaryTile(
-            label: 'Completed',
-            value: completed.toString(),
+            label: 'Completion',
+            value: completion,
             icon: Icons.task_alt_rounded,
           ),
         ),
@@ -242,7 +239,7 @@ class _LessonPlannerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = _text(planner['status'], fallback: 'planned');
+    final status = _text(planner['status'], fallback: 'uploaded');
     final note = _text(planner['note']);
     final attachment = _text(planner['attachment_url']);
     return Card(

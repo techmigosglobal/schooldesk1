@@ -70,8 +70,8 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
       final api = BackendApiClient.instance;
       final profile = await api.getProfile();
       final schoolNotices = await api.getAnnouncements();
-      final conversations = await api.getRawList('/message-conversations');
-      final messages = await api.getRawList('/messages');
+      final conversations = await api.getMessageConversations();
+      final messages = await api.getChatMessages();
       final directMessages = await api.getCommunications();
       // Use /staff (accessible to all roles) instead of /users (Admin/Principal only).
       final staffList = await api.getStaff(status: 'active', pageSize: 1000);
@@ -135,13 +135,12 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     final conversationId = _selectedConversationId;
     final text = _messageController.text.trim();
     if (conversationId.isEmpty || text.isEmpty) return;
-    await BackendApiClient.instance.createRaw('/messages', {
-      'conversation_id': conversationId,
-      'sender_id': RoleAccessService.teacherStaffId,
-      'sender_role': 'Teacher',
-      'message': text,
-      'body': text,
-    });
+    await BackendApiClient.instance.sendChatMessage(
+      conversationId: conversationId,
+      senderId: RoleAccessService.teacherStaffId,
+      senderRole: 'Teacher',
+      body: text,
+    );
     _messageController.clear();
     await _loadCommunication();
   }
@@ -149,10 +148,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   Future<void> _markRead(Map<String, dynamic> message) async {
     final id = teacherFlowText(message['id']);
     if (id.isEmpty) return;
-    await BackendApiClient.instance.updateRaw('/messages/$id', {
-      'is_read': true,
-      'read_at': DateTime.now().toIso8601String(),
-    });
+    await BackendApiClient.instance.markChatMessageRead(id);
     await _loadCommunication();
   }
 

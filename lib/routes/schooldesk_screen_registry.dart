@@ -451,11 +451,10 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-ptm-screen',
-      title: 'PTM',
-      module: 'Communication',
+      route: '/teacher-syllabus-screen',
+      title: 'Syllabus',
+      module: 'Academics',
       portal: 'teacher',
-      feature: SchoolDeskFeature.teacherParentMeetings,
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-dashboard-screen',

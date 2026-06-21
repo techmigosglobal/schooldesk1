@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -61,22 +62,32 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   String _homeworkType = 'Homework';
   String _attachmentUrl = '';
   String _attachmentName = '';
+  String _teacherStaffId = '';
+  String _defaultClassName = '';
+  String _defaultSubject = '';
+  List<Map<String, dynamic>> _assignedClasses = const [];
+  List<Map<String, dynamic>> _students = const [];
+  bool _loadingContext = true;
   bool _uploadingAttachment = false;
   bool _saving = false;
   String? _error;
 
   bool get _missingRequiredContext =>
-      widget.args.teacherStaffId.trim().isEmpty ||
-      widget.args.assignedClasses.isEmpty;
+      _teacherStaffId.trim().isEmpty || _assignedClasses.isEmpty;
 
   @override
   void initState() {
     super.initState();
+    _teacherStaffId = widget.args.teacherStaffId;
+    _defaultClassName = widget.args.defaultClassName;
+    _defaultSubject = widget.args.defaultSubject;
+    _assignedClasses = widget.args.assignedClasses;
+    _students = widget.args.students;
     final homework = widget.args.homework;
     _titleController.text = teacherFlowText(homework?['title']);
     _subjectController.text = teacherFlowText(
       homework?['subject'] ?? homework?['subject_id'],
-      fallback: widget.args.defaultSubject,
+      fallback: _defaultSubject,
     );
     _descriptionController.text = teacherFlowText(
       homework?['description'] ?? homework?['instructions'],
@@ -97,8 +108,9 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     );
     _studentId = _initialId(teacherFlowText(homework?['student_id']), [
       '',
-      ...widget.args.students.map((row) => teacherFlowText(row['id'])),
+      ..._students.map((row) => teacherFlowText(row['id'])),
     ]);
+    _loadMissingContext();
   }
 
   @override
@@ -111,12 +123,12 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   }
 
   List<Map<String, dynamic>> get _classOptions {
-    final rows = widget.args.assignedClasses
+    final rows = _assignedClasses
         .where((row) => teacherFlowText(row['id']).isNotEmpty)
         .toList();
     if (rows.isNotEmpty) return rows;
     return [
-      {'id': '', 'label': widget.args.defaultClassName},
+      {'id': '', 'label': _defaultClassName},
     ];
   }
 
@@ -180,7 +192,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    if (widget.args.teacherStaffId.trim().isEmpty) {
+    if (_teacherStaffId.trim().isEmpty) {
       setState(() => _error = 'Teacher staff profile is missing.');
       return;
     }
@@ -196,7 +208,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           subject: _subjectController.text.trim(),
           className: _selectedClassLabel,
           sectionId: _sectionId,
-          teacherId: widget.args.teacherStaffId,
+          teacherId: _teacherStaffId,
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
           dueDate: _dueDateController.text.trim(),
           studentId: _studentId,
@@ -210,7 +222,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           subject: _subjectController.text.trim(),
           className: _selectedClassLabel,
           sectionId: _sectionId,
-          teacherId: widget.args.teacherStaffId,
+          teacherId: _teacherStaffId,
           description: '$_homeworkType: ${_descriptionController.text.trim()}',
           dueDate: _dueDateController.text.trim(),
           studentId: _studentId,
@@ -236,6 +248,15 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingContext) {
+      return TeacherFlowScaffold(
+        title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
+        subtitle: 'Loading teacher homework context',
+        selectedIndex: 3,
+        loading: true,
+        child: const SizedBox.shrink(),
+      );
+    }
     if (_missingRequiredContext) {
       return _TeacherModuleEntryError(
         title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
@@ -251,8 +272,8 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         children: [
           TeacherCurrentClassCard(
             greeting: 'Homework details',
-            classLabel: widget.args.defaultClassName,
-            subject: widget.args.defaultSubject,
+            classLabel: _defaultClassName,
+            subject: _defaultSubject,
             timeLabel: 'Parents and students are notified after save',
           ),
           const SizedBox(height: 18),
@@ -353,7 +374,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                       value: '',
                       child: Text('Full class'),
                     ),
-                    ...widget.args.students.map(
+                    ..._students.map(
                       (student) => DropdownMenuItem(
                         value: teacherFlowText(student['id']),
                         child: Text(
@@ -470,14 +491,14 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       (row) => teacherFlowText(row['id']) == _sectionId,
     );
     if (match.isNotEmpty) return _classLabel(match.first);
-    return widget.args.defaultClassName;
+    return _defaultClassName;
   }
 
   List<String> get _subjectOptions {
     final match = _classOptions.where(
       (row) => teacherFlowText(row['id']) == _sectionId,
     );
-    if (match.isEmpty) return [widget.args.defaultSubject];
+    if (match.isEmpty) return [_defaultSubject];
 
     final row = match.first;
     final subjects = row['subjects'];
@@ -496,14 +517,63 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           .toList();
       if (list.isNotEmpty) return list;
     }
-    return [widget.args.defaultSubject];
+    return [_defaultSubject];
+  }
+
+  Future<void> _loadMissingContext() async {
+    try {
+      await RoleAccessService.initialize();
+      final classTeacherClasses = RoleAccessService.teacherClassTeacherClasses;
+      final assignedClasses = classTeacherClasses.isNotEmpty
+          ? classTeacherClasses
+          : RoleAccessService.teacherAssignedClasses;
+      if (!mounted) return;
+      setState(() {
+        _teacherStaffId = _teacherStaffId.isEmpty
+            ? RoleAccessService.teacherStaffId
+            : _teacherStaffId;
+        _defaultClassName =
+            _defaultClassName == 'Not assigned' || _defaultClassName.isEmpty
+            ? RoleAccessService.teacherClassName
+            : _defaultClassName;
+        _defaultSubject =
+            _defaultSubject == 'General' || _defaultSubject.isEmpty
+            ? RoleAccessService.teacherSubject
+            : _defaultSubject;
+        _assignedClasses = _assignedClasses.isEmpty
+            ? assignedClasses
+            : _assignedClasses;
+        _students = _students.isEmpty
+            ? RoleAccessService.teacherClassStudents
+            : _students;
+        _sectionId = _initialId(
+          _sectionId,
+          _classOptions.map((row) => teacherFlowText(row['id'])),
+        );
+        _studentId = _initialId(
+          teacherFlowText(widget.args.homework?['student_id']),
+          ['', ..._students.map((row) => teacherFlowText(row['id']))],
+        );
+        if (_subjectController.text.trim().isEmpty ||
+            _subjectController.text == 'General') {
+          _subjectController.text = _defaultSubject;
+        }
+        _loadingContext = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingContext = false;
+        _error = error.toString();
+      });
+    }
   }
 
   Future<void> _writeDiaryEntry() async {
     await BackendApiClient.instance.createRaw('/diary-entries', {
       'section_id': _sectionId,
-      'teacher_id': widget.args.teacherStaffId,
-      'staff_id': widget.args.teacherStaffId,
+      'teacher_id': _teacherStaffId,
+      'staff_id': _teacherStaffId,
       'date': DateTime.now().toUtc().toIso8601String(),
       'entry_date': teacherFlowDate(DateTime.now()),
       'entry_type': 'homework',

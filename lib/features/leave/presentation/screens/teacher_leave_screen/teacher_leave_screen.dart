@@ -87,6 +87,43 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
     if (result != null) await _loadLeave();
   }
 
+  Future<void> _recallApplication(LeaveApplicationModel app) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Recall Leave Request'),
+        content: Text(
+          'Recall your ${_leaveTypeLabel(app.leaveTypeId)} request from '
+          '${app.fromDate.split('T').first} to ${app.toDate.split('T').first}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Recall'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await BackendApiClient.instance.recallLeaveApplication(app.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Leave request recalled')));
+      await _loadLeave();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to recall leave request: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pending = _applications
@@ -176,18 +213,35 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
                       '${app.fromDate.split('T').first} to ${app.toDate.split('T').first} · ${app.reason ?? ''}',
                   status: teacherFlowTitleCase(app.status),
                   statusColor: _statusColor(app.status),
-                  body: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  body: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TeacherInfoPill(
-                        icon: Icons.timer_rounded,
-                        label: '${app.totalDays.toStringAsFixed(1)} day(s)',
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          TeacherInfoPill(
+                            icon: Icons.timer_rounded,
+                            label: '${app.totalDays.toStringAsFixed(1)} day(s)',
+                          ),
+                          const TeacherInfoPill(
+                            icon: Icons.swap_horiz_rounded,
+                            label: 'Substitute shown after approval',
+                          ),
+                        ],
                       ),
-                      const TeacherInfoPill(
-                        icon: Icons.swap_horiz_rounded,
-                        label: 'Substitute shown after approval',
-                      ),
+                      if (app.status == 'pending') ...[
+                        const SizedBox(height: 10),
+                        TeacherFlowActionWrap(
+                          actions: [
+                            TeacherFlowAction(
+                              label: 'Recall',
+                              icon: Icons.undo_rounded,
+                              onTap: () => _recallApplication(app),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

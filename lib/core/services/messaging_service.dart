@@ -23,8 +23,8 @@ class MessagingService extends ChangeNotifier {
 
   Future<void> _load() async {
     final api = BackendApiClient.instance;
-    final conversations = await api.getRawList('/message-conversations');
-    final messages = await api.getRawList('/messages');
+    final conversations = await api.getMessageConversations();
+    final messages = await api.getChatMessages();
 
     _messagesByConversation
       ..clear()
@@ -168,15 +168,14 @@ class MessagingService extends ChangeNotifier {
   }) async {
     final now = DateTime.now().toUtc();
     final api = BackendApiClient.instance;
-    final saved = await api.createRaw('/messages', {
-      'conversation_id': conversationId,
-      'sender_id': senderName,
-      'sender_role': sender,
-      'sender_name': senderName,
-      'body': text,
-      'is_read': false,
-      'sent_at': now.toIso8601String(),
-    });
+    final saved = await api.sendChatMessage(
+      conversationId: conversationId,
+      senderId: senderName,
+      senderRole: sender,
+      senderName: senderName,
+      body: text,
+      sentAt: now,
+    );
 
     _messagesByConversation
         .putIfAbsent(conversationId, () => <Map<String, dynamic>>[])
@@ -242,18 +241,7 @@ class MessagingService extends ChangeNotifier {
     final messages = getMessages(conversationId);
     for (final message in messages) {
       if (message['sender'] == otherSender && message['read'] == false) {
-        await BackendApiClient.instance
-            .updateRaw('/messages/${message['id']}', {
-              'conversation_id': conversationId,
-              'sender_id': message['senderName'],
-              'sender_role': message['sender'],
-              'sender_name': message['senderName'],
-              'body': message['text'],
-              'is_read': true,
-              'sent_at': DateTime.fromMillisecondsSinceEpoch(
-                message['timestamp'] as int? ?? 0,
-              ).toUtc().toIso8601String(),
-            });
+        await BackendApiClient.instance.markChatMessageRead('${message['id']}');
         message['read'] = true;
       }
     }

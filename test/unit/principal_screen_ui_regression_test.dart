@@ -555,14 +555,14 @@ void main() {
       expect(source, contains('New Announcement'));
       expect(source, contains('Message Reports'));
       expect(source, contains('Communication Settings'));
-      expect(source, contains("getRawList('/message-conversations')"));
-      expect(source, contains("getRawList('/messages')"));
+      expect(source, contains('getMessageConversations()'));
+      expect(source, contains('getChatMessages()'));
       expect(source, contains('getCommunications()'));
       expect(source, contains('getAnnouncements()'));
       expect(source, contains('sendCommunication('));
       expect(source, contains('createAnnouncement('));
-      expect(source, contains("createRaw('/messages'"));
-      expect(source, contains("updateRaw('/messages/\${message.id}'"));
+      expect(source, contains('sendChatMessage('));
+      expect(source, contains('markChatMessageRead('));
       expect(source, contains("createReportExport("));
       expect(source, contains("'/reports/exports'"));
       expect(source, contains('PrincipalShellBottomBar'));
@@ -671,6 +671,32 @@ void main() {
       calendar,
       isNot(contains("label: _filterLabel(_EventFilter.month)")),
     );
+  });
+
+  test('teacher calendar uses the shared academic-year filtered calendar', () {
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final calendar = File(
+      'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
+    ).readAsStringSync();
+    final teacherCalendarFile = File(
+      'lib/features/calendar/presentation/screens/teacher_calendar_screen/teacher_calendar_screen.dart',
+    );
+
+    expect(
+      routes,
+      contains(
+        'teacherCalendar: (context) =>\n'
+        '        const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher)',
+      ),
+    );
+    expect(calendar, contains('getAcademicYears()'));
+    expect(
+      calendar,
+      contains(
+        'academicYearId: selectedYearId.isEmpty ? null : selectedYearId',
+      ),
+    );
+    expect(teacherCalendarFile.existsSync(), isFalse);
   });
 
   test('principal attendance UI uses directory workflow without QR display', () {

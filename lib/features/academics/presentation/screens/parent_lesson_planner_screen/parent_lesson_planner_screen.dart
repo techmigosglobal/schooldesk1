@@ -12,8 +12,7 @@ class ParentLessonPlannerScreen extends StatefulWidget {
       _ParentLessonPlannerScreenState();
 }
 
-class _ParentLessonPlannerScreenState
-    extends State<ParentLessonPlannerScreen> {
+class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
   bool _loading = true;
   String? _error;
   List<dynamic> _planners = [];
@@ -30,13 +29,11 @@ class _ParentLessonPlannerScreenState
       _error = null;
     });
     try {
-      final response = await BackendApiClient.instance.dio
-          .get('/api/v1/lesson-planners/parent');
+      final planners = await BackendApiClient.instance
+          .getParentLessonPlanners();
       if (!mounted) return;
       setState(() {
-        _planners = response.data is List
-            ? response.data as List
-            : (response.data['data'] as List? ?? []);
+        _planners = planners;
         _loading = false;
       });
     } catch (e) {
@@ -61,27 +58,29 @@ class _ParentLessonPlannerScreenState
         ),
       ],
       body: _loading
-          ? const SchoolDeskStatusPanel.loading(message: 'Loading lesson planners')
+          ? const SchoolDeskStatusPanel.loading(
+              message: 'Loading lesson planners',
+            )
           : _error != null
-              ? SchoolDeskStatusPanel.error(
-                  title: 'Unavailable',
-                  message: _error!,
-                  onAction: _load,
-                )
-              : _planners.isEmpty
-                  ? SchoolDeskStatusPanel.empty(
-                      title: 'No lesson planners yet',
-                      message:
-                          'Your child\'s teacher has not uploaded any lesson plans yet.',
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _planners.length,
-                      itemBuilder: (context, index) {
-                        final p = _planners[index];
-                        return _PlannerCard(planner: p);
-                      },
-                    ),
+          ? SchoolDeskStatusPanel.error(
+              title: 'Unavailable',
+              message: _error!,
+              onAction: _load,
+            )
+          : _planners.isEmpty
+          ? SchoolDeskStatusPanel.empty(
+              title: 'No lesson planners yet',
+              message:
+                  'Your child\'s teacher has not uploaded any lesson plans yet.',
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _planners.length,
+              itemBuilder: (context, index) {
+                final p = _planners[index];
+                return _PlannerCard(planner: p);
+              },
+            ),
     );
   }
 }
@@ -96,15 +95,17 @@ class _PlannerCard extends StatelessWidget {
     final theme = Theme.of(context);
     final status = planner['status'] ?? 'uploaded';
     final isCompleted = status == 'completed';
-    final grade = _nested(planner['grade'], 'grade_name') ??
+    final grade =
+        _nested(planner['grade'], 'grade_name') ??
         planner['grade_id']?.toString() ??
         '';
-    final section = _nested(planner['section'], 'section_name') ??
+    final section =
+        _nested(planner['section'], 'section_name') ??
         planner['section_id']?.toString() ??
         '';
-    final classLabel =
-        [grade, section].where((s) => s.isNotEmpty).join(' – ');
-    final teacher = _nested(planner['teacher'], 'full_name') ??
+    final classLabel = [grade, section].where((s) => s.isNotEmpty).join(' – ');
+    final teacher =
+        _nested(planner['teacher'], 'full_name') ??
         _nested(planner['teacher'], 'name') ??
         'Teacher';
     final weekStart = _shortDate(planner['week_start_date']);
@@ -137,14 +138,11 @@ class _PlannerCard extends StatelessWidget {
                 Chip(
                   label: Text(
                     isCompleted ? 'Completed' : 'Uploaded',
-                    style: const TextStyle(
-                        fontSize: 11, color: Colors.white),
+                    style: const TextStyle(fontSize: 11, color: Colors.white),
                   ),
-                  backgroundColor:
-                      isCompleted ? Colors.green : Colors.orange,
+                  backgroundColor: isCompleted ? Colors.green : Colors.orange,
                   padding: EdgeInsets.zero,
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ],
             ),
@@ -153,10 +151,7 @@ class _PlannerCard extends StatelessWidget {
               icon: Icons.calendar_today_outlined,
               text: 'Week: $weekStart – $weekEnd',
             ),
-            _InfoRow(
-              icon: Icons.person_outlined,
-              text: 'Teacher: $teacher',
-            ),
+            _InfoRow(icon: Icons.person_outlined, text: 'Teacher: $teacher'),
             if (note.isNotEmpty)
               _InfoRow(icon: Icons.notes_outlined, text: note),
             if (attachmentUrl.isNotEmpty) ...[
@@ -218,14 +213,14 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 15,
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 15,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              text,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(text, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
       ),

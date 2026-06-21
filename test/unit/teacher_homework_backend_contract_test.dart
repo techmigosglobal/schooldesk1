@@ -49,6 +49,8 @@ void main() {
 
     expect(teacherForms, contains('TeacherHomeworkFormScreen'));
     expect(teacherForms, contains('TeacherHomeworkSubmissionsScreen'));
+    expect(teacherForms, contains('RoleAccessService.initialize()'));
+    expect(teacherForms, contains('_loadMissingContext'));
     expect(teacherForms, contains('createHomework('));
     expect(teacherForms, contains('updateHomework('));
     expect(
@@ -74,6 +76,14 @@ void main() {
     expect(teacherDiary, contains('_archivedEntries'));
     expect(teacherDiary, contains('Archived Diary Entries'));
     expect(teacherDiary, contains('_prefillFromRouteArgs'));
+    expect(teacherDiary, contains('AppRoutes.teacherHomework'));
+    expect(teacherDiary, contains('Formal student work belongs in Homework.'));
+    expect(teacherDiary, isNot(contains("label: 'No Practice'")));
+    expect(
+      teacherScreen,
+      contains("TeacherFlowSectionHeader(title: 'Homework Log')"),
+    );
+    expect(teacherScreen, isNot(contains('Subject-wise Homework Logs')));
     expect(
       File(
         'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',

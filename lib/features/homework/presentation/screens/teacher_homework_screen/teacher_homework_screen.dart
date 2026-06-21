@@ -266,7 +266,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          TeacherFlowSectionHeader(title: 'Subject-wise Homework Logs'),
+          TeacherFlowSectionHeader(title: 'Homework Log'),
           const SizedBox(height: 10),
           if (_homework.isEmpty)
             const TeacherFlowCard(

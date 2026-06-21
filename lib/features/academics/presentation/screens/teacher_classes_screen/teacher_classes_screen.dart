@@ -183,6 +183,14 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                           AppRoutes.teacherDiary,
                         ),
                       ),
+                      TeacherFlowAction(
+                        label: 'Track Leave',
+                        icon: Icons.event_busy_rounded,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.teacherLeave,
+                        ),
+                      ),
                     ],
                   ),
                 ),

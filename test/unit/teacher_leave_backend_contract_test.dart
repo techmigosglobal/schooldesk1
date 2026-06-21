@@ -27,11 +27,15 @@ void main() {
     expect(screen, contains('getLeaveTypes()'));
     expect(screen, contains('getLeaveBalances(staffId: staffId)'));
     expect(screen, contains('getLeaveApplications(staffId: staffId)'));
+    expect(screen, contains('_recallApplication'));
+    expect(screen, contains("label: 'Recall'"));
     expect(screen, isNot(contains('showModalBottomSheet(')));
     expect(screen, isNot(contains("staff_id': 'self'")));
     expect(screen, isNot(contains('NotificationService')));
 
     expect(form, contains('TeacherLeaveRequestFormScreen'));
+    expect(form, contains('RoleAccessService.initialize()'));
+    expect(form, contains('_loadMissingContext'));
     expect(form, contains('submitLeaveApplication('));
     expect(form, contains('LeaveApplicationRequest('));
     expect(form, contains('staffId: _staffId'));
@@ -45,6 +49,8 @@ void main() {
       api,
       contains('Future<List<Map<String, dynamic>>> getLeaveBalances'),
     );
+    expect(api, contains('Future<void> recallLeaveApplication'));
+    expect(api, contains("'/leave/applications/\$id/recall'"));
     expect(routes, contains('teacherLeaveRequestForm'));
     expect(routes, contains('TeacherLeaveRequestFormScreen'));
     expect(guard, contains('AppRoutes.teacherLeaveRequestForm: {\'teacher\'}'));
