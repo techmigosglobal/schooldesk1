@@ -215,6 +215,7 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 		&models.StaffSubject{},
 		&models.Room{},
 		&models.TimetableSlot{},
+		&models.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -229,9 +230,11 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 	department := models.Department{BaseModel: models.BaseModel{ID: "dept-timetable"}, SchoolID: school.ID, DepartmentName: "Academics"}
 	math := models.Subject{BaseModel: models.BaseModel{ID: "subject-math"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Mathematics"}
 	science := models.Subject{BaseModel: models.BaseModel{ID: "subject-science"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "Science"}
+	english := models.Subject{BaseModel: models.BaseModel{ID: "subject-english"}, SchoolID: school.ID, DepartmentID: department.ID, SubjectName: "English"}
 	mathTeacher := models.Staff{BaseModel: models.BaseModel{ID: "staff-math"}, SchoolID: school.ID, StaffCode: "T-MATH", FirstName: "Meera", LastName: "Math", Status: "active"}
 	scienceTeacher := models.Staff{BaseModel: models.BaseModel{ID: "staff-science"}, SchoolID: school.ID, StaffCode: "T-SCI", FirstName: "Sanjay", LastName: "Science", Status: "active"}
-	seeds := []any{&school, &year, &term, &grade, &room, &section, &department, &math, &science, &mathTeacher, &scienceTeacher}
+	englishTeacher := models.Staff{BaseModel: models.BaseModel{ID: "staff-english"}, SchoolID: school.ID, StaffCode: "T-ENG", FirstName: "Elena", LastName: "English", Status: "active"}
+	seeds := []any{&school, &year, &term, &grade, &room, &section, &department, &math, &science, &english, &mathTeacher, &scienceTeacher, &englishTeacher}
 	for _, seed := range seeds {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed: %v", err)
@@ -256,6 +259,7 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 		c.Next()
 	})
 	handler := NewTimetableHandler()
+	router.GET("/timetable/slots", handler.GetTimetableSlots)
 	router.POST("/timetable/suggestions", handler.SuggestTimetableSlots)
 	router.POST("/timetable/slots/generate", handler.GenerateTimetableSlots)
 
@@ -331,5 +335,67 @@ func TestSuggestAndGenerateTimetableSlotsUsesBackendRelationships(t *testing.T) 
 	}
 	if generatedBody.Data.Created != 0 || generatedBody.Data.Skipped != 3 {
 		t.Fatalf("expected duplicate generation to skip existing periods, got %+v", generatedBody.Data)
+	}
+
+	teacherSlots := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/timetable/slots?staff_id="+mathTeacher.ID, nil)
+	router.ServeHTTP(teacherSlots, req)
+	if teacherSlots.Code != http.StatusOK {
+		t.Fatalf("teacher slots status=%d body=%s", teacherSlots.Code, teacherSlots.Body.String())
+	}
+	var teacherSlotsBody struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(teacherSlots.Body.Bytes(), &teacherSlotsBody); err != nil {
+		t.Fatalf("decode teacher slots: %v", err)
+	}
+	if len(teacherSlotsBody.Data) == 0 || teacherSlotsBody.Data[0]["subject_id"] != math.ID {
+		t.Fatalf("expected generated slots to be visible in math teacher timetable, got %+v", teacherSlotsBody.Data)
+	}
+
+	if err := db.Create(&models.GradeSubject{BaseModel: models.BaseModel{ID: "grade-english"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SubjectID: english.ID, PeriodsPerWeek: 1, IsMandatory: true}).Error; err != nil {
+		t.Fatalf("seed added grade subject: %v", err)
+	}
+	sectionID := section.ID
+	if err := db.Create(&models.StaffSubject{BaseModel: models.BaseModel{ID: "staff-subject-english"}, SchoolID: school.ID, AcademicYearID: year.ID, StaffID: englishTeacher.ID, SubjectID: english.ID, GradeID: grade.ID, SectionID: &sectionID, IsPrimary: true}).Error; err != nil {
+		t.Fatalf("seed added staff subject: %v", err)
+	}
+	if err := db.Model(&models.GradeSubject{}).Where("id IN ?", []string{"grade-math", "grade-science"}).Update("periods_per_week", 1).Error; err != nil {
+		t.Fatalf("normalize existing subject weights: %v", err)
+	}
+	if err := db.Where("section_id = ? AND academic_year_id = ? AND term_id = ?", section.ID, year.ID, term.ID).Delete(&models.TimetableSlot{}).Error; err != nil {
+		t.Fatalf("clear timetable before regeneration: %v", err)
+	}
+
+	changedPayload := `{"section_id":"section-timetable","academic_year_id":"year-timetable","term_id":"term-timetable","day_of_week":1,"period_count":3,"start_time":"09:00","period_duration_minutes":40,"gap_minutes":5}`
+	changedGenerate := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/timetable/slots/generate", strings.NewReader(changedPayload))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(changedGenerate, req)
+	if changedGenerate.Code != http.StatusCreated {
+		t.Fatalf("changed generate status=%d body=%s", changedGenerate.Code, changedGenerate.Body.String())
+	}
+
+	englishSlots := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/timetable/slots?staff_id="+englishTeacher.ID, nil)
+	router.ServeHTTP(englishSlots, req)
+	if englishSlots.Code != http.StatusOK {
+		t.Fatalf("english teacher slots status=%d body=%s", englishSlots.Code, englishSlots.Body.String())
+	}
+	if err := json.Unmarshal(englishSlots.Body.Bytes(), &teacherSlotsBody); err != nil {
+		t.Fatalf("decode english teacher slots: %v", err)
+	}
+	if len(teacherSlotsBody.Data) == 0 {
+		t.Fatalf("expected regenerated timetable to include newly mapped English teacher")
+	}
+	foundEnglish := false
+	for _, slot := range teacherSlotsBody.Data {
+		if slot["staff_id"] != englishTeacher.ID {
+			t.Fatalf("expected staff-scoped timetable to contain only the requested teacher, got %+v", teacherSlotsBody.Data)
+		}
+		foundEnglish = foundEnglish || slot["subject_id"] == english.ID
+	}
+	if !foundEnglish {
+		t.Fatalf("expected regenerated teacher timetable to include the new English subject, got %+v", teacherSlotsBody.Data)
 	}
 }

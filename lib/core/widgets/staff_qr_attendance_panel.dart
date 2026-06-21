@@ -21,10 +21,17 @@ class StaffQrAttendancePanel extends StatefulWidget {
 }
 
 class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
+  static const int _qrRefreshSeconds = 5;
+  static const Duration _qrRefreshInterval = Duration(
+    seconds: _qrRefreshSeconds,
+  );
+
   StaffQrTokenModel? _token;
   List<StaffAttendanceModel> _recent = const [];
   Timer? _ticker;
+  Timer? _qrRefreshTimer;
   Timer? _pollingTimer;
+  DateTime? _nextQrRefreshAt;
   bool _loading = true;
   bool _refreshing = false;
   bool _exportingLog = false;
@@ -34,7 +41,11 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   @override
   void initState() {
     super.initState();
-    _load();
+    unawaited(_load());
+    _qrRefreshTimer = Timer.periodic(
+      _qrRefreshInterval,
+      (_) => unawaited(_refreshQrCode()),
+    );
     _pollingTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _pollRecentScans(),
@@ -44,6 +55,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   @override
   void dispose() {
     _ticker?.cancel();
+    _qrRefreshTimer?.cancel();
     _pollingTimer?.cancel();
     super.dispose();
   }
@@ -61,12 +73,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       if (!mounted) return;
       setState(() {
         _token = token;
-        _secondsLeft = token.secondsRemaining;
+        _nextQrRefreshAt = DateTime.now().add(_qrRefreshInterval);
+        _secondsLeft = _qrRefreshSeconds;
         _loading = false;
         _refreshing = false;
       });
       _startLiveTicker();
-      _loadRecentScans();
+      unawaited(_loadRecentScans());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -99,11 +112,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     try {
       final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
       if (!mounted) return;
-      if (rows.length > _recent.length) {
-        _load(quiet: true);
-      } else {
-        setState(() => _recent = rows);
-      }
+      setState(() => _recent = rows);
     } catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
@@ -112,6 +121,10 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         );
       }
     }
+  }
+
+  Future<void> _refreshQrCode() async {
+    await _load(quiet: true);
   }
 
   Future<void> _exportDailyQrLog() async {
@@ -161,13 +174,11 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   void _startLiveTicker() {
     _ticker ??= Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      final token = _token;
-      if (token == null) return;
-      final next = token.secondsRemaining;
-      setState(() => _secondsLeft = next);
-      if (next <= 1 && !_refreshing) {
-        unawaited(_load(quiet: true));
-      }
+      final nextRefreshAt = _nextQrRefreshAt;
+      if (nextRefreshAt == null) return;
+      final next = nextRefreshAt.difference(DateTime.now()).inSeconds + 1;
+      final clamped = next < 0 ? 0 : next;
+      setState(() => _secondsLeft = clamped);
     });
   }
 

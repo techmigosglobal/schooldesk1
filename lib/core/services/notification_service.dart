@@ -183,6 +183,7 @@ class NotificationCategory {
   static const String pendingApproval = 'pending_approval';
   static const String feeDue = 'fee_due';
   static const String examReminder = 'exam_reminder';
+  static const String event = 'event';
   static const String general = 'general';
 }
 

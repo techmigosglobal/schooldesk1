@@ -104,6 +104,29 @@ void main() {
     expect(teacherTimetable, isNot(contains('_buildQuickActions')));
   });
 
+  test('class subject changes prompt smart timetable regeneration', () {
+    final principalClasses = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final teacherTimetable = File(
+      'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
+    ).readAsStringSync();
+
+    expect(principalClasses, contains('_promptRegenerateTimetable'));
+    expect(principalClasses, contains('Regenerate timetable?'));
+    expect(principalClasses, contains('generateSmartTimetable('));
+    expect(principalClasses, contains('getTerms(_academicYearId)'));
+    expect(
+      principalClasses,
+      contains('teacher subjects and teacher timetable stay in sync'),
+    );
+    expect(
+      teacherTimetable,
+      contains('staffId: RoleAccessService.teacherStaffId'),
+    );
+    expect(teacherTimetable, contains('_weeklySubjects'));
+  });
+
   test('teacher timetable falls back to assigned class slots', () {
     final teacherTimetable = File(
       'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',

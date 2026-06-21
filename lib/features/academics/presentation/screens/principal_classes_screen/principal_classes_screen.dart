@@ -4296,7 +4296,10 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ),
       ),
     );
-    if (changed == true) await _load();
+    if (changed == true) {
+      await _load();
+      await _promptRegenerateTimetable();
+    }
   }
 
   Future<void> _setTeacher(
@@ -4340,6 +4343,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         );
       }
       await _load();
+      await _promptRegenerateTimetable();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4378,6 +4382,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ],
       );
       await _load();
+      await _promptRegenerateTimetable();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4458,6 +4463,70 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
             'Removed from this class, but subject could not be deleted globally: $error',
           ),
           backgroundColor: context.appTheme.warning,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _promptRegenerateTimetable() async {
+    if (!mounted || _sectionId.isEmpty || _academicYearId.isEmpty) return;
+    final regenerate = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Regenerate timetable?'),
+        content: Text(
+          'Subject setup for $_className changed. Regenerate now so teacher subjects and teacher timetable stay in sync.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Later'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.auto_awesome_rounded),
+            label: const Text('Regenerate'),
+          ),
+        ],
+      ),
+    );
+    if (regenerate == true) {
+      await _regenerateTimetable();
+    }
+  }
+
+  Future<void> _regenerateTimetable() async {
+    setState(() => _saving = true);
+    try {
+      final terms = await BackendApiClient.instance.getTerms(_academicYearId);
+      final termId = terms.isEmpty ? '' : _classText(terms.first['id']);
+      if (termId.isEmpty) {
+        throw Exception('Create a term for this academic year first.');
+      }
+      final response = await BackendApiClient.instance.generateSmartTimetable(
+        sectionId: _sectionId,
+        academicYearId: _academicYearId,
+        termId: termId,
+      );
+      if (!mounted) return;
+      final created = _classInt(response['created']);
+      final replaced = _classInt(response['deleted']);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Timetable regenerated for $_className. $created slots created, $replaced old slots replaced.',
+          ),
+          backgroundColor: context.appTheme.success,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to regenerate timetable: $error'),
+          backgroundColor: context.appTheme.error,
         ),
       );
     } finally {

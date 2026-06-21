@@ -65,10 +65,15 @@ void main() {
     expect(adminAttendance, isNot(contains('StaffQrAttendancePanel')));
     expect(qrPanel, contains('StaffQrAttendancePanel'));
     expect(qrPanel, contains('QrImageView'));
-    expect(qrPanel, contains('secondsRemaining'));
+    expect(qrPanel, contains('static const int _qrRefreshSeconds = 5'));
+    expect(qrPanel, contains('Timer? _qrRefreshTimer'));
+    expect(qrPanel, contains('_qrRefreshTimer = Timer.periodic'));
+    expect(qrPanel, contains('unawaited(_refreshQrCode())'));
+    expect(qrPanel, contains('_nextQrRefreshAt = DateTime.now().add'));
+    expect(qrPanel, contains('_secondsLeft = _qrRefreshSeconds'));
     expect(qrPanel, contains('_startLiveTicker'));
     expect(qrPanel, contains('Timer.periodic(const Duration(seconds: 1)'));
-    expect(qrPanel, contains('unawaited(_load(quiet: true))'));
+    expect(qrPanel, isNot(contains('token.secondsRemaining')));
     expect(qrPanel, contains('Recent scans'));
     expect(qrPanel, contains('Semantics('));
     expect(qrPanel, isNot(contains('Future.wait<Object>([')));

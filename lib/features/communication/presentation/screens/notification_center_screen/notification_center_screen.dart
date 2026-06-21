@@ -35,7 +35,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: widget.role == 'teacher' ? 2 : 5,
+      length: _tabCountForRole(widget.role),
       vsync: this,
     );
     _init();
@@ -66,7 +66,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   List<AppNotification> _filtered(String? category) {
     final all = _service?.getNotificationsForRole(widget.role) ?? [];
     if (category == null) return all;
+    if (widget.role.trim().toLowerCase() == 'principal') {
+      return all.where((n) => _principalCategory(n) == category).toList();
+    }
     return all.where((n) => n.category == category).toList();
+  }
+
+  int _tabCountForRole(String role) {
+    return switch (role.trim().toLowerCase()) {
+      'teacher' => 2,
+      'principal' => 4,
+      _ => 5,
+    };
   }
 
   @override
@@ -121,15 +132,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         labelColor: context.appTheme.primary,
         unselectedLabelColor: mutedColor,
         indicatorColor: context.appTheme.primary,
-        tabs: widget.role == 'teacher'
-            ? const [Tab(text: 'All'), Tab(text: 'Circulars')]
-            : const [
-                Tab(text: 'All'),
-                Tab(text: 'Approvals'),
-                Tab(text: 'Fees'),
-                Tab(text: 'Exams'),
-                Tab(text: 'Circulars'),
-              ],
+        tabs: _tabsForRole(widget.role),
       ),
       body: ColoredBox(
         color: bgColor,
@@ -137,7 +140,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             ? const Center(child: CircularProgressIndicator())
             : TabBarView(
                 controller: _tabController,
-                children: widget.role == 'teacher'
+                children: widget.role.trim().toLowerCase() == 'teacher'
                     ? [
                         _buildList(
                           null,
@@ -148,6 +151,37 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         ),
                         _buildList(
                           NotificationCategory.general,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                      ]
+                    : widget.role.trim().toLowerCase() == 'principal'
+                    ? [
+                        _buildList(
+                          null,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.pendingApproval,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.feeDue,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.event,
                           bgColor,
                           surfaceColor,
                           onSurfaceColor,
@@ -194,6 +228,48 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
               ),
       ),
     );
+  }
+
+  List<Tab> _tabsForRole(String role) {
+    return switch (role.trim().toLowerCase()) {
+      'teacher' => const [Tab(text: 'All'), Tab(text: 'Circulars')],
+      'principal' => const [
+        Tab(text: 'All'),
+        Tab(text: 'Approvals'),
+        Tab(text: 'Fees'),
+        Tab(text: 'Events'),
+      ],
+      _ => const [
+        Tab(text: 'All'),
+        Tab(text: 'Approvals'),
+        Tab(text: 'Fees'),
+        Tab(text: 'Exams'),
+        Tab(text: 'Circulars'),
+      ],
+    };
+  }
+
+  String _principalCategory(AppNotification notification) {
+    final text =
+        '${notification.title} ${notification.body} ${notification.route} ${notification.referenceType}'
+            .toLowerCase();
+    if (notification.category == NotificationCategory.pendingApproval ||
+        text.contains('approval') ||
+        text.contains('approve') ||
+        text.contains('leave request')) {
+      return NotificationCategory.pendingApproval;
+    }
+    if (notification.category == NotificationCategory.feeDue ||
+        text.contains('fee') ||
+        text.contains('payment')) {
+      return NotificationCategory.feeDue;
+    }
+    if (notification.category == NotificationCategory.event ||
+        text.contains('event') ||
+        text.contains('calendar')) {
+      return NotificationCategory.event;
+    }
+    return notification.category;
   }
 
   Widget _buildParentNotificationCenter(BuildContext context) {
@@ -447,6 +523,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Fees';
       case NotificationCategory.examReminder:
         return 'Exams';
+      case NotificationCategory.event:
+        return 'Events';
       case NotificationCategory.general:
         return 'Circulars';
       default:
@@ -486,8 +564,11 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     Color onSurfaceColor,
     Color mutedColor,
   ) {
-    final categoryIcon = _getCategoryIcon(notif.category);
-    final categoryColor = _getCategoryColor(notif.category);
+    final effectiveCategory = widget.role.trim().toLowerCase() == 'principal'
+        ? _principalCategory(notif)
+        : notif.category;
+    final categoryIcon = _getCategoryIcon(effectiveCategory);
+    final categoryColor = _getCategoryColor(effectiveCategory);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final unreadBg = isDark
         ? const Color(0xFF1A3A5C)
@@ -571,7 +652,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            _categoryLabel(notif.category),
+                            _categoryLabel(effectiveCategory),
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.dmSans(
                               fontSize: 11,
@@ -636,6 +717,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.account_balance_wallet_rounded;
       case NotificationCategory.examReminder:
         return Icons.quiz_rounded;
+      case NotificationCategory.event:
+        return Icons.event_available_rounded;
       default:
         return Icons.notifications_rounded;
     }
@@ -649,6 +732,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.error;
       case NotificationCategory.examReminder:
         return context.appTheme.primary;
+      case NotificationCategory.event:
+        return context.appTheme.success;
       default:
         return context.appTheme.muted;
     }

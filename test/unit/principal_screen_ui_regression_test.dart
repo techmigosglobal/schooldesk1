@@ -408,12 +408,29 @@ void main() {
     final source = File(
       'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
     ).readAsStringSync();
+    final notificationCenter = File(
+      'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
+    ).readAsStringSync();
+    final notificationService = File(
+      'lib/core/services/notification_service.dart',
+    ).readAsStringSync();
 
     expect(source, contains('api.getNotifications()'));
     expect(source, contains('unreadNotifications'));
     expect(source, contains('class _HeaderNotificationButton'));
     expect(source, contains('Icons.notifications_none_rounded'));
     expect(source, contains('AppRoutes.notificationCenter'));
+    expect(notificationCenter, contains("'principal' => 4"));
+    expect(notificationCenter, contains("Tab(text: 'Approvals')"));
+    expect(notificationCenter, contains("Tab(text: 'Fees')"));
+    expect(notificationCenter, contains("Tab(text: 'Events')"));
+    expect(notificationCenter, contains('_principalCategory'));
+    expect(notificationCenter, contains("text.contains('approval')"));
+    expect(notificationCenter, contains("text.contains('event')"));
+    expect(
+      notificationService,
+      contains("static const String event = 'event'"),
+    );
   });
 
   test('principal dashboard top banner and module grid are responsive', () {
@@ -715,6 +732,14 @@ void main() {
       expect(screen, contains('Select Class'));
       expect(screen, contains('Choose a class to see student attendance.'));
       expect(screen, contains('Marked today:'));
+      expect(screen, contains('_selectedSectionSessions'));
+      expect(screen, contains('session.sectionId == _selectedSectionId'));
+      expect(screen, contains('_studentStatusLabel'));
+      expect(screen, contains('_studentStatusColor'));
+      expect(screen, contains('statusLabel: _studentStatusLabel(student.id)'));
+      expect(screen, contains('label: statusLabel'));
+      expect(screen, isNot(contains('label: student.status,')));
+      expect(screen, isNot(contains("'Active'")));
       expect(screen, contains('Search by name or admission no.'));
       expect(screen, contains('_ModeCard'));
       expect(screen, contains('_StaffAttendanceRow'));
@@ -880,7 +905,7 @@ void main() {
     },
   );
 
-  test('principal subjects screen is command-center supervision', () {
+  test('principal subjects screen is class-filtered and backend-backed', () {
     final screen = File(
       'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
     ).readAsStringSync();
@@ -895,27 +920,29 @@ void main() {
     ).readAsStringSync();
 
     expect(routes, contains('PrincipalSubjectsScreen'));
-    expect(screen, contains('Subjects Directory'));
-    expect(screen, contains("String _workspaceView = 'Subjects'"));
-    expect(screen, contains('Setup Subjects in Class Hub'));
+    expect(screen, contains('String _selectedGradeId'));
+    expect(screen, contains('_activeGradesFrom(_grades, _sections)'));
+    expect(screen, contains('_selectedClassSubjects'));
+    expect(screen, contains('_buildClassSubjectFilters'));
+    expect(screen, contains('Search subjects...'));
+    expect(screen, contains('Select Class'));
+    expect(screen, contains('Showing subjects for '));
+    expect(screen, contains('_PrincipalSubjectCard'));
+    expect(screen, contains('_TeacherSubjectsDetailScreen'));
+    expect(screen, contains('Teacher Subjects'));
+    expect(screen, contains('Subjects handled by this teacher'));
+    expect(screen, contains('Subjects this teacher can teach'));
     expect(screen, contains('_openClassesHubForSubjects'));
     expect(screen, contains("class_hub_action': 'subjects'"));
     expect(screen, contains("source': 'principal_subjects'"));
     expect(screen, contains('PrincipalShellBottomBar'));
-    expect(screen, contains('PrincipalDirectoryCard'));
-    expect(screen, contains('PrincipalDetailPage'));
-    expect(screen, contains('Mapped'));
-    expect(screen, contains('Class Coverage'));
-    expect(screen, contains('Total Subjects'));
-    expect(screen, contains('Core Subjects'));
-    expect(screen, contains('Teacher Load'));
-    expect(screen, contains('Class / Grade'));
-    expect(screen, contains('teacher_class_coverage'));
-    expect(screen, contains('Open Classes Hub'));
-    expect(screen, contains('Subject-wise Topper List'));
-    expect(screen, contains('Weak Subject Detection'));
-    expect(screen, contains('Teacher Performance'));
-    expect(screen, contains('Homework Consistency'));
+    expect(screen, contains('/grade-subjects'));
+    expect(screen, contains('/staff-subjects'));
+    expect(screen, contains('api.getGrades()'));
+    expect(screen, contains('api.getSections()'));
+    expect(screen, contains('api.getStaff(page: 1, pageSize: 500)'));
+    expect(screen, isNot(contains('Sarah Johnson')));
+    expect(screen, isNot(contains('Mrs. Sarah Johnson')));
     expect(screen, isNot(contains('Create Subject')));
     expect(screen, isNot(contains('Map / assign')));
     expect(screen, isNot(contains('Add Subject / Teacher')));

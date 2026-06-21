@@ -509,6 +509,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                             recent[i].currentSectionId ?? _selectedSectionId,
                           ),
                           percent: recent[i].attendancePercent,
+                          statusLabel: _studentStatusLabel(recent[i].id),
+                          statusColor: _studentStatusColor(recent[i].id),
                           onTap: () => _openStudent(recent[i]),
                           showDivider: i != recent.length - 1,
                         ),
@@ -661,6 +663,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                           student.currentSectionId ?? _selectedSectionId,
                         ),
                         percent: _studentAttendancePercent(student),
+                        statusLabel: _studentStatusLabel(student.id),
+                        statusColor: _studentStatusColor(student.id),
                         onTap: () => _openStudent(student),
                       ),
                       _StudentAttendanceMeta(
@@ -841,6 +845,8 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         builder: (_) => _StudentDetailPage(
           student: student,
           sectionLabel: _sectionLabel(student.currentSectionId ?? ''),
+          statusLabel: _studentStatusLabel(student.id),
+          statusColor: _studentStatusColor(student.id),
           records: _studentAttendanceRecords,
           onReopen: _sessions.isEmpty
               ? null
@@ -1182,18 +1188,47 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       )
       .toList();
 
-  int get _presentStudentsToday => _sessions.fold(
+  List<AttendanceSessionModel> get _selectedSectionSessions => _sessions
+      .where(
+        (session) =>
+            _selectedSectionId.isEmpty ||
+            session.sectionId == _selectedSectionId,
+      )
+      .toList();
+
+  int get _presentStudentsToday => _selectedSectionSessions.fold(
     0,
     (sum, session) => sum + _effectivePresentCount(session),
   );
 
-  int get _markedStudentsToday =>
-      _sessions.fold(0, (sum, session) => sum + _effectiveMarkedCount(session));
+  int get _markedStudentsToday => _selectedSectionSessions.fold(
+    0,
+    (sum, session) => sum + _effectiveMarkedCount(session),
+  );
 
-  int get _expectedStudentsToday => _sessions.fold(
+  int get _expectedStudentsToday => _selectedSectionSessions.fold(
     0,
     (sum, session) => sum + _effectiveTotalStudents(session),
   );
+
+  String _studentStatusLabel(String studentId) {
+    final record = _latestStudentRecord(studentId);
+    if (record == null) return 'Unmarked';
+    final status = _recordStatus(record);
+    return status.toLowerCase() == 'unmarked' ? 'Unmarked' : status;
+  }
+
+  Color _studentStatusColor(String studentId) {
+    final status = _studentStatusLabel(studentId).toLowerCase();
+    if (status == 'present' || status == 'late') {
+      return const Color(0xFF24A765);
+    }
+    if (status == 'absent') return const Color(0xFFEF4444);
+    if (status == 'leave' || status == 'half day') {
+      return const Color(0xFFF97316);
+    }
+    return const Color(0xFF94A3B8);
+  }
 
   int _effectivePresentCount(AttendanceSessionModel session) {
     final counts = _sessionStatusCounts(session);
@@ -1360,12 +1395,16 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 class _StudentDetailPage extends StatelessWidget {
   final StudentModel student;
   final String sectionLabel;
+  final String statusLabel;
+  final Color statusColor;
   final List<Map<String, dynamic>> records;
   final VoidCallback? onReopen;
 
   const _StudentDetailPage({
     required this.student,
     required this.sectionLabel,
+    required this.statusLabel,
+    required this.statusColor,
     required this.records,
     this.onReopen,
   });
@@ -1413,10 +1452,7 @@ class _StudentDetailPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusPill(
-                  label: student.status,
-                  color: const Color(0xFF24A765),
-                ),
+                _StatusPill(label: statusLabel, color: statusColor),
               ],
             ),
           ),
@@ -1713,6 +1749,8 @@ class _StudentRow extends StatelessWidget {
   final StudentModel student;
   final String sectionLabel;
   final double percent;
+  final String statusLabel;
+  final Color statusColor;
   final VoidCallback onTap;
   final bool showDivider;
 
@@ -1720,6 +1758,8 @@ class _StudentRow extends StatelessWidget {
     required this.student,
     required this.sectionLabel,
     required this.percent,
+    required this.statusLabel,
+    required this.statusColor,
     required this.onTap,
     this.showDivider = false,
   });
@@ -1749,10 +1789,7 @@ class _StudentRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                _StatusPill(
-                  label: student.status,
-                  color: const Color(0xFF24A765),
-                ),
+                _StatusPill(label: statusLabel, color: statusColor),
                 const SizedBox(width: 10),
                 Text('${percent.toStringAsFixed(0)}%', style: _UiText.caption),
                 const Icon(
@@ -1924,7 +1961,7 @@ class _StatusPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label.isEmpty ? 'Active' : label,
+        label.isEmpty ? 'Unmarked' : label,
         style: TextStyle(
           color: color,
           fontSize: 11,

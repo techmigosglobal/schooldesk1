@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -29,11 +31,19 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   String? _error;
   String _search = '';
   String _workspaceView = 'Subjects';
+  String _selectedGradeId = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -68,6 +78,11 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         _grades = results[3] as List<GradeModel>;
         _sections = results[4] as List<SectionModel>;
         _staff = (results[5] as PaginatedList<StaffModel>).data;
+        final activeGrades = _activeGradesFrom(_grades, _sections);
+        if (_selectedGradeId.isEmpty ||
+            !activeGrades.any((grade) => grade.id == _selectedGradeId)) {
+          _selectedGradeId = activeGrades.isEmpty ? '' : activeGrades.first.id;
+        }
         _loading = false;
       });
     } catch (error) {
@@ -97,6 +112,71 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       final matchesSearch = query.isEmpty || searchable.contains(query);
       return matchesSearch;
     }).toList();
+  }
+
+  List<GradeModel> get _activeGrades => _activeGradesFrom(_grades, _sections);
+
+  List<GradeModel> _activeGradesFrom(
+    List<GradeModel> grades,
+    List<SectionModel> sections,
+  ) {
+    final activeGradeIds = sections.map((section) => section.gradeId).toSet();
+    return grades.where((grade) => activeGradeIds.contains(grade.id)).toList()
+      ..sort((left, right) {
+        final order = left.gradeNumber.compareTo(right.gradeNumber);
+        if (order != 0) return order;
+        return left.gradeName.compareTo(right.gradeName);
+      });
+  }
+
+  GradeModel? get _selectedGrade {
+    for (final grade in _activeGrades) {
+      if (grade.id == _selectedGradeId) return grade;
+    }
+    return _activeGrades.isEmpty ? null : _activeGrades.first;
+  }
+
+  List<_ClassSubjectRow> get _selectedClassSubjects {
+    final grade = _selectedGrade;
+    if (grade == null) return const [];
+    final query = _search.trim().toLowerCase();
+    final gradeSubjects = _activeGradeSubjects
+        .where((row) => _text(row['grade_id']) == grade.id)
+        .toList();
+    final staffSubjects = _activeStaffSubjects
+        .where((row) => _text(row['grade_id']) == grade.id)
+        .toList();
+    final subjectIds = <String>{
+      ...gradeSubjects.map((row) => _text(row['subject_id'])),
+      ...staffSubjects.map((row) => _text(row['subject_id'])),
+    }..removeWhere((id) => id.isEmpty);
+    return subjectIds
+        .map((subjectId) {
+          final subject = _subjectById(subjectId);
+          final assignments =
+              staffSubjects
+                  .where((row) => _text(row['subject_id']) == subjectId)
+                  .map(_assignmentFromRow)
+                  .toList()
+                ..sort(
+                  (left, right) =>
+                      left.teacherName.compareTo(right.teacherName),
+                );
+          final gradeSubject = _gradeSubjectFor(grade.id, subjectId);
+          return _ClassSubjectRow(
+            subjectId: subjectId,
+            subjectName: _text(subject['subject_name'], fallback: 'Subject'),
+            subjectCode: _text(subject['subject_code']),
+            gradeSubjectId: _text(gradeSubject['id']),
+            assignments: assignments,
+          );
+        })
+        .where((row) {
+          if (query.isEmpty) return true;
+          return row.searchText.contains(query);
+        })
+        .toList()
+      ..sort((left, right) => left.subjectName.compareTo(right.subjectName));
   }
 
   List<_ClassSubjectCoverage> get _classCoverage {
@@ -204,13 +284,14 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cards = _directoryCards;
+    final selectedGrade = _selectedGrade;
+    final subjects = _selectedClassSubjects;
     return Scaffold(
-      backgroundColor: const Color(0xFFF6FAFF),
+      backgroundColor: const Color(0xFFFAFCFF),
       bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: RefreshIndicator(
-          color: const Color(0xFF0969FF),
+          color: const Color(0xFF6C4CFF),
           onRefresh: _loadData,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
@@ -219,14 +300,12 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: _SubjectsDirectoryHeader(
-                  title: _workspaceView == 'Subjects'
-                      ? 'Subjects'
-                      : 'Subjects Directory',
+                  title: 'Subjects',
                   subtitle: _subjectsScopeLabel,
-                  onFilter: _showViewFilterSheet,
+                  onFilter: () => _openClassesHubForSubjects(),
                 ),
               ),
-              SliverToBoxAdapter(child: _buildDirectoryFilters()),
+              SliverToBoxAdapter(child: _buildClassSubjectFilters()),
               if (_loading)
                 const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
@@ -244,18 +323,15 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                     ),
                   ),
                 )
-              else if (cards.isEmpty)
+              else if (selectedGrade == null)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
                     child: EmptyStateWidget(
                       icon: Icons.menu_book_rounded,
-                      title: _activeGradeIds.isEmpty
-                          ? 'No active classes found'
-                          : 'No subject rows found',
-                      description: _activeGradeIds.isEmpty
-                          ? 'Create classes in Class Hub, then map subjects and teachers.'
-                          : 'Open a class in Class Hub for subject setup, or adjust the directory filters.',
+                      title: 'No active classes found',
+                      description:
+                          'Create classes in Class Hub, then map subjects and teachers.',
                       actionLabel: 'Go to Classes Hub',
                       onAction: () async {
                         await Navigator.pushNamed(
@@ -267,23 +343,48 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                     ),
                   ),
                 )
-              else ...[
-                SliverToBoxAdapter(child: _buildMetricsStrip()),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 14),
-                  sliver: SliverList.builder(
-                    itemCount: cards.length,
-                    itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(bottom: 13),
-                      child: cards[index],
+              else if (subjects.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: EmptyStateWidget(
+                      icon: Icons.menu_book_rounded,
+                      title: 'No subjects found',
+                      description:
+                          'No backend subject mappings match ${selectedGrade.gradeName}.',
+                      actionLabel: 'Setup Subjects',
+                      onAction: () =>
+                          _openClassesHubForSubjects(gradeId: selectedGrade.id),
                     ),
                   ),
-                ),
-                SliverToBoxAdapter(child: _buildClassHubCta()),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                    child: _buildAnalyticsSection(),
+                )
+              else ...[
+                SliverToBoxAdapter(child: _buildSelectedClassSummary()),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+                  sliver: SliverList.builder(
+                    itemCount: subjects.length,
+                    itemBuilder: (context, index) {
+                      final subject = subjects[index];
+                      final teacher = _primaryAssignment(subject.assignments);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: _PrincipalSubjectCard(
+                          row: subject,
+                          classLabel: selectedGrade.gradeName,
+                          teacher: teacher,
+                          onTeacherTap: teacher == null
+                              ? null
+                              : () => _openTeacherSubjectDetail(
+                                  teacher.teacherId,
+                                ),
+                          onSetup: () => _openClassesHubForSubjects(
+                            gradeId: selectedGrade.id,
+                            subjectId: subject.subjectId,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -318,15 +419,161 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   }..removeWhere((id) => id.isEmpty);
 
   String get _subjectsScopeLabel {
-    if (_classCoverage.length == 1) {
-      final coverage = _classCoverage.first;
-      final section = coverage.sections.isEmpty
-          ? ''
-          : ' - ${coverage.sections.first.sectionName}';
-      return '${coverage.grade.gradeName}$section';
-    }
-    if (_classCoverage.isEmpty) return 'No active class mappings';
-    return '${_classCoverage.length} active classes';
+    final count = _activeGrades.length;
+    if (count == 0) return 'No active classes';
+    return '$count active ${count == 1 ? 'class' : 'classes'}';
+  }
+
+  Widget _buildClassSubjectFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 8, 22, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SubjectSearchField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _search = value),
+          ),
+          const SizedBox(height: 18),
+          _ClassSelectField(
+            grades: _activeGrades,
+            selectedGradeId: _selectedGradeId,
+            onChanged: (value) => setState(() => _selectedGradeId = value),
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF6C4CFF),
+                side: const BorderSide(color: Color(0xFFE7E1FF)),
+                backgroundColor: const Color(0xFFF8F5FF),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: () => setState(() {
+                _search = '';
+                _searchController.clear();
+                _selectedGradeId = _activeGrades.isEmpty
+                    ? ''
+                    : _activeGrades.first.id;
+              }),
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              label: Text(
+                'Reset',
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedClassSummary() {
+    final grade = _selectedGrade;
+    final subjectCount = _selectedClassSubjects.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 10, 22, 10),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 66),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFFE5E7F3)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0E1D2440),
+              blurRadius: 14,
+              offset: Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text.rich(
+                TextSpan(
+                  text: 'Showing subjects for ',
+                  style: GoogleFonts.dmSans(
+                    color: const Color(0xFF67728A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: grade?.gradeName ?? 'Class',
+                      style: const TextStyle(
+                        color: Color(0xFF6C4CFF),
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3EFFF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE3D9FF)),
+              ),
+              child: Text(
+                '$subjectCount ${subjectCount == 1 ? 'Subject' : 'Subjects'}',
+                style: GoogleFonts.dmSans(
+                  color: const Color(0xFF6C4CFF),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openTeacherSubjectDetail(String teacherId) async {
+    if (teacherId.trim().isEmpty) return;
+    final staff = _staffById(teacherId);
+    final assignments =
+        _activeStaffSubjects
+            .where((row) => _text(row['staff_id']) == teacherId)
+            .map(_assignmentFromRow)
+            .toList()
+          ..sort((left, right) {
+            final subjectOrder = left.subjectName.compareTo(right.subjectName);
+            if (subjectOrder != 0) return subjectOrder;
+            return left.classLabel.compareTo(right.classLabel);
+          });
+    if (!mounted) return;
+    final action = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => _TeacherSubjectsDetailScreen(
+          teacherName: _staffName(
+            staff,
+            fallback: assignments.isEmpty
+                ? 'Teacher'
+                : assignments.first.teacherName,
+          ),
+          designation: staff?.designation ?? 'Teacher',
+          assignments: assignments,
+          onSetup: () => Navigator.of(context).pop('classhub'),
+        ),
+      ),
+    );
+    if (!mounted || action != 'classhub') return;
+    await _openClassesHubForSubjects();
   }
 
   Widget _buildMetricsStrip() {
@@ -1005,6 +1252,546 @@ class _SubjectsDirectoryHeader extends StatelessWidget {
   }
 }
 
+class _SubjectSearchField extends StatelessWidget {
+  const _SubjectSearchField({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      onChanged: onChanged,
+      style: GoogleFonts.dmSans(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: const Color(0xFF111827),
+      ),
+      decoration: InputDecoration(
+        hintText: 'Search subjects...',
+        hintStyle: GoogleFonts.dmSans(
+          color: const Color(0xFF8A94A8),
+          fontWeight: FontWeight.w700,
+        ),
+        prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF526079)),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFE1E6F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFFE1E6F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF6C4CFF), width: 1.4),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassSelectField extends StatelessWidget {
+  const _ClassSelectField({
+    required this.grades,
+    required this.selectedGradeId,
+    required this.onChanged,
+  });
+
+  final List<GradeModel> grades;
+  final String selectedGradeId;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = grades.any((grade) => grade.id == selectedGradeId)
+        ? selectedGradeId
+        : (grades.isEmpty ? null : grades.first.id);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE1E6F0)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: selected,
+          isExpanded: true,
+          icon: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Color(0xFF526079),
+          ),
+          items: [
+            for (final grade in grades)
+              DropdownMenuItem(
+                value: grade.id,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Select Class',
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF6C4CFF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      grade.gradeName,
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF111827),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) onChanged(value);
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _PrincipalSubjectCard extends StatelessWidget {
+  const _PrincipalSubjectCard({
+    required this.row,
+    required this.classLabel,
+    required this.teacher,
+    required this.onTeacherTap,
+    required this.onSetup,
+  });
+
+  final _ClassSubjectRow row;
+  final String classLabel;
+  final _SubjectAssignment? teacher;
+  final VoidCallback? onTeacherTap;
+  final VoidCallback onSetup;
+
+  @override
+  Widget build(BuildContext context) {
+    final teacherName = teacher?.teacherName ?? 'Teacher not assigned';
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(8),
+      elevation: 0,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTeacherTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 124),
+          padding: const EdgeInsets.fromLTRB(14, 16, 8, 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE7EBF3)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x101D2440),
+                blurRadius: 14,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _SubjectGlyph(label: row.subjectName),
+              const SizedBox(width: 16),
+              _ClassChip(label: classLabel),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      row.subjectName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF111827),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _SubjectTeacherAvatar(name: teacherName),
+                        const SizedBox(width: 9),
+                        Flexible(
+                          child: Text(
+                            teacherName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              color: const Color(0xFF667085),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (teacher != null) ...[
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: Color(0xFF6C4CFF),
+                            size: 16,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Subject actions',
+                icon: const Icon(
+                  Icons.more_vert_rounded,
+                  color: Color(0xFF526079),
+                ),
+                onSelected: (_) => onSetup(),
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'setup',
+                    child: Text('Setup in Class Hub'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassChip extends StatelessWidget {
+  const _ClassChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 42),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3EFFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE3D9FF)),
+      ),
+      child: Text(
+        _compactClassLabel(label),
+        textAlign: TextAlign.center,
+        style: GoogleFonts.dmSans(
+          color: const Color(0xFF6C4CFF),
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherSubjectsDetailScreen extends StatelessWidget {
+  const _TeacherSubjectsDetailScreen({
+    required this.teacherName,
+    required this.designation,
+    required this.assignments,
+    required this.onSetup,
+  });
+
+  final String teacherName;
+  final String designation;
+  final List<_SubjectAssignment> assignments;
+  final VoidCallback onSetup;
+
+  @override
+  Widget build(BuildContext context) {
+    final assignedClass = assignments.isEmpty
+        ? 'No class'
+        : assignments.first.classLabel;
+    final subjectIds = assignments.map((row) => row.subjectId).toSet();
+    return Scaffold(
+      backgroundColor: const Color(0xFFFAFCFF),
+      bottomNavigationBar: const PrincipalShellBottomBar(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 96),
+          children: [
+            _SubjectsDirectoryHeader(
+              title: 'Teacher Subjects',
+              subtitle: 'Subjects handled by this teacher',
+              onFilter: onSetup,
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: _subjectPanelDecoration(context).copyWith(
+                color: const Color(0xFFFCFAFF),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  _TeacherPortrait(name: teacherName),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                teacherName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.dmSans(
+                                  color: const Color(0xFF111827),
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.verified_rounded,
+                              color: Color(0xFF6C4CFF),
+                              size: 22,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          designation.trim().isEmpty ? 'Teacher' : designation,
+                          style: GoogleFonts.dmSans(
+                            color: const Color(0xFF6C4CFF),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _TeacherMiniMetric(
+                                icon: Icons.school_outlined,
+                                label: 'Assigned Class',
+                                value: assignedClass,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _TeacherMiniMetric(
+                                icon: Icons.groups_2_outlined,
+                                label: 'Can teach',
+                                value:
+                                    '${subjectIds.length} ${subjectIds.length == 1 ? 'Subject' : 'Subjects'}',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+            Text(
+              'Subjects this teacher can teach',
+              style: GoogleFonts.dmSans(
+                color: const Color(0xFF111827),
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (assignments.isEmpty)
+              EmptyStateWidget(
+                icon: Icons.menu_book_rounded,
+                title: 'No subjects assigned',
+                description:
+                    'Use Class Hub to assign this teacher to class subjects.',
+                actionLabel: 'Open Class Hub',
+                onAction: onSetup,
+              )
+            else
+              for (final assignment in assignments)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _TeacherSubjectRow(
+                    assignment: assignment,
+                    onTap: onSetup,
+                  ),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherPortrait extends StatelessWidget {
+  const _TeacherPortrait({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 104,
+      height: 104,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFFF0EAFF),
+        border: Border.all(color: Colors.white, width: 5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x1A1D2440),
+            blurRadius: 16,
+            offset: Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Center(
+        child: Text(
+          _initials(name),
+          style: GoogleFonts.dmSans(
+            color: const Color(0xFF6C4CFF),
+            fontSize: 30,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeacherMiniMetric extends StatelessWidget {
+  const _TeacherMiniMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFE6E0F7)),
+          ),
+          child: Icon(icon, color: const Color(0xFF6C4CFF), size: 22),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: const Color(0xFF7B8498),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  color: const Color(0xFF111827),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeacherSubjectRow extends StatelessWidget {
+  const _TeacherSubjectRow({required this.assignment, required this.onTap});
+
+  final _SubjectAssignment assignment;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 92),
+        padding: const EdgeInsets.fromLTRB(16, 14, 14, 14),
+        decoration: _subjectPanelDecoration(context),
+        child: Row(
+          children: [
+            _SubjectGlyph(label: assignment.subjectName),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    assignment.subjectName,
+                    style: GoogleFonts.dmSans(
+                      color: const Color(0xFF111827),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  _ClassChip(label: assignment.gradeName),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFF526079),
+              size: 30,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SubjectMetricCard extends StatelessWidget {
   const _SubjectMetricCard({
     required this.icon,
@@ -1596,7 +2383,10 @@ IconData _subjectIcon(String label) {
     return Icons.abc_rounded;
   }
   if (value.contains('science') || value.contains('evs')) {
-    return Icons.eco_outlined;
+    return Icons.science_outlined;
+  }
+  if (value.contains('social') || value.contains('history')) {
+    return Icons.public_rounded;
   }
   if (value.contains('computer')) return Icons.computer_rounded;
   if (value.contains('music')) return Icons.music_note_rounded;
@@ -1625,6 +2415,19 @@ IconData _subjectIcon(String label) {
     return (const Color(0xFF00A7A7), const Color(0xFFE7F9F8));
   }
   return (const Color(0xFF0969FF), const Color(0xFFEAF2FF));
+}
+
+String _compactClassLabel(String label) {
+  final clean = label.trim();
+  if (clean.isEmpty) return '-';
+  final roman = RegExp(
+    r'\b([IVXLCDM]+)\b',
+    caseSensitive: false,
+  ).firstMatch(clean);
+  if (roman != null) return roman.group(1)!.toUpperCase();
+  final number = RegExp(r'\d+').firstMatch(clean);
+  if (number != null) return number.group(0)!;
+  return clean.length <= 3 ? clean : clean.substring(0, 1).toUpperCase();
 }
 
 String _initials(String value) {
