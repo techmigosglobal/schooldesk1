@@ -28,7 +28,7 @@ func NewAttendanceHandler() *AttendanceHandler {
 	return &AttendanceHandler{}
 }
 
-const staffQRRefreshSeconds = 5
+const staffQRRefreshSeconds = 7
 const staffQRScanGraceSeconds = 10
 
 var (
@@ -1089,6 +1089,8 @@ func (h *AttendanceHandler) GetStaffQRToken(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to create staff QR token")
 		return
 	}
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
 		Data: staffQRTokenResponse{

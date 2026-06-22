@@ -21,7 +21,7 @@ class StaffQrAttendancePanel extends StatefulWidget {
 }
 
 class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
-  static const int _qrRefreshSeconds = 5;
+  static const int _qrRefreshSeconds = 7;
   static const Duration _qrRefreshInterval = Duration(
     seconds: _qrRefreshSeconds,
   );
@@ -42,10 +42,6 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   void initState() {
     super.initState();
     unawaited(_load());
-    _qrRefreshTimer = Timer.periodic(
-      _qrRefreshInterval,
-      (_) => unawaited(_refreshQrCode()),
-    );
     _pollingTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => _pollRecentScans(),
@@ -62,6 +58,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
 
   Future<void> _load({bool quiet = false}) async {
     if (_refreshing) return;
+    _qrRefreshTimer?.cancel();
     setState(() {
       _refreshing = true;
       if (!quiet) _loading = true;
@@ -69,7 +66,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
     });
     try {
       final api = BackendApiClient.instance;
-      final token = await api.getStaffQrToken();
+      final token = await api.getStaffQrToken(nonce: _qrRefreshNonce());
       if (!mounted) return;
       setState(() {
         _token = token;
@@ -84,9 +81,13 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       if (!mounted) return;
       setState(() {
         _error = error.toString();
+        _nextQrRefreshAt = DateTime.now().add(_qrRefreshInterval);
+        _secondsLeft = _qrRefreshSeconds;
         _loading = false;
         _refreshing = false;
       });
+    } finally {
+      if (mounted) _scheduleQrRefresh();
     }
   }
 
@@ -126,6 +127,16 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
   Future<void> _refreshQrCode() async {
     await _load(quiet: true);
   }
+
+  void _scheduleQrRefresh() {
+    _qrRefreshTimer?.cancel();
+    _qrRefreshTimer = Timer(
+      _qrRefreshInterval,
+      () => unawaited(_refreshQrCode()),
+    );
+  }
+
+  String _qrRefreshNonce() => DateTime.now().microsecondsSinceEpoch.toString();
 
   Future<void> _exportDailyQrLog() async {
     if (_exportingLog) return;
@@ -339,6 +350,7 @@ class _QrBlock extends StatelessWidget {
                     color: tokens.textMuted,
                   )
                 : QrImageView(
+                    key: ValueKey(token!.token),
                     data: token!.token,
                     version: QrVersions.auto,
                     errorCorrectionLevel: QrErrorCorrectLevel.M,
@@ -377,7 +389,7 @@ class _QrBlock extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'QR refreshes every 5 seconds',
+                  'QR refreshes every 7 seconds',
                   style: theme.textTheme.labelSmall?.copyWith(color: color),
                 ),
               ],

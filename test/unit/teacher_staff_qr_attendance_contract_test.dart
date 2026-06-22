@@ -65,15 +65,17 @@ void main() {
     expect(adminAttendance, isNot(contains('StaffQrAttendancePanel')));
     expect(qrPanel, contains('StaffQrAttendancePanel'));
     expect(qrPanel, contains('QrImageView'));
-    expect(qrPanel, contains('static const int _qrRefreshSeconds = 5'));
+    expect(qrPanel, contains('static const int _qrRefreshSeconds = 7'));
     expect(qrPanel, contains('Timer? _qrRefreshTimer'));
-    expect(qrPanel, contains('_qrRefreshTimer = Timer.periodic'));
+    expect(qrPanel, contains('_scheduleQrRefresh'));
     expect(qrPanel, contains('unawaited(_refreshQrCode())'));
+    expect(qrPanel, contains('ValueKey(token!.token)'));
     expect(qrPanel, contains('_nextQrRefreshAt = DateTime.now().add'));
     expect(qrPanel, contains('_secondsLeft = _qrRefreshSeconds'));
     expect(qrPanel, contains('_startLiveTicker'));
     expect(qrPanel, contains('Timer.periodic(const Duration(seconds: 1)'));
     expect(qrPanel, isNot(contains('token.secondsRemaining')));
+    expect(qrPanel, contains('QR refreshes every 7 seconds'));
     expect(qrPanel, contains('Recent scans'));
     expect(qrPanel, contains('Semantics('));
     expect(qrPanel, isNot(contains('Future.wait<Object>([')));
@@ -83,7 +85,12 @@ void main() {
     expect(qrPanel, contains('shareBytes('));
     expect(qrPanel, isNot(contains('XFile.fromData')));
 
-    expect(api, contains('Future<StaffQrTokenModel> getStaffQrToken()'));
+    expect(
+      api,
+      contains('Future<StaffQrTokenModel> getStaffQrToken({String? nonce})'),
+    );
+    expect(api, contains("queryParameters: {'refresh_nonce': nonce}"));
+    expect(api, contains("'Cache-Control': 'no-store'"));
     expect(api, contains('Future<StaffAttendanceModel> scanStaffQr'));
     expect(api, contains('exportStaffQrLogsCsv'));
     expect(api, contains('getMyStaffAttendanceToday'));
@@ -99,7 +106,8 @@ void main() {
     expect(handler, contains('verifyStaffQRToken'));
     expect(handler, contains('currentStaffID(c)'));
     expect(handler, contains('payload.SchoolID != schoolID'));
-    expect(handler, contains('staffQRRefreshSeconds = 5'));
+    expect(handler, contains('staffQRRefreshSeconds = 7'));
+    expect(handler, contains('Cache-Control", "no-store'));
     expect(handler, contains('staffQRScanGraceSeconds = 10'));
     expect(handler, contains('ExportStaffQRDailyLogs'));
   });

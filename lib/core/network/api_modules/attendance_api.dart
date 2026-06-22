@@ -180,9 +180,15 @@ extension BackendAttendanceApi on BackendApiClient {
     );
   }
 
-  Future<StaffQrTokenModel> getStaffQrToken() async {
+  Future<StaffQrTokenModel> getStaffQrToken({String? nonce}) async {
     try {
-      final response = await _dio.get('/attendance/staff/qr-token');
+      final response = await _dio.get(
+        '/attendance/staff/qr-token',
+        queryParameters: {'refresh_nonce': nonce},
+        options: Options(
+          headers: const {'Cache-Control': 'no-store', 'Pragma': 'no-cache'},
+        ),
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return StaffQrTokenModel.fromJson(
