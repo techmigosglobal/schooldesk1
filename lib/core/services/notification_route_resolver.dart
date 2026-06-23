@@ -34,9 +34,13 @@ class NotificationRouteResolver {
       'homework' => _homeworkRouteFor(role),
       'fee' => _feeRouteFor(role),
       'exam' || 'exam_schedule' => _examRouteFor(role),
-      'event' => _eventRouteFor(role),
+      'event' || 'event_post' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
       'leave' => _leaveRouteFor(role),
+      'staff_attendance' ||
+      'staff_attendance_daily_report' ||
+      'staff_attendance_monthly_report' => _attendanceRouteFor(role),
+      'lesson_planner_weekly_digest' => _lessonPlannerRouteFor(role),
       'health' => AppRoutes.parentHealthUpdate,
       _ => AppRoutes.notificationCenter,
     };
@@ -113,6 +117,24 @@ class NotificationRouteResolver {
       'parent' => AppRoutes.schoolGallery,
       'teacher' => AppRoutes.teacherEventPosts,
       'principal' => AppRoutes.principalEventApprovals,
+      _ => AppRoutes.notificationCenter,
+    };
+  }
+
+  static String _attendanceRouteFor(String role) {
+    return switch (role) {
+      'principal' => AppRoutes.principalAttendance,
+      'teacher' => AppRoutes.teacherMyAttendance,
+      'parent' => AppRoutes.parentAttendance,
+      _ => AppRoutes.notificationCenter,
+    };
+  }
+
+  static String _lessonPlannerRouteFor(String role) {
+    return switch (role) {
+      'principal' => AppRoutes.principalLessonPlanner,
+      'teacher' => AppRoutes.teacherLessonPlanner,
+      'parent' => AppRoutes.parentLessonPlanner,
       _ => AppRoutes.notificationCenter,
     };
   }

@@ -69,13 +69,13 @@ func (h *ReportExportHandler) Create(category string) gin.HandlerFunc {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		format := strings.ToLower(strings.TrimSpace(textPayload(payload, "format")))
+		format, supportedFormat := normalizeReportFormat(textPayload(payload, "format"))
 		if format == "" {
 			fail(c, http.StatusBadRequest, "format is required")
 			return
 		}
-		if format != "pdf" && format != "csv" && format != "json" && format != "xlsx" {
-			fail(c, http.StatusBadRequest, "format must be pdf, csv, json, or xlsx")
+		if !supportedFormat {
+			fail(c, http.StatusBadRequest, "format must be pdf, csv, json, xlsx, or excel")
 			return
 		}
 		title := firstPayloadText(payload, "report_title", "report", "title", "name")
@@ -124,6 +124,20 @@ func (h *ReportExportHandler) Create(category string) gin.HandlerFunc {
 		id := row.ID
 		auditAction(c, "reports", "export", "report_exports", &id)
 		success(c, http.StatusCreated, row, "Report export generated")
+	}
+}
+
+func normalizeReportFormat(value string) (string, bool) {
+	format := strings.ToLower(strings.TrimSpace(value))
+	switch format {
+	case "":
+		return "", false
+	case "excel":
+		return "xlsx", true
+	case "pdf", "csv", "json", "xlsx":
+		return format, true
+	default:
+		return format, false
 	}
 }
 

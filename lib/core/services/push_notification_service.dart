@@ -237,10 +237,39 @@ class PushNotificationService {
       await androidPlugin
           ?.createNotificationChannel(_androidChannel)
           .timeout(_firebaseOperationTimeout);
-      _localNotificationsReady = true;
+      final androidNotificationsAllowed =
+          await _requestAndroidNotificationPermission(androidPlugin);
+      _localNotificationsReady = androidNotificationsAllowed != false;
     } catch (_) {
       _localNotificationsReady = false;
     }
+  }
+
+  Future<bool?> _requestAndroidNotificationPermission(
+    AndroidFlutterLocalNotificationsPlugin? androidPlugin,
+  ) async {
+    if (androidPlugin == null) return null;
+    final enabled = await androidPlugin.areNotificationsEnabled().timeout(
+      _firebaseOperationTimeout,
+    );
+    if (enabled == true) {
+      _permissionStatus = 'authorized';
+      return true;
+    }
+
+    final granted = await androidPlugin
+        .requestNotificationsPermission()
+        .timeout(_firebaseOperationTimeout);
+    if (granted == false) {
+      _permissionStatus = 'denied';
+      _lastRegistrationError = 'Android notification permission was denied.';
+      return false;
+    }
+    if (granted == true) {
+      _permissionStatus = 'authorized';
+      return true;
+    }
+    return null;
   }
 
   Future<void> _refreshToken() async {

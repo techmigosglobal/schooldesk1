@@ -87,7 +87,9 @@ func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
 	database.DB.Preload("CreatedByTeacher").First(&post, "id = ?", post.ID)
 
 	if req.IsSubmit {
-		createApprovalRequestedNotificationsTx(database.DB, c, post.ID, "Event Post Submitted", "A new event post requires your approval.")
+		if logs, err := createEventPostApprovalRequestedNotificationsTx(database.DB, c, post.ID, post.Title); err == nil {
+			enqueuePushNotifications(logs)
+		}
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
@@ -178,7 +180,9 @@ func (h *EventPostHandler) ApproveEventPost(c *gin.Context) {
 
 	database.DB.Preload("CreatedByTeacher").First(&post, "id = ?", post.ID)
 
-	createApprovalDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "Event Post Approved", "Your event post has been approved.")
+	if logs, err := createEventPostDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "approved", ""); err == nil {
+		enqueuePushNotifications(logs)
+	}
 	if strings.Contains(post.Destinations, "PARENTS_HOME") {
 		createNotificationLogsForRolesTx(database.DB, schoolID, []string{"parent"}, "", "New School Event", post.Title, "event", "medium", "event_post", post.ID)
 	}
@@ -214,7 +218,9 @@ func (h *EventPostHandler) RejectEventPost(c *gin.Context) {
 
 	database.DB.Preload("CreatedByTeacher").First(&post, "id = ?", post.ID)
 
-	createApprovalDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "Event Post Rejected", "Your event post has been rejected. Reason: "+req.Reason)
+	if logs, err := createEventPostDecisionNotificationsTx(database.DB, c, post.CreatedByTeacherID, post.ID, "rejected", req.Reason); err == nil {
+		enqueuePushNotifications(logs)
+	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
 }

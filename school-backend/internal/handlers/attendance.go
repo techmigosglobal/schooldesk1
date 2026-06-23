@@ -1224,7 +1224,7 @@ func createStaffPunchInNotificationsTx(
 	return createNotificationLogsForRolesTx(
 		tx,
 		schoolID,
-		[]string{"principal", "admin"},
+		[]string{"principal"},
 		currentUserID(c),
 		"Staff punch-in recorded",
 		body,

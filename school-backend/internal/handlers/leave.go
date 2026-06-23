@@ -155,7 +155,7 @@ func (h *LeaveHandler) CreateLeaveApplication(c *gin.Context) {
 	if logs, err := createNotificationLogsForRolesTx(
 		database.DB,
 		scopedSchoolID(c),
-		[]string{"admin", "principal"},
+		[]string{"principal"},
 		c.GetString("user_id"),
 		"Teacher leave approval pending",
 		"A teacher leave request is waiting for approval.",

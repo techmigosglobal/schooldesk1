@@ -6,6 +6,7 @@ import (
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
+	"google.golang.org/api/option"
 )
 
 type PushMessage struct {
@@ -22,12 +23,16 @@ type FirebasePushSender struct {
 	client *messaging.Client
 }
 
-func NewFirebasePushSender(ctx context.Context, projectID string) (*FirebasePushSender, error) {
+func NewFirebasePushSender(ctx context.Context, projectID string, serviceAccountJSON ...string) (*FirebasePushSender, error) {
 	config := &firebase.Config{}
 	if strings.TrimSpace(projectID) != "" {
 		config.ProjectID = strings.TrimSpace(projectID)
 	}
-	app, err := firebase.NewApp(ctx, config)
+	options := []option.ClientOption{}
+	if len(serviceAccountJSON) > 0 && strings.TrimSpace(serviceAccountJSON[0]) != "" {
+		options = append(options, option.WithCredentialsJSON([]byte(strings.TrimSpace(serviceAccountJSON[0]))))
+	}
+	app, err := firebase.NewApp(ctx, config, options...)
 	if err != nil {
 		return nil, err
 	}

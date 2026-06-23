@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/features/academics/presentation/screens/academic_management_screen/academic_management_form_screens.dart';
@@ -128,6 +129,7 @@ class _PrincipalAcademicYearsScreenState
                   onView: () => _openDetail(year),
                   onEdit: () => _openEdit(year),
                   onActivate: () => _activate(year),
+                  onDelete: () => _deleteYear(year),
                 ),
                 const SizedBox(height: 12),
               ],
@@ -188,6 +190,24 @@ class _PrincipalAcademicYearsScreenState
       }
     }
   }
+
+  Future<void> _deleteYear(Map<String, dynamic> year) async {
+    final firstConfirm = await _confirmAcademicYearDelete(context, year);
+    if (firstConfirm != true || !mounted) return;
+    final finalConfirm = await _confirmAcademicYearFinalDelete(context, year);
+    if (finalConfirm != true || !mounted) return;
+    try {
+      await BackendApiClient.instance.deleteAcademicYear('${year['id']}');
+      await _load();
+      if (mounted) {
+        _snack(context, '${_yearLabel(year)} deleted');
+      }
+    } catch (error) {
+      if (mounted) {
+        _snack(context, 'Unable to delete year: $error', error: true);
+      }
+    }
+  }
 }
 
 class PrincipalAcademicYearDetailScreen extends StatelessWidget {
@@ -205,14 +225,7 @@ class PrincipalAcademicYearDetailScreen extends StatelessWidget {
         children: [
           _YearHeroCard(year: year, centered: true),
           const SizedBox(height: 30),
-          Text(
-            'Export Data',
-            style: GoogleFonts.dmSans(
-              color: _ayInk,
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          Text('Export Data', style: _titleStyle(22)),
           const SizedBox(height: 18),
           _ExportHubCard(
             icon: Icons.co_present_rounded,
@@ -271,7 +284,7 @@ class _AcademicYearClasswiseExportScreenState
   String _gradeId = 'all';
   String _sectionId = 'all';
   String _exportType = 'complete_classwise_data';
-  String _format = 'excel';
+  String _format = 'xlsx';
   bool _loading = true;
   bool _exporting = false;
   List<GradeModel> _grades = const [];
@@ -456,7 +469,7 @@ class _AcademicYearClasswiseExportScreenState
         ('Sections', '${_visibleSections.length} section(s)'),
         ('Students', '$_studentCount student record(s) available'),
         ('Export Type', _labelize(_exportType)),
-        ('Format', _format.toUpperCase()),
+        ('Format', _formatLabel(_format)),
       ],
     );
   }
@@ -464,7 +477,7 @@ class _AcademicYearClasswiseExportScreenState
   Future<void> _export() async {
     setState(() => _exporting = true);
     try {
-      await BackendApiClient.instance.createReportExport(
+      final export = await BackendApiClient.instance.createReportExport(
         '/reports/exports',
         reportTitle: 'Classwise ${_labelize(_exportType)}',
         reportType: _exportType,
@@ -473,7 +486,12 @@ class _AcademicYearClasswiseExportScreenState
         parameters: _parameters(),
       );
       if (mounted) {
-        _snack(context, 'Classwise export queued');
+        await _downloadExportArtifact(
+          context,
+          export: export,
+          format: _format,
+          title: 'Classwise ${_labelize(_exportType)}',
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -502,7 +520,7 @@ class _AcademicYearUsersExportScreenState
     extends State<AcademicYearUsersExportScreen> {
   final Set<String> _roles = {'principal', 'teacher', 'parent'};
   String _status = 'all';
-  String _format = 'csv';
+  String _format = 'xlsx';
   bool _exporting = false;
   int _total = 0;
 
@@ -604,7 +622,7 @@ class _AcademicYearUsersExportScreenState
                 _Segmented(
                   title: 'File Format',
                   value: _format,
-                  values: const ['csv', 'excel', 'pdf'],
+                  values: const ['csv', 'xlsx', 'pdf'],
                   onChanged: (value) => setState(() => _format = value),
                 ),
               ],
@@ -642,7 +660,7 @@ class _AcademicYearUsersExportScreenState
         ('Roles', _roles.map(_labelize).join(', ')),
         ('Status', _labelize(_status)),
         ('Matched Users', '$_total user account(s)'),
-        ('Format', _format.toUpperCase()),
+        ('Format', _formatLabel(_format)),
       ],
     );
   }
@@ -654,7 +672,7 @@ class _AcademicYearUsersExportScreenState
     }
     setState(() => _exporting = true);
     try {
-      await BackendApiClient.instance.createReportExport(
+      final export = await BackendApiClient.instance.createReportExport(
         '/reports/exports',
         reportTitle: 'Users-wise Data Export',
         reportType: 'users_wise_export',
@@ -669,7 +687,12 @@ class _AcademicYearUsersExportScreenState
         },
       );
       if (mounted) {
-        _snack(context, 'Users-wise export queued');
+        await _downloadExportArtifact(
+          context,
+          export: export,
+          format: _format,
+          title: 'Users-wise Data Export',
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -875,7 +898,7 @@ class _AcademicYearFeesExportScreenState
         ('Invoices', '$_invoiceCount invoice(s)'),
         ('Payment Status', _labelize(_paymentStatus)),
         ('Report Type', _labelize(_reportType)),
-        ('Format', _format.toUpperCase()),
+        ('Format', _formatLabel(_format)),
       ],
     );
   }
@@ -883,7 +906,7 @@ class _AcademicYearFeesExportScreenState
   Future<void> _export() async {
     setState(() => _exporting = true);
     try {
-      await BackendApiClient.instance.createReportExport(
+      final export = await BackendApiClient.instance.createReportExport(
         '/fees/reports/exports',
         reportTitle: _labelize(_reportType),
         reportType: _reportType,
@@ -900,7 +923,12 @@ class _AcademicYearFeesExportScreenState
         },
       );
       if (mounted) {
-        _snack(context, 'Fees export queued');
+        await _downloadExportArtifact(
+          context,
+          export: export,
+          format: _format,
+          title: _labelize(_reportType),
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -957,12 +985,14 @@ class _YearListCard extends StatelessWidget {
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onActivate;
+  final VoidCallback onDelete;
 
   const _YearListCard({
     required this.year,
     required this.onView,
     required this.onEdit,
     required this.onActivate,
+    required this.onDelete,
   });
 
   @override
@@ -996,12 +1026,20 @@ class _YearListCard extends StatelessWidget {
                       onSelected: (value) {
                         if (value == 'edit') onEdit();
                         if (value == 'activate') onActivate();
+                        if (value == 'delete') onDelete();
                       },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'edit', child: Text('Edit')),
-                        PopupMenuItem(
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                        const PopupMenuItem(
                           value: 'activate',
                           child: Text('Mark current'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red.shade700),
+                          ),
                         ),
                       ],
                     ),
@@ -1437,7 +1475,7 @@ class _FormatCard extends StatelessWidget {
       child: _Segmented(
         title: 'File Format',
         value: value,
-        values: const ['csv', 'excel', 'pdf'],
+        values: const ['csv', 'xlsx', 'pdf'],
         onChanged: onChanged,
       ),
     );
@@ -1490,7 +1528,7 @@ class _Segmented extends StatelessWidget {
                         ),
                       ),
                       child: Text(
-                        _labelize(item).replaceAll('Pdf', 'PDF'),
+                        _formatLabel(item),
                         style: _labelStyle(
                           16,
                           color: value == item ? _ayBlue : _ayInk,
@@ -1865,33 +1903,202 @@ String _labelize(String value) => value
     .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
     .join(' ');
 
-TextStyle _titleStyle(double size) => GoogleFonts.dmSans(
-  color: _ayInk,
-  fontSize: size,
-  fontWeight: FontWeight.w900,
-  letterSpacing: 0,
-);
+String _formatLabel(String value) {
+  switch (value.toLowerCase().trim()) {
+    case 'csv':
+      return 'CSV';
+    case 'xlsx':
+    case 'excel':
+      return 'Excel';
+    case 'pdf':
+      return 'PDF';
+    case 'json':
+      return 'JSON';
+    default:
+      return _labelize(value);
+  }
+}
 
-TextStyle _labelStyle(double size, {Color color = _ayInk}) =>
-    GoogleFonts.dmSans(
-      color: color,
-      fontSize: size,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0,
-    );
+double _ayResponsiveTextScale([BuildContext? context]) {
+  final width = context == null ? 360.0 : MediaQuery.sizeOf(context).width;
+  if (width < 360) return .78;
+  if (width < 430) return .86;
+  if (width < 600) return .94;
+  return 1;
+}
 
-TextStyle _bodyStyle() => GoogleFonts.dmSans(
-  color: _ayInk,
-  fontSize: 17,
-  fontWeight: FontWeight.w600,
-);
+TextStyle _ayFont(
+  double size, {
+  BuildContext? context,
+  Color color = _ayInk,
+  FontWeight fontWeight = FontWeight.w700,
+}) {
+  return GoogleFonts.dmSans(
+    color: color,
+    fontWeight: fontWeight,
+    letterSpacing: 0,
+  ).copyWith(fontSize: size * _ayResponsiveTextScale(context));
+}
 
-TextStyle _mutedStyle(double size) => GoogleFonts.dmSans(
+TextStyle _titleStyle(double size, {BuildContext? context}) =>
+    _ayFont(size, context: context, color: _ayInk, fontWeight: FontWeight.w900);
+
+TextStyle _labelStyle(
+  double size, {
+  BuildContext? context,
+  Color color = _ayInk,
+}) =>
+    _ayFont(size, context: context, color: color, fontWeight: FontWeight.w800);
+
+TextStyle _bodyStyle({BuildContext? context}) =>
+    _ayFont(17, context: context, color: _ayInk, fontWeight: FontWeight.w600);
+
+TextStyle _mutedStyle(double size, {BuildContext? context}) => _ayFont(
+  size,
+  context: context,
   color: _ayMuted,
-  fontSize: size,
   fontWeight: FontWeight.w600,
-  letterSpacing: 0,
 );
+
+Future<bool?> _confirmAcademicYearDelete(
+  BuildContext context,
+  Map<String, dynamic> year,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete academic year?'),
+      content: Text(
+        'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, exams, or events still use this academic year.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: () => Navigator.pop(context, true),
+          icon: const Icon(Icons.warning_amber_rounded),
+          label: const Text('Continue'),
+        ),
+      ],
+    ),
+  );
+}
+
+Future<bool?> _confirmAcademicYearFinalDelete(
+  BuildContext context,
+  Map<String, dynamic> year,
+) async {
+  final controller = TextEditingController();
+  try {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) {
+        var canDelete = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Final confirmation'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Type DELETE to confirm deleting ${_yearLabel(year)}.'),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirmation',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) => setDialogState(
+                    () => canDelete = value.trim().toUpperCase() == 'DELETE',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: canDelete
+                    ? () => Navigator.pop(context, true)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                ),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  } finally {
+    controller.dispose();
+  }
+}
+
+Future<void> _downloadExportArtifact(
+  BuildContext context, {
+  required Map<String, dynamic> export,
+  required String format,
+  required String title,
+}) async {
+  final downloadUrl = '${export['download_url'] ?? ''}'.trim();
+  if (downloadUrl.isEmpty) {
+    _snack(context, '$title export queued');
+    return;
+  }
+  final bytes = await BackendApiClient.instance.downloadReportExport(
+    downloadUrl,
+  );
+  if (bytes.isEmpty) {
+    throw StateError('Export file was empty');
+  }
+  await const ShareExportService().shareBytes(
+    bytes: bytes,
+    fileName: _exportFileName(downloadUrl, format, title),
+    mimeType: _exportMimeType(format),
+    title: title,
+    subject: title,
+    text: '$title generated from SchoolDesk.',
+  );
+  if (context.mounted) {
+    _snack(context, '$title downloaded');
+  }
+}
+
+String _exportFileName(String downloadUrl, String format, String title) {
+  final path = Uri.tryParse(downloadUrl)?.path ?? '';
+  final segments = path.split('/').where((part) => part.isNotEmpty).toList();
+  final lastSegment = segments.isEmpty ? null : segments.last;
+  if (lastSegment != null && lastSegment.contains('.')) return lastSegment;
+  final safeTitle = title
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+  final extension = format == 'xlsx' || format == 'excel' ? 'xlsx' : format;
+  return '${safeTitle.isEmpty ? 'academic_export' : safeTitle}.$extension';
+}
+
+String _exportMimeType(String format) {
+  switch (format.toLowerCase().trim()) {
+    case 'csv':
+      return 'text/csv';
+    case 'xlsx':
+    case 'excel':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'pdf':
+      return 'application/pdf';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 void _snack(BuildContext context, String message, {bool error = false}) {
   ScaffoldMessenger.of(context).showSnackBar(

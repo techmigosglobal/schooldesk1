@@ -76,6 +76,16 @@ func TestWriteReportArtifactSupportsXLSXFormat(t *testing.T) {
 	}
 }
 
+func TestReportExportNormalizesExcelFormatToXLSX(t *testing.T) {
+	format, ok := normalizeReportFormat(" Excel ")
+	if !ok {
+		t.Fatal("expected excel alias to be supported")
+	}
+	if format != "xlsx" {
+		t.Fatalf("format = %q, want xlsx", format)
+	}
+}
+
 func unzipText(t *testing.T, reader *zip.Reader, name string) string {
 	t.Helper()
 	for _, file := range reader.File {

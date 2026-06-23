@@ -47,7 +47,7 @@ func main() {
 	}
 
 	if cfg.EnableFCMPush && cfg.AppMode == "worker" {
-		push, err := services.NewFirebasePushSender(context.Background(), cfg.FirebaseProjectID)
+		push, err := services.NewFirebasePushSender(context.Background(), cfg.FirebaseProjectID, cfg.FirebaseServiceAccountJSON)
 		if err != nil {
 			if cfg.Environment == "production" {
 				log.Fatalf("Failed to initialize FCM push sender: %v", err)

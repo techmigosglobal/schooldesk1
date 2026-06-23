@@ -16,6 +16,7 @@ func RunNotificationWorker() error {
 		return nil
 	}
 	log.Println("Notification worker started")
+	startScheduledPrincipalReportScheduler()
 	return services.Queue.Consume("notifications", func(payload map[string]interface{}) error {
 		if id, ok := payload["notification_id"].(string); ok && strings.TrimSpace(id) != "" {
 			if err := deliverNotificationPush(context.Background(), strings.TrimSpace(id)); err != nil {

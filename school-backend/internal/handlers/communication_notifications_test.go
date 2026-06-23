@@ -341,6 +341,112 @@ func TestCommunicationsDirectMessagesValidateScopeNotifyAndRead(t *testing.T) {
 	}
 }
 
+func TestEventPostSubmitNotifiesPrincipalForApproval(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	handler := NewEventPostHandler()
+	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	router.POST("/event-posts", handler.CreateEventPost)
+
+	create := httptest.NewRecorder()
+	router.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/event-posts",
+		strings.NewReader(`{"title":"Annual Day","description":"Stage rehearsal","event_date":"2026-07-01T09:00:00Z","destinations":["SCHOOL_GALLERY"],"is_submit":true}`),
+	))
+	if create.Code != http.StatusOK {
+		t.Fatalf("create event post status=%d body=%s", create.Code, create.Body.String())
+	}
+
+	var response struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode event post response: %v", err)
+	}
+	postID, _ := response.Data["id"].(string)
+	if postID == "" {
+		t.Fatalf("event post id missing from response: %v", response.Data)
+	}
+
+	var principalLog models.NotificationLog
+	if err := database.DB.
+		Where("recipient_user_id = ? AND reference_type = ? AND reference_id = ?", "user-policy-principal", "event_post", postID).
+		First(&principalLog).Error; err != nil {
+		t.Fatalf("load principal event post notification: %v", err)
+	}
+	if principalLog.Route != "/principal-event-approvals-screen" {
+		t.Fatalf("principal event route=%q, want /principal-event-approvals-screen", principalLog.Route)
+	}
+	if principalLog.PushStatus != "pending" {
+		t.Fatalf("principal event push_status=%q, want pending", principalLog.PushStatus)
+	}
+
+	var adminCount int64
+	if err := database.DB.Model(&models.NotificationLog{}).
+		Where("recipient_user_id = ? AND reference_type = ? AND reference_id = ?", "user-policy-admin", "event_post", postID).
+		Count(&adminCount).Error; err != nil {
+		t.Fatalf("count admin event notifications: %v", err)
+	}
+	if adminCount != 0 {
+		t.Fatalf("admin event notifications=%d, want 0", adminCount)
+	}
+}
+
+func TestEventPostApprovalNotifiesSubmittingTeacherOnly(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	handler := NewEventPostHandler()
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.POST("/event-posts", handler.CreateEventPost)
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.POST("/event-posts/:id/approve", handler.ApproveEventPost)
+
+	create := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(create, httptest.NewRequest(
+		http.MethodPost,
+		"/event-posts",
+		strings.NewReader(`{"title":"Science Fair","description":"Robotics demo","event_date":"2026-07-02T09:00:00Z","destinations":["SCHOOL_GALLERY"],"is_submit":true}`),
+	))
+	if create.Code != http.StatusOK {
+		t.Fatalf("create event post status=%d body=%s", create.Code, create.Body.String())
+	}
+	var response struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(create.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode event post response: %v", err)
+	}
+	postID, _ := response.Data["id"].(string)
+	if postID == "" {
+		t.Fatalf("event post id missing from response: %v", response.Data)
+	}
+
+	approve := httptest.NewRecorder()
+	principalRouter.ServeHTTP(approve, httptest.NewRequest(http.MethodPost, "/event-posts/"+postID+"/approve", nil))
+	if approve.Code != http.StatusOK {
+		t.Fatalf("approve event post status=%d body=%s", approve.Code, approve.Body.String())
+	}
+
+	var teacherLog models.NotificationLog
+	if err := database.DB.
+		Where("recipient_user_id = ? AND reference_type = ? AND reference_id = ? AND title = ?", "user-policy-teacher", "event_post", postID, "Event post approved").
+		First(&teacherLog).Error; err != nil {
+		t.Fatalf("load teacher event approval notification: %v", err)
+	}
+	if teacherLog.Route != "/teacher-event-posts-screen" {
+		t.Fatalf("teacher event route=%q, want /teacher-event-posts-screen", teacherLog.Route)
+	}
+
+	var otherTeacherCount int64
+	if err := database.DB.Model(&models.NotificationLog{}).
+		Where("recipient_user_id = ? AND reference_type = ? AND reference_id = ? AND title = ?", "user-policy-teacher-other", "event_post", postID, "Event post approved").
+		Count(&otherTeacherCount).Error; err != nil {
+		t.Fatalf("count other teacher event notifications: %v", err)
+	}
+	if otherTeacherCount != 0 {
+		t.Fatalf("other teacher approval notifications=%d, want 0", otherTeacherCount)
+	}
+}
+
 func findCommunicationRow(rows []map[string]any, messageID string) map[string]any {
 	for _, row := range rows {
 		if row["message_id"] == messageID || row["id"] == messageID {

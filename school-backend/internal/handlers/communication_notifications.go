@@ -361,6 +361,51 @@ func createApprovalDecisionNotificationsTx(tx *gorm.DB, c *gin.Context, requeste
 	)
 }
 
+func createEventPostApprovalRequestedNotificationsTx(tx *gorm.DB, c *gin.Context, referenceID, title string) ([]models.NotificationLog, error) {
+	body := strings.TrimSpace(title)
+	if body == "" {
+		body = "A teacher event post requires approval."
+	}
+	return createNotificationLogsForRolesTx(
+		tx,
+		scopedSchoolID(c),
+		[]string{"principal"},
+		c.GetString("user_id"),
+		"Event post approval pending",
+		body,
+		"pending_approval",
+		"high",
+		"event_post",
+		referenceID,
+	)
+}
+
+func createEventPostDecisionNotificationsTx(tx *gorm.DB, c *gin.Context, teacherStaffID, referenceID, status, reason string) ([]models.NotificationLog, error) {
+	teacherUserID := staffUserIDForNotification(scopedSchoolID(c), teacherStaffID)
+	if teacherUserID == "" {
+		return nil, nil
+	}
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" {
+		status = "updated"
+	}
+	body := "Your event post was " + status + "."
+	if strings.TrimSpace(reason) != "" {
+		body += " Reason: " + strings.TrimSpace(reason)
+	}
+	return createNotificationLogsForUserIDsTx(
+		tx,
+		scopedSchoolID(c),
+		[]string{teacherUserID},
+		"Event post "+status,
+		body,
+		"event",
+		"medium",
+		"event_post",
+		referenceID,
+	)
+}
+
 func createNotificationLogsForRolesTx(
 	tx *gorm.DB,
 	schoolID string,
@@ -874,12 +919,11 @@ func notificationRoute(referenceType, role string) string {
 	role = strings.ToLower(strings.TrimSpace(role))
 	switch strings.ToLower(strings.TrimSpace(referenceType)) {
 	case "attendance", "staff_attendance":
-		if role == "admin" {
-			return "/admin-attendance-screen"
-		}
 		if role == "teacher" {
 			return "/teacher-my-attendance-screen"
 		}
+		return "/principal-attendance-screen"
+	case "staff_attendance_daily_report", "staff_attendance_monthly_report":
 		return "/principal-attendance-screen"
 	case "announcement", "notice":
 		switch role {
@@ -937,6 +981,11 @@ func notificationRoute(referenceType, role string) string {
 			return "/parent-calendar-screen"
 		}
 		return "/events-calendar-screen"
+	case "event_post":
+		if role == "teacher" {
+			return "/teacher-event-posts-screen"
+		}
+		return "/principal-event-approvals-screen"
 	case "fee":
 		if role == "parent" {
 			return "/parent-fees-screen"
@@ -955,6 +1004,8 @@ func notificationRoute(referenceType, role string) string {
 			return "/teacher-leave-screen"
 		}
 		return "/approval-center-screen"
+	case "lesson_planner_weekly_digest":
+		return "/principal-lesson-planner-screen"
 	}
 	return "/notification-center-screen"
 }

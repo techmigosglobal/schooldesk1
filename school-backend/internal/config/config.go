@@ -35,6 +35,7 @@ type Config struct {
 	EnableRelationshipConstraints bool
 	EnableFCMPush                 bool
 	FirebaseProjectID             string
+	FirebaseServiceAccountJSON    string
 }
 
 func Load() *Config {
@@ -79,6 +80,7 @@ func Load() *Config {
 		EnableRelationshipConstraints: getEnvAsBool("ENABLE_RELATIONSHIP_CONSTRAINTS", false),
 		EnableFCMPush:                 getEnvAsBool("ENABLE_FCM_PUSH", false),
 		FirebaseProjectID:             strings.TrimSpace(getEnv("FIREBASE_PROJECT_ID", "")),
+		FirebaseServiceAccountJSON:    strings.TrimSpace(getEnv("FIREBASE_SERVICE_ACCOUNT_JSON", "")),
 	}
 }
 
@@ -107,6 +109,11 @@ func (c *Config) Validate() error {
 	}
 	if c.EnableFCMPush && strings.TrimSpace(c.FirebaseProjectID) == "" {
 		return errors.New("missing FIREBASE_PROJECT_ID when ENABLE_FCM_PUSH=true")
+	}
+	if c.EnableFCMPush &&
+		strings.TrimSpace(c.FirebaseServiceAccountJSON) == "" &&
+		strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")) == "" {
+		return errors.New("missing FIREBASE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS when ENABLE_FCM_PUSH=true")
 	}
 	return nil
 }

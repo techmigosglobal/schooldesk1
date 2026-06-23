@@ -249,6 +249,28 @@ extension BackendCommunicationsApi on BackendApiClient {
     return createRaw(path, payload);
   }
 
+  Future<Uint8List> downloadReportExport(String downloadUrl) async {
+    final value = downloadUrl.trim();
+    if (value.isEmpty) {
+      throw const ServerException(message: 'Export download URL is missing');
+    }
+    final uri = Uri.parse(value);
+    final resolved = uri.hasScheme
+        ? uri
+        : Uri.parse(
+            '${EnvConfig.apiOrigin}${value.startsWith('/') ? '' : '/'}$value',
+          );
+    try {
+      final response = await _dio.getUri<List<int>>(
+        resolved,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return Uint8List.fromList(response.data ?? const <int>[]);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getReportExports(
     String path, {
     String? status,

@@ -23,7 +23,7 @@ void main() {
       () {
         final target = NotificationRouteResolver.resolve(
           data: {
-            'route': AppRoutes.adminFees,
+            'route': AppRoutes.feeMonitoring,
             'reference_type': 'fee',
             'role': 'parent',
           },
@@ -55,7 +55,7 @@ void main() {
       );
 
       expect(homework.route, AppRoutes.parentHomework);
-      expect(exam.route, AppRoutes.teacherDashboard);
+      expect(exam.route, AppRoutes.teacherReports);
     });
 
     test('routes principal messages to the communication center', () {
@@ -65,6 +65,35 @@ void main() {
       );
 
       expect(target.route, AppRoutes.communicationCenter);
+    });
+
+    test('routes role-based push report and event references', () {
+      final dailyAttendance = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'staff_attendance_daily_report'},
+        currentRole: 'principal',
+      );
+      final monthlyAttendance = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'staff_attendance_monthly_report'},
+        currentRole: 'principal',
+      );
+      final eventForPrincipal = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'event_post'},
+        currentRole: 'principal',
+      );
+      final eventForTeacher = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'event_post'},
+        currentRole: 'teacher',
+      );
+      final lessonPlannerDigest = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'lesson_planner_weekly_digest'},
+        currentRole: 'principal',
+      );
+
+      expect(dailyAttendance.route, AppRoutes.principalAttendance);
+      expect(monthlyAttendance.route, AppRoutes.principalAttendance);
+      expect(eventForPrincipal.route, AppRoutes.principalEventApprovals);
+      expect(eventForTeacher.route, AppRoutes.teacherEventPosts);
+      expect(lessonPlannerDigest.route, AppRoutes.principalLessonPlanner);
     });
   });
 }

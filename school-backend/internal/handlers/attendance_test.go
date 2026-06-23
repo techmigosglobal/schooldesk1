@@ -350,6 +350,18 @@ func TestStaffQRScanRecordsOneCheckInPerDay(t *testing.T) {
 		Where("staff_id = ?", f.teacherStaffID).
 		Count(&count).Error)
 	assert.Equal(t, int64(1), count)
+
+	var principalLog models.NotificationLog
+	assert.NoError(t, database.DB.
+		Where("recipient_user_id = ? AND reference_type = ?", "user-policy-principal", "staff_attendance").
+		First(&principalLog).Error)
+	assert.Equal(t, "/principal-attendance-screen", principalLog.Route)
+
+	var adminNotifications int64
+	assert.NoError(t, database.DB.Model(&models.NotificationLog{}).
+		Where("recipient_user_id = ? AND reference_type = ?", "user-policy-admin", "staff_attendance").
+		Count(&adminNotifications).Error)
+	assert.Equal(t, int64(0), adminNotifications)
 }
 
 func TestStaffQRDailyLogExportIncludesOnlyQRRowsForDate(t *testing.T) {
