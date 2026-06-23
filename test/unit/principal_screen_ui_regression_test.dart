@@ -928,6 +928,9 @@ void main() {
     expect(screen, contains('Select Class'));
     expect(screen, contains('Showing subjects for '));
     expect(screen, contains('_PrincipalSubjectCard'));
+    expect(screen, isNot(contains('_SubjectGlyph(label: row.subjectName)')));
+    expect(screen, isNot(contains('_ClassChip(label: classLabel)')));
+    expect(screen, contains('_SubjectTeacherAvatar(name: teacherName)'));
     expect(screen, contains('_TeacherSubjectsDetailScreen'));
     expect(screen, contains('Teacher Subjects'));
     expect(screen, contains('Subjects handled by this teacher'));

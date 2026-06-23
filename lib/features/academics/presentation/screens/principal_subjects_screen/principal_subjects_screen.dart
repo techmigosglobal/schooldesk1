@@ -1412,10 +1412,6 @@ class _PrincipalSubjectCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              _SubjectGlyph(label: row.subjectName),
-              const SizedBox(width: 16),
-              _ClassChip(label: classLabel),
-              const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1429,6 +1425,17 @@ class _PrincipalSubjectCard extends StatelessWidget {
                         color: const Color(0xFF111827),
                         fontSize: 18,
                         fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      classLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: const Color(0xFF6C4CFF),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 12),

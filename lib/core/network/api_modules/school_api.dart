@@ -149,10 +149,15 @@ extension BackendSchoolApi on BackendApiClient {
     }
   }
 
-  Future<void> deleteAcademicYear(String id) async {
+  Future<void> deleteAcademicYear(
+    String id, {
+    bool cascadeConfirmed = false,
+  }) async {
     final value = id.trim();
     if (value.isEmpty) return;
-    await deleteRaw('/academic-years/$value');
+    await deleteRaw(
+      '/academic-years/$value${cascadeConfirmed ? '?cascade=true' : ''}',
+    );
   }
 
   // ─── Grades ─────────────────────────────────────────────────────────────────

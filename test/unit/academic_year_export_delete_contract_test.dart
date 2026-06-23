@@ -14,6 +14,7 @@ void main() {
     expect(source, contains('_confirmAcademicYearDelete'));
     expect(source, contains('_confirmAcademicYearFinalDelete'));
     expect(source, contains('deleteAcademicYear('));
+    expect(source, contains('cascadeConfirmed: true'));
 
     expect(source, contains("values: const ['csv', 'xlsx', 'pdf']"));
     expect(source, isNot(contains("values: const ['csv', 'excel', 'pdf']")));

@@ -197,7 +197,10 @@ class _PrincipalAcademicYearsScreenState
     final finalConfirm = await _confirmAcademicYearFinalDelete(context, year);
     if (finalConfirm != true || !mounted) return;
     try {
-      await BackendApiClient.instance.deleteAcademicYear('${year['id']}');
+      await BackendApiClient.instance.deleteAcademicYear(
+        '${year['id']}',
+        cascadeConfirmed: true,
+      );
       await _load();
       if (mounted) {
         _snack(context, '${_yearLabel(year)} deleted');

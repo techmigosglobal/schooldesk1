@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"school-backend/internal/models"
 )
@@ -83,6 +84,54 @@ func TestReportExportNormalizesExcelFormatToXLSX(t *testing.T) {
 	}
 	if format != "xlsx" {
 		t.Fatalf("format = %q, want xlsx", format)
+	}
+}
+
+func TestReportPDFUsesStructuredSearchableLayout(t *testing.T) {
+	row := models.ReportExport{
+		BaseModel:     models.BaseModel{ID: "export-pdf-structured"},
+		SchoolID:      "school-suite",
+		Category:      "classwise",
+		ReportTitle:   "Classwise Export",
+		ReportType:    "class_summary",
+		Format:        "pdf",
+		Scope:         "principal",
+		RequestedRole: "Principal",
+		RequestedAt:   time.Date(2026, 6, 23, 8, 30, 0, 0, time.UTC),
+	}
+
+	artifact := string(reportPDF(row, map[string]interface{}{
+		"academic_year": "2026-2027",
+		"student_count": 42,
+		"format":        "pdf",
+	}))
+
+	for _, want := range []string{
+		"%PDF-1.4",
+		"Report Details",
+		"Data Table",
+		"Generated:",
+		"Academic Year",
+		"SchoolDesk ERP",
+		"Classwise Export",
+		"1 1 1 rg",
+	} {
+		if !strings.Contains(artifact, want) {
+			t.Fatalf("structured pdf missing %q: %s", want, artifact)
+		}
+	}
+	if !strings.Contains(artifact, " re S") {
+		t.Fatalf("structured pdf should draw table borders: %s", artifact)
+	}
+}
+
+func TestPDFTruncateKeepsUTF8Valid(t *testing.T) {
+	got := pdfTruncate("Málaga résumé पाठशाला", 12)
+	if !strings.Contains(got, "...") {
+		t.Fatalf("pdfTruncate should indicate truncation, got %q", got)
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("pdfTruncate produced invalid UTF-8: %q", got)
 	}
 }
 

@@ -217,31 +217,39 @@ func reportXLSX(row models.ReportExport, payload map[string]interface{}) ([]byte
 
 func reportPDF(row models.ReportExport, payload map[string]interface{}) []byte {
 	rows := reportArtifactRows(row, payload)
-	body := []string{"SchoolDesk report export"}
-	for index, cells := range rows {
-		if index > 24 {
-			body = append(body, "More rows are available in CSV/XLSX export.")
-			break
-		}
-		body = append(body, strings.Join(cells, " | "))
-	}
-	return minimalPDF(row.ReportTitle, body)
-}
-
-func minimalPDF(title string, lines []string) []byte {
 	var content strings.Builder
-	content.WriteString("BT\n/F1 18 Tf\n50 760 Td\n(" + pdfEscape(title) + ") Tj\n")
-	content.WriteString("/F1 11 Tf\n0 -28 Td\n")
-	for _, line := range lines {
-		content.WriteString("(" + pdfEscape(line) + ") Tj\n0 -16 Td\n")
+	generatedAt := row.RequestedAt
+	if generatedAt.IsZero() {
+		generatedAt = time.Now().UTC()
 	}
-	content.WriteString("ET\n")
+
+	content.WriteString("0.09 0.24 0.42 rg\n0 742 612 50 re f\n")
+	pdfTextAtColor(&content, "F2", 20, 42, 762, row.ReportTitle, "1 1 1")
+	pdfTextAtColor(&content, "F1", 10, 42, 746, "Generated: "+generatedAt.Format("02 Jan 2006, 03:04 PM UTC"), "0.88 0.94 1")
+
+	pdfSectionTitle(&content, 42, 710, "Report Details")
+	details := [][]string{
+		{"Report Type", reportPDFLabel(firstReportPDFText(row.ReportType, textPayload(payload, "report_type"), "export"))},
+		{"Category", reportPDFLabel(row.Category)},
+		{"Format", strings.ToUpper(row.Format)},
+		{"Scope", reportPDFLabel(row.Scope)},
+		{"Requested By", reportPDFLabel(firstReportPDFText(row.RequestedRole, row.RequestedBy, "system"))},
+	}
+	if academicYear := firstReportPDFText(textPayload(payload, "academic_year"), textPayload(payload, "academic_year_id")); academicYear != "" {
+		details = append(details, []string{"Academic Year", academicYear})
+	}
+	drawKeyValueGrid(&content, details, 42, 672)
+
+	pdfSectionTitle(&content, 42, 520, "Data Table")
+	drawReportTable(&content, rows, 42, 488)
+	pdfTextAt(&content, "F1", 8, 42, 34, "SchoolDesk ERP - Page 1 - Export ID "+row.ID)
 	stream := content.String()
 	objects := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%sendstream", len(stream), stream),
 	}
 	var buffer bytes.Buffer
@@ -259,6 +267,150 @@ func minimalPDF(title string, lines []string) []byte {
 	}
 	buffer.WriteString(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xrefOffset))
 	return buffer.Bytes()
+}
+
+func pdfSectionTitle(content *strings.Builder, x, y float64, title string) {
+	content.WriteString("0.89 0.94 1 rg\n")
+	content.WriteString(fmt.Sprintf("%.1f %.1f 528 28 re f\n", x, y-18))
+	content.WriteString("0.12 0.38 0.82 RG\n1 w\n")
+	content.WriteString(fmt.Sprintf("%.1f %.1f 528 28 re S\n", x, y-18))
+	pdfTextAt(content, "F2", 13, x+12, y-1, title)
+}
+
+func drawKeyValueGrid(content *strings.Builder, rows [][]string, x, y float64) {
+	const rowHeight = 22.0
+	for index, row := range rows {
+		rowY := y - float64(index)*rowHeight
+		content.WriteString("0.98 0.99 1 rg\n")
+		content.WriteString(fmt.Sprintf("%.1f %.1f 528 %.1f re f\n", x, rowY-rowHeight+4, rowHeight))
+		content.WriteString("0.82 0.88 0.95 RG\n0.7 w\n")
+		content.WriteString(fmt.Sprintf("%.1f %.1f 528 %.1f re S\n", x, rowY-rowHeight+4, rowHeight))
+		pdfTextAt(content, "F2", 9, x+10, rowY-10, pdfTruncate(row[0], 26))
+		if len(row) > 1 {
+			pdfTextAt(content, "F1", 9, x+180, rowY-10, pdfTruncate(row[1], 55))
+		}
+	}
+}
+
+func drawReportTable(content *strings.Builder, rows [][]string, x, y float64) {
+	if len(rows) == 0 {
+		pdfTextAt(content, "F1", 10, x, y, "No report rows available.")
+		return
+	}
+	columnCount := len(rows[0])
+	if columnCount == 0 {
+		return
+	}
+	columnWidth := 528.0 / float64(columnCount)
+	rowHeight := 22.0
+	maxRows := len(rows)
+	if maxRows > 14 {
+		maxRows = 14
+	}
+	for rowIndex := 0; rowIndex < maxRows; rowIndex++ {
+		row := rows[rowIndex]
+		rowY := y - float64(rowIndex)*rowHeight
+		if rowIndex == 0 {
+			content.WriteString("0.09 0.24 0.42 rg\n")
+		} else if rowIndex%2 == 0 {
+			content.WriteString("0.97 0.99 1 rg\n")
+		} else {
+			content.WriteString("1 1 1 rg\n")
+		}
+		content.WriteString(fmt.Sprintf("%.1f %.1f 528 %.1f re f\n", x, rowY-rowHeight+5, rowHeight))
+		content.WriteString("0.82 0.88 0.95 RG\n0.7 w\n")
+		content.WriteString(fmt.Sprintf("%.1f %.1f 528 %.1f re S\n", x, rowY-rowHeight+5, rowHeight))
+		for columnIndex := 1; columnIndex < columnCount; columnIndex++ {
+			lineX := x + float64(columnIndex)*columnWidth
+			content.WriteString(fmt.Sprintf("%.1f %.1f m %.1f %.1f l S\n", lineX, rowY-rowHeight+5, lineX, rowY+5))
+		}
+		for columnIndex := 0; columnIndex < columnCount; columnIndex++ {
+			cell := ""
+			if columnIndex < len(row) {
+				cell = row[columnIndex]
+			}
+			font := "F1"
+			if rowIndex == 0 {
+				font = "F2"
+			}
+			if rowIndex == 0 {
+				pdfTextAtColor(content, font, 8, x+float64(columnIndex)*columnWidth+5, rowY-10, pdfTruncate(cell, int(columnWidth/4.7)), "1 1 1")
+			} else {
+				pdfTextAt(content, font, 8, x+float64(columnIndex)*columnWidth+5, rowY-10, pdfTruncate(cell, int(columnWidth/4.7)))
+			}
+		}
+	}
+	if len(rows) > maxRows {
+		pdfTextAt(content, "F1", 9, x, y-float64(maxRows)*rowHeight-10, "More rows are available in CSV/XLSX exports.")
+	}
+}
+
+func pdfTextAt(content *strings.Builder, font string, size int, x, y float64, text string) {
+	color := "0.04 0.08 0.16"
+	if font == "F1" && size <= 10 {
+		color = "0.30 0.36 0.46"
+	}
+	pdfTextAtColor(content, font, size, x, y, text, color)
+}
+
+func pdfTextAtColor(content *strings.Builder, font string, size int, x, y float64, text, color string) {
+	content.WriteString(color + " rg\n")
+	content.WriteString(fmt.Sprintf("BT\n/%s %d Tf\n%.1f %.1f Td\n(%s) Tj\nET\n", font, size, x, y, pdfEscape(text)))
+}
+
+func pdfTruncate(value string, max int) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if max <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= max {
+		return value
+	}
+	if max <= 3 {
+		return string(runes[:max])
+	}
+	return string(runes[:max-3]) + "..."
+}
+
+func reportPDFLabel(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "_", " "))
+	if value == "" {
+		return ""
+	}
+	words := strings.Fields(strings.ToLower(value))
+	for index, word := range words {
+		if word == "" {
+			continue
+		}
+		words[index] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
+}
+
+func minimalPDF(title string, lines []string) []byte {
+	payload := map[string]interface{}{
+		"report_type": "timetable",
+	}
+	for index, line := range lines {
+		payload[fmt.Sprintf("line_%02d", index+1)] = line
+	}
+	return reportPDF(models.ReportExport{
+		BaseModel:   models.BaseModel{ID: "legacy-pdf"},
+		ReportTitle: title,
+		ReportType:  "timetable",
+		Format:      "pdf",
+		RequestedAt: time.Now().UTC(),
+	}, payload)
+}
+
+func firstReportPDFText(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func writeZipFile(archive *zip.Writer, name, body string) error {

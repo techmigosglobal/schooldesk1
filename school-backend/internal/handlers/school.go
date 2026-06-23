@@ -402,36 +402,236 @@ func (h *SchoolHandler) UpdateAcademicYear(c *gin.Context) {
 
 func (h *SchoolHandler) DeleteAcademicYear(c *gin.Context) {
 	id := c.Param("id")
+	schoolID := scopedSchoolID(c)
 	var year models.AcademicYear
-	if err := database.DB.First(&year, "id = ? AND school_id = ?", id, scopedSchoolID(c)).Error; err != nil {
+	if err := database.DB.First(&year, "id = ? AND school_id = ?", id, schoolID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "Academic year not found"})
 		return
 	}
-	if year.IsCurrent {
-		c.JSON(http.StatusConflict, models.APIResponse{Success: false, Error: "Activate another academic year before deleting the current one"})
+	hasLinks, err := academicYearHasCascadeLinks(database.DB, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to validate academic record links"})
 		return
 	}
-	if blockAcademicDelete(c,
-		academicRef("sections", &models.Section{}, "academic_year_id = ?", id),
-		academicRef("terms", &models.Term{}, "academic_year_id = ?", id),
-		academicRef("holidays", &models.Holiday{}, "academic_year_id = ?", id),
-		academicRef("enrollments", &models.Enrollment{}, "academic_year_id = ?", id),
-		academicRef("attendance summaries", &models.AttendanceSummary{}, "academic_year_id = ?", id),
-		academicRef("fee structures", &models.FeeStructure{}, "academic_year_id = ?", id),
-		academicRef("fee invoices", &models.FeeInvoice{}, "academic_year_id = ?", id),
-		academicRef("timetable slots", &models.TimetableSlot{}, "academic_year_id = ?", id),
-		academicRef("events", &models.EventCalendar{}, "academic_year_id = ?", id),
-		academicRef("exams", &models.Exam{}, "academic_year_id = ?", id),
-	) {
+	if hasLinks && strings.ToLower(strings.TrimSpace(c.Query("cascade"))) != "true" {
+		c.JSON(http.StatusConflict, models.APIResponse{
+			Success: false,
+			Error:   "Cascade confirmation is required to delete linked academic year records",
+		})
 		return
 	}
-	if err := database.DB.Delete(&models.AcademicYear{}, "id = ? AND school_id = ?", id, scopedSchoolID(c)).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := cascadeAcademicYearLinks(tx, id); err != nil {
+			return err
+		}
+		if err := tx.Delete(&models.AcademicYear{}, "id = ? AND school_id = ?", id, schoolID).Error; err != nil {
+			return err
+		}
+		if year.IsCurrent {
+			return promoteLatestAcademicYear(tx, schoolID)
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to delete academic year"})
 		return
 	}
 	auditAction(c, "academic_years", "delete", "academic_years", &id)
 	invalidateAcademicYearCaches()
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}, Message: "Academic year deleted successfully"})
+}
+
+func academicYearHasCascadeLinks(tx *gorm.DB, academicYearID string) (bool, error) {
+	refs := []academicReference{
+		academicRef("sections", &models.Section{}, "academic_year_id = ?", academicYearID),
+		academicRef("terms", &models.Term{}, "academic_year_id = ?", academicYearID),
+		academicRef("holidays", &models.Holiday{}, "academic_year_id = ?", academicYearID),
+		academicRef("enrollments", &models.Enrollment{}, "academic_year_id = ?", academicYearID),
+		academicRef("attendance sessions", &models.AttendanceSession{}, "academic_year_id = ?", academicYearID),
+		academicRef("attendance summaries", &models.AttendanceSummary{}, "academic_year_id = ?", academicYearID),
+		academicRef("fee structures", &models.FeeStructure{}, "academic_year_id = ?", academicYearID),
+		academicRef("fee invoices", &models.FeeInvoice{}, "academic_year_id = ?", academicYearID),
+		academicRef("fee concessions", &models.FeeConcession{}, "academic_year_id = ?", academicYearID),
+		academicRef("timetable slots", &models.TimetableSlot{}, "academic_year_id = ?", academicYearID),
+		academicRef("events", &models.EventCalendar{}, "academic_year_id = ?", academicYearID),
+		academicRef("exams", &models.Exam{}, "academic_year_id = ?", academicYearID),
+		academicRef("grade subjects", &models.GradeSubject{}, "academic_year_id = ?", academicYearID),
+		academicRef("staff subjects", &models.StaffSubject{}, "academic_year_id = ?", academicYearID),
+	}
+	for _, ref := range refs {
+		var count int64
+		if err := tx.Model(ref.model).Where(ref.query, ref.args...).Count(&count).Error; err != nil {
+			return false, err
+		}
+		if count > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func cascadeAcademicYearLinks(tx *gorm.DB, academicYearID string) error {
+	termIDs, err := pluckAcademicDeleteIDs(tx, &models.Term{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	sectionIDs, err := pluckAcademicDeleteIDs(tx, &models.Section{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	slotIDs, err := pluckAcademicDeleteIDs(tx, &models.TimetableSlot{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	sessionIDs, err := pluckAcademicDeleteIDs(tx, &models.AttendanceSession{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	invoiceIDs, err := pluckAcademicDeleteIDs(tx, &models.FeeInvoice{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	examIDs, err := pluckAcademicDeleteIDs(tx, &models.Exam{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	eventIDs, err := pluckAcademicDeleteIDs(tx, &models.EventCalendar{}, "id", "academic_year_id = ?", academicYearID)
+	if err != nil {
+		return err
+	}
+	homeworkIDs := []string{}
+	if len(sectionIDs) > 0 {
+		homeworkIDs, err = pluckAcademicDeleteIDs(tx, &models.Homework{}, "id", "section_id IN ?", sectionIDs)
+		if err != nil {
+			return err
+		}
+	}
+	examScheduleIDs := []string{}
+	if len(examIDs) > 0 {
+		examScheduleIDs, err = pluckAcademicDeleteIDs(tx, &models.ExamSchedule{}, "id", "exam_id IN ?", examIDs)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := deleteAcademicLinkedRows(tx, &models.StudentMark{}, "exam_schedule_id IN ?", examScheduleIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.ReportCard{}, "exam_id IN ?", examIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.ExamSchedule{}, "exam_id IN ?", examIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Exam{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.StudentAttendance{}, "session_id IN ?", sessionIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.AttendanceSession{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.AttendanceSummary{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.FeeInvoiceItem{}, "invoice_id IN ?", invoiceIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Payment{}, "invoice_id IN ?", invoiceIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.ParentPaymentRequest{}, "invoice_id IN ?", invoiceIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.FeeInvoice{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.FeeStructure{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.FeeConcession{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Substitution{}, "timetable_slot_id IN ?", slotIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.TimetableSlot{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.ParentTeacherMeeting{}, "event_id IN ?", eventIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.EventCalendar{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.HomeworkSubmission{}, "homework_id IN ?", homeworkIDs); err != nil {
+		return err
+	}
+	if len(sectionIDs) > 0 {
+		if err := tx.Where("current_section_id IN ?", sectionIDs).Model(&models.Student{}).Update("current_section_id", nil).Error; err != nil {
+			return err
+		}
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Homework{}, "section_id IN ?", sectionIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.DiaryEntry{}, "section_id IN ?", sectionIDs); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.StaffSubject{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.GradeSubject{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Enrollment{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Section{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Holiday{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	if err := deleteAcademicLinkedRows(tx, &models.Term{}, "academic_year_id = ?", academicYearID); err != nil {
+		return err
+	}
+	_ = termIDs
+	return nil
+}
+
+func pluckAcademicDeleteIDs(tx *gorm.DB, model interface{}, column, query string, args ...interface{}) ([]string, error) {
+	ids := []string{}
+	if err := tx.Model(model).Where(query, args...).Pluck(column, &ids).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func deleteAcademicLinkedRows(tx *gorm.DB, model interface{}, query string, args ...interface{}) error {
+	for _, arg := range args {
+		if ids, ok := arg.([]string); ok && len(ids) == 0 {
+			return nil
+		}
+	}
+	return tx.Where(query, args...).Delete(model).Error
+}
+
+func promoteLatestAcademicYear(tx *gorm.DB, schoolID string) error {
+	var replacement models.AcademicYear
+	err := tx.Where("school_id = ?", schoolID).
+		Order("start_date DESC, created_at DESC").
+		First(&replacement).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := tx.Model(&models.AcademicYear{}).Where("school_id = ?", schoolID).Update("is_current", false).Error; err != nil {
+		return err
+	}
+	return tx.Model(&models.AcademicYear{}).Where("id = ?", replacement.ID).Update("is_current", true).Error
 }
 
 func invalidateAcademicYearCaches() {

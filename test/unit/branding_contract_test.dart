@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -55,4 +56,37 @@ void main() {
     expect(androidManifest, contains('android:label="ArishVille"'));
     expect(iosInfo, contains('<string>ArishVille</string>'));
   });
+
+  test('Android splash logo assets are large enough for launch screens', () {
+    final expectedSizes = <String, int>{
+      'mipmap-mdpi': 240,
+      'mipmap-hdpi': 360,
+      'mipmap-xhdpi': 480,
+      'mipmap-xxhdpi': 720,
+      'mipmap-xxxhdpi': 960,
+    };
+
+    for (final entry in expectedSizes.entries) {
+      final asset = File(
+        'android/app/src/main/res/${entry.key}/launch_image.png',
+      );
+      expect(asset.existsSync(), isTrue, reason: '${asset.path} is missing');
+      final size = _pngSize(asset);
+      expect(size.width, entry.value, reason: '${asset.path} width');
+      expect(size.height, entry.value, reason: '${asset.path} height');
+    }
+
+    final android12Style = File(
+      'android/app/src/main/res/values-v31/styles.xml',
+    ).readAsStringSync();
+    expect(android12Style, contains('@mipmap/launch_image'));
+  });
+}
+
+({int width, int height}) _pngSize(File file) {
+  final bytes = file.readAsBytesSync();
+  expect(bytes.length, greaterThanOrEqualTo(24), reason: file.path);
+  expect(bytes.take(8).toList(), [137, 80, 78, 71, 13, 10, 26, 10]);
+  final data = ByteData.sublistView(Uint8List.fromList(bytes));
+  return (width: data.getUint32(16), height: data.getUint32(20));
 }

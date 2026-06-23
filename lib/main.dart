@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/error_reporting_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/theme_provider.dart';
+import 'package:schooldesk1/core/widgets/animated_startup_splash.dart';
 import 'package:schooldesk1/core/widgets/custom_error_widget.dart';
 
 void main() async {
@@ -99,7 +100,7 @@ class MyApp extends StatelessWidget {
                   maxScaleFactor: SchoolDeskResponsive.maxSupportedTextScale,
                 ),
               ),
-              child: child!,
+              child: AnimatedStartupSplash(child: child!),
             );
           },
           debugShowCheckedModeBanner: false,
