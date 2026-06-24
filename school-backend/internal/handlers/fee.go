@@ -472,16 +472,82 @@ func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID s
 func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	id := c.Param("id")
+	removePending := c.Query("remove_pending") == "true"
+
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var structure models.FeeStructure
+		if err := tx.Where("id = ? AND school_id = ?", id, schoolID).First(&structure).Error; err != nil {
+			return err
+		}
+
+		if removePending {
+			query := tx.Model(&models.FeeInvoice{}).
+				Joins("JOIN students ON students.id = fee_invoices.student_id").
+				Joins("JOIN sections ON sections.id = students.current_section_id").
+				Where("students.school_id = ? AND fee_invoices.academic_year_id = ? AND fee_invoices.status = ?", schoolID, structure.AcademicYearID, "pending").
+				Where("sections.grade_id = ?", structure.GradeID)
+
+			if structure.SectionID != nil {
+				query = query.Where("students.current_section_id = ?", *structure.SectionID)
+			}
+
+			var invoices []models.FeeInvoice
+			if err := query.Preload("Items").Find(&invoices).Error; err != nil {
+				return err
+			}
+
+			for _, invoice := range invoices {
+				itemRemoved := false
+				amountToRemove := 0.0
+
+				for _, item := range invoice.Items {
+					if item.FeeCategoryID == structure.FeeCategoryID {
+						amountToRemove += item.Amount
+						itemRemoved = true
+						if err := tx.Where("id = ?", item.ID).Delete(&models.FeeInvoiceItem{}).Error; err != nil {
+							return err
+						}
+					}
+				}
+
+				if itemRemoved {
+					newTotal := roundMoney(invoice.TotalAmount - amountToRemove)
+					if newTotal < 0 {
+						newTotal = 0
+					}
+					newPayable := roundMoney(newTotal - invoice.DiscountAmount - invoice.ConcessionAmount + invoice.FineAmount)
+					if newPayable < 0 {
+						newPayable = 0
+					}
+					newBalance := roundMoney(newPayable - invoice.PaidAmount)
+					if newBalance < 0 {
+						newBalance = 0
+					}
+
+					nextStatus := invoice.Status
+					if newBalance == 0 && invoice.PaidAmount > 0 {
+						nextStatus = "paid"
+					} else if newTotal == 0 && newBalance == 0 {
+						nextStatus = "paid"
+					}
+
+					if err := tx.Model(&models.FeeInvoice{}).Where("id = ?", invoice.ID).Updates(map[string]interface{}{
+						"total_amount":   newTotal,
+						"payable_amount": newPayable,
+						"balance":        newBalance,
+						"status":         nextStatus,
+					}).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
+
 		if err := tx.Where("fee_structure_id = ?", id).Delete(&models.FeeInstallment{}).Error; err != nil {
 			return err
 		}
-		result := tx.Where("id = ? AND school_id = ?", id, schoolID).Delete(&models.FeeStructure{})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
+		if err := tx.Delete(&structure).Error; err != nil {
+			return err
 		}
 		return nil
 	})

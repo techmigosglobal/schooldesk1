@@ -224,6 +224,18 @@ class _AdminFeeStructureFormScreenState
 
   Widget _buildSummary() {
     final fee = widget.args.feeStructure;
+    final grade = widget.args.grades
+        .where((g) => g.id == _selectedGradeId)
+        .firstOrNull;
+    final section = _structureSectionOptions
+        .where((s) => s.id == _selectedSectionId)
+        .firstOrNull;
+    final titleLabel = widget.args.isEditing
+        ? _textValue(fee?['class'], fallback: 'Fee structure')
+        : grade != null
+            ? 'Fee Structure for ${grade.gradeName}${section != null ? ' - ${section.sectionName}' : ' (All Sections)'}'
+            : 'Create backend fee structure';
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -250,9 +262,7 @@ class _AdminFeeStructureFormScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.args.isEditing
-                      ? _textValue(fee?['class'], fallback: 'Fee structure')
-                      : 'Create backend fee structure',
+                  titleLabel,
                   style: GoogleFonts.dmSans(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -260,7 +270,7 @@ class _AdminFeeStructureFormScreenState
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Select the class, fee category, due day, and amount.',
+                  'Review the class, section, fee category, due day, and amount.',
                   style: GoogleFonts.dmSans(
                     color: context.appTheme.muted,
                     fontSize: 12,

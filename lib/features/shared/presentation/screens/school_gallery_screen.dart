@@ -153,11 +153,41 @@ class _GalleryPostCard extends StatelessWidget {
                   : Image.network(
                       _assetUrl(media),
                       fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) => Container(
+                      width: double.infinity,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: context.appTheme.panelMuted,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                  : null,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Container(
                         color: context.appTheme.panelMuted,
-                        child: Icon(
-                          Icons.broken_image_outlined,
-                          color: context.appTheme.onSurfaceVariant,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.broken_image_outlined,
+                              color: context.appTheme.onSurfaceVariant,
+                              size: 32,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Image unavailable',
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: context.appTheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -192,7 +222,7 @@ class _GalleryPostCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            eventDate,
+                            _formatEventDate(eventDate),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.labelSmall,
@@ -242,7 +272,40 @@ class _GalleryPostCard extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 12),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(_assetUrl(url), fit: BoxFit.cover),
+                    child: _isImageUrl(url)
+                        ? Image.network(
+                            _assetUrl(url),
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, progress) {
+                              if (progress == null) return child;
+                              return SizedBox(
+                                height: 200,
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    value: progress.expectedTotalBytes != null
+                                        ? progress.cumulativeBytesLoaded /
+                                              progress.expectedTotalBytes!
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => const SizedBox(
+                              height: 120,
+                              child: Center(
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                          )
+                        : ListTile(
+                            leading: const Icon(Icons.attach_file_rounded),
+                            title: Text(
+                              url.split('/').last,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                   ),
                 ),
             ],
@@ -253,24 +316,14 @@ class _GalleryPostCard extends StatelessWidget {
   }
 }
 
-String _firstMedia(dynamic raw) {
-  final media = _mediaList(raw);
-  return media.isEmpty ? '' : media.first;
-}
-
-List<String> _mediaList(dynamic raw) {
-  if (raw is List) {
-    return raw
-        .map((e) => e.toString().trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-  }
-  return raw
-      .toString()
-      .split(',')
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toList();
+String _formatEventDate(String raw) {
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) return raw;
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${parsed.day} ${months[parsed.month - 1]} ${parsed.year}';
 }
 
 String _text(dynamic value, {String fallback = ''}) {
@@ -282,5 +335,51 @@ String _assetUrl(String path) {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  return '${EnvConfig.apiOrigin}$path';
+  final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
+  final p = path.startsWith('/') ? path : '/$path';
+  return '$origin$p';
+}
+
+List<String> _mediaList(dynamic raw) {
+  if (raw == null) return const [];
+  if (raw is List) {
+    return raw
+        .map((e) => e.toString().trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+  final text = raw.toString().trim();
+  if (text.isEmpty) return const [];
+  // Handle JSON array strings
+  if (text.startsWith('[')) {
+    try {
+      // Avoid importing dart:convert — basic bracket unwrap
+      final inner = text.substring(1, text.length - 1);
+      return inner
+          .split(',')
+          .map((e) => e.trim().replaceAll('"', ''))
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } catch (_) {}
+  }
+  return text
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+}
+
+String _firstMedia(dynamic raw) {
+  final media = _mediaList(raw);
+  return media.isEmpty ? '' : media.first;
+}
+
+bool _isImageUrl(String url) {
+  final lower = url.toLowerCase().split('?').first;
+  return lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.png') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.heic');
 }

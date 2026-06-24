@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -76,7 +77,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           'category': ev['category'] ?? '',
           'author': ev['author'] ?? ev['posted_by'] ?? '',
           'media_urls': ev['media_urls'],
-          'media_type': ev['media_type'] ?? ev['mediaType'],
+          // Keep raw event type for image detection
+          'media_type': ev['media_type'] ?? ev['mediaType'] ?? '',
+          'destinations': ev['destinations'] ?? '',
         });
       }
       feedItems.sort(
@@ -698,36 +701,48 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
     final mediaUrls = _eventPostMediaUrls(post);
-    final mediaType = _eventPostMediaType(post);
-    if (mediaUrls.isEmpty && mediaType.isEmpty) return const SizedBox.shrink();
+    if (mediaUrls.isEmpty) return const SizedBox.shrink();
 
-    final url = mediaUrls.isEmpty ? '' : mediaUrls.first;
-    final isPhoto = mediaType == 'Photo' || mediaType == 'Image';
-    final preview = isPhoto && url.isNotEmpty
-        ? Image.network(
-            url,
-            height: 180,
-            width: double.infinity,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                _MediaFallbackPreview(type: mediaType, url: url),
-          )
-        : _MediaFallbackPreview(type: mediaType, url: url);
+    final url = mediaUrls.first;
+    final resolvedUrl = _resolveMediaUrl(url);
+    final mediaType = _eventPostMediaType(post);
+    final isImage = mediaType == 'Photo' || _isImagePath(url);
+
+    Widget preview;
+    if (isImage) {
+      preview = Image.network(
+        resolvedUrl,
+        height: 200,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return Container(
+            height: 200,
+            color: tokens.panel,
+            child: Center(
+              child: CircularProgressIndicator(
+                value: loadingProgress.expectedTotalBytes != null
+                    ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                    : null,
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) =>
+            _MediaFallbackPreview(type: 'Image', url: url),
+      );
+    } else {
+      preview = _MediaFallbackPreview(type: mediaType.isEmpty ? 'Media' : mediaType, url: url);
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radius.control),
-        child: Stack(
-          alignment: Alignment.bottomLeft,
-          children: [
-            SizedBox(width: double.infinity, child: preview),
-            Padding(
-              padding: const EdgeInsets.all(10),
-              child: _FeedMediaTypeChip(type: mediaType),
-            ),
-          ],
-        ),
+        child: SizedBox(width: double.infinity, child: preview),
       ),
     );
   }
@@ -917,6 +932,26 @@ List<String> _eventPostMediaUrls(Map<String, dynamic> post) {
       .toList();
 }
 
+/// Resolves relative upload paths to absolute URLs using the API origin.
+String _resolveMediaUrl(String url) {
+  if (url.isEmpty) return url;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
+  final path = url.startsWith('/') ? url : '/$url';
+  return '$origin$path';
+}
+
+/// Returns true when the URL path clearly belongs to an image file.
+bool _isImagePath(String url) {
+  final path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
+  return path.endsWith('.jpg') ||
+      path.endsWith('.jpeg') ||
+      path.endsWith('.png') ||
+      path.endsWith('.webp') ||
+      path.endsWith('.gif') ||
+      path.endsWith('.heic');
+}
+
 String _eventPostMediaType(Map<String, dynamic> post) {
   final explicit = _firstText(post, [
     'media_type',
@@ -938,15 +973,10 @@ String _eventPostMediaType(Map<String, dynamic> post) {
       path.endsWith('.webm')) {
     return 'Video';
   }
-  if (path.endsWith('.jpg') ||
-      path.endsWith('.jpeg') ||
-      path.endsWith('.png') ||
-      path.endsWith('.webp') ||
-      path.endsWith('.gif') ||
-      path.endsWith('.heic')) {
+  if (_isImagePath(urls.first)) {
     return 'Photo';
   }
-  return 'Media';
+  return urls.isNotEmpty ? 'Media' : '';
 }
 
 IconData _eventPostMediaIcon(String type) {

@@ -53,14 +53,29 @@ class _TeacherLeaveRequestFormScreenState
   bool _saving = false;
   String? _error;
 
+  // Backing ISO dates for API submission
+  DateTime _fromDate = DateTime.now().add(const Duration(days: 1));
+  DateTime _toDate = DateTime.now().add(const Duration(days: 1));
+
+  static const List<String> _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  String _displayDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = _monthNames[date.month - 1];
+    return '$day $month ${date.year}';
+  }
+
   @override
   void initState() {
     super.initState();
-    final tomorrow = teacherFlowDate(
-      DateTime.now().add(const Duration(days: 1)),
-    );
-    _fromDateController = TextEditingController(text: tomorrow);
-    _toDateController = TextEditingController(text: tomorrow);
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    _fromDate = tomorrow;
+    _toDate = tomorrow;
+    _fromDateController = TextEditingController(text: _displayDate(tomorrow));
+    _toDateController = TextEditingController(text: _displayDate(tomorrow));
     _staffId = widget.args.staffId;
     _staffName = widget.args.staffName;
     _leaveTypes = widget.args.leaveTypes;
@@ -101,8 +116,8 @@ class _TeacherLeaveRequestFormScreenState
         LeaveApplicationRequest(
           staffId: _staffId,
           leaveTypeId: _leaveTypeId,
-          fromDate: _fromDateController.text.trim(),
-          toDate: _toDateController.text.trim(),
+          fromDate: teacherFlowDate(_fromDate),
+          toDate: teacherFlowDate(_toDate),
           halfDay: _halfDay,
           reason: _reasonController.text.trim(),
         ),
@@ -181,16 +196,6 @@ class _TeacherLeaveRequestFormScreenState
                         : (value) => setState(() => _leaveTypeId = value ?? ''),
                   ),
                   const SizedBox(height: 12),
-                ] else ...[
-                  TeacherFlowCard(
-                    icon: Icons.event_note_rounded,
-                    title: 'General leave request',
-                    subtitle:
-                        'Leave types are not configured. Submit your dates and reason directly for principal approval.',
-                    status: 'No type needed',
-                    statusColor: teacherFlowAccent,
-                  ),
-                  const SizedBox(height: 12),
                 ],
                 Row(
                   children: [
@@ -198,17 +203,19 @@ class _TeacherLeaveRequestFormScreenState
                       child: TextFormField(
                         controller: _fromDateController,
                         readOnly: true,
+                        style: const TextStyle(overflow: TextOverflow.visible),
                         decoration: const InputDecoration(
                           labelText: 'From date',
-                          hintText: 'YYYY-MM-DD',
+                          hintText: 'DD MMM YYYY',
                           prefixIcon: Icon(Icons.event_rounded),
                           suffixIcon: Icon(Icons.calendar_today_outlined),
+                          isDense: true,
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
                         onTap: _saving
                             ? null
-                            : () => _pickDate(_fromDateController),
+                            : () => _pickDateField(isFrom: true),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -216,17 +223,19 @@ class _TeacherLeaveRequestFormScreenState
                       child: TextFormField(
                         controller: _toDateController,
                         readOnly: true,
+                        style: const TextStyle(overflow: TextOverflow.visible),
                         decoration: const InputDecoration(
                           labelText: 'To date',
-                          hintText: 'YYYY-MM-DD',
+                          hintText: 'DD MMM YYYY',
                           prefixIcon: Icon(Icons.event_available_rounded),
                           suffixIcon: Icon(Icons.calendar_today_outlined),
+                          isDense: true,
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
                         onTap: _saving
                             ? null
-                            : () => _pickDate(_toDateController),
+                            : () => _pickDateField(isFrom: false),
                       ),
                     ),
                   ],
@@ -302,10 +311,8 @@ class _TeacherLeaveRequestFormScreenState
     return '';
   }
 
-  Future<void> _pickDate(TextEditingController controller) async {
-    final initial =
-        DateTime.tryParse(controller.text.trim()) ??
-        DateTime.now().add(const Duration(days: 1));
+  Future<void> _pickDateField({required bool isFrom}) async {
+    final initial = isFrom ? _fromDate : _toDate;
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -313,12 +320,20 @@ class _TeacherLeaveRequestFormScreenState
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
     if (picked == null || !mounted) return;
-    controller.text = teacherFlowDate(picked);
-    if (controller == _fromDateController &&
-        DateTime.tryParse(_toDateController.text.trim())?.isBefore(picked) ==
-            true) {
-      _toDateController.text = teacherFlowDate(picked);
-    }
+    setState(() {
+      if (isFrom) {
+        _fromDate = picked;
+        _fromDateController.text = _displayDate(picked);
+        // If to-date is now before from-date, push it forward
+        if (_toDate.isBefore(picked)) {
+          _toDate = picked;
+          _toDateController.text = _displayDate(picked);
+        }
+      } else {
+        _toDate = picked;
+        _toDateController.text = _displayDate(picked);
+      }
+    });
   }
 
   Future<void> _loadMissingContext() async {
@@ -419,15 +434,10 @@ class _TeacherLeaveRequestFormScreenState
   }
 
   String? _validateLeaveRequest() {
-    final from = DateTime.tryParse(_fromDateController.text.trim());
-    final to = DateTime.tryParse(_toDateController.text.trim());
-    if (from == null || to == null) {
-      return 'Select valid leave dates.';
-    }
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
-    final fromOnly = DateTime(from.year, from.month, from.day);
-    final toOnly = DateTime(to.year, to.month, to.day);
+    final fromOnly = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
+    final toOnly = DateTime(_toDate.year, _toDate.month, _toDate.day);
     if (fromOnly.isBefore(todayOnly)) {
       return 'Leave cannot start before today.';
     }

@@ -733,29 +733,52 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       _snack('Fee structure ID is missing.');
       return;
     }
+    bool removePending = true;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete fee component?'),
-        content: Text(
-          'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}. Existing generated invoices and payments are not deleted.',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Delete fee component?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}.',
+              ),
+              const SizedBox(height: 12),
+              CheckboxListTile(
+                value: removePending,
+                onChanged: (val) => setState(() => removePending = val == true),
+                title: const Text('Remove from unpaid invoices'),
+                subtitle: const Text(
+                  'Deducts this fee component from pending student invoices to avoid incorrect billing.',
+                ),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Delete'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.delete_outline_rounded),
-            label: const Text('Delete'),
-          ),
-        ],
       ),
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(id);
+      await BackendApiClient.instance.deleteFeeStructure(
+        id,
+        removePending: removePending,
+      );
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);

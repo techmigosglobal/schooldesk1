@@ -311,10 +311,13 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
-  Future<void> deleteFeeStructure(String structureId) async {
+  Future<void> deleteFeeStructure(String structureId, {bool removePending = false}) async {
     try {
       final response = await _dio.delete(
         '/fees/structures/${structureId.trim()}',
+        queryParameters: {
+          if (removePending) 'remove_pending': 'true',
+        },
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) return;
