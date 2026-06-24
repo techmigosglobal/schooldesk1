@@ -641,6 +641,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             _FeeStructureCard(
               bundle: bundle,
               onTap: () => _openStructureDetails(bundle),
+              onDelete: () => _deleteFeeStructureBundle(bundle),
             ),
       ],
     );
@@ -772,6 +773,16 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           onPressed: () => _openStudentsForCollection(structure: bundle),
           icon: const Icon(Icons.groups_outlined),
           label: const Text('View Students'),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => _deleteFeeStructureBundle(bundle),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFFDC2626),
+            side: const BorderSide(color: Color(0xFFDC2626)),
+          ),
+          icon: const Icon(Icons.delete_outline_rounded),
+          label: const Text('Delete Fee Structure'),
         ),
       ],
     );
@@ -2028,6 +2039,150 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     });
   }
 
+  Future<void> _deleteFeeStructureBundle(_FeeStructureBundle bundle) async {
+    // First confirmation
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            bool removePending = true;
+            return AlertDialog(
+              title: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 22),
+                  const SizedBox(width: 8),
+                  const Text('Delete Fee Structure?'),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You are about to delete:',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    bundle.title,
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                  ),
+                  Text(
+                    '${bundle.classLabel} · ${bundle.components.length} components',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  StatefulBuilder(
+                    builder: (context, setCheckState) => CheckboxListTile(
+                      value: removePending,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Remove from unpaid student invoices',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        'Deducts this fee component from pending invoices so students aren\'t overcharged',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      onChanged: (value) => setCheckState(() => removePending = value ?? true),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  onPressed: () => Navigator.pop(context, removePending ? true : false),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                  ),
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Second confirmation — type to confirm
+    final doubleConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Are you absolutely sure?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This action is IRREVERSIBLE. Type DELETE to confirm:',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: const InputDecoration(
+                    hintText: 'Type DELETE',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: controller.text.trim() == 'DELETE'
+                    ? () => Navigator.pop(context, true)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                ),
+                child: const Text('Confirm Delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (doubleConfirmed != true || !mounted) return;
+
+    setState(() => _saving = true);
+    try {
+      await BackendApiClient.instance.deleteFeeStructure(
+        bundle.id,
+        removePending: true,
+      );
+      if (!mounted) return;
+      _snack('Fee structure deleted.', success: true);
+      // Go back to list view and refresh
+      if (_view == _FeeView.structureDetails) {
+        setState(() => _view = _FeeView.structures);
+      }
+      await _loadData();
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Unable to delete: $error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   void _openStructureForInvoice(Map<String, dynamic> invoice) {
     final bundle = _structureBundles.firstWhereOrNull((structure) {
       final sameGrade =
@@ -2868,8 +3023,9 @@ class _FeeHeader extends StatelessWidget {
 class _FeeCard extends StatelessWidget {
   final Widget child;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
-  const _FeeCard({required this.child, this.onTap});
+  const _FeeCard({required this.child, this.onTap, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
@@ -2890,10 +3046,11 @@ class _FeeCard extends StatelessWidget {
       ),
       child: child,
     );
-    if (onTap == null) return card;
+    if (onTap == null && onLongPress == null) return card;
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
+      onLongPress: onLongPress,
       child: card,
     );
   }
@@ -3104,13 +3261,19 @@ class _FeeSectionTitle extends StatelessWidget {
 class _FeeStructureCard extends StatelessWidget {
   final _FeeStructureBundle bundle;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
-  const _FeeStructureCard({required this.bundle, required this.onTap});
+  const _FeeStructureCard({
+    required this.bundle,
+    required this.onTap,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     return _FeeCard(
       onTap: onTap,
+      onLongPress: onDelete,
       child: Row(
         children: [
           _FeeIconBadge(
@@ -3152,6 +3315,14 @@ class _FeeStructureCard extends StatelessWidget {
                 ? const Color(0xFF16A34A)
                 : const Color(0xFFF59E0B),
           ),
+          if (onDelete != null) ...[
+            const SizedBox(width: 8),
+            Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: Colors.red[300],
+            ),
+          ],
         ],
       ),
     );
