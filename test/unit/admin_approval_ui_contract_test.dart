@@ -21,21 +21,24 @@ void main() {
     expect(dashboard, isNot(contains('Publish Timetable')));
   });
 
-  test('admin student controls submit approval requests instead of final labels', () {
-    final students = _read(
-      'lib/features/people/presentation/screens/admin_students_screen/admin_students_screen.dart',
-    );
+  test(
+    'admin student controls submit approval requests instead of final labels',
+    () {
+      final students = _read(
+        'lib/features/people/presentation/screens/admin_students_screen/admin_students_screen.dart',
+      );
 
-    expect(students, contains("createRaw('/student-approvals'"));
-    expect(students, contains('Prepare Student Request'));
-    expect(students, contains('Submit Student for Approval'));
-    expect(students, contains('Submit Update for Approval'));
-    expect(students, contains('Submit Removal for Approval'));
-    expect(students, contains('Submit Promotion for Approval'));
-    expect(students, isNot(contains('Request Delete')));
-    expect(students, isNot(contains('Request student')));
-    expect(students, isNot(contains('Send Request')));
-  });
+      expect(students, contains("createRaw('/student-approvals'"));
+      expect(students, contains('Prepare Student Request'));
+      expect(students, contains('Submit Student for Approval'));
+      expect(students, contains('Submit Update for Approval'));
+      expect(students, contains('Submit Removal for Approval'));
+      expect(students, contains('Submit Promotion for Approval'));
+      expect(students, isNot(contains('Request Delete')));
+      expect(students, isNot(contains('Request student')));
+      expect(students, isNot(contains('Send Request')));
+    },
+  );
 
   test('admin staff update and removal submit backend approval requests', () {
     final staff = _read(
@@ -53,25 +56,28 @@ void main() {
     expect(staff, contains('Submit Staff Removal for Approval'));
   });
 
-  test('admin finance controls use request language', () {
+  test('principal finance controls use direct ownership language', () {
     final fees = _read(
       'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     );
     final feeForms = _read(
       'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
     );
-    final combined = '$fees\n$feeForms';
+    final decision = _read(
+      'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart',
+    );
+    final combined = '$fees\n$feeForms\n$decision';
 
-    expect(combined, contains('Prepare Fee Structure Request'));
-    expect(combined, contains('Submit Fee Structure for Approval'));
-    expect(combined, contains('Submit Invoice Request'));
-    expect(combined, contains('Submit Invoices for Approval'));
-    expect(combined, contains('Submit Payment Request'));
-    expect(combined, contains('Submit Payment for Approval'));
-    expect(combined, isNot(contains("label: const Text('Create')")));
-    expect(combined, isNot(contains('Save structure')));
-    expect(combined, isNot(contains('Generate invoices')));
-    expect(combined, isNot(contains('Record payment')));
+    expect(combined, contains('Create Fee Structure'));
+    expect(combined, contains('Save Structure'));
+    expect(combined, contains('Generate Invoices'));
+    expect(combined, contains('Record Payment'));
+    expect(combined, contains('Approve Payment'));
+    expect(combined, contains('Reject Payment'));
+    expect(combined, isNot(contains('Prepare Fee Structure Request')));
+    expect(combined, isNot(contains('Submit Fee Structure for Approval')));
+    expect(combined, isNot(contains('Submit Invoice Request')));
+    expect(combined, isNot(contains('Submit Payment for Approval')));
   });
 
   test('admin scoped sources do not expose final decision buttons', () {
@@ -79,9 +85,6 @@ void main() {
       'lib/features/dashboard/presentation/screens/admin_dashboard_screen/admin_dashboard_screen.dart',
       'lib/features/people/presentation/screens/admin_students_screen/admin_students_screen.dart',
       'lib/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart',
-      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
-      'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
-      'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart',
     ].map(_read).join('\n');
 
     for (final label in ['Approve', 'Reject', 'Apply']) {

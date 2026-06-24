@@ -64,7 +64,7 @@ class _AdminPaymentRequestDecisionScreenState
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: _decision == 'approved'
-                    ? 'Approval note'
+                    ? 'Payment approval note'
                     : 'Rejection reason',
                 alignLabelWithHint: true,
               ),
@@ -83,7 +83,10 @@ class _AdminPaymentRequestDecisionScreenState
                     SizedBox(width: 12),
                     Text(
                       'Loading invoice form...',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -105,7 +108,9 @@ class _AdminPaymentRequestDecisionScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : '${_title(_decision)} Payment Request',
+                    : _decision == 'approved'
+                    ? 'Approve Payment'
+                    : 'Reject Payment',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -177,7 +182,7 @@ class _AdminPaymentRequestDecisionScreenState
         Expanded(
           child: ChoiceChip(
             selected: _decision == 'approved',
-            label: const Text('Recommend approval'),
+            label: const Text('Approve Payment'),
             avatar: const Icon(Icons.check_rounded, size: 16),
             onSelected: _submitting
                 ? null
@@ -188,7 +193,7 @@ class _AdminPaymentRequestDecisionScreenState
         Expanded(
           child: ChoiceChip(
             selected: _decision == 'rejected',
-            label: const Text('Recommend rejection'),
+            label: const Text('Reject Payment'),
             avatar: const Icon(Icons.close_rounded, size: 16),
             onSelected: _submitting
                 ? null
@@ -278,43 +283,42 @@ class _AdminPaymentRequestDecisionScreenState
 
     if (!mounted) return false;
     final shouldGenerate = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Generate Invoice?'),
-          content: Text(
-            'Payment of $amount approved for $studentName.\n\n'
-            'Would you like to generate a fee receipt / invoice for this payment?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Later'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Generate Invoice'),
-            ),
-          ],
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate Invoice?'),
+        content: Text(
+          'Payment of $amount approved for $studentName.\n\n'
+          'Would you like to generate a fee receipt / invoice for this payment?',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Later'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Generate Invoice'),
+          ),
+        ],
+      ),
+    );
+    if (shouldGenerate != true) return true; // user chose 'Later'
+    if (!mounted) return false;
+    setState(() => _navigatingToInvoice = true);
+    try {
+      await _navigateToInvoiceGeneration(
+        studentId: studentId,
+        gradeId: gradeId,
+        studentName: studentName,
       );
-      if (shouldGenerate != true) return true; // user chose 'Later'
-      if (!mounted) return false;
-      setState(() => _navigatingToInvoice = true);
-      try {
-        await _navigateToInvoiceGeneration(
-          studentId: studentId,
-          gradeId: gradeId,
-          studentName: studentName,
-        );
-        return true;
-      } catch (error) {
-        if (mounted) _showError(error.toString());
-        return false;
-      } finally {
-        if (mounted) setState(() => _navigatingToInvoice = false);
-      }
+      return true;
+    } catch (error) {
+      if (mounted) _showError(error.toString());
+      return false;
+    } finally {
+      if (mounted) setState(() => _navigatingToInvoice = false);
+    }
   }
-
 
   Future<void> _navigateToInvoiceGeneration({
     required String studentId,
@@ -345,9 +349,7 @@ class _AdminPaymentRequestDecisionScreenState
         sections: sections,
         students: students,
         feeStructures: feeStructures,
-        seedStructure: {
-          if (gradeId.isNotEmpty) 'grade_id': gradeId,
-        },
+        seedStructure: {if (gradeId.isNotEmpty) 'grade_id': gradeId},
         ownerRole: 'principal',
       ),
     );
@@ -402,12 +404,10 @@ class _AdminPaymentRequestDecisionScreenState
     return parsed.toIso8601String().split('T').first;
   }
 
-  String _title(String value) =>
-      value.isEmpty ? value : value[0].toUpperCase() + value.substring(1);
-
   Widget _buildProofPreview(String? url) {
     if (url == null || url.isEmpty) return const SizedBox.shrink();
-    final isImage = url.toLowerCase().endsWith('.jpg') ||
+    final isImage =
+        url.toLowerCase().endsWith('.jpg') ||
         url.toLowerCase().endsWith('.jpeg') ||
         url.toLowerCase().endsWith('.png');
     if (!isImage) {
@@ -454,9 +454,7 @@ class _AdminPaymentRequestDecisionScreenState
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
-              InteractiveViewer(
-                child: Image.network(url, fit: BoxFit.contain),
-              ),
+              InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
               Positioned(
                 top: 8,
                 right: 8,

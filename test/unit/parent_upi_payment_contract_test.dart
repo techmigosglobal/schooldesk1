@@ -73,18 +73,21 @@ void main() {
       final handler = File(
         'school-backend/internal/handlers/fee.go',
       ).readAsStringSync();
+      final api = File(
+        'lib/core/network/api_modules/fees_api.dart',
+      ).readAsStringSync();
 
       expect(form, contains('Replace existing class/year fee structure'));
       expect(form, contains('_confirmReplaceExisting'));
-      expect(form, contains('replace_existing'));
+      expect(api, contains('replace_existing'));
       expect(form, contains('Per installment'));
       expect(form, contains('Installments parents can pay'));
 
       expect(screen, contains('_deleteFeeStructure'));
       expect(screen, contains('Delete fee component'));
-      expect(screen, contains('/fees/structures/\$id'));
+      expect(screen, contains('deleteFeeStructure(id)'));
 
-      expect(dto, contains('ReplaceExisting  bool'));
+      expect(dto, contains('ReplaceExisting'));
       expect(handler, contains('ReplaceExisting'));
       expect(handler, contains('Delete(&models.FeeStructure{})'));
       expect(handler, contains('replace_existing'));

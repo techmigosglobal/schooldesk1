@@ -57,9 +57,14 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> getPaymentConfig() async {
+  Future<Map<String, dynamic>> getPaymentConfig({String invoiceId = ''}) async {
     try {
-      final response = await _dio.get('/fees/payment-config');
+      final response = await _dio.get(
+        '/fees/payment-config',
+        queryParameters: {
+          if (invoiceId.trim().isNotEmpty) 'invoice_id': invoiceId.trim(),
+        },
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return Map<String, dynamic>.from(data['data'] as Map);
@@ -220,6 +225,7 @@ extension BackendFeesApi on BackendApiClient {
     String installmentMethod = 'equal',
     String effectiveFrom = '',
     List<Map<String, dynamic>> installments = const [],
+    bool replaceExisting = false,
   }) async {
     try {
       final response = await _dio.post(
@@ -237,6 +243,7 @@ extension BackendFeesApi on BackendApiClient {
           if (effectiveFrom.trim().isNotEmpty)
             'effective_from': effectiveFrom.trim(),
           if (installments.isNotEmpty) 'installments': installments,
+          'replace_existing': replaceExisting,
         },
       );
       final data = response.data as Map<String, dynamic>;
@@ -370,6 +377,188 @@ extension BackendFeesApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to upload payment QR',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPaymentConfigs() async {
+    try {
+      final response = await _dio.get('/fees/payment-configs');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) return _asListMap(data['data']);
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load payment configurations',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> createPaymentConfig({
+    String scope = 'school',
+    String gradeId = '',
+    String sectionId = '',
+    required String upiId,
+    required String payeeName,
+    String merchantCode = '',
+    String qrNote = '',
+    String qrImageUrl = '',
+    bool? upiEnabled,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payment-configs',
+        data: {
+          'scope': scope.trim(),
+          if (gradeId.trim().isNotEmpty) 'grade_id': gradeId.trim(),
+          if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
+          'upi_id': upiId.trim(),
+          'payee_name': payeeName.trim(),
+          'merchant_code': merchantCode.trim(),
+          'qr_note': qrNote.trim(),
+          'qr_image_url': qrImageUrl.trim(),
+          'upi_enabled':
+              upiEnabled ??
+              (upiId.trim().isNotEmpty || qrImageUrl.trim().isNotEmpty),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create payment configuration',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateScopedPaymentConfig(
+    String id, {
+    String scope = 'school',
+    String gradeId = '',
+    String sectionId = '',
+    required String upiId,
+    required String payeeName,
+    String merchantCode = '',
+    String qrNote = '',
+    String qrImageUrl = '',
+    bool? upiEnabled,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/fees/payment-configs/${id.trim()}',
+        data: {
+          'scope': scope.trim(),
+          if (gradeId.trim().isNotEmpty) 'grade_id': gradeId.trim(),
+          if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
+          'upi_id': upiId.trim(),
+          'payee_name': payeeName.trim(),
+          'merchant_code': merchantCode.trim(),
+          'qr_note': qrNote.trim(),
+          'qr_image_url': qrImageUrl.trim(),
+          'upi_enabled':
+              upiEnabled ??
+              (upiId.trim().isNotEmpty || qrImageUrl.trim().isNotEmpty),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to update payment configuration',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadScopedPaymentQr({
+    required String id,
+    required String path,
+    required String fileName,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payment-configs/${id.trim()}/qr',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(path, filename: fileName),
+        }),
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload payment QR',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> rolloverFeeStructures({
+    required String fromAcademicYearId,
+    required String toAcademicYearId,
+    bool overwrite = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/structures/rollover',
+        data: {
+          'from_academic_year_id': fromAcademicYearId.trim(),
+          'to_academic_year_id': toAcademicYearId.trim(),
+          'overwrite': overwrite,
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to rollover fee structures',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> previewFeeInvoiceSync(String structureId) async {
+    try {
+      final response = await _dio.post(
+        '/fees/structures/${structureId.trim()}/invoice-sync/preview',
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to preview invoice sync',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> applyFeeInvoiceSync(
+    String structureId, {
+    bool includePartiallyPaid = false,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/structures/${structureId.trim()}/invoice-sync/apply',
+        data: {'include_partially_paid': includePartiallyPaid},
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to apply invoice sync',
       );
     } on DioException catch (e) {
       throw _handleError(e);

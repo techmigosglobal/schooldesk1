@@ -37,6 +37,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   List<SectionModel> _sections = [];
   List<StudentModel> _students = [];
   Map<String, dynamic> _paymentConfig = const {};
+  List<Map<String, dynamic>> _paymentConfigs = [];
   final _upiIdController = TextEditingController();
   final _payeeNameController = TextEditingController();
   final _qrNoteController = TextEditingController();
@@ -74,6 +75,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final feeCategories = await api.getRawList('/fees/categories');
       final concessions = await api.getRawList('/fees/concessions');
       final paymentConfig = await api.getPaymentConfig();
+      final paymentConfigs = await api.getPaymentConfigs();
       final academicYears = await api.getAcademicYears();
       final grades = await api.getGrades();
       final sections = await api.getSections();
@@ -85,6 +87,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _feeCategories = feeCategories;
         _concessions = concessions;
         _paymentConfig = paymentConfig;
+        _paymentConfigs = paymentConfigs;
         _upiIdController.text = _textValue(paymentConfig['upi_id']);
         _payeeNameController.text = _textValue(paymentConfig['payee_name']);
         _qrNoteController.text = _textValue(paymentConfig['qr_note']);
@@ -122,12 +125,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
-          tooltip: 'Prepare fee structure request',
+          tooltip: 'Create Fee Structure',
           icon: const Icon(Icons.add_card_outlined),
           onPressed: _openCreateFeeStructureForm,
         ),
         IconButton(
-          tooltip: 'Submit invoice request for approval',
+          tooltip: 'Generate Invoices',
           icon: const Icon(Icons.receipt_long_outlined),
           onPressed: () => _openGenerateInvoiceForm(),
         ),
@@ -313,6 +316,30 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               ),
             ],
           ),
+          if (_paymentConfigs.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Scoped payment configs',
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            for (final config in _paymentConfigs.take(6))
+              OpsListRow(
+                icon: Icons.qr_code_2_rounded,
+                title:
+                    '${_textValue(config['scope'], fallback: 'school')} scope',
+                subtitle:
+                    '${_textValue(config['upi_id'], fallback: 'UPI pending')} | ${_textValue(config['qr_note'], fallback: 'No note')}',
+                trailing: OpsStatusPill(
+                  label: config['upi_enabled'] == true ? 'Active' : 'Off',
+                  color: config['upi_enabled'] == true
+                      ? Colors.green
+                      : Colors.orange,
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -380,14 +407,13 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: FilledButton.icon(
         onPressed: _openCreateFeeStructureForm,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Prepare Fee Structure Request'),
+        label: const Text('Create Fee Structure'),
       ),
       child: _feeStructures.isEmpty
           ? OpsEmptyState(
               icon: Icons.price_change_outlined,
               title: 'No fee structures',
-              message:
-                  'Prepare fee structure requests before submitting student invoices.',
+              message: 'Create fee structures before generating invoices.',
             )
           : Column(
               children: [
@@ -397,14 +423,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                     title:
                         '${_textValue(structure['category'], fallback: 'Fee')} - ${_textValue(structure['class'], fallback: 'Class pending')}',
                     subtitle:
-                        '${_money(_numValue(structure['amount']))} | ${_textValue(structure['frequency'], fallback: 'frequency pending')} | due day ${structure['due_day'] ?? '-'}',
+                        '${_money(_numValue(structure['amount']))} | ${_textValue(structure['frequency'], fallback: 'frequency pending')} | ${_textValue(structure['section'], fallback: 'All sections')} | due day ${structure['due_day'] ?? '-'}',
                     trailing: Wrap(
                       spacing: 8,
                       children: [
                         TextButton.icon(
                           onPressed: () => _openEditFeeStructureForm(structure),
                           icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Prepare Update Request'),
+                          label: const Text('Save Structure'),
                         ),
                         TextButton.icon(
                           onPressed: () => _deleteFeeStructure(structure),
@@ -427,7 +453,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: FilledButton.icon(
         onPressed: () => _openGenerateInvoiceForm(),
         icon: const Icon(Icons.receipt_long_outlined),
-        label: const Text('Submit Invoice Request'),
+        label: const Text('Generate Invoices'),
       ),
       child: _pendingDues.isEmpty
           ? OpsListRow(
@@ -459,7 +485,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                           color: Colors.orange,
                         ),
                         IconButton(
-                          tooltip: 'Submit payment for approval',
+                          tooltip: 'Record Payment',
                           icon: const Icon(Icons.payments_outlined),
                           onPressed: () =>
                               _openRecordPaymentForm(invoice: invoice),
@@ -513,7 +539,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: OutlinedButton.icon(
         onPressed: () => _openRecordPaymentForm(),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Submit Payment Request'),
+        label: const Text('Record Payment'),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -729,7 +755,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteRaw('/fees/structures/$id');
+      await BackendApiClient.instance.deleteFeeStructure(id);
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);
@@ -745,6 +771,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       arguments: AdminFeeStructureFormArgs(
         academicYears: _academicYears,
         grades: _grades,
+        sections: _sections,
         feeCategories: _feeCategories,
         feeStructure: structure,
       ),
@@ -770,7 +797,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (!mounted || result is! AdminInvoiceGenerationFormResult) return;
     await _loadData();
     _snack(
-      'Invoice request submitted: ${result.created} invoice(s), skipped ${result.skipped}.',
+      'Generated ${result.created} invoice(s), skipped ${result.skipped}.',
       success: true,
     );
   }
@@ -787,7 +814,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     if (!mounted || result is! AdminPaymentRecordFormResult) return;
     await _loadData();
     _snack(
-      'Payment request of ${_money(result.amount)} submitted for ${result.studentName}',
+      'Recorded payment of ${_money(result.amount)} for ${result.studentName}',
       success: true,
     );
   }
@@ -935,11 +962,18 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> fee) {
     final category = _mapValue(fee['fee_category']);
     final grade = _mapValue(fee['grade']);
+    final section = _mapValue(fee['section']);
     return {
       ...fee,
       'class': _textValue(
         grade['grade_name'],
         fallback: _textValue(fee['grade_id']),
+      ),
+      'section': _textValue(
+        section['section_name'],
+        fallback: _textValue(fee['section_id']).isEmpty
+            ? 'All sections'
+            : _textValue(fee['section_id']),
       ),
       'category': _textValue(
         category['category_name'] ?? category['name'],

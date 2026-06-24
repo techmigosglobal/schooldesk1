@@ -73,15 +73,39 @@ type SchoolPaymentSetting struct {
 	School       *School `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
 }
 
+type ScopedPaymentSetting struct {
+	BaseModel
+	SchoolID     string   `gorm:"type:text;not null;index" json:"school_id"`
+	GradeID      *string  `gorm:"type:text;index" json:"grade_id,omitempty"`
+	SectionID    *string  `gorm:"type:text;index" json:"section_id,omitempty"`
+	Scope        string   `gorm:"type:text;not null;default:'school';index" json:"scope"`
+	UPIID        string   `gorm:"type:text" json:"upi_id"`
+	PayeeName    string   `gorm:"type:text" json:"payee_name"`
+	MerchantCode string   `gorm:"type:text" json:"merchant_code"`
+	QRNote       string   `gorm:"type:text" json:"qr_note"`
+	QRImageURL   string   `gorm:"type:text" json:"qr_image_url"`
+	UPIEnabled   bool     `gorm:"default:false" json:"upi_enabled"`
+	UpdatedBy    *string  `gorm:"type:text" json:"updated_by,omitempty"`
+	School       *School  `gorm:"foreignKey:SchoolID" json:"school,omitempty"`
+	Grade        *Grade   `gorm:"foreignKey:GradeID" json:"grade,omitempty"`
+	Section      *Section `gorm:"foreignKey:SectionID" json:"section,omitempty"`
+}
+
 type FeeConcession struct {
 	BaseModel
+	SchoolID       string        `gorm:"type:text;index" json:"school_id"`
 	StudentID      string        `gorm:"type:uuid;not null" json:"student_id"`
 	FeeCategoryID  string        `gorm:"type:uuid;not null" json:"fee_category_id"`
 	AcademicYearID string        `gorm:"type:uuid;not null" json:"academic_year_id"`
 	ConcessionType string        `gorm:"type:text;not null" json:"concession_type"`
 	Value          float64       `json:"value"`
 	Reason         string        `gorm:"type:text" json:"reason"`
+	Status         string        `gorm:"type:text;default:'pending';index" json:"status"`
+	RequestedBy    *string       `gorm:"type:text" json:"requested_by,omitempty"`
 	ApprovedBy     *string       `gorm:"type:uuid" json:"approved_by"`
+	DecidedBy      *string       `gorm:"type:text" json:"decided_by,omitempty"`
+	DecidedAt      *time.Time    `json:"decided_at,omitempty"`
+	AdminRemarks   string        `gorm:"type:text" json:"admin_remarks"`
 	Student        *Student      `gorm:"foreignKey:StudentID" json:"student,omitempty"`
 	FeeCategory    *FeeCategory  `gorm:"foreignKey:FeeCategoryID" json:"fee_category,omitempty"`
 	AcademicYear   *AcademicYear `gorm:"foreignKey:AcademicYearID" json:"academic_year,omitempty"`
@@ -126,39 +150,49 @@ type FeeInvoiceItem struct {
 
 type Payment struct {
 	BaseModel
-	InvoiceID     string      `gorm:"type:uuid;not null" json:"invoice_id"`
-	ReceiptNumber string      `gorm:"size:100;unique" json:"receipt_number"`
-	AmountPaid    float64     `json:"amount_paid"`
-	PaymentDate   time.Time   `json:"payment_date"`
-	PaymentMode   string      `gorm:"type:text;not null" json:"payment_mode"`
-	TransactionID string      `gorm:"size:255" json:"transaction_id"`
-	ReceivedBy    *string     `gorm:"type:uuid" json:"received_by"`
-	CreatedAt     time.Time   `json:"created_at"`
-	Invoice       *FeeInvoice `gorm:"foreignKey:InvoiceID" json:"invoice,omitempty"`
+	InvoiceID         string      `gorm:"type:uuid;not null" json:"invoice_id"`
+	ReceiptNumber     string      `gorm:"size:100;unique" json:"receipt_number"`
+	AmountPaid        float64     `json:"amount_paid"`
+	PaymentDate       time.Time   `json:"payment_date"`
+	PaymentMode       string      `gorm:"type:text;not null" json:"payment_mode"`
+	TransactionID     string      `gorm:"size:255" json:"transaction_id"`
+	PaymentConfigID   *string     `gorm:"type:text" json:"payment_config_id,omitempty"`
+	PaymentUPIID      string      `gorm:"type:text" json:"payment_upi_id"`
+	PaymentPayeeName  string      `gorm:"type:text" json:"payment_payee_name"`
+	PaymentQRImageURL string      `gorm:"type:text" json:"payment_qr_image_url"`
+	PaymentQRNote     string      `gorm:"type:text" json:"payment_qr_note"`
+	ReceivedBy        *string     `gorm:"type:uuid" json:"received_by"`
+	CreatedAt         time.Time   `json:"created_at"`
+	Invoice           *FeeInvoice `gorm:"foreignKey:InvoiceID" json:"invoice,omitempty"`
 }
 
 type ParentPaymentRequest struct {
 	BaseModel
-	SchoolID         string      `gorm:"type:text;not null;index" json:"school_id"`
-	InvoiceID        string      `gorm:"type:text;not null;index" json:"invoice_id"`
-	StudentID        string      `gorm:"type:text;not null;index" json:"student_id"`
-	ParentUserID     string      `gorm:"type:text;not null;index" json:"parent_user_id"`
-	PaymentID        *string     `gorm:"type:text" json:"payment_id,omitempty"`
-	RequestReference string      `gorm:"size:100;uniqueIndex" json:"request_reference"`
-	Amount           float64     `json:"amount"`
-	PaymentDate      time.Time   `json:"payment_date"`
-	PaymentMode      string      `gorm:"type:text;not null" json:"payment_mode"`
-	TransactionID    string      `gorm:"size:255" json:"transaction_id"`
-	ProofURL         *string     `gorm:"type:text" json:"proof_url,omitempty"`
-	Status           string      `gorm:"type:text;default:'pending';index" json:"status"`
-	Remarks          string      `gorm:"type:text" json:"remarks"`
-	AdminRemarks     string      `gorm:"type:text" json:"admin_remarks"`
-	DecidedBy        *string     `gorm:"type:text" json:"decided_by,omitempty"`
-	DecidedAt        *time.Time  `json:"decided_at,omitempty"`
-	Invoice          *FeeInvoice `gorm:"foreignKey:InvoiceID" json:"invoice,omitempty"`
-	Student          *Student    `gorm:"foreignKey:StudentID" json:"student,omitempty"`
-	ParentUser       *User       `gorm:"foreignKey:ParentUserID" json:"parent_user,omitempty"`
-	Payment          *Payment    `gorm:"foreignKey:PaymentID" json:"payment,omitempty"`
+	SchoolID          string      `gorm:"type:text;not null;index" json:"school_id"`
+	InvoiceID         string      `gorm:"type:text;not null;index" json:"invoice_id"`
+	StudentID         string      `gorm:"type:text;not null;index" json:"student_id"`
+	ParentUserID      string      `gorm:"type:text;not null;index" json:"parent_user_id"`
+	PaymentID         *string     `gorm:"type:text" json:"payment_id,omitempty"`
+	RequestReference  string      `gorm:"size:100;uniqueIndex" json:"request_reference"`
+	Amount            float64     `json:"amount"`
+	PaymentDate       time.Time   `json:"payment_date"`
+	PaymentMode       string      `gorm:"type:text;not null" json:"payment_mode"`
+	TransactionID     string      `gorm:"size:255" json:"transaction_id"`
+	ProofURL          *string     `gorm:"type:text" json:"proof_url,omitempty"`
+	Status            string      `gorm:"type:text;default:'pending';index" json:"status"`
+	Remarks           string      `gorm:"type:text" json:"remarks"`
+	AdminRemarks      string      `gorm:"type:text" json:"admin_remarks"`
+	PaymentConfigID   *string     `gorm:"type:text" json:"payment_config_id,omitempty"`
+	PaymentUPIID      string      `gorm:"type:text" json:"payment_upi_id"`
+	PaymentPayeeName  string      `gorm:"type:text" json:"payment_payee_name"`
+	PaymentQRImageURL string      `gorm:"type:text" json:"payment_qr_image_url"`
+	PaymentQRNote     string      `gorm:"type:text" json:"payment_qr_note"`
+	DecidedBy         *string     `gorm:"type:text" json:"decided_by,omitempty"`
+	DecidedAt         *time.Time  `json:"decided_at,omitempty"`
+	Invoice           *FeeInvoice `gorm:"foreignKey:InvoiceID" json:"invoice,omitempty"`
+	Student           *Student    `gorm:"foreignKey:StudentID" json:"student,omitempty"`
+	ParentUser        *User       `gorm:"foreignKey:ParentUserID" json:"parent_user,omitempty"`
+	Payment           *Payment    `gorm:"foreignKey:PaymentID" json:"payment,omitempty"`
 }
 
 // AfterFind populates NetAmount from PayableAmount (backward compatibility).

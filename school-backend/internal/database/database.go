@@ -258,6 +258,7 @@ func autoMigrate() error {
 		&models.FeeStructure{},
 		&models.FeeInstallment{},
 		&models.SchoolPaymentSetting{},
+		&models.ScopedPaymentSetting{},
 		&models.FeeConcession{},
 		&models.FeeInvoice{},
 		&models.FeeInvoiceItem{},

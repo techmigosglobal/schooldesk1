@@ -504,7 +504,7 @@ func TestGetInvoicesScopesParentToLinkedStudents(t *testing.T) {
 	}
 }
 
-func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t *testing.T) {
+func TestParentPaymentRequestLifecycleUsesDirectPrincipalDecision(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -629,14 +629,14 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 		t.Fatalf("upi payment without proof should fail, status=%d body=%s", missingProofResp.Code, missingProofResp.Body.String())
 	}
 
-	adminRouter := gin.New()
-	adminRouter.Use(func(c *gin.Context) {
+	principalRouter := gin.New()
+	principalRouter.Use(func(c *gin.Context) {
 		c.Set("school_id", school.ID)
-		c.Set("user_id", admin.ID)
-		c.Set("role_name", "Admin")
+		c.Set("user_id", principal.ID)
+		c.Set("role_name", "Principal")
 		c.Next()
 	})
-	adminRouter.PUT("/fees/payment-requests/:id/decision", handler.DecideParentPaymentRequest)
+	principalRouter.PUT("/fees/payment-requests/:id/decision", handler.DecideParentPaymentRequest)
 
 	approveReq := httptest.NewRequest(
 		http.MethodPut,
@@ -645,50 +645,12 @@ func TestParentPaymentRequestLifecycleConvertsAdminDecisionToPrincipalApproval(t
 	)
 	approveReq.Header.Set("Content-Type", "application/json")
 	approveResp := httptest.NewRecorder()
-	adminRouter.ServeHTTP(approveResp, approveReq)
-	if approveResp.Code != http.StatusCreated {
-		t.Fatalf("admin decision approval status=%d body=%s", approveResp.Code, approveResp.Body.String())
-	}
-	if err := db.First(&invoice, "id = ?", "invoice-linked-payment").Error; err != nil {
-		t.Fatalf("reload invoice after admin approval request: %v", err)
-	}
-	if invoice.Balance != 1000 || invoice.PaidAmount != 0 || invoice.Status != "pending" {
-		t.Fatalf("admin decision must not settle invoice directly: %+v", invoice)
+	principalRouter.ServeHTTP(approveResp, approveReq)
+	if approveResp.Code != http.StatusOK {
+		t.Fatalf("principal decision status=%d body=%s", approveResp.Code, approveResp.Body.String())
 	}
 	var paymentCount int64
 	db.Model(&models.Payment{}).Where("invoice_id = ?", invoice.ID).Count(&paymentCount)
-	if paymentCount != 0 {
-		t.Fatalf("admin decision created payment directly, got %d", paymentCount)
-	}
-	var approvalRow models.FrontendRecord
-	if err := db.First(&approvalRow, "resource = ?", approvalRequestResource).Error; err != nil {
-		t.Fatalf("admin decision should create approval row: %v", err)
-	}
-
-	principalApprovalRouter := approvalRequestRouter("Principal", principal.ID, school.ID)
-	approveApproval := httptest.NewRecorder()
-	approveApprovalReq := httptest.NewRequest(
-		http.MethodPost,
-		"/approvals/"+approvalRow.ID+"/approve",
-		strings.NewReader(`{"note":"verified"}`),
-	)
-	approveApprovalReq.Header.Set("Content-Type", "application/json")
-	principalApprovalRouter.ServeHTTP(approveApproval, approveApprovalReq)
-	if approveApproval.Code != http.StatusOK {
-		t.Fatalf("principal approve status=%d body=%s", approveApproval.Code, approveApproval.Body.String())
-	}
-	applyApproval := httptest.NewRecorder()
-	applyApprovalReq := httptest.NewRequest(
-		http.MethodPost,
-		"/approvals/"+approvalRow.ID+"/apply",
-		strings.NewReader(`{}`),
-	)
-	applyApprovalReq.Header.Set("Content-Type", "application/json")
-	principalApprovalRouter.ServeHTTP(applyApproval, applyApprovalReq)
-	if applyApproval.Code != http.StatusOK {
-		t.Fatalf("principal apply status=%d body=%s", applyApproval.Code, applyApproval.Body.String())
-	}
-
 	if err := db.First(&invoice, "id = ?", "invoice-linked-payment").Error; err != nil {
 		t.Fatalf("reload approved invoice: %v", err)
 	}

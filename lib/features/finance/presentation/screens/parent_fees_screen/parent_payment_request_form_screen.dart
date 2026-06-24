@@ -115,7 +115,10 @@ class _ParentPaymentRequestFormScreenState
       _configError = null;
     });
     try {
-      final config = await BackendApiClient.instance.getPaymentConfig();
+      final invoiceId = _fees.isEmpty ? '' : _text(_fees.first['id']);
+      final config = await BackendApiClient.instance.getPaymentConfig(
+        invoiceId: invoiceId,
+      );
       if (!mounted) return;
       setState(() {
         _paymentConfig = config;

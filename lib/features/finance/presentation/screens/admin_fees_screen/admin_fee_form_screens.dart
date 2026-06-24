@@ -15,6 +15,7 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 class AdminFeeStructureFormArgs {
   final List<AcademicYearModel> academicYears;
   final List<GradeModel> grades;
+  final List<SectionModel> sections;
   final List<Map<String, dynamic>> feeCategories;
   final Map<String, dynamic>? feeStructure;
   final String ownerRole;
@@ -22,6 +23,7 @@ class AdminFeeStructureFormArgs {
   const AdminFeeStructureFormArgs({
     required this.academicYears,
     required this.grades,
+    required this.sections,
     required this.feeCategories,
     this.feeStructure,
     this.ownerRole = 'admin',
@@ -111,6 +113,7 @@ class _AdminFeeStructureFormScreenState
   late final TextEditingController _lateFineController;
   late String _selectedYearId;
   late String _selectedGradeId;
+  late String _selectedSectionId;
   late String _selectedCategoryId;
   late int _selectedInstallmentCount;
   bool _replaceExisting = false;
@@ -142,6 +145,10 @@ class _AdminFeeStructureFormScreenState
       '${fee['grade_id'] ?? ''}',
       widget.args.grades.map((grade) => grade.id),
     );
+    _selectedSectionId = _initialId('${fee['section_id'] ?? ''}', [
+      '',
+      ...widget.args.sections.map((section) => section.id),
+    ]);
     _selectedCategoryId = _initialId(
       '${fee['fee_category_id'] ?? ''}',
       widget.args.feeCategories.map((category) => '${category['id']}'),
@@ -171,9 +178,9 @@ class _AdminFeeStructureFormScreenState
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: widget.args.isEditing
-          ? 'Prepare Fee Structure Update'
-          : 'Prepare Fee Structure Request',
-      subtitle: 'Class-wise fee setup prepared for Principal approval',
+          ? 'Edit Fee Structure'
+          : 'Create Fee Structure',
+      subtitle: 'Class and section-wise fee setup owned by Principal finance',
       drawer: _financeDrawer(widget.args.ownerRole),
       floatingActionButton: DashboardFabWidget(
         role: _dashboardRole(widget.args.ownerRole),
@@ -206,11 +213,7 @@ class _AdminFeeStructureFormScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_rounded, size: 18),
-                label: Text(
-                  _saving
-                      ? 'Submitting...'
-                      : 'Submit Fee Structure for Approval',
-                ),
+                label: Text(_saving ? 'Saving...' : 'Save Structure'),
               ),
             ],
           ],
@@ -249,7 +252,7 @@ class _AdminFeeStructureFormScreenState
                 Text(
                   widget.args.isEditing
                       ? _textValue(fee?['class'], fallback: 'Fee structure')
-                      : 'Prepare backend fee structure request',
+                      : 'Create backend fee structure',
                   style: GoogleFonts.dmSans(
                     fontWeight: FontWeight.w700,
                     fontSize: 14,
@@ -305,7 +308,30 @@ class _AdminFeeStructureFormScreenState
           validator: (value) => _required(value, 'Select class.'),
           onChanged: _saving
               ? null
-              : (value) => setState(() => _selectedGradeId = value ?? ''),
+              : (value) => setState(() {
+                  _selectedGradeId = value ?? '';
+                  if (!_structureSectionOptions.any(
+                    (section) => section.id == _selectedSectionId,
+                  )) {
+                    _selectedSectionId = '';
+                  }
+                }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: _selectedSectionId,
+          decoration: const InputDecoration(labelText: 'Section scope'),
+          items: [
+            const DropdownMenuItem(value: '', child: Text('All sections')),
+            for (final section in _structureSectionOptions)
+              DropdownMenuItem(
+                value: section.id,
+                child: Text(section.sectionName),
+              ),
+          ],
+          onChanged: _saving
+              ? null
+              : (value) => setState(() => _selectedSectionId = value ?? ''),
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
@@ -446,35 +472,42 @@ class _AdminFeeStructureFormScreenState
     if (_replaceExisting && !await _confirmReplaceExisting()) return;
     setState(() => _saving = true);
     try {
-      final payload = {
-        'academic_year_id': _selectedYearId,
-        'grade_id': _selectedGradeId,
-        'fee_category_id': _selectedCategoryId,
-        'amount': double.parse(_amountController.text),
-        'due_day': int.parse(_dueDayController.text),
-        'late_fine_per_day': double.tryParse(_lateFineController.text) ?? 0,
-        'installment_count': _selectedInstallmentCount,
-        'replace_existing': _replaceExisting,
-      };
       final id = '${widget.args.feeStructure?['id'] ?? ''}'.trim();
       if (widget.args.isEditing) {
         if (id.isEmpty) throw Exception('Backend fee structure ID is missing');
-        await BackendApiClient.instance.updateRaw(
-          '/fees/structures/$id',
-          payload,
+        await BackendApiClient.instance.updateFeeStructure(
+          id,
+          academicYearId: _selectedYearId,
+          gradeId: _selectedGradeId,
+          sectionId: _selectedSectionId,
+          feeCategoryId: _selectedCategoryId,
+          amount: double.parse(_amountController.text),
+          dueDay: int.parse(_dueDayController.text),
+          lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
+          installmentCount: _selectedInstallmentCount,
         );
       } else {
-        await BackendApiClient.instance.createRaw('/fees/structures', payload);
+        await BackendApiClient.instance.createFeeStructure(
+          academicYearId: _selectedYearId,
+          gradeId: _selectedGradeId,
+          sectionId: _selectedSectionId,
+          feeCategoryId: _selectedCategoryId,
+          amount: double.parse(_amountController.text),
+          dueDay: int.parse(_dueDayController.text),
+          lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
+          installmentCount: _selectedInstallmentCount,
+          replaceExisting: _replaceExisting,
+        );
       }
       if (!mounted) return;
       Navigator.pop(
         context,
         AdminFeeStructureFormResult(
           widget.args.isEditing
-              ? 'Fee structure update submitted for Principal approval'
+              ? 'Fee structure saved'
               : _replaceExisting
               ? 'Existing class fee structure replaced with the new setup'
-              : 'Fee structure request submitted for Principal approval',
+              : 'Fee structure created',
         ),
       );
     } catch (error) {
@@ -507,6 +540,11 @@ class _AdminFeeStructureFormScreenState
     );
     return confirmed == true;
   }
+
+  List<SectionModel> get _structureSectionOptions =>
+      widget.args.sections.where((section) {
+        return section.gradeId == _selectedGradeId;
+      }).toList()..sort((a, b) => a.sectionName.compareTo(b.sectionName));
 }
 
 class AdminInvoiceGenerationFormScreen extends StatefulWidget {
@@ -610,7 +648,7 @@ class _AdminInvoiceGenerationFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Submit Fee Invoice Request',
+      title: 'Generate Invoices',
       subtitle: 'Prepare term-wise invoices for a class, section, or student',
       drawer: _financeDrawer(widget.args.ownerRole),
       floatingActionButton: DashboardFabWidget(
@@ -645,9 +683,7 @@ class _AdminInvoiceGenerationFormScreenState
                       )
                     : const Icon(Icons.receipt_long_rounded, size: 18),
                 label: Text(
-                  _generating
-                      ? 'Submitting...'
-                      : 'Submit Invoices for Approval',
+                  _generating ? 'Generating...' : 'Generate Invoices',
                 ),
               ),
             ],
@@ -1065,8 +1101,8 @@ class _AdminPaymentRecordFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Submit Payment Request',
-      subtitle: 'Prepare a verified payment against an outstanding invoice',
+      title: 'Record Payment',
+      subtitle: 'Record a verified payment against an outstanding invoice',
       drawer: _financeDrawer(widget.args.ownerRole),
       floatingActionButton: DashboardFabWidget(
         role: _dashboardRole(widget.args.ownerRole),
@@ -1099,9 +1135,7 @@ class _AdminPaymentRecordFormScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.payments_rounded, size: 18),
-                label: Text(
-                  _saving ? 'Submitting...' : 'Submit Payment for Approval',
-                ),
+                label: Text(_saving ? 'Saving...' : 'Record Payment'),
               ),
             ],
           ],
