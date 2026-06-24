@@ -12,8 +12,6 @@ class BackendDataService {
   static const String kConcessionRequests = 'principal_concession_requests';
   static const String kTimetable = 'principal_timetable';
   static const String kSubstituteRequests = 'principal_substitute_requests';
-  static const String kExamSchedule = 'principal_exam_schedule';
-  static const String kExamResults = 'principal_exam_results';
   static const String kComplaints = 'principal_complaints';
   static const String kCirculars = 'principal_circulars';
   static const String kNotices = 'principal_notices';
@@ -34,7 +32,6 @@ class BackendDataService {
   static const String kAdminFeeStructures = 'admin_fee_structures';
   static const String kAdminPendingDues = 'admin_pending_dues';
   static const String kAdminRecentPayments = 'admin_recent_payments';
-  static const String kAdminExams = 'admin_exams';
   static const String kAdminSeatings = 'admin_seatings';
   static const String kTeacherAttendance = 'teacher_attendance';
   static const String kTeacherHomework = 'teacher_homework';
@@ -230,31 +227,6 @@ class BackendDataService {
         return await _api.getTimetableSlots();
       case kSubstituteRequests:
         return await _api.getSubstitutions();
-      case kExamSchedule:
-        return (await _api.getRawList(
-          '/exams/schedules',
-        )).map(_principalExamSchedule).toList();
-      case kExamResults:
-        return (await _api.getRawList(
-          '/exams/report-cards',
-        )).map(_principalExamResult).toList();
-      case kAdminExams:
-        return (await _api.getExams())
-            .map(
-              (e) => {
-                'id': e.id,
-                'school_id': e.schoolId,
-                'academic_year_id': e.academicYearId,
-                'term_id': e.termId,
-                'exam_type_id': e.examTypeId,
-                'exam_name': e.examName,
-                'name': e.examName,
-                'start_date': e.startDate,
-                'end_date': e.endDate,
-                'is_published': e.isPublished,
-              },
-            )
-            .toList();
       case kTeacherHomework:
       case kParentHomework:
         return await _api.getRawList('/homework');
@@ -634,96 +606,6 @@ class BackendDataService {
     } else {
       await _api.updateRaw('$path/$id', row);
     }
-  }
-
-  Map<String, dynamic> _principalExamSchedule(Map<String, dynamic> row) {
-    final subject = _asMap(row['subject']);
-    final grade = _asMap(row['grade']);
-    final section = _asMap(row['section']);
-    final room = _asMap(row['room']);
-    final examDate = _dateDayMonth(row['exam_date'] ?? row['date']);
-    final start = '${row['start_time'] ?? row['time'] ?? ''}'.trim();
-    final end = '${row['end_time'] ?? ''}'.trim();
-    return {
-      ...row,
-      'date': examDate,
-      'subject':
-          subject['subject_name'] ??
-          subject['name'] ??
-          row['subject_name'] ??
-          row['subject_id'] ??
-          'Subject pending',
-      'class': [
-        grade['grade_name'] ?? row['grade_name'],
-        section['section_name'] ?? row['section_name'],
-      ].where((part) => '${part ?? ''}'.trim().isNotEmpty).join(' '),
-      'time': end.isEmpty || start.isEmpty ? start : '$start - $end',
-      'duration': '${row['max_marks'] ?? 0} marks',
-      'room':
-          room['room_number'] ??
-          room['room_name'] ??
-          row['room_name'] ??
-          row['room_id'] ??
-          'Not assigned',
-      'status': row['status'] ?? 'scheduled',
-    };
-  }
-
-  Map<String, dynamic> _principalExamResult(Map<String, dynamic> row) {
-    final student = _asMap(row['student']);
-    final enrollment = _asMap(row['enrollment']);
-    final percentage = _numValue(row['percentage'] ?? row['percent']);
-    final totalObtained = _numValue(row['total_obtained']);
-    return {
-      ...row,
-      'name': [
-        student['first_name'],
-        student['last_name'],
-      ].where((part) => '${part ?? ''}'.trim().isNotEmpty).join(' ').trim(),
-      'class': enrollment['section_id'] ?? row['section_id'] ?? '',
-      'roll': enrollment['roll_number'] ?? row['roll_number'] ?? '',
-      'rank': row['class_rank'] ?? row['rank'] ?? 0,
-      'percent': percentage,
-      'grade': row['overall_grade'] ?? row['grade'] ?? '',
-      'math': totalObtained,
-      'science': 0,
-      'english': 0,
-      'hindi': 0,
-      'social': 0,
-    };
-  }
-
-  Map<String, dynamic> _asMap(Object? value) {
-    if (value is Map) return Map<String, dynamic>.from(value);
-    return <String, dynamic>{};
-  }
-
-  num _numValue(Object? value) {
-    if (value is num) return value;
-    return num.tryParse('${value ?? ''}') ?? 0;
-  }
-
-  String _dateDayMonth(Object? value) {
-    final parsed = DateTime.tryParse('${value ?? ''}');
-    if (parsed == null) {
-      final raw = '${value ?? ''}'.trim();
-      return raw.isEmpty ? 'TBD Date' : raw;
-    }
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${parsed.day} ${months[parsed.month - 1]}';
   }
 
   String _dateValue(Object? value, {required bool start}) {

@@ -162,13 +162,6 @@ class _AdminDrawerState extends State<AdminDrawer> {
               route: AppRoutes.principalClasses,
             ),
             SchoolDeskNavigationItem(
-              index: 6,
-              icon: Icons.quiz_outlined,
-              activeIcon: Icons.quiz_rounded,
-              label: SchoolDeskGlossary.exams,
-              route: AppRoutes.principalAcademicInfo,
-            ),
-            SchoolDeskNavigationItem(
               index: 15,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
@@ -294,5 +287,4 @@ class _AdminDrawerState extends State<AdminDrawer> {
     );
   }
 }
-
 

@@ -1,4 +1,4 @@
-/// API contract definitions for the live SchoolDesk REST backend.
+/// API contract definitions for the live Arish Ville REST backend.
 ///
 /// These DTOs intentionally mirror the payloads currently used by
 /// BackendApiClient. They are the safe target model layer for the incremental

@@ -912,7 +912,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         mimeType: 'text/csv',
         title: 'Student Directory CSV',
         subject: 'Student Directory CSV',
-        text: 'Student directory export generated from SchoolDesk.',
+        text: 'Student directory export generated from Arish Ville.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

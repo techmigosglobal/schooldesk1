@@ -263,71 +263,6 @@ func notifyHomeworkCreated(row models.Homework) {
 	}
 }
 
-func createExamScheduleNotifications(row models.ExamSchedule) {
-	scheduleID := strings.TrimSpace(row.ID)
-	if scheduleID == "" {
-		return
-	}
-	var schedule models.ExamSchedule
-	if err := database.DB.
-		Preload("Exam").
-		Preload("Subject").
-		First(&schedule, "id = ?", scheduleID).Error; err == nil {
-		row = schedule
-	}
-	schoolID := ""
-	examName := ""
-	if row.Exam != nil {
-		schoolID = strings.TrimSpace(row.Exam.SchoolID)
-		examName = strings.TrimSpace(row.Exam.ExamName)
-	}
-	if schoolID == "" && strings.TrimSpace(row.ExamID) != "" {
-		var exam models.Exam
-		if err := database.DB.First(&exam, "id = ?", strings.TrimSpace(row.ExamID)).Error; err == nil {
-			schoolID = strings.TrimSpace(exam.SchoolID)
-			examName = strings.TrimSpace(exam.ExamName)
-		}
-	}
-	if schoolID == "" {
-		return
-	}
-	parents, parentErr := parentUsersForSectionTx(database.DB, schoolID, row.SectionID)
-	teachers, teacherErr := teacherUsersForSectionSubjectTx(database.DB, schoolID, row.SectionID, row.SubjectID)
-	users := mergeNotificationUsers(parents, teachers)
-	if (parentErr != nil && teacherErr != nil) || len(users) == 0 {
-		return
-	}
-	title := "Exam schedule published"
-	if examName != "" {
-		title = "Exam: " + examName
-	}
-	subject := ""
-	if row.Subject != nil {
-		subject = strings.TrimSpace(row.Subject.SubjectName)
-	}
-	body := "An exam schedule has been added."
-	if !row.ExamDate.IsZero() {
-		body = "Exam date: " + row.ExamDate.Format("2 Jan 2006") + "."
-	}
-	if subject != "" {
-		body = subject + " - " + body
-	}
-	logs, err := createNotificationLogsForUsersTx(
-		database.DB,
-		schoolID,
-		users,
-		title,
-		body,
-		"exam_reminder",
-		"medium",
-		"exam_schedule",
-		scheduleID,
-	)
-	if err == nil {
-		enqueuePushNotifications(logs)
-	}
-}
-
 func createApprovalRequestedNotificationsTx(tx *gorm.DB, c *gin.Context, referenceID, title, body string) ([]models.NotificationLog, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -964,18 +899,7 @@ func notificationRoute(referenceType, role string) string {
 			return "/teacher-homework-screen"
 		}
 	case "exam", "exam_schedule":
-		if role == "parent" {
-			return "/parent-calendar-screen"
-		}
-		if role == "teacher" {
-			return "/teacher-performance-screen"
-		}
-		if role == "admin" {
-			return "/admin-exams-screen"
-		}
-		if role == "principal" {
-			return "/exams-results-screen"
-		}
+		return "/notification-center-screen"
 	case "event":
 		if role == "parent" {
 			return "/parent-calendar-screen"

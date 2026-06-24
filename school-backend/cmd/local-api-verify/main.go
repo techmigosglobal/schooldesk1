@@ -262,7 +262,6 @@ func (v *verifier) runMutating() {
 	v.runAttendanceFlow()
 	v.runStudentLeaveFlow()
 	v.runTeacherHomeworkFlow()
-	v.runExamScheduleNotificationFlow()
 	v.runReportExportFlow()
 	v.runParentCalendarReadFlow()
 
@@ -582,59 +581,6 @@ func (v *verifier) runTeacherHomeworkFlow() {
 	v.expect("Parent sees reviewed homework submission", http.MethodGet, "/homework/"+v.ids["homework"]+"/submissions?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
 }
 
-func (v *verifier) runExamScheduleNotificationFlow() {
-	if v.tokens["Principal"] == "" || v.tokens["Teacher"] == "" || v.tokens["Parent"] == "" {
-		v.addFail("Exam schedule notification fixture", "local verifier", "Principal/Teacher/Parent", "Principal, Teacher, or Parent token missing")
-		return
-	}
-	if !v.ensureTeacherSubjectAssignment() {
-		return
-	}
-	if v.ids["default_grade"] == "" {
-		_, sections := v.expectAny("Principal reloads section grade for exam schedule", http.MethodGet, "/sections?page_size=1", "Principal", "Principal", nil, http.StatusOK)
-		v.ids["default_grade"] = firstString(sections, "grade_id")
-	}
-	if v.ids["default_grade"] == "" {
-		v.addFail("Exam schedule notification fixture", "local verifier", "Principal", "Missing default grade ID")
-		return
-	}
-	v.expectDataID("Principal creates exam type for schedule notification", http.MethodPost, "/exams/types", "Principal", "Principal", map[string]any{
-		"name":              "Local Docker Exam Type " + v.suffix,
-		"weightage_percent": 10,
-		"is_board_exam":     false,
-	}, http.StatusCreated, "exam_type")
-	if v.ids["exam_type"] == "" {
-		return
-	}
-	v.expectDataID("Principal creates exam for schedule notification", http.MethodPost, "/exams", "Principal", "Principal", map[string]any{
-		"academic_year_id": v.ids["default_year"],
-		"term_id":          v.ids["default_term"],
-		"exam_type_id":     v.ids["exam_type"],
-		"exam_name":        "Local Docker Exam " + v.suffix,
-		"start_date":       "2026-05-30",
-		"end_date":         "2026-05-31",
-	}, http.StatusCreated, "exam")
-	if v.ids["exam"] == "" {
-		return
-	}
-	v.expectDataID("Principal creates exam schedule and notifications", http.MethodPost, "/exams/schedules", "Principal", "Principal", map[string]any{
-		"exam_id":    v.ids["exam"],
-		"grade_id":   v.ids["default_grade"],
-		"section_id": v.ids["default_section"],
-		"subject_id": v.ids["default_subject"],
-		"exam_date":  "2026-05-30",
-		"start_time": "09:00",
-		"end_time":   "10:00",
-		"max_marks":  100,
-		"pass_marks": 35,
-	}, http.StatusCreated, "exam_schedule")
-	if v.ids["exam_schedule"] == "" {
-		return
-	}
-	v.expectNotification("Parent sees exam schedule notification", "Parent", "exam_schedule", v.ids["exam_schedule"])
-	v.expectNotification("Teacher sees exam schedule notification", "Teacher", "exam_schedule", v.ids["exam_schedule"])
-}
-
 func (v *verifier) runStudentLeaveFlow() {
 	if v.tokens["Principal"] == "" || v.tokens["Parent"] == "" || v.ids["payment_student"] == "" {
 		v.addFail("Student leave fixture", "local verifier", "Principal/Parent", "Principal token, Parent token, or linked student ID missing")
@@ -688,11 +634,6 @@ func (v *verifier) runReportExportFlow() {
 		"format":       "pdf",
 		"scope":        "principal",
 	}, http.StatusCreated, "student_report_export")
-	v.expectDataID("Teacher creates report-card export", http.MethodPost, "/exams/report-cards/exports", "Teacher", "Teacher", map[string]any{
-		"report_title": "Local Docker Teacher Report Card",
-		"format":       "pdf",
-		"scope":        "teacher",
-	}, http.StatusCreated, "teacher_report_card_export")
 	v.expect("Parent blocked from general report export", http.MethodPost, "/reports/exports", "Parent", "Parent", map[string]any{
 		"report_title": "Blocked parent export",
 		"format":       "pdf",
@@ -706,7 +647,6 @@ func (v *verifier) runParentCalendarReadFlow() {
 	}
 	v.expect("Parent reads calendar events", http.MethodGet, "/events", "Parent", "Parent", nil, http.StatusOK)
 	v.expect("Parent reads PTM calendar rows", http.MethodGet, "/parent-teacher-meetings", "Parent", "Parent", nil, http.StatusOK)
-	v.expect("Parent reads exam milestones", http.MethodGet, "/exams", "Parent", "Parent", nil, http.StatusOK)
 	_, years := v.expectAny("Parent lists academic years for holidays", http.MethodGet, "/academic-years", "Parent", "Parent", nil, http.StatusOK)
 	yearID := firstID(years)
 	if yearID == "" {

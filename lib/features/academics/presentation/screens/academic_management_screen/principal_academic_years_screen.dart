@@ -1972,7 +1972,7 @@ Future<bool?> _confirmAcademicYearDelete(
     builder: (context) => AlertDialog(
       title: const Text('Delete academic year?'),
       content: Text(
-        'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, exams, or events still use this academic year.',
+        'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, or events still use this academic year.',
       ),
       actions: [
         TextButton(
@@ -2069,7 +2069,7 @@ Future<void> _downloadExportArtifact(
     mimeType: _exportMimeType(format),
     title: title,
     subject: title,
-    text: '$title generated from SchoolDesk.',
+    text: '$title generated from Arish Ville.',
   );
   if (context.mounted) {
     _snack(context, '$title downloaded');

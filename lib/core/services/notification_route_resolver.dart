@@ -104,12 +104,7 @@ class NotificationRouteResolver {
   }
 
   static String _examRouteFor(String role) {
-    return switch (role) {
-      'parent' => AppRoutes.parentAcademicProgress,
-      'teacher' => AppRoutes.teacherReports,
-      'principal' => AppRoutes.reportsAnalytics,
-      _ => AppRoutes.notificationCenter,
-    };
+    return AppRoutes.notificationCenter;
   }
 
   static String _eventRouteFor(String role) {

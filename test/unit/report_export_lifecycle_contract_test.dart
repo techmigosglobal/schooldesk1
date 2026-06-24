@@ -21,16 +21,6 @@ void main() {
     final adminFees = File(
       'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
-    final teacherReports = File(
-      'lib/features/reports/presentation/screens/teacher_reports_screen/teacher_reports_screen.dart',
-    ).readAsStringSync();
-    final parentProgress = File(
-      'lib/features/reports/presentation/screens/parent_academic_progress_screen/parent_academic_progress_screen.dart',
-    ).readAsStringSync();
-    final reportCardGenerator = File(
-      'lib/features/reports/presentation/screens/report_card_generator_screen/report_card_generator_screen.dart',
-    ).readAsStringSync();
-
     final studentOversight = File(
       'lib/features/people/presentation/screens/student_oversight_screen/student_oversight_screen.dart',
     ).readAsStringSync();
@@ -53,15 +43,10 @@ void main() {
       principalReports,
       adminAttendance,
       adminFees,
-      teacherReports,
-      parentProgress,
-      reportCardGenerator,
       studentOversight,
     ]) {
       expect(source, contains('createReportExport('));
     }
-    expect(reportCardGenerator, contains("'/exams/report-cards/exports'"));
-    expect(reportCardGenerator, contains('report_card_bulk'));
     expect(adminReports, isNot(contains('download_done_rounded')));
     expect(adminReports, isNot(contains('exported as \$format successfully')));
 
@@ -79,7 +64,7 @@ void main() {
     expect(main, contains('reportExportHandler.Create("student_reports")'));
     expect(main, contains('reportExportHandler.Create("attendance_reports")'));
     expect(main, contains('reportExportHandler.Create("fee_reports")'));
-    expect(main, contains('reportExportHandler.Create("report_cards")'));
+    expect(main, isNot(contains('reportExportHandler.Create("report_cards")')));
     expect(
       main,
       isNot(contains('NewFrontendRecordHandler("fees/reports/exports")')),

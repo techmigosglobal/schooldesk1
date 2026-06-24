@@ -14,7 +14,7 @@
     {
       "key": "students",
       "label": "Students",
-      "frontend_route": "/admin-students-screen",
+      "frontend_route": "/student-oversight-screen",
       "backend_resource": "student-approvals",
       "entity_type": "student",
       "risk_level": "high",
@@ -44,7 +44,7 @@
     {
       "key": "staff",
       "label": "Staff",
-      "frontend_route": "/admin-teachers-screen",
+      "frontend_route": "/staff-management-screen",
       "backend_resource": "account-approvals",
       "entity_type": "staff",
       "risk_level": "high",
@@ -74,7 +74,7 @@
     {
       "key": "attendance_operations",
       "label": "Attendance operations",
-      "frontend_route": "/admin-attendance-screen",
+      "frontend_route": "/principal-attendance-screen",
       "backend_resource": "approval-requests",
       "entity_type": "attendance",
       "risk_level": "medium",
@@ -104,7 +104,7 @@
     {
       "key": "fees",
       "label": "Fees",
-      "frontend_route": "/admin-fees-screen",
+      "frontend_route": "/fee-monitoring-screen",
       "backend_resource": "approval-requests",
       "entity_type": "fee",
       "risk_level": "high",
@@ -134,7 +134,7 @@
     {
       "key": "timetable",
       "label": "Timetable",
-      "frontend_route": "/admin-timetable-screen",
+      "frontend_route": "/principal-timetable-screen",
       "backend_resource": "approval-requests",
       "entity_type": "timetable",
       "risk_level": "high",
@@ -162,39 +162,9 @@
       }
     },
     {
-      "key": "exams",
-      "label": "Exams",
-      "frontend_route": "/admin-exams-screen",
-      "backend_resource": "approval-requests",
-      "entity_type": "exam",
-      "risk_level": "high",
-      "admin": {
-        "view": true,
-        "create_draft": true,
-        "submit_for_approval": true,
-        "edit_pending_request": true,
-        "cancel_own_pending_request": true,
-        "final_approve": false,
-        "final_reject": false,
-        "direct_publish": false,
-        "delete_active_record": false
-      },
-      "principal": {
-        "view": true,
-        "create_draft": false,
-        "submit_for_approval": false,
-        "edit_pending_request": false,
-        "cancel_own_pending_request": false,
-        "final_approve": true,
-        "final_reject": true,
-        "direct_publish": true,
-        "delete_active_record": true
-      }
-    },
-    {
       "key": "communication",
       "label": "Communication",
-      "frontend_route": "/admin-communication-screen",
+      "frontend_route": "/communication-center-screen",
       "backend_resource": "approval-requests",
       "entity_type": "communication",
       "risk_level": "medium",
@@ -224,7 +194,7 @@
     {
       "key": "helpdesk",
       "label": "Helpdesk",
-      "frontend_route": "/admin-helpdesk-screen",
+      "frontend_route": "/complaint-management-screen",
       "backend_resource": "approval-requests",
       "entity_type": "helpdesk",
       "risk_level": "medium",
@@ -254,7 +224,7 @@
     {
       "key": "documents",
       "label": "Documents",
-      "frontend_route": "/admin-documents-screen",
+      "frontend_route": "/id-card-generation-screen",
       "backend_resource": "approval-requests",
       "entity_type": "document",
       "risk_level": "medium",
@@ -284,7 +254,7 @@
     {
       "key": "user_access",
       "label": "User Access",
-      "frontend_route": "/admin-user-access-screen",
+      "frontend_route": "/principal-user-management-screen",
       "backend_resource": "account-approvals",
       "entity_type": "account",
       "risk_level": "high",
@@ -314,7 +284,7 @@
     {
       "key": "reports",
       "label": "Reports",
-      "frontend_route": "/admin-reports-screen",
+      "frontend_route": "/reports-analytics-screen",
       "backend_resource": "approval-requests",
       "entity_type": "report",
       "risk_level": "low",
@@ -344,7 +314,7 @@
     {
       "key": "academic_info",
       "label": "Academic Info",
-      "frontend_route": "/admin-academic-info-screen",
+      "frontend_route": "/academic-management-screen",
       "backend_resource": "class-approvals",
       "entity_type": "academic_info",
       "risk_level": "high",

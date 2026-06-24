@@ -988,14 +988,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           mimeType: 'text/csv',
           title: title,
           subject: title,
-          text: 'Attendance export generated from SchoolDesk.',
+          text: 'Attendance export generated from Arish Ville.',
         );
       } else {
         final bytes = await PdfService.getInstance().generateAttendanceReport(
           className: _sectionLabel(_selectedSectionId),
           month: DateFormat('dd MMM yyyy').format(DateTime.now()),
           students: rows,
-          schoolName: 'SchoolDesk',
+          schoolName: 'Arish Ville',
         );
         if (!mounted) return;
         await PdfService.getInstance().previewDocument(context, bytes, title);

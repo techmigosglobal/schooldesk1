@@ -15,8 +15,6 @@ class StorageKeys {
   static const String concessionRequests = 'principal_concession_requests';
   static const String timetable = 'principal_timetable';
   static const String substituteRequests = 'principal_substitute_requests';
-  static const String examSchedule = 'principal_exam_schedule';
-  static const String examResults = 'principal_exam_results';
   static const String complaints = 'principal_complaints';
   static const String circulars = 'principal_circulars';
   static const String notices = 'principal_notices';
@@ -40,7 +38,6 @@ class StorageKeys {
   static const String adminFeeStructures = 'admin_fee_structures';
   static const String adminPendingDues = 'admin_pending_dues';
   static const String adminRecentPayments = 'admin_recent_payments';
-  static const String adminExams = 'admin_exams';
   static const String adminSeatings = 'admin_seatings';
 
   // Teacher

@@ -254,7 +254,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       ?..hideCurrentSnackBar()
       ..showSnackBar(
         const SnackBar(
-          content: Text('Press back again to exit SchoolDesk'),
+          content: Text('Press back again to exit Arish Ville'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 2),
         ),

@@ -127,7 +127,7 @@ class _ReceiptBody extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'SchoolDesk',
+                          'Arish Ville',
                           style: GoogleFonts.ibmPlexSans(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,

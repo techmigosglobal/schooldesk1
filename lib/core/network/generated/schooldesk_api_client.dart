@@ -112,42 +112,6 @@ abstract class SchoolDeskApiClient {
     @Body() Map<String, dynamic> payload,
   );
 
-  @GET('/exams')
-  Future<ApiEnvelope> exams(@Queries() Map<String, dynamic>? query);
-
-  @POST('/exams')
-  Future<ApiEnvelope> createExam(@Body() ExamDto payload);
-
-  @PUT('/exams/{id}')
-  Future<ApiEnvelope> updateExam(
-    @Path('id') String id,
-    @Body() ExamDto payload,
-  );
-
-  @PATCH('/exams/{id}/publish')
-  Future<ApiEnvelope> publishExam(
-    @Path('id') String id,
-    @Body() Map<String, dynamic> payload,
-  );
-
-  @GET('/exams/types')
-  Future<ApiEnvelope> examTypes();
-
-  @POST('/exams/schedules')
-  Future<ApiEnvelope> createExamSchedule(@Body() ExamScheduleDto payload);
-
-  @GET('/exams/schedules/{schedule_id}/marks')
-  Future<ApiEnvelope> scheduleMarks(@Path('schedule_id') String scheduleId);
-
-  @POST('/exams/schedules/{schedule_id}/marks')
-  Future<ApiEnvelope> enterMarks(
-    @Path('schedule_id') String scheduleId,
-    @Body() Map<String, dynamic> payload,
-  );
-
-  @GET('/exams/report-cards')
-  Future<ApiEnvelope> reportCards(@Queries() Map<String, dynamic>? query);
-
   @GET('/homework')
   Future<PaginatedEnvelope> homework(@Queries() Map<String, dynamic>? query);
 

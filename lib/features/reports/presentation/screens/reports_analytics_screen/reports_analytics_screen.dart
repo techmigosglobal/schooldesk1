@@ -34,7 +34,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -92,7 +92,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           Tab(text: 'Overview'),
           Tab(text: 'Attendance'),
           Tab(text: 'Fee'),
-          Tab(text: 'Exam'),
           Tab(text: 'Staff'),
         ],
       ),
@@ -109,7 +108,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         _buildOverviewTab(),
         _buildAttendanceTab(),
         _buildFeeTab(),
-        _buildExamTab(),
         _buildStaffTab(),
       ],
     );
@@ -208,13 +206,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             DateFormat('MMMM yyyy').format(DateTime.now()),
             Icons.receipt_long_rounded,
             context.appTheme.secondary,
-          ),
-          const SizedBox(height: 8),
-          _buildReportButton(
-            'Exam Results Report',
-            DateFormat('yyyy').format(DateTime.now()),
-            Icons.quiz_rounded,
-            context.appTheme.info,
           ),
           const SizedBox(height: 8),
           _buildReportButton(
@@ -643,165 +634,6 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildExamTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Exam Performance Report',
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => _showExportDialog('PDF'),
-              icon: const Icon(Icons.download_rounded, size: 14),
-              label: const Text('Export'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildExamClassCard('Class 5-A', 88.0, 32, 30, 2),
-        const SizedBox(height: 8),
-        _buildExamClassCard('Class 7-B', 62.4, 34, 28, 6),
-        const SizedBox(height: 8),
-        _buildExamClassCard('Class 8-B', 58.1, 31, 24, 7),
-        const SizedBox(height: 8),
-        _buildExamClassCard('Class 9-A', 71.3, 29, 26, 3),
-        const SizedBox(height: 8),
-        _buildExamClassCard('Class 10-A', 82.6, 30, 29, 1),
-        const SizedBox(height: 16),
-        Text(
-          'Subject-wise Performance',
-          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 10),
-        _buildSubjectBar('Mathematics', 74),
-        _buildSubjectBar('Science', 71),
-        _buildSubjectBar('English', 82),
-        _buildSubjectBar('Hindi', 78),
-        _buildSubjectBar('Social Studies', 76),
-      ],
-    );
-  }
-
-  Widget _buildExamClassCard(
-    String cls,
-    double avg,
-    int total,
-    int passed,
-    int failed,
-  ) {
-    Color color = avg >= 80
-        ? context.appTheme.success
-        : avg >= 65
-        ? context.appTheme.warning
-        : context.appTheme.error;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: color.withAlpha(25),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Center(
-              child: Text(
-                '${avg.toStringAsFixed(0)}%',
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  cls,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Total: $total · Passed: $passed · Failed: $failed',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '${((passed / total) * 100).toStringAsFixed(0)}% pass',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubjectBar(String subject, int percent) {
-    Color color = percent >= 80
-        ? context.appTheme.success
-        : percent >= 70
-        ? context.appTheme.warning
-        : context.appTheme.error;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(subject, style: GoogleFonts.dmSans(fontSize: 12)),
-          ),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: percent / 100,
-                minHeight: 10,
-                backgroundColor: context.appTheme.surfaceVariant,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '$percent%',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
           ),
         ],
       ),

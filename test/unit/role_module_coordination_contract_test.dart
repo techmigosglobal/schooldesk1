@@ -25,9 +25,9 @@ void main() {
 
       expect(adminTimetable, contains('api.getTimetableSlots()'));
       expect(teacherAttendance, contains('RoleAccessService.teacherStaffId'));
-      expect(teacherAttendance, contains('getTimetableSlots('));
       expect(teacherAttendance, contains('staffId: _staffId'));
       expect(teacherAttendance, contains('getStudentEnrollments(s.id)'));
+      expect(teacherAttendance, contains('getAttendanceSessions('));
       expect(
         teacherAttendance,
         contains('Future<AttendanceSessionModel> _ensureSessionForSave'),
@@ -177,41 +177,19 @@ void main() {
     },
   );
 
-  test(
-    'exam marks coordinate admin entry, parent progress, principal records, and report exports',
-    () {
-      final adminExamForms = File(
-        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart',
-      ).readAsStringSync();
-      final parentProgress = File(
-        'lib/features/reports/presentation/screens/parent_academic_progress_screen/parent_academic_progress_screen.dart',
-      ).readAsStringSync();
-      final backendData = File(
-        'lib/core/services/backend_data_service.dart',
-      ).readAsStringSync();
-      final examHandler = File(
-        'school-backend/internal/handlers/exam.go',
-      ).readAsStringSync();
-      final main = readBackendRouteSources();
+  test('retired exam marks and report-card workflow is no longer routed', () {
+    final backendData = File(
+      'lib/core/services/backend_data_service.dart',
+    ).readAsStringSync();
+    final main = readBackendRouteSources();
 
-      expect(adminExamForms, contains('AdminExamMarksEntryScreen'));
-      expect(
-        adminExamForms,
-        contains("'/exams/schedules/\$_scheduleId/marks'"),
-      );
-      expect(parentProgress, contains("'/students/\$studentId/marks'"));
-      expect(parentProgress, contains("'/exams/report-cards'"));
-      expect(parentProgress, contains("'/exams/report-cards/exports'"));
-      expect(backendData, contains('static const String kExamResults'));
-      expect(backendData, contains('_principalExamResult'));
-      expect(examHandler, contains('func (h *ExamHandler) GetScheduleMarks'));
-      expect(examHandler, contains('func (h *ExamHandler) EnterMarks'));
-      expect(examHandler, contains('validateMarkValue'));
-      expect(main, contains('exams.GET("/schedules/:schedule_id/marks"'));
-      expect(main, contains('exams.POST("/schedules/:schedule_id/marks"'));
-      expect(main, contains('exams.GET("/report-cards/exports"'));
-    },
-  );
+    expect(backendData, isNot(contains('static const String kExamResults')));
+    expect(backendData, isNot(contains('_principalExamResult')));
+    expect(main, isNot(contains('api.Group("/exams")')));
+    expect(main, isNot(contains('exams.GET("/schedules/:schedule_id/marks"')));
+    expect(main, isNot(contains('exams.POST("/schedules/:schedule_id/marks"')));
+    expect(main, isNot(contains('exams.GET("/report-cards/exports"')));
+  });
 
   test(
     'approval workflow coordinates admin requests with principal decision center',
@@ -335,7 +313,7 @@ void main() {
         policyTests,
         contains('TestStudentDashboardCompatIsParentManagedAndLinkedScoped'),
       );
-      expect(verifier, contains('Admin links Parent to fee student'));
+      expect(verifier, contains('Principal links Parent to fee student'));
       expect(verifier, contains('Parent can read linked students'));
       expect(
         verifier,
@@ -345,13 +323,10 @@ void main() {
   );
 
   test(
-    'advanced leave, exam, homework notification, and route-deep-link contracts are connected',
+    'advanced leave, homework notification, retired exam routing, and route-deep-link contracts are connected',
     () {
       final studentLeave = File(
         'school-backend/internal/handlers/student_leave.go',
-      ).readAsStringSync();
-      final exam = File(
-        'school-backend/internal/handlers/exam.go',
       ).readAsStringSync();
       final notifications = File(
         'school-backend/internal/handlers/communication_notifications.go',
@@ -379,13 +354,11 @@ void main() {
       );
       expect(studentLeave, contains('createNotificationLogsForRolesTx'));
       expect(studentLeave, contains('createNotificationLogsForUserIDsTx'));
-      expect(exam, contains('func (h *ExamHandler) CreateExamSchedule'));
-      expect(exam, contains('createExamScheduleNotifications(schedule)'));
       expect(notifications, contains('func notifyHomeworkCreated'));
-      expect(notifications, contains('func createExamScheduleNotifications'));
       expect(notifications, contains('referenceType string'));
       expect(notifications, contains('case "homework"'));
-      expect(notifications, contains('case "exam", "exam_schedule"'));
+      expect(notifications, contains('case "exam", "exam_schedule":'));
+      expect(notifications, contains('return "/notification-center-screen"'));
       expect(routeResolver, contains("'homework' => _homeworkRouteFor(role)"));
       expect(
         routeResolver,
@@ -394,12 +367,15 @@ void main() {
       expect(localVerifier, contains('Parent sees homework notification'));
       expect(
         localVerifier,
-        contains('Admin creates exam schedule and notifications'),
+        isNot(contains('Admin creates exam schedule and notifications')),
       );
-      expect(localVerifier, contains('Parent sees exam schedule notification'));
       expect(
         localVerifier,
-        contains('Teacher sees exam schedule notification'),
+        isNot(contains('Parent sees exam schedule notification')),
+      );
+      expect(
+        localVerifier,
+        isNot(contains('Teacher sees exam schedule notification')),
       );
     },
   );

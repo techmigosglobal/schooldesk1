@@ -34,8 +34,8 @@ class PushNotificationService {
   static const _deviceRegistrationTimeout = Duration(seconds: 5);
   static const _androidChannel = AndroidNotificationChannel(
     'schooldesk_updates',
-    'SchoolDesk updates',
-    description: 'Important SchoolDesk alerts, messages, and reminders.',
+    'Arish Ville updates',
+    description: 'Important Arish Ville alerts, messages, and reminders.',
     importance: Importance.high,
   );
 
@@ -295,7 +295,7 @@ class PushNotificationService {
   Future<void> _handleForeground(RemoteMessage message) async {
     if (!_localNotificationsReady) return;
     final notification = message.notification;
-    final title = notification?.title ?? message.data['title'] ?? 'SchoolDesk';
+    final title = notification?.title ?? message.data['title'] ?? 'Arish Ville';
     final body = notification?.body ?? message.data['body'] ?? '';
     await _localNotifications.show(
       id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,

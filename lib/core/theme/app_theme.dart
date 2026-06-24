@@ -4,7 +4,7 @@ import 'package:schooldesk1/core/widgets/custom_page_transition_builder.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class AppTheme {
-  // SchoolDesk trust palette: calm blue leadership, warm teal support,
+  // Arish Ville trust palette: calm blue leadership, warm teal support,
   // and soft slate surfaces for long operational sessions.
   static const Color primary = Color(0xFF1D4ED8);
   static const Color primaryLight = Color(0xFF60A5FA);

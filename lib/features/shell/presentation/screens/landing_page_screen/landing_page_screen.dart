@@ -257,7 +257,7 @@ class _LandingHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'ArishVille Preschool',
+                  'Arish Ville Preschool',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(

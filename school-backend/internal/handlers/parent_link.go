@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"school-backend/internal/database"
 	"school-backend/internal/models"
@@ -237,22 +236,15 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		HomeworkDueCount            int64   `json:"homework_due_count"`
 		FeeBalance                  float64 `json:"fee_balance"`
 		FeePendingInvoices          int64   `json:"fee_pending_invoices"`
-		UpcomingExamDate            *string `json:"upcoming_exam_date"`
 		PrimaryGuardianName         string  `json:"primary_guardian_name"`
 		PrimaryGuardianRelationship string  `json:"primary_guardian_relationship"`
 		PrimaryGuardianPhone        string  `json:"primary_guardian_phone"`
 		PrimaryGuardianEmail        string  `json:"primary_guardian_email"`
 	}
 
-	dateFunc := "strftime('%Y-%m-%d', MIN(es.exam_date))"
-	if database.DB.Dialector.Name() == "postgres" {
-		dateFunc = "TO_CHAR(MIN(es.exam_date), 'YYYY-MM-DD')"
-	}
-
 	var dbRows []studentRow
-	now := time.Now().UTC()
-	if err := database.DB.Raw(fmt.Sprintf(`
-		SELECT
+	if err := database.DB.Raw(`
+			SELECT
 			students.id AS id,
 			students.first_name AS first_name,
 			students.last_name AS last_name,
@@ -289,16 +281,8 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 				SELECT COUNT(*)
 				FROM fee_invoices fi
 				WHERE fi.student_id = students.id AND fi.status != 'paid'
-			), 0) AS fee_pending_invoices,
-			(
-				SELECT %s
-				FROM exam_schedules es
-				JOIN exams e ON e.id = es.exam_id
-				WHERE e.school_id = parent_student_links.school_id
-				  AND es.section_id = students.current_section_id
-				  AND es.exam_date >= ?
-			) AS upcoming_exam_date,
-			COALESCE((SELECT g.full_name FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_name,
+				), 0) AS fee_pending_invoices,
+				COALESCE((SELECT g.full_name FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_name,
 			COALESCE((SELECT g.relationship FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_relationship,
 			COALESCE((SELECT g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_phone,
 			COALESCE((SELECT g.email FROM guardians g JOIN student_guardians sg ON sg.guardian_id = g.id WHERE sg.student_id = students.id AND sg.is_primary = true LIMIT 1), '') AS primary_guardian_email
@@ -310,7 +294,7 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 		WHERE parent_student_links.school_id = ? 
 		  AND parent_student_links.parent_user_id = ? 
 		  AND students.status != 'inactive'
-	`, dateFunc), now, schoolID, parentUserID).Scan(&dbRows).Error; err != nil {
+			`, schoolID, parentUserID).Scan(&dbRows).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load linked students")
 		return
 	}
@@ -358,7 +342,6 @@ func (h *ParentLinkHandler) GetMyStudents(c *gin.Context) {
 				"status":           feeStatus,
 			},
 			"pending_homework_count": row.HomeworkDueCount,
-			"upcoming_exam_date":     row.UpcomingExamDate,
 			"primary_guardian": gin.H{
 				"full_name":    row.PrimaryGuardianName,
 				"relationship": row.PrimaryGuardianRelationship,

@@ -938,13 +938,9 @@ func TestTeacherStudentSubresourcesRejectOutsideSection(t *testing.T) {
 
 	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
 	studentHandler := NewStudentHandler()
-	aliasHandler := NewOperationalAliasHandler()
 
 	router.GET("/students/:id/attendance", studentHandler.GetStudentAttendance)
 	router.GET("/students/:id/fees", studentHandler.GetStudentFees)
-	router.GET("/students/:id/marks", studentHandler.GetStudentMarks)
-
-	router.GET("/compat/students/:id/marks", aliasHandler.GetStudentGrades)
 
 	for _, tc := range []struct {
 		name string
@@ -952,9 +948,6 @@ func TestTeacherStudentSubresourcesRejectOutsideSection(t *testing.T) {
 	}{
 		{"attendance", "/students/" + f.otherStudentID + "/attendance"},
 		{"fees", "/students/" + f.otherStudentID + "/fees"},
-		{"marks", "/students/" + f.otherStudentID + "/marks"},
-
-		{"compat marks", "/compat/students/" + f.otherStudentID + "/marks"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			response := httptest.NewRecorder()

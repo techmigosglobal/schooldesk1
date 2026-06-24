@@ -1,4 +1,4 @@
-# SchoolDesk — Flutter School Management App
+# Arish Ville — Flutter School Management App
 
 A modern Flutter-based mobile application for school management, supporting four roles: Principal, Admin, Teacher, and Parent.
 
@@ -63,7 +63,7 @@ docker compose -f docker-compose.yml -f docker-compose.observability.yml --profi
 Prometheus is available at `http://127.0.0.1:9090`; Grafana is available at
 `http://127.0.0.1:3000` with `admin` / `schooldesk-admin` unless overridden by
 `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. The provisioned dashboard is
-`SchoolDesk API Overview`.
+`Arish Ville API Overview`.
 
 Verify the full local observability stack:
 
@@ -188,7 +188,7 @@ flutter build ios --release
 
 ## 🧪 Application Testing Workflow
 
-A complete end-to-end testing guide for SchoolDesk across all four roles and their cross-role integrations.
+A complete end-to-end testing guide for Arish Ville across all four roles and their cross-role integrations.
 
 ---
 

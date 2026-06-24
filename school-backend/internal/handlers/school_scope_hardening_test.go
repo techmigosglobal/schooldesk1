@@ -167,30 +167,11 @@ func TestSchoolAcademicAndTermReadsAreSchoolScoped(t *testing.T) {
 	}
 }
 
-func TestExamReportAndTimetableReadsAreSchoolScoped(t *testing.T) {
+func TestTimetableReadsAreSchoolScoped(t *testing.T) {
 	f := setupSchoolScopeFixture(t)
 	adminRouter := scopedPolicyRouter("Admin", "user-policy-admin", "", "", "admin@policy.test", f.schoolID)
-	examHandler := NewExamHandler()
 	timetableHandler := NewTimetableHandler()
-	adminRouter.GET("/exams/report-cards", examHandler.GetReportCards)
-	adminRouter.GET("/exams/:id", examHandler.GetExam)
 	adminRouter.GET("/timetable/section/:section_id", timetableHandler.GetTimetableBySection)
-
-	otherExam := httptest.NewRecorder()
-	adminRouter.ServeHTTP(otherExam, httptest.NewRequest(http.MethodGet, "/exams/"+f.externalExamID, nil))
-	if otherExam.Code != http.StatusNotFound {
-		t.Fatalf("other exam should be hidden, status=%d body=%s", otherExam.Code, otherExam.Body.String())
-	}
-
-	reportCards := httptest.NewRecorder()
-	adminRouter.ServeHTTP(reportCards, httptest.NewRequest(http.MethodGet, "/exams/report-cards", nil))
-	if reportCards.Code != http.StatusOK {
-		t.Fatalf("report cards status=%d body=%s", reportCards.Code, reportCards.Body.String())
-	}
-	rows := decodePolicyList(t, reportCards.Body.String())
-	if len(rows) != 1 || rows[0]["id"] != f.currentReportCardID {
-		t.Fatalf("report cards should include only current school, rows=%v", rows)
-	}
 
 	otherSectionTimetable := httptest.NewRecorder()
 	adminRouter.ServeHTTP(otherSectionTimetable, httptest.NewRequest(http.MethodGet, "/timetable/section/"+f.externalSectionID, nil))
@@ -279,38 +260,6 @@ func TestStaffLeaveIsSchoolAndRoleScoped(t *testing.T) {
 	}
 }
 
-func TestTeacherCannotEnterMarksForUnassignedSchedule(t *testing.T) {
-	f := setupSchoolScopeFixture(t)
-	router := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
-	router.POST("/exams/schedules/:schedule_id/marks", NewExamHandler().EnterMarks)
-
-	denied := httptest.NewRecorder()
-	router.ServeHTTP(
-		denied,
-		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+f.externalExamScheduleID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.externalStudentID+`","enrollment_id":"`+f.externalEnrollmentID+`","marks_obtained":74}]}`)),
-	)
-	if denied.Code != http.StatusNotFound {
-		t.Fatalf("cross-school schedule should be hidden, status=%d body=%s", denied.Code, denied.Body.String())
-	}
-
-	unassignedSchedule := models.ExamSchedule{
-		BaseModel: models.BaseModel{ID: "schedule-scope-unassigned-same-school"},
-		ExamID:    f.currentExamID, GradeID: "grade-policy", SectionID: f.otherSectionID, SubjectID: f.otherSubjectID,
-		ExamDate: time.Date(2026, 5, 17, 9, 0, 0, 0, time.UTC), MaxMarks: 100, PassMarks: 35,
-	}
-	if err := database.DB.Create(&unassignedSchedule).Error; err != nil {
-		t.Fatalf("seed unassigned schedule: %v", err)
-	}
-	forbidden := httptest.NewRecorder()
-	router.ServeHTTP(
-		forbidden,
-		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+unassignedSchedule.ID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.otherStudentID+`","enrollment_id":"`+f.otherEnrollmentID+`","marks_obtained":74}]}`)),
-	)
-	if forbidden.Code != http.StatusForbidden {
-		t.Fatalf("same-school unassigned schedule should be forbidden, status=%d body=%s", forbidden.Code, forbidden.Body.String())
-	}
-}
-
 func TestTeacherLeaveApplicationIsPendingForPrincipalApproval(t *testing.T) {
 	f := setupSchoolScopeFixture(t)
 	handler := NewLeaveHandler()
@@ -358,67 +307,5 @@ func TestTeacherLeaveApplicationIsPendingForPrincipalApproval(t *testing.T) {
 	}
 	if principalNotification.Category != "pending_approval" || principalNotification.Route != "/approval-center-screen" {
 		t.Fatalf("unexpected principal leave notification: %+v", principalNotification)
-	}
-}
-
-func TestAdminExamMarksAreUpsertedAndScheduleMarksReadable(t *testing.T) {
-	f := setupSchoolScopeFixture(t)
-	router := scopedPolicyRouter("Admin", "user-policy-admin", "", "", "admin@policy.test", f.schoolID)
-	handler := NewExamHandler()
-	router.GET("/exams/schedules/:schedule_id/marks", handler.GetScheduleMarks)
-	router.POST("/exams/schedules/:schedule_id/marks", handler.EnterMarks)
-
-	first := httptest.NewRecorder()
-	router.ServeHTTP(
-		first,
-		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+f.currentExamScheduleID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.studentID+`","enrollment_id":"`+f.enrollmentID+`","marks_obtained":74,"grade_label":"B+"}]}`)),
-	)
-	if first.Code != http.StatusOK {
-		t.Fatalf("initial marks save status=%d body=%s", first.Code, first.Body.String())
-	}
-
-	second := httptest.NewRecorder()
-	router.ServeHTTP(
-		second,
-		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+f.currentExamScheduleID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.studentID+`","enrollment_id":"`+f.enrollmentID+`","marks_obtained":88,"grade_label":"A"}]}`)),
-	)
-	if second.Code != http.StatusOK {
-		t.Fatalf("updated marks save status=%d body=%s", second.Code, second.Body.String())
-	}
-
-	var count int64
-	if err := database.DB.Model(&models.StudentMark{}).
-		Where("exam_schedule_id = ? AND student_id = ? AND enrollment_id = ?", f.currentExamScheduleID, f.studentID, f.enrollmentID).
-		Count(&count).Error; err != nil {
-		t.Fatalf("count marks: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected mark update instead of duplicate rows, count=%d", count)
-	}
-	var mark models.StudentMark
-	if err := database.DB.First(&mark, "exam_schedule_id = ? AND student_id = ?", f.currentExamScheduleID, f.studentID).Error; err != nil {
-		t.Fatalf("load saved mark: %v", err)
-	}
-	if mark.MarksObtained != 88 || mark.GradeLabel != "A" {
-		t.Fatalf("expected latest mark to be stored, got marks=%v grade=%q", mark.MarksObtained, mark.GradeLabel)
-	}
-
-	list := httptest.NewRecorder()
-	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/exams/schedules/"+f.currentExamScheduleID+"/marks", nil))
-	if list.Code != http.StatusOK {
-		t.Fatalf("list marks status=%d body=%s", list.Code, list.Body.String())
-	}
-	rows := decodePolicyList(t, list.Body.String())
-	if len(rows) != 1 || rows[0]["student_id"] != f.studentID {
-		t.Fatalf("expected schedule marks to be readable and scoped, rows=%v", rows)
-	}
-
-	tooHigh := httptest.NewRecorder()
-	router.ServeHTTP(
-		tooHigh,
-		httptest.NewRequest(http.MethodPost, "/exams/schedules/"+f.currentExamScheduleID+"/marks", strings.NewReader(`{"marks":[{"student_id":"`+f.studentID+`","enrollment_id":"`+f.enrollmentID+`","marks_obtained":101,"grade_label":"A+"}]}`)),
-	)
-	if tooHigh.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("marks above max should be rejected, status=%d body=%s", tooHigh.Code, tooHigh.Body.String())
 	}
 }

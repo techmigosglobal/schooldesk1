@@ -26,7 +26,6 @@ void main() {
         'attendance_operations',
         'fees',
         'timetable',
-        'exams',
         'communication',
         'helpdesk',
         'documents',

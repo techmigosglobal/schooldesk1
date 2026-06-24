@@ -177,7 +177,7 @@ func (h *PrincipalAcademicCommandHandler) ExamsOverview(c *gin.Context) {
 }
 
 func (h *PrincipalAcademicCommandHandler) SaveExamAction(c *gin.Context) {
-	savePrincipalAction(c, principalExamActionsResource, "principal/exams", "exam_supervision", "Exam action saved", "exam_id")
+	savePrincipalAction(c, principalExamActionsResource, "principal/reports", "exam_supervision", "Exam action saved", "exam_id")
 }
 
 func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
@@ -211,9 +211,8 @@ func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
 		"weak_students": weakStudents,
 		"reports": gin.H{
 			"export_options": []gin.H{
-				{"label": "PDF report cards", "format": "pdf", "route": "/exams/report-cards/exports"},
-				{"label": "Excel analytics", "format": "xlsx", "route": "/exams/report-cards/exports"},
-				{"label": "Comparative performance charts", "format": "pdf", "route": "/reports/exports"},
+				{"label": "Attendance summary", "format": "pdf", "route": "/reports/exports"},
+				{"label": "Student oversight summary", "format": "xlsx", "route": "/student-reports/exports"},
 			},
 			"recent_exports": recentReportExports(schoolID),
 		},
@@ -223,7 +222,7 @@ func (h *PrincipalAcademicCommandHandler) ResultsOverview(c *gin.Context) {
 }
 
 func (h *PrincipalAcademicCommandHandler) SaveResultAction(c *gin.Context) {
-	savePrincipalAction(c, principalResultActionsResource, "principal/results", "result_supervision", "Result action saved", "exam_id")
+	savePrincipalAction(c, principalResultActionsResource, "principal/reports", "result_supervision", "Result action saved", "exam_id")
 }
 
 func principalTimetableSlotQuery(schoolID string) *gorm.DB {
@@ -1239,7 +1238,7 @@ func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluation
 			Title:       "Exam types missing",
 			Message:     "Create exam types before scheduling tests, midterms, or finals.",
 			ActionLabel: "Create exam type",
-			Route:       "principalExams",
+			Route:       "reportsAnalytics",
 			EntityType:  "exam_type",
 			EntityLabel: "Exam readiness",
 			Count:       1,
@@ -1295,7 +1294,7 @@ func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluation
 			Title:       "No exams created",
 			Message:     "Create an exam, then add subject-wise schedules and evaluation tracking.",
 			ActionLabel: "Create exam",
-			Route:       "principalExams",
+			Route:       "reportsAnalytics",
 			EntityType:  "exam",
 			EntityLabel: "Exam workflow",
 			Count:       1,
@@ -1315,7 +1314,7 @@ func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluation
 			Title:       "Exam schedules incomplete",
 			Message:     pluralize(missingSchedules, "exam") + " need subject-wise schedule rows.",
 			ActionLabel: "Schedule exams",
-			Route:       "principalExams",
+			Route:       "reportsAnalytics",
 			EntityType:  "exam",
 			EntityLabel: "Schedule",
 			Count:       missingSchedules,
@@ -1333,7 +1332,7 @@ func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluation
 			Title:       "Marks pending",
 			Message:     pluralize(pendingMarks, "mark entry") + " must be completed before report cards are reliable.",
 			ActionLabel: "Follow up",
-			Route:       "principalExams",
+			Route:       "reportsAnalytics",
 			EntityType:  "exam",
 			EntityLabel: "Evaluation",
 			Count:       pendingMarks,
@@ -1347,7 +1346,7 @@ func examWorkflowGaps(exams []models.Exam, evaluation []gin.H, delayedEvaluation
 			Title:       "Evaluation delayed",
 			Message:     pluralize(int64(len(delayedEvaluations)), "schedule") + " are delayed by more than 72 hours.",
 			ActionLabel: "Escalate",
-			Route:       "principalExams",
+			Route:       "reportsAnalytics",
 			EntityType:  "exam",
 			EntityLabel: "Evaluation",
 			Count:       int64(len(delayedEvaluations)),
@@ -1996,9 +1995,9 @@ func resultsWorkflowGaps(marks []principalResultMarkRow, reportCards []principal
 			Category:    "Results",
 			Severity:    "critical",
 			Title:       "Marks not entered",
-			Message:     "Enter exam marks before report cards, rankings, and progress reports can be generated.",
-			ActionLabel: "Review exams",
-			Route:       "principalExams",
+			Message:     "Academic result workflows are retired. Use attendance, student, and fee reports for operational review.",
+			ActionLabel: "Review reports",
+			Route:       "reportsAnalytics",
 			EntityType:  "result",
 			EntityLabel: "Marks",
 			Count:       1,
@@ -2006,15 +2005,15 @@ func resultsWorkflowGaps(marks []principalResultMarkRow, reportCards []principal
 	}
 	if len(marks) > 0 && len(reportCards) == 0 {
 		gaps = append(gaps, principalOperationalGap{
-			ID:          "results-report-cards-missing",
+			ID:          "legacy-results-found",
 			Category:    "Results",
 			Severity:    "warning",
-			Title:       "Report cards not generated",
-			Message:     "Marks exist, but report cards have not been generated for principal review.",
-			ActionLabel: "Generate report cards",
-			Route:       "principalResults",
+			Title:       "Legacy result records found",
+			Message:     "Legacy marks exist, but result document generation has been retired from the current app.",
+			ActionLabel: "Review reports",
+			Route:       "reportsAnalytics",
 			EntityType:  "result",
-			EntityLabel: "Report cards",
+			EntityLabel: "Legacy results",
 			Count:       1,
 		})
 	}
@@ -2026,7 +2025,7 @@ func resultsWorkflowGaps(marks []principalResultMarkRow, reportCards []principal
 			Title:       "Weak student follow-up needed",
 			Message:     pluralize(int64(len(weakStudents)), "student") + " need academic follow-up from the results workflow.",
 			ActionLabel: "Create follow-up",
-			Route:       "principalResults",
+			Route:       "reportsAnalytics",
 			EntityType:  "result",
 			EntityLabel: "Weak students",
 			Count:       int64(len(weakStudents)),

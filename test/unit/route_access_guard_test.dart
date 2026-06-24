@@ -37,15 +37,18 @@ void main() {
       );
     });
 
-    test('does not treat admin as an authenticated app role', () {
+    test('maps backend admin role to principal app access', () {
       expect(RouteAccessGuard.authenticatedRoles, isNot(contains('admin')));
-      expect(RouteAccessGuard.dashboardForRole('Admin'), isNull);
+      expect(
+        RouteAccessGuard.dashboardForRole('Admin'),
+        AppRoutes.principalDashboard,
+      );
       expect(
         RouteAccessGuard.initialRouteFor(
           isAuthenticated: true,
           currentRole: 'Admin',
         ),
-        AppRoutes.initial,
+        AppRoutes.principalDashboard,
       );
       expect(
         RouteAccessGuard.redirectFor(
@@ -53,7 +56,7 @@ void main() {
           isAuthenticated: true,
           currentRole: 'Admin',
         ),
-        AppRoutes.landingPage,
+        isNull,
       );
     });
 
@@ -128,7 +131,6 @@ void main() {
         AppRoutes.teacherCommunication,
         AppRoutes.teacherLeave,
         AppRoutes.teacherLeaveRequestForm,
-        AppRoutes.teacherReports,
         AppRoutes.teacherDiary,
         AppRoutes.teacherEventPosts,
         AppRoutes.teacherLessonPlanner,

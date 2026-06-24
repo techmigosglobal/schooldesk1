@@ -28,7 +28,7 @@ void main() {
       contains('SchoolDeskApi.instance.client.notifications()'),
     );
     expect(backendApi, contains('SchoolDeskApi.instance.client.events('));
-    expect(backendApi, contains('SchoolDeskApi.instance.client.exams('));
+    expect(backendApi, isNot(contains('SchoolDeskApi.instance.client.exams(')));
     expect(backendApi, contains('listTablesMdRoot('));
     expect(backendApi, contains('createTablesMdRoot('));
     expect(backendApi, contains('updateTablesMdRoot('));

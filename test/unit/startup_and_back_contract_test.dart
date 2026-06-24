@@ -71,7 +71,11 @@ void main() {
     expect(dashboard, contains('PopScope('));
     expect(dashboard, contains('canPop: false'));
     expect(dashboard, contains('SystemNavigator.pop()'));
-    expect(dashboard, contains('Press back again to exit SchoolDesk'));
+    expect(dashboard, contains('Press back again to exit Arish Ville'));
+    expect(
+      File('lib/core/widgets/schooldesk_route_frame.dart').readAsStringSync(),
+      contains('Press back again to exit Arish Ville'),
+    );
     expect(dashboard, isNot(contains('LogoutService')));
     expect(dashboard, isNot(contains('BackendApiClient.instance.logout')));
   });

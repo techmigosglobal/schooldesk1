@@ -403,7 +403,7 @@ class _IntroPanel extends StatelessWidget {
                   'assets/branding/ArishVilleLogo.png',
                   height: 150,
                   fit: BoxFit.contain,
-                  semanticLabel: 'ArishVille Preschool',
+                  semanticLabel: 'Arish Ville Preschool',
                 ),
               ),
               const SizedBox(height: 14),
@@ -416,13 +416,13 @@ class _IntroPanel extends StatelessWidget {
                       width: 54,
                       height: 54,
                       fit: BoxFit.cover,
-                      semanticLabel: 'ArishVille Preschool logo',
+                      semanticLabel: 'Arish Ville Preschool logo',
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'ArishVille Preschool',
+                      'Arish Ville Preschool',
                       style: GoogleFonts.dmSans(
                         fontSize: 18,
                         height: 1.15,

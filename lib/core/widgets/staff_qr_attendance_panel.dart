@@ -153,7 +153,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         mimeType: 'text/csv',
         title: 'Staff QR logs',
         subject: 'Staff QR logs for $date',
-        text: 'Daily staff QR attendance log exported from SchoolDesk.',
+        text: 'Daily staff QR attendance log exported from Arish Ville.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

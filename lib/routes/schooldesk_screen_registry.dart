@@ -315,13 +315,6 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
-      route: '/report-card-generator-screen',
-      title: 'Report Card Generator',
-      module: 'Reports',
-      portal: 'principal',
-      feature: SchoolDeskFeature.reportsExports,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-dashboard-screen',
       title: 'Teacher Dashboard',
       module: 'Overview',
@@ -382,12 +375,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-performance-screen',
-      title: 'Student Performance',
-      module: 'Academics',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-student-notes-screen',
       title: 'Student Notes',
       module: 'Academics',
@@ -425,13 +412,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-reports-screen',
-      title: 'Reports',
-      module: 'Reports',
-      portal: 'teacher',
-      feature: SchoolDeskFeature.reportsExports,
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-diary-screen',
       title: 'Class Diary',
       module: 'Classroom',
@@ -441,12 +421,6 @@ class SchoolDeskScreenRegistry {
       route: '/parent-dashboard-screen',
       title: 'Parent Dashboard',
       module: 'Overview',
-      portal: 'parent',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-academic-progress-screen',
-      title: 'Academic Progress',
-      module: 'Child Academics',
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(

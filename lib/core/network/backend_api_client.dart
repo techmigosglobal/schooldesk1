@@ -25,7 +25,7 @@ part 'api_modules/staff_api.dart';
 part 'api_modules/users_api.dart';
 part 'api_modules/students_api.dart';
 part 'api_modules/attendance_api.dart';
-part 'api_modules/exams_events_api.dart';
+part 'api_modules/events_api.dart';
 part 'api_modules/fees_api.dart';
 part 'api_modules/leave_api.dart';
 part 'api_modules/communications_api.dart';

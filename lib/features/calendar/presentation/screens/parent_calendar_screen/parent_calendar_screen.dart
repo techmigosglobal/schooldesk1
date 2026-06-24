@@ -23,12 +23,11 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   String? _error;
   List<Map<String, dynamic>> _events = [];
   List<Map<String, dynamic>> _holidays = [];
-  List<Map<String, dynamic>> _examDates = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _loadCalendar();
   }
 
@@ -44,7 +43,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       final academicYears = await api.getAcademicYears();
       final events = await api.getEvents();
       final ptms = await api.getRawList('/parent-teacher-meetings');
-      final exams = await api.getExams();
       final holidayRows = <Map<String, dynamic>>[];
       for (final year
           in academicYears.where((year) => year.isCurrent).take(1)) {
@@ -65,7 +63,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
               .map(_holidayFromEvent),
           ...holidayRows.map(_holidayCalendarRow),
         ]..sort(_sortByDate);
-        _examDates = exams.map(_examCalendarRow).toList()..sort(_sortByDate);
         _loading = false;
         _error = null;
       });
@@ -76,7 +73,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
         _error = error.toString();
         _events = [];
         _holidays = [];
-        _examDates = [];
       });
     }
   }
@@ -91,7 +87,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Calendar',
-      subtitle: 'See school events, holidays, and exam milestones',
+      subtitle: 'See school events, holidays, and PTM schedules',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -112,7 +108,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
         tabs: const [
           Tab(text: 'Events'),
           Tab(text: 'Holidays'),
-          Tab(text: 'Exams'),
         ],
       ),
       body: _loading
@@ -122,7 +117,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
               children: [
                 _buildEventsTab(),
                 _buildHolidaysTab(),
-                _buildExamsTab(),
               ],
             ),
     );
@@ -143,15 +137,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       emptyTitle: 'No holidays',
       emptyMessage: 'Published school holidays will appear here.',
       itemBuilder: _holidayCard,
-    );
-  }
-
-  Widget _buildExamsTab() {
-    return _tabList(
-      rows: _examDates,
-      emptyTitle: 'No exams',
-      emptyMessage: 'Published exam milestones will appear here.',
-      itemBuilder: _examCard,
     );
   }
 
@@ -325,58 +310,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     );
   }
 
-  Widget _examCard(Map<String, dynamic> exam) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.appTheme.infoContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              Icons.quiz_rounded,
-              color: context.appTheme.info,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  exam['exam'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  '${exam['date']} | ${exam['time']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: context.appTheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _typeBadge(exam['status'] as String, context.appTheme.info),
-        ],
-      ),
-    );
-  }
-
   Widget _dateBlock(Map<String, dynamic> row, Color color) {
     return Container(
       width: 52,
@@ -487,21 +420,6 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
       'date': range,
       'day': _weekday(start),
       'type': _title(_text(holiday['type'], fallback: 'School')),
-      'dateSort': start,
-    };
-  }
-
-  Map<String, dynamic> _examCalendarRow(ExamModel exam) {
-    final start = _dateTime(exam.startDate);
-    final end = _dateTime(exam.endDate);
-    final range = end == null || _sameDay(start, end)
-        ? _fullDate(start)
-        : '${_fullDate(start)} - ${_fullDate(end)}';
-    return {
-      'exam': exam.examName,
-      'date': range,
-      'time': 'Published window',
-      'status': exam.isPublished ? 'Published' : 'Planned',
       'dateSort': start,
     };
   }

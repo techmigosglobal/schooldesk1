@@ -112,14 +112,12 @@ void main() {
 
         'teacherEventPosts',
         'teacherLessonPlanner',
-        'teacherPerformance',
         'teacherStudentNotes',
         'teacherDiscipline',
         'schoolGallery',
         'teacherCommunication',
         'teacherParentInteraction',
         'teacherLeave',
-        'teacherReports',
         'notificationCenter',
         'profileScreen',
         'settingsScreen',
@@ -131,6 +129,15 @@ void main() {
           reason: '$routeName should be reachable from TeacherDrawer',
         );
       }
+
+      expect(
+        teacherNavigationSource,
+        isNot(contains('AppRoutes.teacherPerformance')),
+      );
+      expect(
+        teacherNavigationSource,
+        isNot(contains('AppRoutes.teacherReports')),
+      );
 
       expect(
         teacherNavigationSource,

@@ -13,7 +13,7 @@ if (self.schoolDeskFirebaseConfig) {
 
   messaging.onBackgroundMessage(function (payload) {
     const notification = payload.notification || {};
-    const title = notification.title || payload.data?.title || "SchoolDesk";
+    const title = notification.title || payload.data?.title || "Arish Ville";
     const options = {
       body: notification.body || payload.data?.body || "",
       icon: "/icons/Icon-192.png",

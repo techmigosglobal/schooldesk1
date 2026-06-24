@@ -205,8 +205,6 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/reports-analytics-screen',
-        '/teacher-reports-screen',
-        '/report-card-generator-screen',
         '/principal-analytics-screen',
       },
     ),

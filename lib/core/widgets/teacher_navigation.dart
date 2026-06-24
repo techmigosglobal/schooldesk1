@@ -177,13 +177,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherLessonPlanner,
             ),
             const SchoolDeskNavigationItem(
-              index: 25,
-              icon: Icons.insights_outlined,
-              activeIcon: Icons.insights_rounded,
-              label: 'Student Performance',
-              route: AppRoutes.teacherPerformance,
-            ),
-            const SchoolDeskNavigationItem(
               index: 27,
               icon: Icons.sticky_note_2_outlined,
               activeIcon: Icons.sticky_note_2_rounded,
@@ -249,13 +242,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               label: 'Leave Requests',
               route: AppRoutes.teacherLeave,
             ),
-            SchoolDeskNavigationItem(
-              index: 12,
-              icon: Icons.bar_chart_outlined,
-              activeIcon: Icons.bar_chart_rounded,
-              label: 'Reports',
-              route: AppRoutes.teacherReports,
-            ),
           ],
         ),
       ],
@@ -297,4 +283,3 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
     );
   }
 }
-

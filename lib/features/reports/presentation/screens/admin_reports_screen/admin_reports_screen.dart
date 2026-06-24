@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -145,72 +144,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
   Widget _buildAllReports() {
     return ListView.separated(
       padding: const EdgeInsets.all(12),
-      itemCount: _reportCategories.length + 1,
+      itemCount: _reportCategories.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, i) {
-        // First item: Report Card Generator banner
-        if (i == 0) {
-          return GestureDetector(
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.reportCardGenerator),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [context.appTheme.primary, context.appTheme.primary.withAlpha(200)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: context.appTheme.surface.withAlpha(30),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Student Report Card Generator',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          'Generate printable report cards with exam results & attendance',
-                          style: GoogleFonts.dmSans(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        final cat = _reportCategories[i - 1];
+        final cat = _reportCategories[i];
         final reports = cat['reports'] as List<Map<String, dynamic>>;
         final c = cat['color'] as Color;
         return Container(

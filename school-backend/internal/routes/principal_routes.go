@@ -87,24 +87,4 @@ func registerPrincipalRoutes(
 		),
 		principalAcademicCommandHandler.SaveTimetableAction,
 	)
-	principal.GET("/exams", principalAcademicCommandHandler.ExamsOverview)
-	principal.POST(
-		"/exams/actions",
-		middleware.RateLimitMiddleware(
-			"principal_exam_action",
-			cfg.RateLimitMaxAPI,
-			time.Duration(cfg.RateLimitWindowSeconds)*time.Second,
-		),
-		principalAcademicCommandHandler.SaveExamAction,
-	)
-	principal.GET("/results", principalAcademicCommandHandler.ResultsOverview)
-	principal.POST(
-		"/results/actions",
-		middleware.RateLimitMiddleware(
-			"principal_result_action",
-			cfg.RateLimitMaxAPI,
-			time.Duration(cfg.RateLimitWindowSeconds)*time.Second,
-		),
-		principalAcademicCommandHandler.SaveResultAction,
-	)
 }

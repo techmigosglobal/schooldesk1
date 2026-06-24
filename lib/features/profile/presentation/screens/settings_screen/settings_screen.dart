@@ -98,7 +98,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       iconColor: context.appTheme.primary,
                       title: 'App Text Size',
                       subtitle:
-                          'Uses SchoolDesk sizing, not the phone display size',
+                          'Uses Arish Ville sizing, not the phone display size',
                       value:
                           _settingsProvider?.getSetting(
                             'font_size',

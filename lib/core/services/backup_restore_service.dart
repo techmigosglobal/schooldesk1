@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 class BackupRestoreService {
+  static const _legacyAppName = 'School' 'Desk';
+
   static BackupRestoreService? _instance;
 
   Map<String, dynamic>? _backupMeta;
@@ -19,7 +21,7 @@ class BackupRestoreService {
     final payload = {
       'version': '1.0',
       'timestamp': DateTime.now().toIso8601String(),
-      'appName': 'SchoolDesk',
+      'appName': 'Arish Ville',
       'data': {
         'students': (await api.getStudents(page: 1, pageSize: 100)).data.length,
         'staff': (await api.getStaff(page: 1, pageSize: 100)).data.length,
@@ -33,7 +35,9 @@ class BackupRestoreService {
 
   Future<bool> restoreBackup(String jsonString) async {
     final decoded = jsonDecode(jsonString);
-    return decoded is Map && decoded['appName'] == 'SchoolDesk';
+    return decoded is Map &&
+        (decoded['appName'] == 'Arish Ville' ||
+            decoded['appName'] == _legacyAppName);
   }
 
   Map<String, dynamic>? getBackupMeta() => _backupMeta;

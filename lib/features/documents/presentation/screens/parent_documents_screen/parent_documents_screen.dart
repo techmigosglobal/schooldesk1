@@ -117,9 +117,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
     });
 
     try {
-      if (docType == 'report_card') {
-        await _generateReportCardPdf(doc);
-      } else if (docType == 'fee_receipt') {
+      if (docType == 'fee_receipt') {
         await _generateFeeReceiptPdf(doc);
       } else {
         // For ID cards and other docs, show a snackbar
@@ -153,52 +151,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
     }
   }
 
-  Future<void> _generateReportCardPdf(Map<String, dynamic> doc) async {
-    final pdfService = PdfService.getInstance();
-    final childName = _activeChildName.isEmpty ? 'Student' : _activeChildName;
-    final className = doc['className'] as String? ?? _activeClassName;
-    final rollNo = doc['rollNo'] as String? ?? '';
-    final examName = doc['examName'] as String? ?? 'Term Exam';
-
-    // Generate subject data based on child
-    final subjects = _buildSubjectData(childName, examName);
-    final totalMarks = subjects.fold(
-      0.0,
-      (sum, s) => sum + (s['maxMarks'] as double),
-    );
-    final obtainedMarks = subjects.fold(
-      0.0,
-      (sum, s) => sum + (s['obtainedMarks'] as double),
-    );
-    final percentage = totalMarks > 0
-        ? (obtainedMarks / totalMarks) * 100
-        : 0.0;
-    final grade = _gradeFromPct(percentage);
-
-    final pdfBytes = await pdfService.generateReportCard(
-      studentName: doc['studentName'] as String? ?? childName,
-      className: className,
-      rollNo: rollNo,
-      examName: examName,
-      academicYear: '2025–26',
-      subjects: subjects,
-      totalMarks: totalMarks,
-      obtainedMarks: obtainedMarks,
-      percentage: percentage,
-      grade: grade,
-      result: percentage >= 40 ? 'PASS' : 'FAIL',
-      attendancePercent: 0,
-      parentName: '',
-      schoolName: '',
-      schoolAddress: '',
-    );
-
-    await Printing.layoutPdf(
-      onLayout: (_) async => Uint8List.fromList(pdfBytes),
-      name: 'ReportCard_${childName}_$examName',
-    );
-  }
-
   Future<void> _generateFeeReceiptPdf(Map<String, dynamic> doc) async {
     final pdfService = PdfService.getInstance();
     final childName = _activeChildName.isEmpty ? 'Student' : _activeChildName;
@@ -227,23 +179,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
       onLayout: (_) async => Uint8List.fromList(pdfBytes),
       name: 'FeeReceipt_${childName}_$termLabel',
     );
-  }
-
-  List<Map<String, dynamic>> _buildSubjectData(
-    String childName,
-    String examName,
-  ) {
-    return const [];
-  }
-
-  String _gradeFromPct(double pct) {
-    if (pct >= 90) return 'A+';
-    if (pct >= 80) return 'A';
-    if (pct >= 70) return 'B+';
-    if (pct >= 60) return 'B';
-    if (pct >= 50) return 'C';
-    if (pct >= 40) return 'D';
-    return 'F';
   }
 
   @override
@@ -363,9 +298,8 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
         final doc = _availableDocs[i];
         final isGenerating =
             _generatingPdf && _generatingDocName == doc['name'];
-        final isReportCard = doc['docType'] == 'report_card';
         final isFeeReceipt = doc['docType'] == 'fee_receipt';
-        final canGenerate = isReportCard || isFeeReceipt;
+        final canGenerate = isFeeReceipt;
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
@@ -411,7 +345,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                     ),
                     if (canGenerate)
                       Text(
-                        isReportCard ? 'PDF will be generated' : 'PDF receipt',
+                        'PDF receipt',
                         style: GoogleFonts.dmSans(
                           fontSize: 10,
                           color: context.appTheme.primary,

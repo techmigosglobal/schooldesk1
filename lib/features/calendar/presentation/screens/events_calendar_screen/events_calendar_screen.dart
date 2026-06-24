@@ -3048,15 +3048,15 @@ abstract final class _SchoolCalendarData {
       type: 'academic',
     ),
     _c(
-      'Annual Exam Results',
+      'Annual Academic Review',
       '2027-04-01',
-      desc: 'Annual examination results declaration',
+      desc: 'Annual academic year review and planning',
       type: 'academic',
     ),
     _c(
-      'Final PTM / Report Cards',
+      'Final PTM',
       '2027-04-10',
-      desc: 'Final Parent-Teacher Meeting & report card distribution',
+      desc: 'Final Parent-Teacher Meeting',
       type: 'academic',
     ),
 

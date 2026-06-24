@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,7 +46,6 @@ type parentChildSummary struct {
 	AttendancePct     float64 `json:"attendance_pct"`
 	HomeworkDueCount  int64   `json:"homework_due"`
 	ClassTeacherName  string  `json:"class_teacher_name"`
-	NextExamDate      *string `json:"next_exam_date"`
 }
 
 type principalOperationalGap struct {
@@ -82,7 +80,6 @@ func (h *DashboardHandler) Admin(c *gin.Context) {
 		TodaySessions     int64   `json:"today_sessions"`
 		TodayPresent      int64   `json:"today_present"`
 		TodayMarked       int64   `json:"today_marked"`
-		UpcomingExams     int64   `json:"upcoming_exams"`
 		OpenConversations int64   `json:"open_conversations"`
 	}
 	todayStart, todayEnd := dayRange(time.Now())
@@ -103,9 +100,8 @@ func (h *DashboardHandler) Admin(c *gin.Context) {
 			(SELECT COUNT(*) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?) AS today_sessions,
 			COALESCE((SELECT SUM(attendance_sessions.present_count) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_present,
 			COALESCE((SELECT SUM(attendance_sessions.total_students) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_marked,
-			(SELECT COUNT(*) FROM exams WHERE school_id = ? AND start_date >= ?) AS upcoming_exams,
 			(SELECT COUNT(*) FROM message_conversations WHERE school_id = ?) AS open_conversations
-	`, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID, todayStart, schoolID).Scan(&row).Error; err != nil {
+	`, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID).Scan(&row).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load admin dashboard")
 		return
 	}
@@ -117,7 +113,6 @@ func (h *DashboardHandler) Admin(c *gin.Context) {
 			"classes":            row.TotalClasses,
 			"pending_approvals":  row.PendingApprovals,
 			"unread_alerts":      row.UnreadAlerts,
-			"upcoming_exams":     row.UpcomingExams,
 			"open_conversations": row.OpenConversations,
 		},
 		"fees":             buildFeeSummary(row.TotalInvoiced, row.TotalPaid, row.TotalBalance, row.PendingInvoices, row.PaidInvoices),
@@ -134,7 +129,6 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 		PendingApprovals int64   `json:"pending_approvals"`
 		UrgentNotices    int64   `json:"urgent_notices"`
 		UpcomingEvents   int64   `json:"upcoming_events"`
-		UpcomingExams    int64   `json:"upcoming_exams"`
 		TotalInvoiced    float64 `json:"total_invoiced"`
 		TotalPaid        float64 `json:"total_paid"`
 		TotalBalance     float64 `json:"total_balance"`
@@ -152,7 +146,6 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 				(SELECT COUNT(*) FROM sections JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ?) AS total_classes,
 				(SELECT COUNT(*) FROM announcements WHERE school_id = ? AND is_urgent = true) AS urgent_notices,
 				(SELECT COUNT(*) FROM events WHERE school_id = ? AND start_date >= date(?)) AS upcoming_events,
-				(SELECT COUNT(*) FROM exams WHERE school_id = ? AND start_date >= ?) AS upcoming_exams,
 			COALESCE((SELECT SUM(fee_invoices.payable_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_invoiced,
 			COALESCE((SELECT SUM(fee_invoices.paid_amount) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_paid,
 			COALESCE((SELECT SUM(fee_invoices.balance) FROM fee_invoices JOIN students ON students.id = fee_invoices.student_id WHERE students.school_id = ? AND students.status != 'inactive'), 0) AS total_balance,
@@ -161,7 +154,7 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 				(SELECT COUNT(*) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?) AS today_sessions,
 				COALESCE((SELECT SUM(attendance_sessions.present_count) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_present,
 				COALESCE((SELECT SUM(attendance_sessions.total_students) FROM attendance_sessions JOIN sections ON sections.id = attendance_sessions.section_id JOIN grades ON grades.id = sections.grade_id WHERE grades.school_id = ? AND attendance_sessions.date >= ? AND attendance_sessions.date < ?), 0) AS today_marked
-		`, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, schoolID, todayStart, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd).Scan(&row).Error; err != nil {
+		`, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, schoolID, schoolID, schoolID, schoolID, schoolID, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd, schoolID, todayStart, todayEnd).Scan(&row).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load principal dashboard")
 		return
 	}
@@ -186,7 +179,6 @@ func (h *DashboardHandler) Principal(c *gin.Context) {
 			"operational_gaps":  len(operationalGaps),
 			"urgent_notices":    row.UrgentNotices,
 			"upcoming_events":   row.UpcomingEvents,
-			"upcoming_exams":    row.UpcomingExams,
 		},
 		"fees":             buildFeeSummary(row.TotalInvoiced, row.TotalPaid, row.TotalBalance, row.PendingInvoices, row.PaidInvoices),
 		"today_attendance": buildAttendanceSummary(row.TodayPresent, row.TodayMarked, row.TodaySessions),
@@ -215,9 +207,6 @@ func principalOperationalGaps(schoolID string, todayStart, todayEnd time.Time) (
 		return nil, err
 	}
 	if err := appendUnassignedTeacherGaps(&gaps, schoolID); err != nil {
-		return nil, err
-	}
-	if err := appendExamScheduleGaps(&gaps, schoolID, todayStart); err != nil {
 		return nil, err
 	}
 	if err := appendTodayAttendanceGaps(&gaps, schoolID, todayStart, todayEnd); err != nil {
@@ -545,47 +534,6 @@ func appendUnassignedTeacherGaps(gaps *[]principalOperationalGap, schoolID strin
 	return nil
 }
 
-func appendExamScheduleGaps(gaps *[]principalOperationalGap, schoolID string, todayStart time.Time) error {
-	var rows []struct {
-		ExamID   string
-		ExamName string
-		Count    int64
-	}
-	if err := database.DB.Raw(`
-		SELECT exams.id AS exam_id,
-			exams.exam_name AS exam_name,
-			1 AS count
-		FROM exams
-		WHERE exams.school_id = ?
-			AND exams.start_date >= ?
-			AND NOT EXISTS (
-				SELECT 1 FROM exam_schedules
-				WHERE exam_schedules.exam_id = exams.id
-			)
-		ORDER BY exams.start_date ASC
-		LIMIT 4
-	`, schoolID, todayStart).Scan(&rows).Error; err != nil {
-		return err
-	}
-	for _, row := range rows {
-		label := firstNonEmpty(strings.TrimSpace(row.ExamName), "Upcoming exam")
-		*gaps = append(*gaps, principalOperationalGap{
-			ID:          "missing-exam-schedule:" + row.ExamID,
-			Category:    "Exams",
-			Severity:    "warning",
-			Title:       "Exam schedule incomplete",
-			Message:     label + " has no subject schedule yet.",
-			ActionLabel: "Review exams",
-			Route:       "principalExams",
-			EntityType:  "exam",
-			EntityID:    row.ExamID,
-			EntityLabel: label,
-			Count:       1,
-		})
-	}
-	return nil
-}
-
 func appendTodayAttendanceGaps(gaps *[]principalOperationalGap, schoolID string, todayStart, todayEnd time.Time) error {
 	dayOfWeek := int(todayStart.Weekday())
 	if dayOfWeek == 0 {
@@ -807,13 +755,15 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 		UnreadMessages    int64   `json:"unread_messages"`
 	}
 	if err := database.DB.Raw(`
-		WITH linked_students AS (
-			SELECT parent_student_links.student_id
-			FROM parent_student_links
-			JOIN students ON students.id = parent_student_links.student_id
-			WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ?
-				AND students.status != 'inactive'
-		)
+			WITH linked_students AS (
+				SELECT parent_student_links.student_id
+				FROM parent_student_links
+				JOIN students
+					ON students.id = parent_student_links.student_id
+					AND students.school_id = parent_student_links.school_id
+				WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ?
+					AND students.status != 'inactive'
+			)
 		SELECT
 			(SELECT COUNT(*) FROM linked_students) AS linked_children,
 			(SELECT COUNT(*) FROM student_attendances WHERE student_id IN (SELECT student_id FROM linked_students) AND LOWER(status) IN ('present', 'late')) AS attendance_present,
@@ -830,14 +780,10 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 	}
 	now := time.Now().UTC()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	dateFunc := "strftime('%Y-%m-%d', MIN(es.exam_date))"
-	if database.DB.Dialector.Name() == "postgres" {
-		dateFunc = "TO_CHAR(MIN(es.exam_date), 'YYYY-MM-DD')"
-	}
 
 	var children []parentChildSummary
-	if err := database.DB.Raw(fmt.Sprintf(`
-		SELECT
+	if err := database.DB.Raw(`
+			SELECT
 			students.id,
 			students.first_name,
 			students.last_name,
@@ -862,27 +808,21 @@ func (h *DashboardHandler) Parent(c *gin.Context) {
 					    AND hs.student_id = students.id
 				  )
 			), 0) AS homework_due,
-			COALESCE((
-				SELECT st.first_name || ' ' || st.last_name
-				FROM sections s
-				JOIN staffs st ON st.id = s.class_teacher_id
-				WHERE s.id = students.current_section_id
-			), '') AS class_teacher_name,
-			(
-				SELECT %s
-				FROM exam_schedules es
-				JOIN exams e ON e.id = es.exam_id
-				WHERE e.school_id = parent_student_links.school_id
-				  AND es.section_id = students.current_section_id
-				  AND es.exam_date >= ?
-			) AS next_exam_date
-		FROM parent_student_links
-		JOIN students ON students.id = parent_student_links.student_id
-		LEFT JOIN fee_invoices ON fee_invoices.student_id = students.id
+				COALESCE((
+					SELECT st.first_name || ' ' || st.last_name
+					FROM sections s
+					JOIN staffs st ON st.id = s.class_teacher_id
+					WHERE s.id = students.current_section_id
+				), '') AS class_teacher_name
+			FROM parent_student_links
+			JOIN students
+				ON students.id = parent_student_links.student_id
+				AND students.school_id = parent_student_links.school_id
+			LEFT JOIN fee_invoices ON fee_invoices.student_id = students.id
 		WHERE parent_student_links.school_id = ? AND parent_student_links.parent_user_id = ? AND students.status != 'inactive'
 		GROUP BY students.id, students.first_name, students.last_name, students.admission_number, students.current_section_id, parent_student_links.school_id
 		ORDER BY students.first_name, students.last_name
-	`, dateFunc), startOfMonth, now, schoolID, userID).Scan(&children).Error; err != nil {
+		`, startOfMonth, schoolID, userID).Scan(&children).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load child summaries")
 		return
 	}

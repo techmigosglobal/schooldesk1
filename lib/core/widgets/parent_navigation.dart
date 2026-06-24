@@ -124,13 +124,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'Child Academics',
           items: [
             SchoolDeskNavigationItem(
-              index: 1,
-              icon: Icons.trending_up_outlined,
-              activeIcon: Icons.trending_up_rounded,
-              label: 'Academic Progress',
-              route: AppRoutes.parentAcademicProgress,
-            ),
-            SchoolDeskNavigationItem(
               index: 2,
               icon: Icons.how_to_reg_outlined,
               activeIcon: Icons.how_to_reg_rounded,

@@ -56,12 +56,12 @@ class SchoolDeskGlossary {
       case 'parent':
         return parent;
       default:
-        return role.trim().isEmpty ? 'SchoolDesk' : role.trim();
+        return role.trim().isEmpty ? 'Arish Ville' : role.trim();
     }
   }
 
   static String portalLabel(String role) {
     final label = roleLabel(role);
-    return label == 'SchoolDesk' ? label : '$label Portal';
+    return label == 'Arish Ville' ? label : '$label Portal';
   }
 }

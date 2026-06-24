@@ -1,11 +1,11 @@
 {
-    "name": "ArishVille Preschool",
-    "short_name": "ArishVille",
+    "name": "Arish Ville Preschool",
+    "short_name": "Arish Ville",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "ArishVille Preschool school operations app.",
+    "description": "Arish Ville Preschool school operations app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

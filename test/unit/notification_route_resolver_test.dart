@@ -44,7 +44,7 @@ void main() {
       expect(target.arguments, 'teacher');
     });
 
-    test('falls back to homework and exam role-safe routes', () {
+    test('falls back to homework and retired exam-safe routes', () {
       final homework = NotificationRouteResolver.resolve(
         data: {'reference_type': 'homework'},
         currentRole: 'parent',
@@ -55,7 +55,8 @@ void main() {
       );
 
       expect(homework.route, AppRoutes.parentHomework);
-      expect(exam.route, AppRoutes.teacherReports);
+      expect(exam.route, AppRoutes.notificationCenter);
+      expect(exam.arguments, 'teacher');
     });
 
     test('routes principal messages to the communication center', () {

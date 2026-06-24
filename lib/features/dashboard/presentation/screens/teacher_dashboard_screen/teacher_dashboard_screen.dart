@@ -576,12 +576,6 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         SchoolDeskUiIllustrations.resources,
         AppRoutes.schoolGallery,
       ),
-      _QuickAction(
-        'Reports',
-        'Daily teaching log',
-        SchoolDeskUiIllustrations.resources,
-        AppRoutes.teacherReports,
-      ),
     ];
     return SchoolDeskResponsiveGrid(
       spacing: 16,

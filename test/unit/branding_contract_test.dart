@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('ArishVille branding is wired across onboarding and app metadata', () {
+  test('Arish Ville branding is wired across onboarding and app metadata', () {
     final landing = File(
       'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
     ).readAsStringSync();
@@ -30,7 +30,7 @@ void main() {
     expect(pubspec, contains('- assets/branding/'));
 
     for (final source in [landing, onboarding]) {
-      expect(source, contains('ArishVille Preschool'));
+      expect(source, contains('Arish Ville Preschool'));
       expect(source, contains('assets/branding/ArishVilleLogo.png'));
       expect(source, contains('assets/branding/techmigos_logo.png'));
       expect(
@@ -45,16 +45,17 @@ void main() {
       expect(source, isNot(contains('assets/images/footer.png')));
     }
     expect(landing, contains('Learn Today, Lead Tomorrow'));
-    expect(landing, isNot(contains('Powered by SchoolDesk')));
+    expect(landing, isNot(contains('Powered by Arish Ville')));
     expect(onboarding, contains('Powered by Techmigos'));
 
     expect(onboarding, contains('assets/branding/ArishVilleLogo.png'));
-    expect(main, contains("title: 'ArishVille Preschool'"));
-    expect(webIndex, contains('<title>ArishVille Preschool</title>'));
-    expect(webManifest, contains('"name": "ArishVille Preschool"'));
-    expect(webManifest, contains('"short_name": "ArishVille"'));
-    expect(androidManifest, contains('android:label="ArishVille"'));
-    expect(iosInfo, contains('<string>ArishVille</string>'));
+    expect(main, contains("title: 'Arish Ville Preschool'"));
+    expect(webIndex, contains('<title>Arish Ville Preschool</title>'));
+    expect(webManifest, contains('"name": "Arish Ville Preschool"'));
+    expect(webManifest, contains('"short_name": "Arish Ville"'));
+    expect(androidManifest, contains('android:label="Arish Ville"'));
+    expect(iosInfo, contains('<string>Arish Ville</string>'));
+    expect(pubspec, contains('name: schooldesk1'));
   });
 
   test('Android splash logo assets are large enough for launch screens', () {
@@ -79,7 +80,7 @@ void main() {
     final android12Style = File(
       'android/app/src/main/res/values-v31/styles.xml',
     ).readAsStringSync();
-    expect(android12Style, contains('@mipmap/launch_image'));
+    expect(android12Style, contains('@drawable/transparent_splash_icon'));
   });
 }
 

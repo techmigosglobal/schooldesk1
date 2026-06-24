@@ -1043,7 +1043,7 @@ void main() {
     expect(settingsScreen, contains('App Text Size'));
     expect(
       settingsScreen,
-      contains('Uses SchoolDesk sizing, not the phone display size'),
+      contains('Uses Arish Ville sizing, not the phone display size'),
     );
     expect(students, contains("_formatStudentDate"));
     expect(students, contains("DateFormat('dd MMM yyyy')"));
@@ -1172,7 +1172,7 @@ void main() {
 
     expect(source, contains('label: SchoolDeskGlossary.timetable'));
     expect(source, contains('label: SchoolDeskGlossary.academicManagement'));
-    expect(source, contains('label: SchoolDeskGlossary.exams'));
+    expect(source, isNot(contains('label: SchoolDeskGlossary.exams')));
     expect(source, contains('label: SchoolDeskGlossary.access'));
     expect(source, isNot(contains('Student Administration')));
     expect(source, isNot(contains('Exam Administration')));
@@ -1236,16 +1236,17 @@ void main() {
   test(
     'principal academics expose academic year setup without broad create workflows',
     () {
-      final exams = File(
-        'lib/features/academics/presentation/screens/exams_results_screen/exams_results_screen.dart',
-      ).readAsStringSync();
       final academics = File(
         'lib/features/academics/presentation/screens/academic_management_screen/academic_management_screen.dart',
       ).readAsStringSync();
       final routes = File('lib/routes/app_routes.dart').readAsStringSync();
 
-      expect(exams, isNot(contains('Add New Exam')));
-      expect(exams, isNot(contains('Save Changes')));
+      expect(
+        File(
+          'lib/features/academics/presentation/screens/exams_results_screen/exams_results_screen.dart',
+        ).existsSync(),
+        isFalse,
+      );
       expect(routes, contains('PrincipalAcademicYearsScreen()'));
       expect(academics, contains('Configure academic years'));
       expect(academics, contains('canManageAcademicYears'));

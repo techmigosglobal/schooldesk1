@@ -20,7 +20,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 	studentHandler := handlers.NewStudentHandler()
 	guardianHandler := handlers.NewGuardianHandler()
 	attendanceHandler := handlers.NewAttendanceHandler()
-	examHandler := handlers.NewExamHandler()
 	feeHandler := handlers.NewFeeHandler()
 	leaveHandler := handlers.NewLeaveHandler()
 	timetableHandler := handlers.NewTimetableHandler()
@@ -240,8 +239,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			students.POST("/enrollments", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), studentHandler.CreateEnrollment)
 			students.GET("/:id/attendance", studentHandler.GetStudentAttendance)
 			students.GET("/:id/fees", studentHandler.GetStudentFees)
-			students.GET("/:id/marks", studentHandler.GetStudentMarks)
-			students.GET("/:id/progress", studentHandler.GetStudentProgress)
 			students.POST("/:id/guardians", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), guardianHandler.LinkGuardianToStudent)
 			students.GET("/:id/guardians", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), guardianHandler.GetGuardiansByStudent)
 		}
@@ -313,30 +310,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			attendance.PUT("/:id", middleware.RBACMiddleware("Principal", "Teacher"), attendanceTable.Update)
 			attendance.PATCH("/:id", middleware.RBACMiddleware("Principal", "Teacher"), attendanceTable.Update)
 			attendance.DELETE("/:id", middleware.RBACMiddleware("Principal"), attendanceTable.Delete)
-		}
-
-		exams := api.Group("/exams")
-		exams.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
-		{
-			exams.GET("/types", examHandler.GetExamTypes)
-			exams.POST("/types", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamType)
-			exams.GET("", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), examHandler.GetExams)
-			exams.GET("/:id", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), examHandler.GetExam)
-			exams.GET("/:id/rankings", middleware.RBACMiddleware("Principal", "Teacher"), examHandler.GetClassRanking)
-			exams.POST("", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExam)
-			exams.PUT("/:id", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.UpdateExam)
-			exams.PATCH("/:id", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.UpdateExam)
-			exams.DELETE("/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.DeleteExam)
-			exams.PATCH("/:id/publish", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.PublishExam)
-			exams.GET("/schedules", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), aliasHandler.ListExamSchedules)
-			exams.POST("/schedules", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.CreateExamSchedule)
-			exams.GET("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Principal", "Teacher"), examHandler.GetScheduleMarks)
-			exams.POST("/schedules/:schedule_id/marks", middleware.RBACMiddleware("Principal", "Teacher"), middleware.RateLimitMiddleware("exam_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), examHandler.EnterMarks)
-			exams.GET("/report-cards", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), examHandler.GetReportCards)
-			exams.GET("/report-cards/exports", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), reportExportHandler.List("report_cards"))
-			exams.POST("/report-cards/exports", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), reportExportHandler.Create("report_cards"))
-			exams.GET("/report-cards/exports/:id", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), reportExportHandler.Get)
-			exams.GET("/grading-scale", examHandler.GetGradingScale)
 		}
 
 		fees := api.Group("/fees")
@@ -565,7 +538,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			me.GET("/profile", middleware.RBACMiddleware("Parent", "Teacher"), parentSelfHandler.GetMyProfile)
 			me.PATCH("/profile", middleware.RBACMiddleware("Parent", "Teacher"), parentSelfHandler.PatchMyProfile)
 			me.GET("/timetable", middleware.RBACMiddleware("Parent"), parentSelfHandler.GetMyChildTimetable)
-			me.GET("/exam-schedule", middleware.RBACMiddleware("Parent"), parentSelfHandler.GetMyChildExamSchedule)
 		}
 
 		teacherGroup := api.Group("/teacher")

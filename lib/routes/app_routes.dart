@@ -22,7 +22,6 @@ import 'package:schooldesk1/features/communication/presentation/screens/event_po
 import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
-import 'package:schooldesk1/features/reports/presentation/screens/report_card_generator_screen/report_card_generator_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 
 class AppRoutes {
@@ -87,7 +86,6 @@ class AppRoutes {
   static const String systemMonitor = '/system-monitor-screen';
 
   static const String idCardGeneration = '/id-card-generation-screen';
-  static const String reportCardGenerator = '/report-card-generator-screen';
 
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
@@ -107,11 +105,9 @@ class AppRoutes {
       '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
-  static const String teacherReports = '/teacher-reports-screen';
   static const String teacherDiary = '/teacher-diary-screen';
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
-  static const String teacherPerformance = '/teacher-performance-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDiscipline = '/teacher-discipline-screen';
 
@@ -121,8 +117,6 @@ class AppRoutes {
   static const String kioskQrAttendance = '/kiosk-qr-attendance-screen';
   static const String parentDashboard = '/parent-dashboard-screen';
   static const String parentAcademicInfo = '/parent-academic-info-screen';
-  static const String parentAcademicProgress =
-      '/parent-academic-progress-screen';
   static const String parentAttendance = '/parent-attendance-screen';
   static const String parentHomework = '/parent-homework-screen';
   static const String parentHomeworkSubmit = '/parent-homework-screen/submit';
@@ -223,7 +217,6 @@ class AppRoutes {
     systemMonitor: (context) => const SystemMonitorScreen(),
 
     idCardGeneration: (context) => const IdCardGenerationScreen(),
-    reportCardGenerator: (context) => const ReportCardGeneratorScreen(),
 
     // Teacher
     teacherLogin: (context) => const AuthLoginScreen(),
@@ -246,11 +239,9 @@ class AppRoutes {
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
-    teacherReports: (context) => const TeacherReportsScreen(),
     teacherDiary: (context) => const TeacherDiaryScreen(),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
-    teacherPerformance: (context) => const TeacherPerformanceScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
     teacherDiscipline: (context) => const TeacherDisciplineScreen(),
     teacherCalendar: (context) =>
@@ -266,7 +257,6 @@ class AppRoutes {
       drawer: ParentDrawer(selectedIndex: 19, onDestinationSelected: (_) {}),
       drawerIndex: 19,
     ),
-    parentAcademicProgress: (context) => const ParentAcademicProgressScreen(),
     parentAttendance: (context) => const ParentAttendanceScreen(),
     parentHomework: (context) => const ParentHomeworkScreen(),
     parentHomeworkSubmit: (context) => ParentHomeworkSubmissionScreen(

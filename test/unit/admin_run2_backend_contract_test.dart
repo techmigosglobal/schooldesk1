@@ -13,34 +13,34 @@ void main() {
     expect(
       main,
       contains(
-        'students.PUT("/:id", middleware.RBACMiddleware("Admin", "Principal")',
+        'students.PUT("/:id", middleware.RBACMiddleware("Principal")',
       ),
     );
     expect(main, contains('studentHandler.UpdateStudent'));
     expect(
       main,
       contains(
-        'students.POST("/enrollments", middleware.RBACMiddleware("Admin", "Principal")',
+        'students.POST("/enrollments", middleware.RBACMiddleware("Principal")',
       ),
     );
     expect(main, contains('studentHandler.CreateEnrollment'));
     expect(
       main,
       contains(
-        'studentApprovals.POST("", middleware.RBACMiddleware("Admin"), middleware.RateLimitMiddleware("student_write"',
+        'studentApprovals.POST("", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write"',
       ),
     );
     expect(
       main,
       contains(
-        'attendance.POST("/staff", middleware.RBACMiddleware("Admin", "Principal")',
+        'attendance.POST("/staff", middleware.RBACMiddleware("Principal")',
       ),
     );
     expect(main, contains('attendanceHandler.MarkStaffAttendance'));
     expect(
       main,
       contains(
-        'fees.POST("/invoices", middleware.RBACMiddleware("Admin", "Principal"), middleware.RateLimitMiddleware("fee_write"',
+        'fees.POST("/invoices", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write"',
       ),
     );
   });
@@ -76,13 +76,13 @@ void main() {
     final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
     final api = readBackendApiSources();
 
-    expect(adminFees, contains('AppRoutes.adminPaymentRequests'));
-    expect(routes, contains('adminPaymentRequests'));
+    expect(adminFees, contains('AppRoutes.principalPaymentRequests'));
+    expect(routes, contains('principalPaymentRequests'));
     expect(routes, contains('AdminPaymentRequestsScreen'));
     expect(routes, contains('AdminPaymentRequestDecisionScreen'));
-    expect(guard, contains('AppRoutes.adminPaymentRequests: {\'admin\'}'));
+    expect(guard, contains('AppRoutes.principalPaymentRequests: {\'principal\'}'));
     expect(requestsScreen, contains('getParentPaymentRequests('));
-    expect(requestsScreen, contains('AppRoutes.adminPaymentRequestDecision'));
+    expect(requestsScreen, contains('AppRoutes.principalPaymentRequestDecision'));
     expect(decisionScreen, contains('decideParentPaymentRequest('));
     expect(
       api,
@@ -105,9 +105,10 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(adminFees, contains('AppRoutes.adminFeeStructureForm'));
-    expect(adminFees, contains('AppRoutes.adminInvoiceGenerationForm'));
-    expect(adminFees, contains('AppRoutes.adminPaymentRecordForm'));
+    expect(adminFees, contains('AppRoutes.academicYearFeesExport'));
+    expect(adminFees, contains('AdminFeeStructureFormArgs'));
+    expect(adminFees, contains('AdminInvoiceGenerationFormArgs'));
+    expect(adminFees, contains('AdminPaymentRecordFormArgs'));
     expect(adminFees, isNot(contains('_showCreateFeeStructureDialog')));
     expect(adminFees, isNot(contains('_showGenerateInvoiceDialog')));
     expect(adminFees, isNot(contains('_showRecordPaymentDialog')));
@@ -120,26 +121,10 @@ void main() {
     expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
     expect(feeForms, contains('recordPayment('));
     expect(feeForms, isNot(contains('showDialog(')));
-    expect(routes, contains('adminFeeStructureForm'));
-    expect(routes, contains('adminInvoiceGenerationForm'));
-    expect(routes, contains('adminPaymentRecordForm'));
-    expect(
-      guard,
-      contains('AppRoutes.adminFeeStructureForm: {\'principal\', \'admin\'}'),
-    );
-    expect(
-      guard,
-      contains(
-        'AppRoutes.adminInvoiceGenerationForm: {\'principal\', \'admin\'}',
-      ),
-    );
-    expect(
-      guard,
-      contains('AppRoutes.adminPaymentRecordForm: {\'principal\', \'admin\'}'),
-    );
-    expect(registry, contains('/admin-fees-screen/structures/form'));
-    expect(registry, contains('/admin-fees-screen/invoices/generate'));
-    expect(registry, contains('/admin-fees-screen/payments/record'));
+    expect(routes, contains('academicYearFeesExport'));
+    expect(routes, contains('AcademicYearFeesExportScreen'));
+    expect(guard, contains('AppRoutes.academicYearFeesExport: {\'principal\'}'));
+    expect(registry, contains('/academic-management-screen/year/fees-export'));
   });
 
   test('parent payment requests use routed input screen without popup form', () {
@@ -169,7 +154,7 @@ void main() {
     expect(guard, contains('AppRoutes.parentPaymentRequestForm: {\'parent\'}'));
     expect(registry, contains('/parent-fees-screen/payment'));
     expect(registry, contains('/parent-fees-screen/payment-selection'));
-    expect(registry, isNot(contains('/parent-fees-screen/payment-processing')));
+    expect(registry, contains('/parent-fees-screen/payment-processing'));
   });
 
   test('principal timetable generation stays on approved backend paths', () {
@@ -240,7 +225,7 @@ void main() {
     expect(academicForms, contains('DropdownButtonFormField<String>'));
     expect(academicForms, contains("'classTeacherId': _teacherId"));
     expect(timetableScreen, contains('classTeacherName'));
-    expect(timetableScreen, contains('Class teacher:'));
+    expect(timetableScreen, contains('Class teacher for all periods'));
     expect(timetableScreen, isNot(contains('gradeId.substring')));
   });
 
@@ -256,80 +241,39 @@ void main() {
     expect(source, contains("'/attendance/reports/exports'"));
   });
 
-  test(
-    'admin exams render backend schedules and avoid fake local-only actions',
-    () {
-      final source = File(
-        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exams_screen.dart',
-      ).readAsStringSync();
-      final forms = File(
-        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart',
-      ).readAsStringSync();
-      final api = readBackendApiSources();
-      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-      final guard = File(
-        'lib/routes/route_access_guard.dart',
-      ).readAsStringSync();
-      final registry = File(
-        'lib/routes/schooldesk_screen_registry.dart',
-      ).readAsStringSync();
-      final main = readBackendRouteSources();
+  test('retired admin exam screens and API routes remain unavailable', () {
+    final api = readBackendApiSources();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
+    final registry = File(
+      'lib/routes/schooldesk_screen_registry.dart',
+    ).readAsStringSync();
+    final main = readBackendRouteSources();
 
-      expect(source, contains("getRawList("));
-      expect(source, contains("'/exams/schedules'"));
-      expect(source, contains('AppRoutes.adminExamForm'));
-      expect(source, contains('AppRoutes.adminExamScheduleForm'));
-      expect(source, contains('getAcademicYears()'));
-      expect(source, contains('getExamTypes()'));
-      expect(source, contains('getGrades()'));
-      expect(source, contains('getSections()'));
-      expect(source, contains("getRawList('/subjects'"));
-      expect(source, contains('setExamPublished('));
-      expect(source, contains('String _classLabelForSchedules('));
-      expect(source, contains('String _formatDate('));
-      expect(source, isNot(contains('_showAddExamDialog')));
-      expect(source, isNot(contains('_showEditExamDialog')));
-      expect(source, isNot(contains('showDialog(')));
-      expect(source, isNot(contains("'Class 5A'")));
-      expect(source, isNot(contains('schedule published')));
-      expect(source, isNot(contains('terms.first')));
-      expect(source, isNot(contains('examTypes.first')));
-      expect(forms, contains('AdminExamFormScreen'));
-      expect(forms, contains('AdminExamScheduleFormScreen'));
-      expect(forms, contains('createExam('));
-      expect(forms, contains('updateExam('));
-      expect(forms, contains("createRaw('/exams/schedules'"));
-      expect(forms, contains("'exam_id': _examId"));
-      expect(forms, contains("'grade_id': _gradeId"));
-      expect(forms, contains("'section_id': _sectionId"));
-      expect(forms, contains("'subject_id': _subjectId"));
-      expect(forms, isNot(contains('showDialog(')));
-      expect(api, contains('Future<void> updateExam('));
-      expect(api, contains('Future<void> setExamPublished('));
-      expect(routes, contains('adminExamForm'));
-      expect(routes, contains('AdminExamFormScreen'));
-      expect(routes, contains('adminExamScheduleForm'));
-      expect(routes, contains('AdminExamScheduleFormScreen'));
-      expect(
-        guard,
-        contains('AppRoutes.adminExamForm: {\'principal\', \'admin\'}'),
-      );
-      expect(
-        guard,
-        contains('AppRoutes.adminExamScheduleForm: {\'principal\', \'admin\'}'),
-      );
-      expect(registry, contains('/admin-exams-screen/form'));
-      expect(registry, contains('/admin-exams-screen/schedule'));
-      expect(main, contains('examHandler.UpdateExam'));
-      expect(main, contains('examHandler.PublishExam'));
-      expect(source, contains('_AdminExamTypeFormPage'));
-      expect(source, contains("createRaw('/exams/types'"));
-      expect(source, contains("getRawList('/exams/report-cards'"));
-      expect(source, isNot(contains('Seating plan API is not exposed yet')));
-      expect(
-        source,
-        isNot(contains('Hall ticket generation API is not exposed yet')),
-      );
-    },
-  );
+    expect(
+      File(
+        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exams_screen.dart',
+      ).existsSync(),
+      isFalse,
+    );
+    expect(
+      File(
+        'lib/features/academics/presentation/screens/admin_exams_screen/admin_exam_form_screens.dart',
+      ).existsSync(),
+      isFalse,
+    );
+    expect(api, isNot(contains('Future<void> updateExam(')));
+    expect(api, isNot(contains('Future<void> setExamPublished(')));
+    expect(routes, isNot(contains('adminExamForm')));
+    expect(routes, isNot(contains('AdminExamFormScreen')));
+    expect(routes, isNot(contains('adminExamScheduleForm')));
+    expect(routes, isNot(contains('AdminExamScheduleFormScreen')));
+    expect(guard, isNot(contains('AppRoutes.adminExamForm')));
+    expect(guard, isNot(contains('AppRoutes.adminExamScheduleForm')));
+    expect(registry, isNot(contains('/admin-exams-screen/form')));
+    expect(registry, isNot(contains('/admin-exams-screen/schedule')));
+    expect(main, isNot(contains('examHandler.UpdateExam')));
+    expect(main, isNot(contains('examHandler.PublishExam')));
+    expect(main, isNot(contains('api.Group("/exams")')));
+  });
 }

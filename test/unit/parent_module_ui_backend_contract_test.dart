@@ -12,7 +12,6 @@ void main() {
 
     for (final route in const [
       'parentDashboard',
-      'parentAcademicProgress',
       'parentAttendance',
       'parentHomework',
       'parentHomeworkSubmit',
@@ -49,12 +48,10 @@ void main() {
     final fees = File(
       'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
     ).readAsStringSync();
-    final progress = File(
-      'lib/features/reports/presentation/screens/parent_academic_progress_screen/parent_academic_progress_screen.dart',
-    ).readAsStringSync();
     final leaveForm = File(
       'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_request_form_screen.dart',
     ).readAsStringSync();
+    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
 
     expect(dashboard, contains("api.getDashboard('parent')"));
     expect(dashboard, contains('api.getMyStudents()'));
@@ -65,8 +62,7 @@ void main() {
     expect(homeworkSubmit, contains('submitHomework('));
     expect(fees, contains('getInvoices(studentId: studentId)'));
     expect(fees, contains('getParentPaymentRequests('));
-    expect(progress, contains("'/students/\$studentId/marks'"));
-    expect(progress, contains("'/exams/report-cards'"));
+    expect(routes, isNot(contains('parentAcademicProgress')));
     expect(leaveForm, contains('getLeaveTypes()'));
     expect(leaveForm, isNot(contains('static const _leaveTypes')));
   });

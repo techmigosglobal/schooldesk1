@@ -1447,16 +1447,13 @@ func assistantActionCards(defs []assistantWorkflowDefinition, role string) []gin
 func connectedAssistantCards(role string) []gin.H {
 	principal := strings.EqualFold(role, "principal")
 	attendanceRoute := "/admin-attendance-screen"
-	examsRoute := "/admin-exams-screen"
 	reportsRoute := "/admin-reports-screen"
 	if principal {
 		attendanceRoute = "/principal-attendance-screen"
-		examsRoute = "/principal-exams-screen"
-		reportsRoute = "/principal-results-screen"
+		reportsRoute = "/reports-analytics-screen"
 	}
 	return []gin.H{
 		{"title": "Attendance", "workflow_type": "attendance", "category": "Connected ERP", "target_route": attendanceRoute},
-		{"title": "Exams", "workflow_type": "exams", "category": "Connected ERP", "target_route": examsRoute},
 		{"title": "Notifications", "workflow_type": "notifications", "category": "Connected ERP", "target_route": "/notification-center-screen"},
 		{"title": "Reports", "workflow_type": "reports", "category": "Connected ERP", "target_route": reportsRoute},
 	}

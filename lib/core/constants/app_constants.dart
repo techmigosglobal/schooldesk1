@@ -3,9 +3,9 @@ class AppConstants {
   AppConstants._();
 
   // App Info
-  static const String appName = 'SchoolDesk';
+  static const String appName = 'Arish Ville';
   static const String appVersion = '1.0.0';
-  static const String schoolName = 'Public School';
+  static const String schoolName = 'Arish Ville Preschool';
   static const String schoolTagline = 'Shaping Curious Minds for Tomorrow';
   static const String schoolAddress = 'Hyderabad, Telangana, India';
   static const String schoolPhone = '+91-9876543210';
