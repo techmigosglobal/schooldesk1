@@ -31,8 +31,10 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 		&models.School{},
 		&models.AcademicYear{},
 		&models.Grade{},
+		&models.Section{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
+		&models.FeeInstallment{},
 		&models.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -41,8 +43,9 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	school := models.School{BaseModel: models.BaseModel{ID: "school-fees"}, Name: "Fee School", SchoolType: "cbse"}
 	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-fees"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true}
 	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-fees"}, SchoolID: school.ID, GradeName: "Class 5", GradeNumber: 5}
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-fees"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
 	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-fees"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "monthly"}
-	for _, seed := range []any{&school, &year, &grade, &category} {
+	for _, seed := range []any{&school, &year, &grade, &section, &category} {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed: %v", err)
 		}
@@ -126,7 +129,7 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 		httptest.NewRequest(
 			http.MethodPost,
 			"/fees/structures",
-			strings.NewReader(`{"academic_year_id":"year-fees","grade_id":"grade-fees","fee_category_id":"cat-fees","amount":9000,"due_day":10,"late_fine_per_day":25,"installment_count":4}`),
+			strings.NewReader(`{"academic_year_id":"year-fees","grade_id":"grade-fees","section_id":"section-fees","fee_category_id":"cat-fees","amount":9000,"due_day":10,"late_fine_per_day":25,"installment_count":4,"installment_method":"percentage","effective_from":"2026-06-01","installments":[{"installment_name":"Admission","installment_number":1,"percentage":40,"amount":3600,"due_date":"2026-06-10","status":"upcoming"},{"installment_name":"Term 2","installment_number":2,"percentage":30,"amount":2700,"due_date":"2026-09-10","status":"upcoming"},{"installment_name":"Term 3","installment_number":3,"percentage":30,"amount":2700,"due_date":"2026-12-10","status":"upcoming"}]}`),
 		),
 	)
 	if customInstallments.Code != http.StatusCreated {
@@ -140,6 +143,16 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	}
 	if customBody.Data.InstallmentCount != 4 {
 		t.Fatalf("selected installment_count should be preserved, got %d", customBody.Data.InstallmentCount)
+	}
+	if customBody.Data.SectionID == nil || *customBody.Data.SectionID != section.ID || customBody.Data.InstallmentMethod != "percentage" {
+		t.Fatalf("section and installment method should be preserved, got %+v", customBody.Data)
+	}
+	var installmentRows []models.FeeInstallment
+	if err := db.Where("fee_structure_id = ?", customBody.Data.ID).Order("installment_number").Find(&installmentRows).Error; err != nil {
+		t.Fatalf("load installment rows: %v", err)
+	}
+	if len(installmentRows) != 3 || installmentRows[0].InstallmentName != "Admission" || installmentRows[0].Amount != 3600 {
+		t.Fatalf("installment schedule should be persisted, got %+v", installmentRows)
 	}
 
 	replaceExisting := httptest.NewRecorder()
@@ -199,6 +212,7 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 		&models.Student{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
+		&models.FeeInstallment{},
 		&models.FeeConcession{},
 		&models.FeeInvoice{},
 		&models.FeeInvoiceItem{},
@@ -346,6 +360,66 @@ func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	}
 	if termTwoItem.Amount != 500 {
 		t.Fatalf("selected installment_count should split term tuition into 5 parts, got %.2f", termTwoItem.Amount)
+	}
+
+	if err := db.Create(&models.FeeInstallment{
+		BaseModel:         models.BaseModel{ID: "installment-plan-one"},
+		SchoolID:          school.ID,
+		AcademicYearID:    year.ID,
+		GradeID:           grade.ID,
+		SectionID:         &section.ID,
+		FeeStructureID:    &structures[0].ID,
+		Method:            "custom",
+		InstallmentName:   "Custom June",
+		InstallmentNumber: 1,
+		Amount:            1200,
+		Percentage:        40,
+		DueDate:           time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		Status:            "upcoming",
+	}).Error; err != nil {
+		t.Fatalf("seed scheduled installment: %v", err)
+	}
+	if err := db.Create(&models.FeeInstallment{
+		BaseModel:         models.BaseModel{ID: "installment-plan-two"},
+		SchoolID:          school.ID,
+		AcademicYearID:    year.ID,
+		GradeID:           grade.ID,
+		SectionID:         &section.ID,
+		FeeStructureID:    &structures[1].ID,
+		Method:            "custom",
+		InstallmentName:   "Custom June",
+		InstallmentNumber: 1,
+		Amount:            300,
+		Percentage:        40,
+		DueDate:           time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		Status:            "upcoming",
+	}).Error; err != nil {
+		t.Fatalf("seed scheduled installment: %v", err)
+	}
+	scheduled := httptest.NewRecorder()
+	router.ServeHTTP(
+		scheduled,
+		httptest.NewRequest(
+			http.MethodPost,
+			"/fees/invoices/generate",
+			strings.NewReader(`{"academic_year_id":"year-generate-fees","grade_id":"grade-generate-fees","section_id":"section-generate-fees","invoice_label":"Custom June","due_date":"2026-06-10"}`),
+		),
+	)
+	if scheduled.Code != http.StatusCreated {
+		t.Fatalf("scheduled generate status=%d body=%s", scheduled.Code, scheduled.Body.String())
+	}
+	if err := json.Unmarshal(scheduled.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode scheduled response: %v", err)
+	}
+	if response.Data.Created != 2 {
+		t.Fatalf("expected schedule to create two student invoices, got %+v", response.Data)
+	}
+	var scheduledInvoice models.FeeInvoice
+	if err := db.First(&scheduledInvoice, "student_id = ? AND invoice_number LIKE ?", "student-fee-two", "%CUSTOM-JUNE%").Error; err != nil {
+		t.Fatalf("load scheduled invoice: %v", err)
+	}
+	if scheduledInvoice.TotalAmount != 1500 || !scheduledInvoice.DueDate.Equal(time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("scheduled invoice should use installment rows, got %+v", scheduledInvoice)
 	}
 }
 

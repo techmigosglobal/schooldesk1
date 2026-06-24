@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/intl.dart';
 
@@ -28,6 +29,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   String? _setupError;
   String? _error;
   int _selectedTab = 0;
+  DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
 
   @override
@@ -214,23 +216,49 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3F7FC),
-      body: SafeArea(
-        bottom: false,
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: _buildBody(context),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleDashboardBack();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3F7FC),
+        body: SafeArea(
+          bottom: false,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: _buildBody(context),
+            ),
           ),
         ),
-      ),
-      bottomNavigationBar: _PrincipalBottomBar(
-        selectedIndex: _selectedTab,
-        onSelected: _handleBottomNav,
+        bottomNavigationBar: _PrincipalBottomBar(
+          selectedIndex: _selectedTab,
+          onSelected: _handleBottomNav,
+        ),
       ),
     );
+  }
+
+  void _handleDashboardBack() {
+    final now = DateTime.now();
+    final previous = _lastBackPressedAt;
+    if (previous != null &&
+        now.difference(previous) <= const Duration(seconds: 2)) {
+      SystemNavigator.pop();
+      return;
+    }
+    _lastBackPressedAt = now;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit SchoolDesk'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 2),
+        ),
+      );
   }
 
   Widget _buildBody(BuildContext context) {
@@ -770,7 +798,7 @@ class _PrincipalHomeData {
         ),
         _SetupStep(
           title: 'Fee Structure Setup',
-          route: AppRoutes.principalClasses,
+          route: AppRoutes.feeMonitoring,
           isComplete: hasFees,
         ),
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),

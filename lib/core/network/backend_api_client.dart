@@ -83,7 +83,6 @@ class BackendApiClient {
     if (access != null && access.isNotEmpty) {
       client.setAuthToken(access);
       client.setCurrentRole(await TokenStorageService.getRoleName());
-      await client.restoreStoredSession();
     }
   }
 

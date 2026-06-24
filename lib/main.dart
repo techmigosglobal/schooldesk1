@@ -34,9 +34,6 @@ void main() async {
   };
   await ServiceLocator.initialize();
   EnvConfig.validate();
-  await RoleAccessService.initialize();
-  await PushNotificationService.instance.initialize();
-  unawaited(PushNotificationService.instance.registerDeviceTokenIfPossible());
 
   // Initialize theme provider
   final themeProvider = await ThemeProvider.create();
@@ -72,6 +69,24 @@ void main() async {
       ),
     ),
   );
+  _deferStartupServices();
+}
+
+void _deferStartupServices() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeDeferredStartupServices());
+  });
+}
+
+Future<void> _initializeDeferredStartupServices() async {
+  try {
+    await BackendApiClient.instance.restoreStoredSession();
+    await RoleAccessService.initialize();
+    await PushNotificationService.instance.initialize();
+    await PushNotificationService.instance.registerDeviceTokenIfPossible();
+  } catch (_) {
+    // Startup should not be blocked by optional role hydration or push setup.
+  }
 }
 
 class MyApp extends StatelessWidget {

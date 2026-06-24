@@ -160,7 +160,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           break;
         case 'fees':
         case 'fee_setup':
-          await _openFeesSetup(row);
+          _openFeesModule(row);
           break;
         case 'attendance':
           _openRoute(AppRoutes.principalAttendance, row);
@@ -660,9 +660,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       case 'subjects':
         await _openSubjectSetup(row);
         break;
-      case 'setup_fees':
-        await _openFeesSetup(row);
-        break;
       case 'note':
         await _openInstructionSheet(row);
         break;
@@ -686,14 +683,16 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     if (changed == true) await _load();
   }
 
-  Future<void> _openFeesSetup(Map<String, dynamic> row) async {
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) =>
-            _FeesSetupPage(classRow: row, academicYears: _academicYears),
-      ),
+  void _openFeesModule(Map<String, dynamic> row) {
+    Navigator.pushNamed(
+      context,
+      AppRoutes.feeMonitoring,
+      arguments: {
+        'grade_id': _text(row['grade_id']),
+        'section_id': _text(row['section_id']),
+        'source': 'class_hub',
+      },
     );
-    if (changed == true) await _load();
   }
 
   Future<void> _openInstructionSheet(Map<String, dynamic> row) async {
@@ -1660,10 +1659,6 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                         value: 'subjects',
                         child: Text('Setup subjects'),
                       ),
-                      PopupMenuItem(
-                        value: 'setup_fees',
-                        child: Text('Setup fees'),
-                      ),
                       PopupMenuDivider(),
                       PopupMenuItem(
                         value: 'delete',
@@ -2509,7 +2504,6 @@ class _ClassDetailPage extends StatelessWidget {
               PopupMenuItem(value: 'students', child: Text('Open roster')),
               PopupMenuDivider(),
               PopupMenuItem(value: 'subjects', child: Text('Setup subjects')),
-              PopupMenuItem(value: 'setup_fees', child: Text('Setup fees')),
               PopupMenuDivider(),
               PopupMenuItem(value: 'delete', child: Text('Remove class')),
             ],
@@ -2594,12 +2588,6 @@ class _ClassDetailPage extends StatelessWidget {
                   title: 'Setup subjects',
                   subtitle: 'Assign subjects and teachers for this class',
                   onTap: () => Navigator.pop(context, 'subjects'),
-                ),
-                _ClassActionTile(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Setup fees',
-                  subtitle: 'Create or reuse a fee structure for this class',
-                  onTap: () => Navigator.pop(context, 'setup_fees'),
                 ),
                 _ClassActionTile(
                   icon: Icons.rate_review_outlined,
@@ -3722,7 +3710,6 @@ class _ClassSetupStepRail extends StatelessWidget {
   static const _steps = [
     'Classes setup',
     'Subjects creation and assigning teachers',
-    'Fee setup',
     'Review',
   ];
 

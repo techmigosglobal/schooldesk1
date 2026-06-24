@@ -154,15 +154,28 @@ type CreateEnrollmentRequest struct {
 }
 
 type CreateFeeStructureRequest struct {
-	SchoolID         string  `json:"school_id"`
-	AcademicYearID   string  `json:"academic_year_id" binding:"required"`
-	GradeID          string  `json:"grade_id" binding:"required"`
-	FeeCategoryID    string  `json:"fee_category_id" binding:"required"`
-	Amount           float64 `json:"amount" binding:"required"`
-	DueDay           int     `json:"due_day"`
-	LateFinePerDay   float64 `json:"late_fine_per_day"`
-	InstallmentCount int     `json:"installment_count"`
-	ReplaceExisting  bool    `json:"replace_existing"`
+	SchoolID          string                  `json:"school_id"`
+	AcademicYearID    string                  `json:"academic_year_id" binding:"required"`
+	GradeID           string                  `json:"grade_id" binding:"required"`
+	SectionID         string                  `json:"section_id"`
+	FeeCategoryID     string                  `json:"fee_category_id" binding:"required"`
+	Amount            float64                 `json:"amount" binding:"required"`
+	DueDay            int                     `json:"due_day"`
+	LateFinePerDay    float64                 `json:"late_fine_per_day"`
+	InstallmentCount  int                     `json:"installment_count"`
+	InstallmentMethod string                  `json:"installment_method"`
+	EffectiveFrom     string                  `json:"effective_from"`
+	Installments      []FeeInstallmentRequest `json:"installments"`
+	ReplaceExisting   bool                    `json:"replace_existing"`
+}
+
+type FeeInstallmentRequest struct {
+	InstallmentName   string  `json:"installment_name"`
+	InstallmentNumber int     `json:"installment_number"`
+	Amount            float64 `json:"amount"`
+	Percentage        float64 `json:"percentage"`
+	DueDate           string  `json:"due_date"`
+	Status            string  `json:"status"`
 }
 
 type CreateLeaveApplicationRequest struct {

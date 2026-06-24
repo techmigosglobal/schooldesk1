@@ -138,6 +138,7 @@ extension BackendFeesApi on BackendApiClient {
   Future<List<Map<String, dynamic>>> getFeeStructures({
     String? academicYearId,
     String? gradeId,
+    String? sectionId,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
@@ -146,6 +147,9 @@ extension BackendFeesApi on BackendApiClient {
       }
       if (gradeId != null) {
         queryParams['grade_id'] = gradeId;
+      }
+      if (sectionId != null) {
+        queryParams['section_id'] = sectionId;
       }
       final response = await _dio.get(
         '/fees/structures',
@@ -207,11 +211,15 @@ extension BackendFeesApi on BackendApiClient {
   Future<Map<String, dynamic>> createFeeStructure({
     required String academicYearId,
     required String gradeId,
+    String sectionId = '',
     required String feeCategoryId,
     required double amount,
     int dueDay = 10,
     double lateFinePerDay = 0,
     int installmentCount = 3,
+    String installmentMethod = 'equal',
+    String effectiveFrom = '',
+    List<Map<String, dynamic>> installments = const [],
   }) async {
     try {
       final response = await _dio.post(
@@ -219,11 +227,16 @@ extension BackendFeesApi on BackendApiClient {
         data: {
           'academic_year_id': academicYearId.trim(),
           'grade_id': gradeId.trim(),
+          if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
           'fee_category_id': feeCategoryId.trim(),
           'amount': amount,
           'due_day': dueDay,
           'late_fine_per_day': lateFinePerDay,
           'installment_count': installmentCount,
+          'installment_method': installmentMethod.trim(),
+          if (effectiveFrom.trim().isNotEmpty)
+            'effective_from': effectiveFrom.trim(),
+          if (installments.isNotEmpty) 'installments': installments,
         },
       );
       final data = response.data as Map<String, dynamic>;
@@ -242,16 +255,21 @@ extension BackendFeesApi on BackendApiClient {
     String structureId, {
     String? academicYearId,
     String? gradeId,
+    String? sectionId,
     String? feeCategoryId,
     double? amount,
     int? dueDay,
     double? lateFinePerDay,
     int? installmentCount,
+    String? installmentMethod,
+    String? effectiveFrom,
+    List<Map<String, dynamic>>? installments,
   }) async {
     try {
       final payload = <String, dynamic>{};
       if (academicYearId != null) payload['academic_year_id'] = academicYearId;
       if (gradeId != null) payload['grade_id'] = gradeId;
+      if (sectionId != null) payload['section_id'] = sectionId;
       if (feeCategoryId != null) payload['fee_category_id'] = feeCategoryId;
       if (amount != null) payload['amount'] = amount;
       if (dueDay != null) payload['due_day'] = dueDay;
@@ -260,6 +278,15 @@ extension BackendFeesApi on BackendApiClient {
       }
       if (installmentCount != null) {
         payload['installment_count'] = installmentCount;
+      }
+      if (installmentMethod != null) {
+        payload['installment_method'] = installmentMethod;
+      }
+      if (effectiveFrom != null) {
+        payload['effective_from'] = effectiveFrom;
+      }
+      if (installments != null) {
+        payload['installments'] = installments;
       }
       final response = await _dio.put(
         '/fees/structures/${structureId.trim()}',
@@ -286,6 +313,63 @@ extension BackendFeesApi on BackendApiClient {
       if (data['success'] == true) return;
       throw ServerException(
         message: data['error'] ?? 'Failed to delete fee structure',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updatePaymentConfig({
+    required String upiId,
+    required String payeeName,
+    String merchantCode = '',
+    String qrNote = '',
+    String qrImageUrl = '',
+    bool? upiEnabled,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/fees/payment-config',
+        data: {
+          'upi_id': upiId.trim(),
+          'payee_name': payeeName.trim(),
+          'merchant_code': merchantCode.trim(),
+          'qr_note': qrNote.trim(),
+          'qr_image_url': qrImageUrl.trim(),
+          'upi_enabled':
+              upiEnabled ??
+              (upiId.trim().isNotEmpty || qrImageUrl.trim().isNotEmpty),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to update payment configuration',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadPaymentQr({
+    required String path,
+    required String fileName,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payment-config/qr',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(path, filename: fileName),
+        }),
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to upload payment QR',
       );
     } on DioException catch (e) {
       throw _handleError(e);

@@ -33,8 +33,8 @@ void main() {
           .split('class _FeeIconBadge')
           .first;
 
-      expect(source, contains("title: 'Fees'"));
-      expect(source, contains('View and manage fee information'));
+      expect(source, contains("title: 'Fees Overview'"));
+      expect(source, contains('Class-wise fee structures, payments, and parent QR'));
       expect(source, contains('enum _FeeView'));
       expect(source, contains('_FeeView.home'));
       expect(source, contains('_FeeView.structures'));
@@ -49,13 +49,23 @@ void main() {
       expect(source, contains('Total Fee Structures'));
       expect(source, contains('Total Collections'));
       expect(source, contains('Total Due'));
-      expect(source, contains('Fee Structures'));
-      expect(source, contains('Fee Collection'));
-      expect(source, contains('Outstanding Dues'));
-      expect(source, contains('Fee Reports'));
+      expect(source, contains('Select Class & Section'));
+      expect(source, contains('Active Structure'));
+      expect(source, contains('Collection Progress'));
+      expect(source, contains('Edit Parent QR'));
+      expect(source, contains('Manage Fee Structures'));
+      expect(source, contains('Payments Overview'));
+      expect(source, contains('Student Payments'));
+      expect(source, contains('Installment Plan'));
+      expect(source, contains('Create / Edit Structure'));
       expect(source, contains('Fee Structure Details'));
       expect(source, contains('Fee Components'));
-      expect(source, contains('Go to Classes Hub'));
+      expect(source, contains('Equal Installments'));
+      expect(source, contains('Percentage Division'));
+      expect(source, contains('Custom Amounts'));
+      expect(source, contains('Monthly Payments'));
+      expect(source, contains('Term Wise'));
+      expect(source, contains('One Time Payment'));
       expect(source, contains('Students'));
       expect(source, contains('Fee Ledger'));
       expect(source, contains('Payment Summary'));
@@ -78,6 +88,12 @@ void main() {
       expect(source, contains("'/fees/reports/exports'"));
       expect(source, contains('createReportExport('));
       expect(source, contains('PaymentRequest('));
+      expect(source, contains('_overviewScrollController'));
+      expect(source, contains('_showFeeNavigation'));
+      expect(source, contains('_showClassPicker'));
+      expect(source, contains('_showPaymentQrEditor'));
+      expect(source, contains('updatePaymentConfig('));
+      expect(source, contains('uploadPaymentQr('));
       expect(source, contains('PrincipalShellBottomBar'));
       expect(source, contains('PrincipalDrawer('));
       expect(source, contains('selectedIndex: 7'));
@@ -91,14 +107,17 @@ void main() {
         metricTile,
         isNot(contains('mainAxisAlignment: MainAxisAlignment.spaceBetween')),
       );
-      expect(source, contains('_openClassesHubForFees'));
-      expect(source, contains("class_hub_action': 'fees'"));
-      expect(source, contains("source': 'principal_fees'"));
+      expect(source, isNot(contains('_openClassesHubForFees')));
+      expect(source, isNot(contains("class_hub_action': 'fees'")));
       expect(api, contains('String? academicYearId'));
       expect(api, contains("queryParams['academic_year_id']"));
       expect(api, contains("queryParams['grade_id']"));
       expect(api, contains("queryParams['section_id']"));
       expect(api, contains("queryParams['term_id']"));
+      expect(api, contains('Future<Map<String, dynamic>> updatePaymentConfig'));
+      expect(api, contains('Future<Map<String, dynamic>> uploadPaymentQr'));
+      expect(api, contains("'installment_method'"));
+      expect(api, contains("'installments'"));
       expect(source, isNot(contains('AdminFeeStructureFormScreen')));
       expect(source, isNot(contains('AdminInvoiceGenerationFormScreen')));
       expect(source, isNot(contains("deleteRaw('/fees/structures")));
@@ -150,7 +169,7 @@ void main() {
     expect(screen, contains('Edit Class'));
     expect(screen, contains('Open roster'));
     expect(screen, contains('Setup subjects'));
-    expect(screen, contains('Setup fees'));
+    expect(screen, isNot(contains('Setup fees')));
     expect(screen, isNot(contains("child: Text('Open attendance')")));
     expect(screen, isNot(contains("child: Text('Save note')")));
     expect(screen, isNot(contains("child: Text('Send observation')")));
@@ -162,7 +181,7 @@ void main() {
     expect(screen, contains('Create Class'));
     expect(screen, contains('Classes Setup'));
     expect(screen, contains('Subjects creation and assigning teachers'));
-    expect(screen, contains('Fee setup'));
+    expect(screen, isNot(contains('Fee setup')));
     expect(screen, contains('Review'));
     expect(screen, isNot(contains("value: 'setup_timetable'")));
     expect(screen, isNot(contains("value: 'view_timetables'")));
@@ -196,17 +215,14 @@ void main() {
     expect(screen, isNot(contains('Open timetable')));
     expect(screen, isNot(contains('Save & Publish')));
     expect(screen, isNot(contains('saveTimetableTemplate')));
-    expect(screen, contains('Fees Setup'));
-    expect(screen, contains('Step 4 of 5'));
-    expect(screen, contains('Use Existing Fee Structure'));
-    expect(screen, contains('Create New Fee Structure'));
-    expect(screen, contains('Create Fee Structure'));
-    expect(screen, contains('Structure Details'));
-    expect(screen, contains('Fee Components'));
-    expect(screen, contains('Review Fee Structure'));
-    expect(screen, contains('Save Fee Structures'));
-    expect(screen, contains('Fees Assigned'));
-    expect(screen, contains('Generate Invoices'));
+    expect(screen, isNot(contains("value: 'setup_fees'")));
+    expect(screen, isNot(contains('_openFeesSetup')));
+    expect(screen, contains('_openFeesModule'));
+    final dashboard = File(
+      'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
+    ).readAsStringSync();
+    expect(dashboard, contains("title: 'Fee Structure Setup'"));
+    expect(dashboard, contains('route: AppRoutes.feeMonitoring'));
     expect(screen, contains('Approvals & Notes'));
     expect(screen, contains('PrincipalPreviewBottomNav'));
     expect(screen, contains('principalDirectoryBackground'));
@@ -845,7 +861,7 @@ void main() {
     expect(backend, contains('"principal_role": "supervision"'));
   });
 
-  test('class hub owns subject and fee setup CRUD workflows', () {
+  test('class hub keeps subjects while fees setup moves to fees module', () {
     final screen = File(
       'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
     ).readAsStringSync();
@@ -859,16 +875,19 @@ void main() {
     expect(screen, contains('deleteRaw'));
     expect(screen, contains('updateRaw'));
     expect(screen, contains('/subjects/'));
-    expect(screen, contains('_FeesSetupPage'));
-    expect(screen, contains('createFeeStructure'));
-    expect(screen, contains('updateFeeStructure'));
-    expect(screen, contains('deleteFeeStructure'));
-    expect(screen, contains('generateFeeInvoices'));
-    expect(screen, contains('Generate Invoices'));
-    expect(screen, contains('Back to Class Hub'));
+    expect(screen, isNot(contains("value: 'setup_fees'")));
+    expect(screen, isNot(contains('_openFeesSetup')));
+    expect(screen, contains('_openFeesModule'));
     expect(screen, isNot(contains('Go to Class Dashboard')));
     expect(screen, isNot(contains('Setup Next (Review)')));
 
+    final fees = File(
+      'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
+    ).readAsStringSync();
+    expect(fees, contains('Create / Edit Structure'));
+    expect(fees, contains('createFeeStructure'));
+    expect(fees, contains('updatePaymentConfig'));
+    expect(fees, contains('uploadPaymentQr'));
     expect(client, contains('Future<Map<String, dynamic>> createFeeStructure'));
     expect(client, contains('Future<Map<String, dynamic>> updateFeeStructure'));
     expect(client, contains('Future<void> deleteFeeStructure'));

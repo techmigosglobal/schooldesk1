@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -70,12 +71,23 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   final _paymentAmountController = TextEditingController();
   final _transactionController = TextEditingController();
   final _notesController = TextEditingController();
+  final _overviewScrollController = ScrollController();
+  final _upiIdController = TextEditingController();
+  final _payeeNameController = TextEditingController();
+  final _qrNoteController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
+  bool _savingPaymentConfig = false;
+  bool _uploadingQr = false;
+  bool _showFeeNavigation = false;
+  bool _routeArgsApplied = false;
   String? _error;
   String _query = '';
   String _reportRange = '01 May 2024 - 15 May 2024';
+  String _selectedAcademicYearId = '';
+  String _selectedGradeId = '';
+  String _selectedSectionId = '';
   _FeeView _view = _FeeView.home;
   _FeeStatusFilter _statusFilter = _FeeStatusFilter.all;
   _PaymentMode _selectedPaymentMode = _PaymentMode.onlinePayment;
@@ -87,6 +99,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   List<Map<String, dynamic>> _paymentRequests = const [];
   List<AcademicYearModel> _academicYears = const [];
   List<GradeModel> _grades = const [];
+  List<SectionModel> _sections = const [];
+  Map<String, dynamic> _paymentConfig = const {};
 
   _FeeStructureBundle? _selectedStructure;
   _FeeStudentAccount? _selectedAccount;
@@ -96,7 +110,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   @override
   void initState() {
     super.initState();
+    _overviewScrollController.addListener(_handleOverviewScroll);
     _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_routeArgsApplied) return;
+    _routeArgsApplied = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) {
+      _selectedGradeId = _textValue(args['grade_id'] ?? args['classId']);
+      _selectedSectionId = _textValue(args['section_id'] ?? args['sectionId']);
+    }
   }
 
   @override
@@ -105,7 +132,22 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     _paymentAmountController.dispose();
     _transactionController.dispose();
     _notesController.dispose();
+    _overviewScrollController
+      ..removeListener(_handleOverviewScroll)
+      ..dispose();
+    _upiIdController.dispose();
+    _payeeNameController.dispose();
+    _qrNoteController.dispose();
     super.dispose();
+  }
+
+  void _handleOverviewScroll() {
+    final shouldShow =
+        _overviewScrollController.hasClients &&
+        _overviewScrollController.offset > 280;
+    if (shouldShow != _showFeeNavigation && mounted) {
+      setState(() => _showFeeNavigation = shouldShow);
+    }
   }
 
   Future<void> _loadData() async {
@@ -121,6 +163,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         api.getInvoices(pageSize: 500),
         api.getAcademicYears(),
         api.getGrades(),
+        api.getSections(),
       ]);
 
       final structures = (results[0] as List<Map<String, dynamic>>)
@@ -138,20 +181,37 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       } catch (_) {
         // Payment requests endpoint may not exist yet — fail gracefully.
       }
+      Map<String, dynamic> paymentConfig = const {};
+      try {
+        paymentConfig = await api.getPaymentConfig();
+      } catch (_) {
+        paymentConfig = const {};
+      }
 
       if (!mounted) return;
+      final years = results[2] as List<AcademicYearModel>;
+      final grades = results[3] as List<GradeModel>;
+      final sections = results[4] as List<SectionModel>;
+      final selectedYear = _selectedAcademicYearId.isNotEmpty
+          ? _selectedAcademicYearId
+          : (years.firstWhereOrNull((year) => year.isCurrent)?.id ??
+                (years.isEmpty ? '' : years.first.id));
       setState(() {
         _feeStructures = structures;
         _invoices = invoices;
         _recentPayments = payments;
         _paymentRequests = prList;
-        _academicYears = results[2] as List<AcademicYearModel>;
-        _grades = results[3] as List<GradeModel>;
+        _academicYears = years;
+        _grades = grades;
+        _sections = sections;
+        _paymentConfig = paymentConfig;
+        _selectedAcademicYearId = selectedYear;
         _selectedStructure = _reselectStructure(_selectedStructure);
         _selectedAccount = _reselectAccount(_selectedAccount);
         _selectedInvoice = _reselectInvoice(_selectedInvoice);
         _loading = false;
       });
+      _syncPaymentConfigControllers();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -241,19 +301,122 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   }
 
   Widget _buildHomeView() {
+    final selectedBundle = _selectedOverviewBundle;
     return _FeePage(
+      controller: _overviewScrollController,
       header: _FeeHeader(
-        title: 'Fees',
-        subtitle: 'View and manage fee information',
+        title: 'Fees Overview',
+        subtitle: 'Class-wise fee structures, payments, and parent QR',
         leadingIcon: Icons.menu_rounded,
         onLeading: () => _scaffoldKey.currentState?.openDrawer(),
         trailing: IconButton(
-          tooltip: 'Filter fees',
-          icon: const Icon(Icons.filter_alt_outlined),
-          onPressed: _openStatusFilter,
+          tooltip: 'Refresh fees',
+          icon: const Icon(Icons.refresh_rounded),
+          onPressed: _loadData,
         ),
       ),
       children: [
+        _FeeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Academic Year',
+                style: TextStyle(
+                  color: context.appTheme.muted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: _selectedAcademicYearId.isEmpty
+                    ? null
+                    : _selectedAcademicYearId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                items: _academicYears
+                    .map(
+                      (year) => DropdownMenuItem(
+                        value: year.id,
+                        child: Text(year.yearLabel),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => _selectedAcademicYearId = value);
+                },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _FeeCard(
+          onTap: _showClassPicker,
+          child: Row(
+            children: [
+              _FeeIconBadge(
+                icon: Icons.groups_2_outlined,
+                color: const Color(0xFF7C3AED),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Select Class & Section',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _selectedClassLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.keyboard_arrow_down_rounded),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _FeeCard(
+          child: Row(
+            children: [
+              _FeeIconBadge(
+                icon: Icons.verified_outlined,
+                color: const Color(0xFF16A34A),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _FeeInfoTile(
+                  label: 'Active Structure',
+                  value: selectedBundle?.title ?? 'No active fee structure',
+                ),
+              ),
+              _FeeStatusPill(
+                label: selectedBundle == null ? 'Pending' : 'Active',
+                color: selectedBundle == null
+                    ? const Color(0xFFF59E0B)
+                    : const Color(0xFF16A34A),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         GridView.count(
           crossAxisCount: 2,
           shrinkWrap: true,
@@ -288,6 +451,89 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        _FeeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _FeeSectionTitle('Collection Progress'),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 104,
+                    height: 104,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        CircularProgressIndicator(
+                          value: _collectionRate,
+                          strokeWidth: 12,
+                          backgroundColor: const Color(0xFFFEE2E2),
+                          color: const Color(0xFF16A34A),
+                        ),
+                        Center(
+                          child: Text(
+                            '${(_collectionRate * 100).toStringAsFixed(1)}%',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _FeeInfoTile(
+                          label: 'Collected',
+                          value: _money(_totalCollected),
+                        ),
+                        const SizedBox(height: 10),
+                        _FeeInfoTile(
+                          label: 'Balance',
+                          value: _money(_totalDue),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _FeeCard(
+          child: Row(
+            children: [
+              _FeeIconBadge(
+                icon: Icons.qr_code_2_rounded,
+                color: const Color(0xFF2563EB),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _FeeInfoTile(
+                  label: 'Parent Payment QR',
+                  value: _textValue(
+                    _paymentConfig['upi_id'],
+                    fallback: _textValue(
+                      _paymentConfig['payee_name'],
+                      fallback: 'Not configured',
+                    ),
+                  ),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _showPaymentQrEditor,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit Parent QR'),
+              ),
+            ],
+          ),
+        ),
         if (_paymentRequests.isNotEmpty) ...[
           const SizedBox(height: 20),
           _FeeSectionTitle('Payment Requests (${_paymentRequests.length})'),
@@ -303,36 +549,58 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               child: Text('View all ${_paymentRequests.length} requests'),
             ),
         ],
-        const SizedBox(height: 20),
-        const _FeeSectionTitle('Quick Actions'),
-        const SizedBox(height: 10),
-        _FeeActionRow(
-          icon: Icons.assignment_outlined,
-          iconColor: const Color(0xFF2563EB),
-          title: 'Fee Structures',
-          subtitle: 'View all fee structures',
-          onTap: () => _setView(_FeeView.structures),
-        ),
-        _FeeActionRow(
-          icon: Icons.account_balance_wallet_outlined,
-          iconColor: const Color(0xFF16A34A),
-          title: 'Fee Collection',
-          subtitle: 'View collections and payments',
-          onTap: _openStudentsForCollection,
-        ),
-        _FeeActionRow(
-          icon: Icons.receipt_long_outlined,
-          iconColor: const Color(0xFFEA580C),
-          title: 'Outstanding Dues',
-          subtitle: 'View pending fee payments',
-          onTap: () => _setView(_FeeView.dues),
-        ),
-        _FeeActionRow(
-          icon: Icons.summarize_outlined,
-          iconColor: const Color(0xFF2563EB),
-          title: 'Fee Reports',
-          subtitle: 'View fee reports and analytics',
-          onTap: () => _setView(_FeeView.reports),
+        const SizedBox(height: 24),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: _showFeeNavigation
+              ? Column(
+                  key: const ValueKey('fee-navigation-visible'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _FeeSectionTitle('Quick Actions'),
+                    const SizedBox(height: 10),
+                    _FeeActionRow(
+                      icon: Icons.assignment_outlined,
+                      iconColor: const Color(0xFF2563EB),
+                      title: 'Manage Fee Structures',
+                      subtitle: 'Create / Edit Structure',
+                      onTap: () => _setView(_FeeView.structures),
+                    ),
+                    _FeeActionRow(
+                      icon: Icons.calendar_month_outlined,
+                      iconColor: const Color(0xFF7C3AED),
+                      title: 'Installment Plan',
+                      subtitle:
+                          'Equal Installments, Percentage Division, Custom Amounts, Monthly Payments, Term Wise, One Time Payment',
+                      onTap: () {
+                        final bundle =
+                            selectedBundle ?? _structureBundles.firstOrNull;
+                        if (bundle == null) {
+                          _snack(
+                            'Create / Edit Structure before planning installments.',
+                          );
+                          return;
+                        }
+                        _openStructureDetails(bundle);
+                      },
+                    ),
+                    _FeeActionRow(
+                      icon: Icons.account_balance_wallet_outlined,
+                      iconColor: const Color(0xFF16A34A),
+                      title: 'Payments Overview',
+                      subtitle: 'Collected, balance, partial and unpaid',
+                      onTap: () => _setView(_FeeView.dues),
+                    ),
+                    _FeeActionRow(
+                      icon: Icons.groups_outlined,
+                      iconColor: const Color(0xFFF59E0B),
+                      title: 'Student Payments',
+                      subtitle: 'Student Fee Details and collection history',
+                      onTap: _openStudentsForCollection,
+                    ),
+                  ],
+                )
+              : const SizedBox.shrink(key: ValueKey('fee-navigation-hidden')),
         ),
       ],
     );
@@ -342,14 +610,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final rows = _filteredStructures;
     return _FeePage(
       header: _FeeHeader(
-        title: 'Fee Structures',
-        subtitle: 'View all fee structures',
+        title: 'Manage Fee Structures',
+        subtitle: 'Create / Edit Structure',
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
         trailing: IconButton(
-          tooltip: 'Open Class Hub fee setup',
-          icon: const Icon(Icons.calendar_month_outlined),
-          onPressed: () => _openClassesHubForFees(),
+          tooltip: 'Create / Edit Structure',
+          icon: const Icon(Icons.add_circle_outline_rounded),
+          onPressed: _showFeeStructureEditor,
         ),
       ),
       children: [
@@ -360,10 +628,13 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         ),
         const SizedBox(height: 14),
         if (rows.isEmpty)
-          const _FeeEmptyState(
+          _FeeEmptyState(
             icon: Icons.assignment_outlined,
             title: 'No fee structures found',
-            message: 'Use Classes Hub Step 4 to set up class-wise fee rules.',
+            message:
+                'Create / Edit Structure from Fees to set up class-wise fee rules.',
+            actionLabel: 'Create / Edit Structure',
+            onAction: _showFeeStructureEditor,
           )
         else
           for (final bundle in rows)
@@ -386,14 +657,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
     return _FeePage(
       header: _FeeHeader(
-        title: 'Fee Structure Details',
+        title: 'Class Fee Structure',
         subtitle: bundle.title,
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
         trailing: IconButton(
-          tooltip: 'Edit in Classes Hub',
+          tooltip: 'Create / Edit Structure',
           icon: const Icon(Icons.edit_outlined),
-          onPressed: () => _openClassesHubForFees(gradeId: bundle.gradeId),
+          onPressed: _showFeeStructureEditor,
         ),
       ),
       children: [
@@ -489,13 +760,13 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         const SizedBox(height: 14),
         _FeeInfoBanner(
           text:
-              'To make changes to this fee structure, go to Classes Hub -> Step 4 (Fees).',
+              'Manage components and installment schedules from this Fees module so class, student, parent, and report data stay linked.',
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: () => _openClassesHubForFees(gradeId: bundle.gradeId),
-          icon: const Icon(Icons.apartment_outlined),
-          label: const Text('Go to Classes Hub'),
+          onPressed: _showFeeStructureEditor,
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Create / Edit Structure'),
         ),
         FilledButton.icon(
           onPressed: () => _openStudentsForCollection(structure: bundle),
@@ -1240,6 +1511,515 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     );
   }
 
+  void _showClassPicker() {
+    var query = '';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final rows =
+                _sections.where((section) {
+                  final haystack = '${section.gradeName} ${section.sectionName}'
+                      .toLowerCase();
+                  return query.isEmpty ||
+                      haystack.contains(query.toLowerCase());
+                }).toList()..sort(
+                  (a, b) => '${a.gradeName} ${a.sectionName}'.compareTo(
+                    '${b.gradeName} ${b.sectionName}',
+                  ),
+                );
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 18,
+                  right: 18,
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Select Class & Section',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search_rounded),
+                        hintText: 'Search class or section',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) =>
+                          setSheetState(() => query = value.trim()),
+                    ),
+                    const SizedBox(height: 12),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 420),
+                      child: rows.isEmpty
+                          ? const _FeeEmptyState(
+                              icon: Icons.groups_2_outlined,
+                              title: 'No classes found',
+                              message:
+                                  'Create classes and sections before assigning fee structures.',
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: rows.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 8),
+                              itemBuilder: (context, index) {
+                                final section = rows[index];
+                                final selected =
+                                    section.id == _selectedSectionId;
+                                return _FeeCard(
+                                  onTap: () {
+                                    setState(() {
+                                      _selectedGradeId = section.gradeId;
+                                      _selectedSectionId = section.id;
+                                    });
+                                    Navigator.pop(context);
+                                  },
+                                  child: Row(
+                                    children: [
+                                      _FeeIconBadge(
+                                        icon: selected
+                                            ? Icons.check_circle_outline
+                                            : Icons.groups_2_outlined,
+                                        color: selected
+                                            ? const Color(0xFF16A34A)
+                                            : const Color(0xFF7C3AED),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${section.gradeName} - ${section.sectionName}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                            Text(
+                                              'Capacity ${section.capacity}',
+                                              style: TextStyle(
+                                                color: context.appTheme.muted,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        _money(_classExpectedTotal(section)),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _selectedGradeId = '';
+                          _selectedSectionId = '';
+                        });
+                        Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Show all classes'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showPaymentQrEditor() {
+    _syncPaymentConfigControllers();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 18,
+              right: 18,
+              bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Edit Parent QR',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _upiIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'UPI ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _payeeNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Payee name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _qrNoteController,
+                    minLines: 2,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment note for parents',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  OutlinedButton.icon(
+                    onPressed: _uploadingQr ? null : _pickPaymentQr,
+                    icon: _uploadingQr
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.qr_code_2_rounded),
+                    label: const Text('Upload QR Image'),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.icon(
+                    onPressed: _savingPaymentConfig
+                        ? null
+                        : () async {
+                            await _savePaymentConfig();
+                            if (mounted && Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                            }
+                          },
+                    icon: _savingPaymentConfig
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: const Text('Save Payment Details'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _syncPaymentConfigControllers() {
+    _upiIdController.text = _textValue(_paymentConfig['upi_id']);
+    _payeeNameController.text = _textValue(_paymentConfig['payee_name']);
+    _qrNoteController.text = _textValue(_paymentConfig['qr_note']);
+  }
+
+  Future<void> _savePaymentConfig() async {
+    setState(() => _savingPaymentConfig = true);
+    try {
+      final config = await BackendApiClient.instance.updatePaymentConfig(
+        upiId: _upiIdController.text,
+        payeeName: _payeeNameController.text,
+        qrNote: _qrNoteController.text,
+        qrImageUrl: _textValue(_paymentConfig['qr_image_url']),
+      );
+      if (!mounted) return;
+      setState(() => _paymentConfig = config);
+      _snack('Parent payment QR details saved.', success: true);
+    } catch (error) {
+      _snack('Unable to save payment QR details: $error');
+    } finally {
+      if (mounted) setState(() => _savingPaymentConfig = false);
+    }
+  }
+
+  Future<void> _pickPaymentQr() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final path = file.path;
+    if (path == null || path.isEmpty) return;
+    setState(() => _uploadingQr = true);
+    try {
+      final config = await BackendApiClient.instance.uploadPaymentQr(
+        path: path,
+        fileName: file.name,
+      );
+      if (!mounted) return;
+      setState(() => _paymentConfig = config);
+      _snack('Parent payment QR updated.', success: true);
+    } catch (error) {
+      _snack('Unable to upload payment QR: $error');
+    } finally {
+      if (mounted) setState(() => _uploadingQr = false);
+    }
+  }
+
+  void _showFeeStructureEditor() {
+    final amountController = TextEditingController();
+    var method = 'equal';
+    var saving = false;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 18,
+                  right: 18,
+                  bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Create / Edit Structure',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Class: $_selectedClassLabel',
+                        style: TextStyle(
+                          color: context.appTheme.muted,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: amountController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Fee amount',
+                          prefixText: '₹ ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: method,
+                        decoration: const InputDecoration(
+                          labelText: 'Installment method',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'equal',
+                            child: Text('Equal Installments'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'percentage',
+                            child: Text('Percentage Division'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'custom',
+                            child: Text('Custom Amounts'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'monthly',
+                            child: Text('Monthly Payments'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'term',
+                            child: Text('Term Wise'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'one_time',
+                            child: Text('One Time Payment'),
+                          ),
+                        ],
+                        onChanged: (value) =>
+                            setSheetState(() => method = value ?? 'equal'),
+                      ),
+                      const SizedBox(height: 12),
+                      _FeeInfoBanner(
+                        text:
+                            'This creates a class-linked fee component and saves installment rows used by invoice generation and parent payments.',
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: saving
+                            ? null
+                            : () async {
+                                final amount =
+                                    double.tryParse(
+                                      amountController.text.trim(),
+                                    ) ??
+                                    0;
+                                if (amount <= 0) {
+                                  _snack('Enter a valid fee amount.');
+                                  return;
+                                }
+                                final gradeId = _selectedGradeId.isNotEmpty
+                                    ? _selectedGradeId
+                                    : (_sections.isNotEmpty
+                                          ? _sections.first.gradeId
+                                          : '');
+                                final yearId = _selectedAcademicYearId;
+                                if (gradeId.isEmpty || yearId.isEmpty) {
+                                  _snack(
+                                    'Select class and academic year first.',
+                                  );
+                                  return;
+                                }
+                                setSheetState(() => saving = true);
+                                try {
+                                  final api = BackendApiClient.instance;
+                                  final categories = await api
+                                      .getFeeCategories();
+                                  final category = categories.firstWhereOrNull(
+                                    (row) => _textValue(
+                                      row['category_name'] ?? row['name'],
+                                    ).toLowerCase().contains('tuition'),
+                                  );
+                                  final categoryId = category == null
+                                      ? _textValue(
+                                          (await api.createFeeCategory(
+                                            categoryName: 'Tuition Fee',
+                                            frequency: method == 'one_time'
+                                                ? 'one_time'
+                                                : 'term',
+                                          ))['id'],
+                                        )
+                                      : _textValue(category['id']);
+                                  await api.createFeeStructure(
+                                    academicYearId: yearId,
+                                    gradeId: gradeId,
+                                    sectionId: _selectedSectionId,
+                                    feeCategoryId: categoryId,
+                                    amount: amount,
+                                    installmentCount: method == 'one_time'
+                                        ? 1
+                                        : 3,
+                                    installmentMethod: method,
+                                    effectiveFrom: DateFormat(
+                                      'yyyy-MM-dd',
+                                    ).format(DateTime.now()),
+                                    installments: _defaultInstallmentPayload(
+                                      method,
+                                      amount,
+                                    ),
+                                  );
+                                  setSheetState(() => saving = false);
+                                  if (!mounted) return;
+                                  Navigator.pop(context);
+                                  _snack('Fee structure saved.', success: true);
+                                  await _loadData();
+                                } catch (error) {
+                                  _snack(
+                                    'Unable to save fee structure: $error',
+                                  );
+                                  setSheetState(() => saving = false);
+                                }
+                              },
+                        icon: saving
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: const Text('Save Structure'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(amountController.dispose);
+  }
+
+  List<Map<String, dynamic>> _defaultInstallmentPayload(
+    String method,
+    double total,
+  ) {
+    final now = DateTime.now();
+    if (method == 'one_time') {
+      return [
+        {
+          'installment_name': 'One Time Payment',
+          'installment_number': 1,
+          'amount': total,
+          'percentage': 100,
+          'due_date': DateFormat(
+            'yyyy-MM-dd',
+          ).format(now.add(const Duration(days: 10))),
+          'status': 'upcoming',
+        },
+      ];
+    }
+    final labels = method == 'monthly'
+        ? ['Month 1', 'Month 2', 'Month 3']
+        : method == 'term'
+        ? ['Term 1', 'Term 2', 'Term 3']
+        : ['Installment 1', 'Installment 2', 'Installment 3'];
+    return List.generate(3, (index) {
+      final amount = index == 2
+          ? total - (total / 3).roundToDouble() * 2
+          : (total / 3).roundToDouble();
+      return {
+        'installment_name': labels[index],
+        'installment_number': index + 1,
+        'amount': amount,
+        'percentage': index == 2 ? 34 : 33,
+        'due_date': DateFormat(
+          'yyyy-MM-dd',
+        ).format(now.add(Duration(days: 10 + (index * 90)))),
+        'status': 'upcoming',
+      };
+    });
+  }
+
   void _openStructureDetails(_FeeStructureBundle bundle) {
     setState(() {
       _selectedStructure = bundle;
@@ -1495,23 +2275,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       AppRoutes.principalPaymentRequestDecision,
       arguments: AdminPaymentRequestDecisionArgs(request: request),
     ).then((_) => _loadData());
-  }
-
-  void _openClassesHubForFees({String gradeId = '', String sectionId = ''}) {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.principalClasses,
-      arguments: {
-        'class_hub_action': 'fees',
-        'action': 'fees',
-        'selectedStep': 'fee_setup',
-        if (gradeId.isNotEmpty) 'grade_id': gradeId,
-        if (gradeId.isNotEmpty) 'classId': gradeId,
-        if (sectionId.isNotEmpty) 'section_id': sectionId,
-        if (sectionId.isNotEmpty) 'sectionId': sectionId,
-        'source': 'principal_fees',
-      },
-    );
   }
 
   List<_FeeStructureBundle> get _structureBundles {
@@ -1851,6 +2614,48 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   double get _totalCollected =>
       _recentPayments.fold(0, (sum, row) => sum + _numValue(row['amount']));
 
+  double get _totalExpected => _totalCollected + _totalDue;
+
+  double get _collectionRate => _totalExpected <= 0
+      ? 0
+      : (_totalCollected / _totalExpected).clamp(0, 1).toDouble();
+
+  _FeeStructureBundle? get _selectedOverviewBundle {
+    final rows = _structureBundles.where((bundle) {
+      final yearMatches =
+          _selectedAcademicYearId.isEmpty ||
+          bundle.academicYearId == _selectedAcademicYearId;
+      final gradeMatches =
+          _selectedGradeId.isEmpty || bundle.gradeId == _selectedGradeId;
+      return yearMatches && gradeMatches;
+    }).toList();
+    if (rows.isEmpty) return null;
+    return rows.first;
+  }
+
+  String get _selectedClassLabel {
+    final section = _sections.firstWhereOrNull(
+      (row) => row.id == _selectedSectionId,
+    );
+    if (section != null) {
+      return '${section.gradeName} - ${section.sectionName}';
+    }
+    final grade = _grades.firstWhereOrNull((row) => row.id == _selectedGradeId);
+    if (grade != null) return grade.gradeName;
+    return 'All Classes';
+  }
+
+  double _classExpectedTotal(SectionModel section) {
+    return _structureBundles
+        .where(
+          (bundle) =>
+              bundle.gradeId == section.gradeId &&
+              (_selectedAcademicYearId.isEmpty ||
+                  bundle.academicYearId == _selectedAcademicYearId),
+        )
+        .fold(0, (sum, row) => sum + row.total);
+  }
+
   String _statusFilterLabel(_FeeStatusFilter filter) {
     return switch (filter) {
       _FeeStatusFilter.all => 'All',
@@ -1927,7 +2732,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: success ? context.appTheme.success : context.appTheme.error,
+        backgroundColor: success
+            ? context.appTheme.success
+            : context.appTheme.error,
       ),
     );
   }
@@ -1936,12 +2743,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 class _FeePage extends StatelessWidget {
   final Widget header;
   final List<Widget> children;
+  final ScrollController? controller;
 
-  const _FeePage({required this.header, required this.children});
+  const _FeePage({
+    required this.header,
+    required this.children,
+    this.controller,
+  });
 
   @override
   Widget build(BuildContext context) {
     return ListView(
+      controller: controller,
       physics: const AlwaysScrollableScrollPhysics(
         parent: BouncingScrollPhysics(),
       ),
@@ -2719,7 +3532,9 @@ class _FeeAmountRow extends StatelessWidget {
             value,
             style: TextStyle(
               fontWeight: FontWeight.w900,
-              color: danger ? context.appTheme.error : context.appTheme.onSurface,
+              color: danger
+                  ? context.appTheme.error
+                  : context.appTheme.onSurface,
             ),
           ),
         ],
@@ -3096,7 +3911,9 @@ class _PaymentRequestRow extends StatelessWidget {
       child: Row(
         children: [
           _FeeIconBadge(
-            icon: hasProof ? Icons.receipt_long_outlined : Icons.payment_outlined,
+            icon: hasProof
+                ? Icons.receipt_long_outlined
+                : Icons.payment_outlined,
             color: const Color(0xFF7C3AED),
           ),
           const SizedBox(width: 12),

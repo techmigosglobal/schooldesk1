@@ -256,6 +256,7 @@ func autoMigrate() error {
 		&models.ReportExport{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
+		&models.FeeInstallment{},
 		&models.SchoolPaymentSetting{},
 		&models.FeeConcession{},
 		&models.FeeInvoice{},

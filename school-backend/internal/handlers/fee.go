@@ -105,9 +105,16 @@ func (h *FeeHandler) GetFeeStructures(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	yearID := c.Query("academic_year_id")
 	gradeID := c.Query("grade_id")
+	sectionID := strings.TrimSpace(c.Query("section_id"))
 
 	var structures []models.FeeStructure
-	query := database.DB.Preload("FeeCategory").Preload("Grade").Preload("AcademicYear")
+	query := database.DB.Preload("FeeCategory").
+		Preload("Grade").
+		Preload("Section").
+		Preload("AcademicYear").
+		Preload("Installments", func(db *gorm.DB) *gorm.DB {
+			return db.Order("installment_number ASC")
+		})
 	if schoolID != "" {
 		query = query.Where("school_id = ?", schoolID)
 	}
@@ -116,6 +123,9 @@ func (h *FeeHandler) GetFeeStructures(c *gin.Context) {
 	}
 	if gradeID != "" {
 		query = query.Where("grade_id = ?", gradeID)
+	}
+	if sectionID != "" {
+		query = query.Where("(section_id = ? OR section_id IS NULL)", sectionID)
 	}
 	query.Find(&structures)
 
@@ -132,38 +142,72 @@ func (h *FeeHandler) CreateFeeStructure(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	sectionID, err := validatedFeeStructureSectionID(scopedSchoolID(c), req.AcademicYearID, req.GradeID, req.SectionID)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	effectiveFrom, err := optionalFeeDate(req.EffectiveFrom)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "effective_from must be YYYY-MM-DD")
+		return
+	}
 
 	structure := models.FeeStructure{
-		SchoolID:         scopedSchoolID(c),
-		AcademicYearID:   req.AcademicYearID,
-		GradeID:          req.GradeID,
-		FeeCategoryID:    req.FeeCategoryID,
-		Amount:           req.Amount,
-		DueDay:           req.DueDay,
-		LateFinePerDay:   req.LateFinePerDay,
-		InstallmentCount: normalizeInstallmentCount(req.InstallmentCount),
+		SchoolID:          scopedSchoolID(c),
+		AcademicYearID:    req.AcademicYearID,
+		GradeID:           req.GradeID,
+		SectionID:         sectionID,
+		FeeCategoryID:     req.FeeCategoryID,
+		Amount:            req.Amount,
+		DueDay:            req.DueDay,
+		LateFinePerDay:    req.LateFinePerDay,
+		InstallmentCount:  normalizeInstallmentCount(req.InstallmentCount),
+		InstallmentMethod: normalizeInstallmentMethod(req.InstallmentMethod),
+		EffectiveFrom:     effectiveFrom,
 	}
 
 	replacedCount := int64(0)
-	err := database.DB.Transaction(func(tx *gorm.DB) error {
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
 		if req.ReplaceExisting {
-			result := tx.Where(
+			var existingIDs []string
+			existingQuery := tx.Model(&models.FeeStructure{}).Where(
 				"school_id = ? AND academic_year_id = ? AND grade_id = ?",
 				structure.SchoolID,
 				structure.AcademicYearID,
 				structure.GradeID,
-			).Delete(&models.FeeStructure{})
-			if result.Error != nil {
-				return result.Error
+			)
+			if structure.SectionID != nil {
+				existingQuery = existingQuery.Where("section_id = ?", *structure.SectionID)
 			}
-			replacedCount = result.RowsAffected
+			if err := existingQuery.Pluck("id", &existingIDs).Error; err != nil {
+				return err
+			}
+			if len(existingIDs) > 0 {
+				if err := tx.Where("fee_structure_id IN ?", existingIDs).Delete(&models.FeeInstallment{}).Error; err != nil {
+					return err
+				}
+			}
+			if len(existingIDs) > 0 {
+				result := tx.Where("id IN ?", existingIDs).Delete(&models.FeeStructure{})
+				if result.Error != nil {
+					return result.Error
+				}
+				replacedCount = result.RowsAffected
+			}
 		}
-		return tx.Create(&structure).Error
+		if err := tx.Create(&structure).Error; err != nil {
+			return err
+		}
+		return replaceFeeInstallments(tx, structure, req.Installments)
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create fee structure"})
 		return
 	}
+	_ = database.DB.Preload("FeeCategory").Preload("Grade").Preload("Section").Preload("AcademicYear").Preload("Installments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("installment_number ASC")
+	}).First(&structure, "id = ?", structure.ID).Error
 
 	id := structure.ID
 	auditAction(c, "fees", "create", "fee_structures", &id)
@@ -181,13 +225,17 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	id := c.Param("id")
 	var req struct {
-		AcademicYearID   string   `json:"academic_year_id"`
-		GradeID          string   `json:"grade_id"`
-		FeeCategoryID    string   `json:"fee_category_id"`
-		Amount           *float64 `json:"amount"`
-		DueDay           *int     `json:"due_day"`
-		LateFinePerDay   *float64 `json:"late_fine_per_day"`
-		InstallmentCount *int     `json:"installment_count"`
+		AcademicYearID    string                         `json:"academic_year_id"`
+		GradeID           string                         `json:"grade_id"`
+		SectionID         *string                        `json:"section_id"`
+		FeeCategoryID     string                         `json:"fee_category_id"`
+		Amount            *float64                       `json:"amount"`
+		DueDay            *int                           `json:"due_day"`
+		LateFinePerDay    *float64                       `json:"late_fine_per_day"`
+		InstallmentCount  *int                           `json:"installment_count"`
+		InstallmentMethod string                         `json:"installment_method"`
+		EffectiveFrom     *string                        `json:"effective_from"`
+		Installments      []models.FeeInstallmentRequest `json:"installments"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -207,6 +255,14 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 	if req.GradeID != "" {
 		updates["grade_id"] = req.GradeID
 	}
+	if req.SectionID != nil {
+		sectionID, err := validatedFeeStructureSectionID(schoolID, firstNonEmpty(req.AcademicYearID, structure.AcademicYearID), firstNonEmpty(req.GradeID, structure.GradeID), *req.SectionID)
+		if err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		updates["section_id"] = sectionID
+	}
 	if req.FeeCategoryID != "" {
 		updates["fee_category_id"] = req.FeeCategoryID
 	}
@@ -222,7 +278,18 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 	if req.InstallmentCount != nil {
 		updates["installment_count"] = normalizeInstallmentCount(*req.InstallmentCount)
 	}
-	if len(updates) == 0 {
+	if strings.TrimSpace(req.InstallmentMethod) != "" {
+		updates["installment_method"] = normalizeInstallmentMethod(req.InstallmentMethod)
+	}
+	if req.EffectiveFrom != nil {
+		effectiveFrom, err := optionalFeeDate(*req.EffectiveFrom)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "effective_from must be YYYY-MM-DD")
+			return
+		}
+		updates["effective_from"] = effectiveFrom
+	}
+	if len(updates) == 0 && req.Installments == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No fee structure fields provided"})
 		return
 	}
@@ -243,11 +310,26 @@ func (h *FeeHandler) UpdateFeeStructure(c *gin.Context) {
 		return
 	}
 
-	if err := database.DB.Model(&structure).Updates(updates).Error; err != nil {
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if len(updates) > 0 {
+			if err := tx.Model(&structure).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		if req.Installments != nil {
+			if err := tx.First(&structure, "id = ?", id).Error; err != nil {
+				return err
+			}
+			return replaceFeeInstallments(tx, structure, req.Installments)
+		}
+		return nil
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update fee structure"})
 		return
 	}
-	if err := database.DB.Preload("FeeCategory").Preload("Grade").Preload("AcademicYear").First(&structure, "id = ?", id).Error; err != nil {
+	if err := database.DB.Preload("FeeCategory").Preload("Grade").Preload("Section").Preload("AcademicYear").Preload("Installments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("installment_number ASC")
+	}).First(&structure, "id = ?", id).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to reload fee structure"})
 		return
 	}
@@ -264,6 +346,113 @@ func normalizeInstallmentCount(value int) int {
 		return 12
 	}
 	return value
+}
+
+func normalizeInstallmentMethod(value string) string {
+	text := strings.ToLower(strings.TrimSpace(value))
+	text = strings.ReplaceAll(text, "-", "_")
+	text = strings.ReplaceAll(text, " ", "_")
+	switch text {
+	case "percentage", "percentage_division":
+		return "percentage"
+	case "custom", "custom_amount", "custom_amounts":
+		return "custom"
+	case "monthly", "monthly_payment", "monthly_payments":
+		return "monthly"
+	case "term", "term_wise", "termwise":
+		return "term"
+	case "one_time", "one_time_payment", "onetime":
+		return "one_time"
+	default:
+		return "equal"
+	}
+}
+
+func optionalFeeDate(value string) (*time.Time, error) {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return nil, nil
+	}
+	parsed, err := parseDate(text)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+func validatedFeeStructureSectionID(schoolID, academicYearID, gradeID, rawSectionID string) (*string, error) {
+	sectionID := strings.TrimSpace(rawSectionID)
+	if sectionID == "" {
+		return nil, nil
+	}
+	if !sectionBelongsToSchool(sectionID, schoolID) {
+		return nil, fmt.Errorf("section must belong to this school")
+	}
+	if !sectionBelongsToGrade(sectionID, strings.TrimSpace(gradeID)) {
+		return nil, fmt.Errorf("section must belong to selected grade")
+	}
+	var count int64
+	if err := database.DB.Model(&models.Section{}).
+		Where("id = ? AND academic_year_id = ?", sectionID, strings.TrimSpace(academicYearID)).
+		Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		return nil, fmt.Errorf("section must belong to selected academic year")
+	}
+	return &sectionID, nil
+}
+
+func replaceFeeInstallments(tx *gorm.DB, structure models.FeeStructure, rows []models.FeeInstallmentRequest) error {
+	if err := tx.Where("fee_structure_id = ?", structure.ID).Delete(&models.FeeInstallment{}).Error; err != nil {
+		return err
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	method := normalizeInstallmentMethod(structure.InstallmentMethod)
+	installments := make([]models.FeeInstallment, 0, len(rows))
+	for index, row := range rows {
+		dueDate, err := parseDate(strings.TrimSpace(row.DueDate))
+		if err != nil {
+			return fmt.Errorf("installments[%d].due_date must be YYYY-MM-DD", index)
+		}
+		name := strings.TrimSpace(row.InstallmentName)
+		if name == "" {
+			name = fmt.Sprintf("Installment %d", index+1)
+		}
+		number := row.InstallmentNumber
+		if number <= 0 {
+			number = index + 1
+		}
+		amount := roundMoney(row.Amount)
+		if amount <= 0 && row.Percentage > 0 {
+			amount = roundMoney(structure.Amount * row.Percentage / 100)
+		}
+		if amount <= 0 {
+			return fmt.Errorf("installments[%d].amount must be greater than zero", index)
+		}
+		status := strings.ToLower(strings.TrimSpace(row.Status))
+		if status == "" {
+			status = "upcoming"
+		}
+		structureID := structure.ID
+		installments = append(installments, models.FeeInstallment{
+			SchoolID:          structure.SchoolID,
+			AcademicYearID:    structure.AcademicYearID,
+			GradeID:           structure.GradeID,
+			SectionID:         structure.SectionID,
+			FeeStructureID:    &structureID,
+			Method:            method,
+			InstallmentName:   name,
+			InstallmentNumber: number,
+			Amount:            amount,
+			Percentage:        row.Percentage,
+			DueDate:           dueDate,
+			Status:            status,
+		})
+	}
+	return tx.Create(&installments).Error
 }
 
 func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID string) error {
@@ -284,13 +473,25 @@ func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID s
 func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	id := c.Param("id")
-	result := database.DB.Where("id = ? AND school_id = ?", id, schoolID).Delete(&models.FeeStructure{})
-	if result.Error != nil {
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("fee_structure_id = ?", id).Delete(&models.FeeInstallment{}).Error; err != nil {
+			return err
+		}
+		result := tx.Where("id = ? AND school_id = ?", id, schoolID).Delete(&models.FeeStructure{})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Fee structure not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete fee structure"})
-		return
-	}
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Fee structure not found"})
 		return
 	}
 	auditAction(c, "fees", "delete", "fee_structures", &id)
@@ -527,11 +728,18 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 	}
 
 	var structures []models.FeeStructure
-	if err := database.DB.
+	structureQuery := database.DB.
 		Where("school_id = ? AND academic_year_id = ? AND grade_id = ?", schoolID, req.AcademicYearID, req.GradeID).
 		Preload("FeeCategory").
+		Preload("Installments", func(db *gorm.DB) *gorm.DB {
+			return db.Order("installment_number ASC")
+		}).
 		Order("created_at ASC").
-		Find(&structures).Error; err != nil {
+		Session(&gorm.Session{})
+	if strings.TrimSpace(req.SectionID) != "" {
+		structureQuery = structureQuery.Where("(section_id = ? OR section_id IS NULL)", strings.TrimSpace(req.SectionID))
+	}
+	if err := structureQuery.Find(&structures).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load fee structures")
 		return
 	}
@@ -593,7 +801,12 @@ func (h *FeeHandler) GenerateInvoices(c *gin.Context) {
 	}
 	includeOneTime := req.IncludeOneTime != nil && *req.IncludeOneTime
 	includeYearly := req.IncludeYearly != nil && *req.IncludeYearly
-	billableItems := feeBillableItems(structures, termID != "", termCount, includeOneTime, includeYearly)
+	billableItems := feeScheduledBillableItems(structures, strings.TrimSpace(req.SectionID), label, dueDate)
+	if len(billableItems) > 0 && !billableItems[0].dueDate.IsZero() {
+		dueDate = billableItems[0].dueDate
+	} else {
+		billableItems = feeBillableItems(structures, termID != "", termCount, includeOneTime, includeYearly)
+	}
 	total := 0.0
 	for _, item := range billableItems {
 		total += item.amount
@@ -702,6 +915,52 @@ type feeBillableItem struct {
 	structure   models.FeeStructure
 	amount      float64
 	description string
+	dueDate     time.Time
+}
+
+func feeScheduledBillableItems(structures []models.FeeStructure, sectionID, label string, dueDate time.Time) []feeBillableItem {
+	items := []feeBillableItem{}
+	normalizedLabel := strings.ToLower(strings.TrimSpace(label))
+	sectionID = strings.TrimSpace(sectionID)
+	for _, structure := range structures {
+		for _, installment := range structure.Installments {
+			if installment.SectionID != nil && sectionID != "" && *installment.SectionID != sectionID {
+				continue
+			}
+			if installment.SectionID != nil && sectionID == "" {
+				continue
+			}
+			nameMatch := normalizedLabel != "" && strings.ToLower(strings.TrimSpace(installment.InstallmentName)) == normalizedLabel
+			dateMatch := !dueDate.IsZero() && sameFeeDate(installment.DueDate, dueDate)
+			if !nameMatch && !dateMatch {
+				continue
+			}
+			amount := roundMoney(installment.Amount)
+			if amount <= 0 && installment.Percentage > 0 {
+				amount = roundMoney(structure.Amount * installment.Percentage / 100)
+			}
+			if amount <= 0 {
+				continue
+			}
+			description := feeStructureDescription(structure)
+			if strings.TrimSpace(installment.InstallmentName) != "" {
+				description = fmt.Sprintf("%s - %s", description, strings.TrimSpace(installment.InstallmentName))
+			}
+			items = append(items, feeBillableItem{
+				structure:   structure,
+				amount:      amount,
+				description: description,
+				dueDate:     installment.DueDate,
+			})
+		}
+	}
+	return items
+}
+
+func sameFeeDate(left, right time.Time) bool {
+	ly, lm, ld := left.Date()
+	ry, rm, rd := right.Date()
+	return ly == ry && lm == rm && ld == rd
 }
 
 func feeBillableItems(structures []models.FeeStructure, termMode bool, termCount int, includeOneTime, includeYearly bool) []feeBillableItem {
