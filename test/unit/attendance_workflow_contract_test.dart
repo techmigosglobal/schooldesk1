@@ -108,6 +108,9 @@ void main() {
     expect(principalAttendance, contains('_StudentAttendanceMeta'));
     expect(principalAttendance, contains('_AttendanceHistoryLine'));
     expect(principalAttendance, contains("record['marked_at']"));
+    expect(principalAttendance, contains('_readableAttendanceTeacherLabel'));
+    expect(principalAttendance, contains('_looksLikeIdentifier'));
+    expect(principalAttendance, contains('staff.id == candidateId'));
     expect(principalAttendance, contains('Reopen Attendance'));
     expect(principalAttendance, contains('Send Reminder'));
     expect(principalAttendance, contains('Incomplete'));

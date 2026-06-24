@@ -848,6 +848,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           statusLabel: _studentStatusLabel(student.id),
           statusColor: _studentStatusColor(student.id),
           records: _studentAttendanceRecords,
+          staffDirectory: _staff,
           onReopen: _sessions.isEmpty
               ? null
               : () => _openSessionDetail(_sessions.first),
@@ -1061,19 +1062,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   String _recordTeacher(Map<String, dynamic> row) {
-    final markedBy = _text(row['marked_by']);
-    if (markedBy.isNotEmpty) return markedBy;
-    final session = row['session'] is Map
-        ? Map<String, dynamic>.from(row['session'] as Map)
-        : const <String, dynamic>{};
-    final staff = session['staff'] is Map
-        ? Map<String, dynamic>.from(session['staff'] as Map)
-        : const <String, dynamic>{};
-    final staffName = [
-      staff['first_name'],
-      staff['last_name'],
-    ].where((part) => _text(part).isNotEmpty).join(' ');
-    return staffName.isEmpty ? 'Teacher' : staffName;
+    return _readableAttendanceTeacherLabel(row, staffDirectory: _staff);
   }
 
   String _recordStatus(Map<String, dynamic> row) {
@@ -1398,6 +1387,7 @@ class _StudentDetailPage extends StatelessWidget {
   final String statusLabel;
   final Color statusColor;
   final List<Map<String, dynamic>> records;
+  final List<StaffModel> staffDirectory;
   final VoidCallback? onReopen;
 
   const _StudentDetailPage({
@@ -1406,6 +1396,7 @@ class _StudentDetailPage extends StatelessWidget {
     required this.statusLabel,
     required this.statusColor,
     required this.records,
+    this.staffDirectory = const [],
     this.onReopen,
   });
 
@@ -1509,7 +1500,10 @@ class _StudentDetailPage extends StatelessWidget {
                 : Column(
                     children: [
                       for (final record in records.take(5))
-                        _AttendanceHistoryLine(record: record),
+                        _AttendanceHistoryLine(
+                          record: record,
+                          staffDirectory: staffDirectory,
+                        ),
                     ],
                   ),
           ),
@@ -1836,10 +1830,76 @@ class _StudentAttendanceMeta extends StatelessWidget {
   }
 }
 
+String _readableAttendanceTeacherLabel(
+  Map<String, dynamic> row, {
+  List<StaffModel> staffDirectory = const [],
+}) {
+  final nestedName = _attendanceStaffNameFromMap(row['staff']);
+  if (nestedName.isNotEmpty) return nestedName;
+
+  final session = row['session'] is Map
+      ? Map<String, dynamic>.from(row['session'] as Map)
+      : const <String, dynamic>{};
+  final sessionStaffName = _attendanceStaffNameFromMap(session['staff']);
+  if (sessionStaffName.isNotEmpty) return sessionStaffName;
+
+  final marker = _attendanceLabelText(row['marked_by']);
+  if (marker.isNotEmpty && !_looksLikeIdentifier(marker)) return marker;
+
+  final candidateIds = [
+    marker,
+    _attendanceLabelText(row['marked_by_id']),
+    _attendanceLabelText(row['staff_id']),
+    _attendanceLabelText(row['teacher_id']),
+    _attendanceLabelText(session['staff_id']),
+  ].where((value) => value.isNotEmpty);
+
+  for (final candidateId in candidateIds) {
+    for (final staff in staffDirectory) {
+      if (staff.id == candidateId || staff.staffCode == candidateId) {
+        final name = staff.fullName.trim();
+        if (name.isNotEmpty) return name;
+      }
+    }
+  }
+
+  return 'Teacher';
+}
+
+String _attendanceStaffNameFromMap(Object? value) {
+  if (value is! Map) return '';
+  final map = Map<String, dynamic>.from(value);
+  final direct = _attendanceLabelText(map['full_name'] ?? map['name']);
+  if (direct.isNotEmpty) return direct;
+  return [
+    map['first_name'],
+    map['last_name'],
+  ].map(_attendanceLabelText).where((part) => part.isNotEmpty).join(' ');
+}
+
+String _attendanceLabelText(Object? value) {
+  final text = '${value ?? ''}'.trim();
+  return text.isEmpty || text == 'null' ? '' : text;
+}
+
+bool _looksLikeIdentifier(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return false;
+  final uuid = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+  if (uuid.hasMatch(text)) return true;
+  return RegExp(r'^[0-9a-fA-F]{24,}$').hasMatch(text);
+}
+
 class _AttendanceHistoryLine extends StatelessWidget {
   final Map<String, dynamic> record;
+  final List<StaffModel> staffDirectory;
 
-  const _AttendanceHistoryLine({required this.record});
+  const _AttendanceHistoryLine({
+    required this.record,
+    this.staffDirectory = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1854,7 +1914,7 @@ class _AttendanceHistoryLine extends StatelessWidget {
       record['status'],
       fallback: 'unmarked',
     ).replaceAll('_', ' ');
-    final teacher = _teacherLabel(record);
+    final teacher = _teacherLabel(record, staffDirectory);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -1883,19 +1943,11 @@ class _AttendanceHistoryLine extends StatelessWidget {
     );
   }
 
-  static String _teacherLabel(Map<String, dynamic> row) {
-    final markedBy = _StudentDetailPage._detailText(row['marked_by']);
-    if (markedBy.isNotEmpty) return markedBy;
-    final session = row['session'] is Map
-        ? Map<String, dynamic>.from(row['session'] as Map)
-        : const <String, dynamic>{};
-    final staff = session['staff'] is Map
-        ? Map<String, dynamic>.from(session['staff'] as Map)
-        : const <String, dynamic>{};
-    final name = [staff['first_name'], staff['last_name']]
-        .where((part) => _StudentDetailPage._detailText(part).isNotEmpty)
-        .join(' ');
-    return name.isEmpty ? 'Teacher' : name;
+  static String _teacherLabel(
+    Map<String, dynamic> row,
+    List<StaffModel> staffDirectory,
+  ) {
+    return _readableAttendanceTeacherLabel(row, staffDirectory: staffDirectory);
   }
 
   static Color _statusColor(String status) {

@@ -98,6 +98,107 @@ void main() {
     expect(find.text('Navigation'), findsOneWidget);
   });
 
+  testWidgets(
+    'compact role shell keeps global actions when page has no actions',
+    (tester) async {
+      BackendApiClient.instance.clearAuthToken();
+      BackendApiClient.instance.setCurrentRole('principal');
+      addTearDown(BackendApiClient.instance.clearAuthToken);
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: SchoolDeskModuleScaffold(
+            title: 'Classes',
+            drawer: const Drawer(child: Text('Navigation')),
+            body: const Text('Class list'),
+          ),
+        ),
+      );
+
+      expect(find.byTooltip(SchoolDeskGlossary.notifications), findsOneWidget);
+      expect(find.byTooltip(SchoolDeskGlossary.profile), findsOneWidget);
+      expect(find.text(SchoolDeskGlossary.notifications), findsWidgets);
+      expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+    },
+  );
+
+  testWidgets('compact role shell prioritizes page actions over globals', (
+    tester,
+  ) async {
+    BackendApiClient.instance.clearAuthToken();
+    BackendApiClient.instance.setCurrentRole('principal');
+    addTearDown(BackendApiClient.instance.clearAuthToken);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: SchoolDeskModuleScaffold(
+          title: 'Notifications',
+          drawer: const Drawer(child: Text('Navigation')),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh notifications',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: () {},
+            ),
+          ],
+          body: const Text('Notification list'),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Refresh notifications'), findsOneWidget);
+    expect(find.byTooltip(SchoolDeskGlossary.notifications), findsNothing);
+    expect(find.byTooltip(SchoolDeskGlossary.profile), findsNothing);
+    expect(find.text(SchoolDeskGlossary.notifications), findsWidgets);
+    expect(find.text(SchoolDeskGlossary.profile), findsOneWidget);
+  });
+
+  testWidgets('desktop role shell can suppress global toolbar actions', (
+    tester,
+  ) async {
+    BackendApiClient.instance.clearAuthToken();
+    BackendApiClient.instance.setCurrentRole('principal');
+    addTearDown(BackendApiClient.instance.clearAuthToken);
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: SchoolDeskModuleScaffold(
+          title: 'Notifications',
+          drawer: const Drawer(child: Text('Navigation')),
+          showGlobalToolbarActions: false,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh notifications',
+              icon: const Icon(Icons.refresh_rounded),
+              onPressed: () {},
+            ),
+          ],
+          body: const Text('Notification list'),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Refresh notifications'), findsOneWidget);
+    expect(find.text(SchoolDeskGlossary.search), findsNothing);
+    expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
+    expect(find.byIcon(Icons.account_circle_outlined), findsNothing);
+  });
+
   testWidgets('compact role shell supports principal visual shortcuts', (
     tester,
   ) async {

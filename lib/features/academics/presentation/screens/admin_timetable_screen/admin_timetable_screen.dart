@@ -59,6 +59,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   int _filterDay = 0;
   _AdminTimetableHomeMode _homeMode = _AdminTimetableHomeMode.classes;
   _AdminTimetableDetailMode _detailMode = _AdminTimetableDetailMode.home;
+  bool _editingTimetable = false;
+  bool _savingTimetable = false;
+  bool _deletingTimetable = false;
+  final Map<String, _TimetableSlotDraft> _editDrafts = {};
 
   List<Map<String, dynamic>> _slots = [];
   List<Map<String, dynamic>> _terms = [];
@@ -246,18 +250,30 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           else
             IconButton.filledTonal(
               tooltip: 'Refresh timetable',
-              onPressed: _loadBackendTimetable,
+              onPressed: _savingTimetable || _deletingTimetable
+                  ? null
+                  : _loadBackendTimetable,
               icon: const Icon(Icons.calendar_month_rounded, size: 20),
             ),
           PopupMenuButton<String>(
             tooltip: 'Principal timetable tools',
+            enabled: !_savingTimetable && !_deletingTimetable,
             onSelected: _handleAdminTool,
-            itemBuilder: (context) => const [
-              PopupMenuItem(
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'edit_timetable',
+                child: Text('Edit Timetable'),
+              ),
+              const PopupMenuItem(
+                value: 'delete_timetable',
+                child: Text('Delete Timetable'),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
                 value: 'pre_primary',
                 child: Text('Generate Time Table'),
               ),
-              PopupMenuItem(
+              const PopupMenuItem(
                 value: 'import',
                 child: Text('Generate from class CSV'),
               ),
@@ -332,6 +348,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => setState(() {
+          _clearTimetableEditState();
           _homeMode = mode;
           _search = '';
           _detailMode = _AdminTimetableDetailMode.home;
@@ -477,6 +494,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           final next = value ?? '';
           if (next.isEmpty) return;
           setState(() {
+            _clearTimetableEditState();
             _selectedSectionId = next;
             _detailMode = _AdminTimetableDetailMode.home;
           });
@@ -564,6 +582,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     final classRow = _selectedClassRow;
     if (classRow == null) return _buildHomeView();
     final periods = _periodsForClass(_selectedSectionId, _selectedDay);
+    if (_editingTimetable) _ensureDraftsFor(periods);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -573,21 +592,55 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         const SizedBox(height: 14),
         periods.isEmpty
             ? _classEmptyState(classRow)
+            : _editingTimetable
+            ? _editableSchedulePanel(
+                title: '${_dayLabel(_selectedDay)} Schedule',
+                rows: periods,
+              )
             : _schedulePanel(
                 title: '${_dayLabel(_selectedDay)} Schedule',
                 rows: periods,
                 columns: const ['Time', 'Period', 'Subject', 'Teacher', 'Room'],
                 onRowTap: _openDayDetails,
               ),
+        if (_editingTimetable) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _savingTimetable ? null : _saveEditedTimetable,
+                  icon: _savingTimetable
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(_savingTimetable ? 'Saving...' : 'Save'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _savingTimetable ? null : _cancelEditingTimetable,
+                  icon: const Icon(Icons.close_rounded),
+                  label: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 14),
         OutlinedButton.icon(
-          onPressed: () =>
-              setState(() => _detailMode = _AdminTimetableDetailMode.classWeek),
+          onPressed: _editingTimetable
+              ? null
+              : () => setState(
+                  () => _detailMode = _AdminTimetableDetailMode.classWeek,
+                ),
           icon: const Icon(Icons.calendar_view_week_rounded),
           label: const Text('View Full Week'),
         ),
-        const SizedBox(height: 10),
-        _buildAdminActionStrip(compact: true),
       ],
     );
   }
@@ -937,6 +990,198 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editableSchedulePanel({
+    required String title,
+    required List<Map<String, dynamic>> rows,
+  }) {
+    final sorted = [...rows]..sort(_slotSort);
+    final editableRows = sorted
+        .where((row) => !_isBreakSlot(row) && !_isFree(row))
+        .toList();
+    return Container(
+      decoration: _softDecoration(),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF172B3A),
+                  ),
+                ),
+              ),
+              const _MiniPill(
+                icon: Icons.edit_calendar_outlined,
+                label: 'Editing',
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (editableRows.isEmpty)
+            _emptyPanel('No editable timetable periods found')
+          else
+            for (final row in editableRows)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _editableSlotCard(row),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _editableSlotCard(Map<String, dynamic> row) {
+    final id = _text(row['id']);
+    final draft = _editDrafts[id];
+    if (draft == null) return const SizedBox.shrink();
+    final subjectOptions = _subjectOptions;
+    final staffOptions = _staff;
+    final roomOptions = _roomRows;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2EAF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F3FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${draft.periodNumber}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: context.appTheme.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Period ${draft.periodNumber}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF172B3A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: draft.startTime,
+                  decoration: const InputDecoration(
+                    labelText: 'Start',
+                    hintText: '08:30',
+                  ),
+                  onChanged: (value) => draft.startTime = value,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  initialValue: draft.endTime,
+                  decoration: const InputDecoration(
+                    labelText: 'End',
+                    hintText: '09:10',
+                  ),
+                  onChanged: (value) => draft.endTime = value,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue:
+                subjectOptions.any(
+                  (item) => _text(item['id']) == draft.subjectId,
+                )
+                ? draft.subjectId
+                : '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Subject'),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Select subject')),
+              for (final subject in subjectOptions)
+                DropdownMenuItem(
+                  value: _text(subject['id']),
+                  child: Text(
+                    _text(subject['name'], fallback: _text(subject['id'])),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) =>
+                setState(() => draft.subjectId = (value ?? '').trim()),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: staffOptions.any((item) => item.id == draft.staffId)
+                ? draft.staffId
+                : '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Teacher'),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Select teacher')),
+              for (final staff in staffOptions)
+                DropdownMenuItem(
+                  value: staff.id,
+                  child: Text(
+                    _staffLabel(staff),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) =>
+                setState(() => draft.staffId = (value ?? '').trim()),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue:
+                roomOptions.any(
+                  (item) => _text(item['room_id']) == draft.roomId,
+                )
+                ? draft.roomId
+                : '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Room'),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('No room')),
+              for (final room in roomOptions)
+                DropdownMenuItem(
+                  value: _text(room['room_id']),
+                  child: Text(
+                    _text(room['room_name'], fallback: _text(room['room_id'])),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) =>
+                setState(() => draft.roomId = (value ?? '').trim()),
           ),
         ],
       ),
@@ -1499,6 +1744,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   void _handleAdminTool(String value) {
     switch (value) {
+      case 'edit_timetable':
+        _startEditingSelectedTimetable();
+      case 'delete_timetable':
+        _deleteSelectedClassTimetable();
       case 'pre_primary':
         _openPrePrimaryScheduleSheet();
       case 'import':
@@ -1508,6 +1757,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   void _openTeacher(Map<String, dynamic> row) {
     setState(() {
+      _clearTimetableEditState();
       _homeMode = _AdminTimetableHomeMode.teachers;
       _selectedStaffId = _text(row['staff_id']);
       _detailMode = _AdminTimetableDetailMode.teacher;
@@ -1516,6 +1766,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   void _openRoom(Map<String, dynamic> row) {
     setState(() {
+      _clearTimetableEditState();
       _homeMode = _AdminTimetableHomeMode.rooms;
       _selectedRoomId = _text(row['room_id']);
       _detailMode = _AdminTimetableDetailMode.room;
@@ -1524,6 +1775,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   void _openDayDetails(Map<String, dynamic> period) {
     setState(() {
+      _clearTimetableEditState();
       _selectedSectionId = _text(
         period['section_id'],
         fallback: _selectedSectionId,
@@ -1540,6 +1792,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   void _goBack() {
+    if (_editingTimetable) {
+      _cancelEditingTimetable();
+      return;
+    }
     if (_detailMode == _AdminTimetableDetailMode.classWeek ||
         _detailMode == _AdminTimetableDetailMode.dayDetails) {
       setState(() => _detailMode = _AdminTimetableDetailMode.classDay);
@@ -1550,6 +1806,141 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       return;
     }
     Navigator.of(context).maybePop();
+  }
+
+  void _startEditingSelectedTimetable() {
+    final sectionId = _selectedSectionId.trim();
+    if (sectionId.isEmpty || _selectedClassRow == null) {
+      _showSnack('Select a class timetable before editing.');
+      return;
+    }
+    final periods = _periodsForClass(sectionId, _selectedDay);
+    final editable = periods.where((row) {
+      return _text(row['id']).isNotEmpty && !_isBreakSlot(row) && !_isFree(row);
+    }).toList();
+    if (editable.isEmpty) {
+      _showSnack('No editable periods found for this day.');
+      return;
+    }
+    setState(() {
+      _homeMode = _AdminTimetableHomeMode.classes;
+      _detailMode = _AdminTimetableDetailMode.classDay;
+      _editingTimetable = true;
+      _ensureDraftsFor(editable);
+    });
+  }
+
+  void _cancelEditingTimetable() {
+    setState(_clearTimetableEditState);
+  }
+
+  void _clearTimetableEditState() {
+    _editingTimetable = false;
+    _savingTimetable = false;
+    _editDrafts.clear();
+  }
+
+  Future<void> _saveEditedTimetable() async {
+    final drafts = _editDrafts.values.toList();
+    if (drafts.isEmpty) {
+      _showSnack('No timetable changes to save.');
+      return;
+    }
+    for (final draft in drafts) {
+      if (!draft.isComplete) {
+        _showSnack('Complete subject, teacher, and timings before saving.');
+        return;
+      }
+    }
+    setState(() => _savingTimetable = true);
+    try {
+      final api = BackendApiClient.instance;
+      for (final draft in drafts) {
+        await api.updateTimetableSlot(
+          id: draft.id,
+          sectionId: draft.sectionId,
+          academicYearId: draft.academicYearId,
+          termId: draft.termId,
+          dayOfWeek: draft.dayOfWeek,
+          periodNumber: draft.periodNumber,
+          subjectId: draft.subjectId,
+          staffId: draft.staffId,
+          startTime: draft.startTime,
+          endTime: draft.endTime,
+          roomId: draft.roomId,
+        );
+      }
+      await _loadBackendTimetable();
+      if (!mounted) return;
+      setState(() {
+        _editingTimetable = false;
+        _savingTimetable = false;
+        _editDrafts.clear();
+        _detailMode = _AdminTimetableDetailMode.classDay;
+      });
+      _showSnack('Timetable saved.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _savingTimetable = false);
+      _showSnack('Unable to save timetable. $error');
+    }
+  }
+
+  Future<void> _deleteSelectedClassTimetable() async {
+    final sectionId = _selectedSectionId.trim();
+    if (sectionId.isEmpty || _selectedClassRow == null) {
+      _showSnack('Select a class timetable before deleting.');
+      return;
+    }
+    final periods = _periodsForClass(
+      sectionId,
+      null,
+    ).where((row) => _text(row['id']).isNotEmpty).toList();
+    if (periods.isEmpty) {
+      _showSnack('No timetable data available to delete.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Timetable?'),
+        content: Text(
+          'Delete all ${periods.length} timetable periods for $_selectedClassLabel?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() {
+      _deletingTimetable = true;
+      _clearTimetableEditState();
+    });
+    try {
+      final api = BackendApiClient.instance;
+      for (final period in periods) {
+        await api.deleteTimetableSlot(_text(period['id']));
+      }
+      await _loadBackendTimetable();
+      if (!mounted) return;
+      setState(() {
+        _deletingTimetable = false;
+        _detailMode = _AdminTimetableDetailMode.classDay;
+      });
+      _showSnack('Timetable deleted.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deletingTimetable = false);
+      _showSnack('Unable to delete timetable. $error');
+    }
   }
 
   Future<void> _importTimetableCsv() async {
@@ -2263,6 +2654,27 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     }).toList();
   }
 
+  void _ensureDraftsFor(List<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      final id = _text(row['id']);
+      if (id.isEmpty || _isBreakSlot(row) || _isFree(row)) continue;
+      _editDrafts.putIfAbsent(id, () => _TimetableSlotDraft.fromRow(row));
+    }
+  }
+
+  List<Map<String, String>> get _subjectOptions {
+    final seen = <String>{};
+    final options = <Map<String, String>>[];
+    for (final slot in _slots) {
+      if (_isBreakSlot(slot) || _isFree(slot)) continue;
+      final id = _text(slot['subject_id']);
+      if (id.isEmpty || !seen.add(id)) continue;
+      options.add({'id': id, 'name': _subjectName(slot)});
+    }
+    options.sort((a, b) => _text(a['name']).compareTo(_text(b['name'])));
+    return options;
+  }
+
   List<Map<String, dynamic>> _periodsForTeacher(String staffId, int? day) {
     return _slots.where((slot) {
       return _text(slot['staff_id']) == staffId &&
@@ -2944,6 +3356,74 @@ class _TimetableCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _TimetableSlotDraft {
+  final String id;
+  final String sectionId;
+  final String academicYearId;
+  final String termId;
+  final int dayOfWeek;
+  final int periodNumber;
+  String subjectId;
+  String staffId;
+  String roomId;
+  String startTime;
+  String endTime;
+
+  _TimetableSlotDraft({
+    required this.id,
+    required this.sectionId,
+    required this.academicYearId,
+    required this.termId,
+    required this.dayOfWeek,
+    required this.periodNumber,
+    required this.subjectId,
+    required this.staffId,
+    required this.roomId,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  factory _TimetableSlotDraft.fromRow(Map<String, dynamic> row) {
+    return _TimetableSlotDraft(
+      id: _textValue(row['id']),
+      sectionId: _textValue(row['section_id']),
+      academicYearId: _textValue(row['academic_year_id']),
+      termId: _textValue(row['term_id']),
+      dayOfWeek: _intValue(row['day_of_week']),
+      periodNumber: _intValue(row['period_number']),
+      subjectId: _textValue(row['subject_id']),
+      staffId: _textValue(row['staff_id']),
+      roomId: _textValue(row['room_id']),
+      startTime: _textValue(row['start_time']),
+      endTime: _textValue(row['end_time']),
+    );
+  }
+
+  bool get isComplete {
+    return id.trim().isNotEmpty &&
+        sectionId.trim().isNotEmpty &&
+        academicYearId.trim().isNotEmpty &&
+        termId.trim().isNotEmpty &&
+        dayOfWeek > 0 &&
+        periodNumber > 0 &&
+        subjectId.trim().isNotEmpty &&
+        staffId.trim().isNotEmpty &&
+        startTime.trim().isNotEmpty &&
+        endTime.trim().isNotEmpty;
+  }
+
+  static String _textValue(Object? value) {
+    if (value == null) return '';
+    return value.toString().trim();
+  }
+
+  static int _intValue(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(_textValue(value)) ?? 0;
   }
 }
 

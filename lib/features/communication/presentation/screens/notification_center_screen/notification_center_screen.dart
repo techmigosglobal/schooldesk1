@@ -28,6 +28,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   late TabController _tabController;
   NotificationService? _service;
   bool _loading = true;
+  bool _markingAllRead = false;
   String? _error;
   String _parentFilter = 'all';
 
@@ -98,29 +99,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     final mutedColor = isDark
         ? const Color(0xFF90A4AE)
         : context.appTheme.muted;
-    final unreadCount = _service?.getUnreadCountForRole(widget.role) ?? 0;
 
     return SchoolDeskModuleScaffold(
       title: 'Notifications',
       subtitle: '${_roleLabel(widget.role)} alerts and updates',
       drawer: _drawerForRole(),
-      actions: [
-        IconButton(
-          tooltip: 'Refresh notifications',
-          onPressed: _loading ? null : () => _init(forceRefresh: true),
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-        TextButton.icon(
-          onPressed: unreadCount == 0
-              ? null
-              : () async {
-                  await _service?.markAllAsRead(widget.role);
-                  if (mounted) setState(() {});
-                },
-          icon: const Icon(Icons.done_all_rounded, size: 18),
-          label: const Text('Mark all read'),
-        ),
-      ],
+      showGlobalToolbarActions: false,
+      actions: _notificationHeaderActions(context, widget.role),
       bottom: TabBar(
         controller: _tabController,
         isScrollable: true,
@@ -284,13 +269,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       title: 'Notifications',
       subtitle: 'School alerts, fee reminders, and updates',
       drawer: ParentDrawer(selectedIndex: 99, onDestinationSelected: (_) {}),
-      actions: [
-        IconButton(
-          tooltip: 'Refresh notifications',
-          icon: const Icon(Icons.refresh_rounded),
-          onPressed: _init,
-        ),
-      ],
+      showGlobalToolbarActions: false,
+      actions: _notificationHeaderActions(context, 'parent'),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),
@@ -353,6 +333,64 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
               ),
       ),
     );
+  }
+
+  List<Widget> _notificationHeaderActions(BuildContext context, String role) {
+    final unreadCount = _service?.getUnreadCountForRole(role) ?? 0;
+    final canMarkAll = unreadCount > 0 && !_loading && !_markingAllRead;
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    final refresh = IconButton(
+      tooltip: 'Refresh notifications',
+      onPressed: _loading ? null : () => _init(forceRefresh: true),
+      icon: const Icon(Icons.refresh_rounded),
+    );
+    final markIcon = _markingAllRead
+        ? const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.done_all_rounded);
+
+    if (compact) {
+      return [
+        refresh,
+        IconButton(
+          tooltip: 'Mark all as read',
+          onPressed: canMarkAll ? () => _markAllAsRead(role) : null,
+          icon: markIcon,
+        ),
+      ];
+    }
+
+    return [
+      refresh,
+      TextButton.icon(
+        onPressed: canMarkAll ? () => _markAllAsRead(role) : null,
+        icon: markIcon,
+        label: const Text('Mark all read'),
+      ),
+    ];
+  }
+
+  Future<void> _markAllAsRead(String role) async {
+    if (_markingAllRead || _loading) return;
+    final unreadCount = _service?.getUnreadCountForRole(role) ?? 0;
+    if (unreadCount == 0) return;
+    setState(() => _markingAllRead = true);
+    try {
+      await _service?.markAllAsRead(role);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not mark all notifications as read: $error'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _markingAllRead = false);
+    }
   }
 
   List<AppNotification> _parentFilteredNotifications() {

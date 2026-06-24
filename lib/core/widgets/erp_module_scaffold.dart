@@ -26,6 +26,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
   final bool isPortalRoot;
   final String? fallbackRoute;
   final bool showBackButton;
+  final bool showGlobalToolbarActions;
 
   const SchoolDeskModuleScaffold({
     super.key,
@@ -44,6 +45,7 @@ class SchoolDeskModuleScaffold extends StatefulWidget {
     this.isPortalRoot = false,
     this.fallbackRoute,
     this.showBackButton = true,
+    this.showGlobalToolbarActions = true,
   });
 
   @override
@@ -109,6 +111,12 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         widget.showBackButton &&
         !widget.isPortalRoot &&
         (ModalRoute.of(context)?.canPop ?? false);
+    final globalToolbarActions =
+        widget.showGlobalToolbarActions &&
+            _hasRoleShell &&
+            (showRail || widget.actions.isEmpty)
+        ? (showRail ? _globalToolbarActions() : _compactToolbarActions())
+        : const <Widget>[];
 
     return PopScope(
       canPop: !widget.isPortalRoot,
@@ -171,11 +179,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
                               canNavigateBack: canNavigateBack,
                               onBackPressed: _handleBackPressed,
                               actions: widget.actions,
-                              globalActions: _hasRoleShell
-                                  ? (showRail
-                                        ? _globalToolbarActions()
-                                        : _compactToolbarActions())
-                                  : const [],
+                              globalActions: globalToolbarActions,
                             ),
                             if (widget.bottom != null) widget.bottom!,
                           ],
