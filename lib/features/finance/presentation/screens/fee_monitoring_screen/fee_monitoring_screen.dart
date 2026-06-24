@@ -2033,10 +2033,13 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       final sameGrade =
           structure.gradeId.isNotEmpty &&
           structure.gradeId == _textValue(invoice['grade_id']);
+      final sameSection =
+        structure.sectionId.isEmpty ||
+        structure.sectionId == _textValue(invoice['section_id']);
       final sameYear =
           structure.academicYearId.isNotEmpty &&
           structure.academicYearId == _textValue(invoice['academic_year_id']);
-      return sameGrade && sameYear;
+      return sameGrade && sameSection && sameYear;
     });
     setState(() {
       if (bundle != null) _selectedStructure = bundle;
@@ -2282,7 +2285,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     for (final row in _feeStructures) {
       final gradeId = _textValue(row['grade_id']);
       final yearId = _textValue(row['academic_year_id']);
-      final key = '$gradeId::$yearId';
+      final sectionId = _textValue(row['section_id']);
+      final key = '$gradeId::$yearId::$sectionId';
       grouped.putIfAbsent(key, () => []).add(_FeeComponent.fromRow(row));
     }
 
@@ -2291,10 +2295,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       final first = components.first.source;
       final gradeId = _textValue(first['grade_id']);
       final yearId = _textValue(first['academic_year_id']);
-      final classLabel = _classLabelForGrade(
+      final sectionId = _textValue(first['section_id']);
+      final sectionLabel = _textValue(
+        first['section'],
+        fallback: _sectionLabelForId(sectionId),
+      );
+      final gradeLabel = _classLabelForGrade(
         gradeId,
         fallback: _textValue(first['class'], fallback: 'Class pending'),
       );
+      final classLabel = [gradeLabel, sectionLabel]
+          .where((part) => part.isNotEmpty && part != 'All sections')
+          .join(' - ');
       final yearLabel = _yearLabelForId(
         yearId,
         fallback: _textValue(first['academic_year'], fallback: 'Academic year'),
@@ -2302,9 +2314,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       return _FeeStructureBundle(
         id: entry.key,
         gradeId: gradeId,
+        sectionId: sectionId,
         academicYearId: yearId,
-        title: '$classLabel Fee Structure $yearLabel',
-        classLabel: classLabel,
+        title:
+            '${classLabel.isEmpty ? gradeLabel : classLabel} Fee Structure $yearLabel',
+        classLabel: classLabel.isEmpty ? gradeLabel : classLabel,
+        sectionLabel: sectionLabel,
         academicYearLabel: yearLabel,
         components: components..sort((a, b) => a.name.compareTo(b.name)),
         isActive: components.any((item) => item.status != 'Draft'),
@@ -2360,6 +2375,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         ),
         structureTitle: _structureTitleForInvoice(first),
         gradeId: _textValue(first['grade_id']),
+        sectionId: _textValue(first['section_id']),
         academicYearId: _textValue(first['academic_year_id']),
         photoUrl: _textValue(first['photo_url']),
         total: total,
@@ -2396,11 +2412,15 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             structure.gradeId.isEmpty ||
             account.gradeId.isEmpty ||
             account.gradeId == structure.gradeId;
+        final sameSection =
+            structure.sectionId.isEmpty ||
+            account.sectionId.isEmpty ||
+            account.sectionId == structure.sectionId;
         final sameYear =
             structure.academicYearId.isEmpty ||
             account.academicYearId.isEmpty ||
             account.academicYearId == structure.academicYearId;
-        if (!sameGrade || !sameYear) return false;
+        if (!sameGrade || !sameSection || !sameYear) return false;
       }
       if (!_matchesStatus(account)) return false;
       if (query.isEmpty) return true;
@@ -2472,15 +2492,23 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> row) {
     final category = _mapValue(row['fee_category']);
     final grade = _mapValue(row['grade']);
+    final section = _mapValue(row['section']);
     final year = _mapValue(row['academic_year']);
     return {
       ...row,
       'id': _textValue(row['id']),
       'grade_id': _textValue(row['grade_id'] ?? grade['id']),
+      'section_id': _textValue(row['section_id'] ?? section['id']),
       'academic_year_id': _textValue(row['academic_year_id'] ?? year['id']),
       'class': _textValue(
         grade['grade_name'] ?? grade['name'],
         fallback: _textValue(row['class']),
+      ),
+      'section': _textValue(
+        section['section_name'],
+        fallback: _sectionLabelForId(
+          _textValue(row['section_id'] ?? section['id']),
+        ),
       ),
       'academic_year': _textValue(
         year['year_label'] ?? year['name'],
@@ -2557,6 +2585,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         'invoice_id': _textValue(invoice['id']),
         'name': _textValue(invoice['name'], fallback: 'Student'),
         'class': _textValue(invoice['class'], fallback: 'Class'),
+        'section_id': _textValue(invoice['section_id']),
         'amount': _numValue(row['amount_paid'] ?? row['amount']),
         'mode': _textValue(row['payment_mode'] ?? row['mode']),
         'date': row['payment_date'] ?? row['created_at'],
@@ -2569,6 +2598,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   String _structureTitleForInvoice(Map<String, dynamic> invoice) {
     final bundle = _structureBundles.firstWhereOrNull((structure) {
       return structure.gradeId == _textValue(invoice['grade_id']) &&
+          (structure.sectionId.isEmpty ||
+              structure.sectionId == _textValue(invoice['section_id'])) &&
           structure.academicYearId == _textValue(invoice['academic_year_id']);
     });
     return bundle?.title ??
@@ -2627,7 +2658,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           bundle.academicYearId == _selectedAcademicYearId;
       final gradeMatches =
           _selectedGradeId.isEmpty || bundle.gradeId == _selectedGradeId;
-      return yearMatches && gradeMatches;
+      final sectionMatches =
+          _selectedSectionId.isEmpty ||
+          bundle.sectionId.isEmpty ||
+          bundle.sectionId == _selectedSectionId;
+      return yearMatches && gradeMatches && sectionMatches;
     }).toList();
     if (rows.isEmpty) return null;
     return rows.first;
@@ -2650,10 +2685,17 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         .where(
           (bundle) =>
               bundle.gradeId == section.gradeId &&
+              (bundle.sectionId.isEmpty || bundle.sectionId == section.id) &&
               (_selectedAcademicYearId.isEmpty ||
                   bundle.academicYearId == _selectedAcademicYearId),
         )
         .fold(0, (sum, row) => sum + row.total);
+  }
+
+  String _sectionLabelForId(String sectionId) {
+    if (sectionId.isEmpty) return 'All sections';
+    final section = _sections.firstWhereOrNull((row) => row.id == sectionId);
+    return section?.sectionName ?? sectionId;
   }
 
   String _statusFilterLabel(_FeeStatusFilter filter) {
@@ -3734,9 +3776,11 @@ class _FeeSuccessCircle extends StatelessWidget {
 class _FeeStructureBundle {
   final String id;
   final String gradeId;
+  final String sectionId;
   final String academicYearId;
   final String title;
   final String classLabel;
+  final String sectionLabel;
   final String academicYearLabel;
   final List<_FeeComponent> components;
   final bool isActive;
@@ -3744,9 +3788,11 @@ class _FeeStructureBundle {
   const _FeeStructureBundle({
     required this.id,
     required this.gradeId,
+    required this.sectionId,
     required this.academicYearId,
     required this.title,
     required this.classLabel,
+    required this.sectionLabel,
     required this.academicYearLabel,
     required this.components,
     required this.isActive,
@@ -3801,6 +3847,7 @@ class _FeeStudentAccount {
   final String academicYearLabel;
   final String structureTitle;
   final String gradeId;
+  final String sectionId;
   final String academicYearId;
   final String photoUrl;
   final double total;
@@ -3817,6 +3864,7 @@ class _FeeStudentAccount {
     required this.academicYearLabel,
     required this.structureTitle,
     required this.gradeId,
+    required this.sectionId,
     required this.academicYearId,
     required this.photoUrl,
     required this.total,

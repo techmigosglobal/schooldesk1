@@ -82,6 +82,8 @@ void main() {
       expect(source, contains('_primaryDueInvoice'));
       expect(source, contains('_FeeStructureBundle'));
       expect(source, contains('_FeeStudentAccount'));
+      expect(source, contains("final sectionId = _textValue(row['section_id'])"));
+      expect(source, contains("structure.sectionId == _textValue(invoice['section_id'])"));
       expect(source, contains('_FeePaymentResult'));
       expect(source, contains('BackendApiClient.instance.recordPayment'));
       expect(source, contains("createRaw('/fees/reminders'"));
@@ -240,6 +242,7 @@ void main() {
     expect(client, contains("'grade_name': gradeName.trim()"));
     expect(client, contains('savePrincipalSubjectMapping'));
     expect(client, contains('getFeeStructures'));
+    expect(screen, contains('sectionId: _sectionId'));
     expect(backendRoutes, contains('principal.POST("/classes"'));
     expect(backendRoutes, contains('principal.DELETE('));
     expect(backendRoutes, contains('"/classes/:section_id"'));

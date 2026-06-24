@@ -23,6 +23,8 @@ void main() {
       expect(form, contains('UTR'));
       expect(form, contains('/uploads'));
       expect(form, contains('getPaymentConfig'));
+      expect(form, contains(r'Payee: $_payeeName'));
+      expect(form, contains("_text(_paymentConfig['qr_note'])"));
       expect(form, isNot(contains('Razorpay')));
       expect(datasource, isNot(contains('Razorpay')));
     });

@@ -395,6 +395,27 @@ class _ParentPaymentRequestFormScreenState
               ),
             ),
             const SizedBox(height: 8),
+            Text(
+              'Payee: $_payeeName',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.appTheme.onSurface,
+              ),
+            ),
+            if (_text(_paymentConfig['qr_note']).isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                _text(_paymentConfig['qr_note']),
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: _upiId));

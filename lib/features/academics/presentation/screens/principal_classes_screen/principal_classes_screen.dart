@@ -4736,6 +4736,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             : BackendApiClient.instance.getFeeStructures(
                 academicYearId: _academicYearId,
                 gradeId: _gradeId,
+                sectionId: _sectionId,
               ),
         BackendApiClient.instance.getFeeCategories(),
       ]);
@@ -4838,6 +4839,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
           await BackendApiClient.instance.createFeeStructure(
             academicYearId: _academicYearId,
             gradeId: _gradeId,
+            sectionId: _sectionId,
             feeCategoryId: categoryId,
             amount: component.amount,
             dueDay: component.dueDay,
@@ -4849,6 +4851,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             component.structureId,
             academicYearId: _academicYearId,
             gradeId: _gradeId,
+            sectionId: _sectionId,
             feeCategoryId: categoryId,
             amount: component.amount,
             dueDay: component.dueDay,
