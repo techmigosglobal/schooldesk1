@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 
@@ -123,7 +124,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     return TeacherFlowScaffold(
       title: 'My Attendance',
       subtitle: 'QR Punch-in',
-      selectedIndex: 14,
+      selectedIndex: TeacherNav.myAttendance,
       loading: _loading,
       error: _error,
       onRefresh: _loadToday,

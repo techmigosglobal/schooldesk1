@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -19,6 +20,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
   late TabController _tabController;
 
   List<Map<String, dynamic>> _requests = [];
+  List<Map<String, dynamic>> _templates = [];
   bool _loading = true;
   String? _error;
 
@@ -70,12 +72,18 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   Future<void> _loadRequests() async {
     try {
-      final rows = await BackendApiClient.instance.getRawList(
-        '/documents/requests',
-      );
+      final results = await Future.wait([
+        BackendApiClient.instance.getRawList('/documents/requests'),
+        BackendApiClient.instance.getRawList('/certificates/transfer-requests'),
+        BackendApiClient.instance.getRawList('/documents/templates'),
+      ]);
       if (!mounted) return;
       setState(() {
-        _requests = rows.map(_mapDocumentRequest).toList();
+        _requests = [
+          ...results[0].map(_mapDocumentRequest),
+          ...results[1].map(_mapTransferRequest),
+        ];
+        _templates = results[2].map(_mapTemplate).toList();
         _loading = false;
         _error = null;
       });
@@ -91,6 +99,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
   Map<String, dynamic> _mapDocumentRequest(Map<String, dynamic> row) {
     return {
       'id': row['id'],
+      'resource': 'documents/requests',
       'student':
           row['student_name'] ??
           row['student'] ??
@@ -106,6 +115,35 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     };
   }
 
+  Map<String, dynamic> _mapTransferRequest(Map<String, dynamic> row) {
+    return {
+      'id': row['id'],
+      'resource': 'certificates/transfer-requests',
+      'student':
+          row['student_name'] ??
+          row['student'] ??
+          row['student_id'] ??
+          'Student',
+      'class': row['class_name'] ?? row['class'] ?? '',
+      'type': 'Transfer Certificate',
+      'requestDate': '${row['created_at'] ?? row['requested_on'] ?? ''}'
+          .split('T')
+          .first,
+      'status': row['status'] ?? 'Pending',
+      'parent': row['parent_name'] ?? row['parent'] ?? '',
+    };
+  }
+
+  Map<String, dynamic> _mapTemplate(Map<String, dynamic> row) {
+    return {
+      'id': row['id'],
+      'name': row['name'] ?? row['template_name'] ?? 'Template',
+      'type':
+          row['type'] ?? row['document_type'] ?? row['certificate_type'] ?? '',
+      'status': row['status'] ?? 'active',
+    };
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -114,10 +152,13 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final drawer = AdminDrawer(selectedIndex: 9, onDestinationSelected: (_) {});
+    final drawer = PrincipalDrawer(
+      selectedIndex: PrincipalNav.documents,
+      onDestinationSelected: (_) {},
+    );
     if (_loading) {
       return SchoolDeskModuleScaffold(
-        title: 'Documents',
+        title: 'Documents & Certificates',
         subtitle: 'Approve requests, generate certificates, and track records',
         drawer: drawer,
         floatingActionButton: const DashboardFabWidget(
@@ -129,7 +170,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     }
     if (_error != null) {
       return SchoolDeskModuleScaffold(
-        title: 'Documents',
+        title: 'Documents & Certificates',
         subtitle: 'Approve requests, generate certificates, and track records',
         drawer: drawer,
         floatingActionButton: const DashboardFabWidget(
@@ -155,10 +196,12 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       );
     }
     return SchoolDeskModuleScaffold(
-      title: 'Documents',
+      title: 'Documents & Certificates',
       subtitle: 'Approve requests, generate certificates, and track records',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(
@@ -289,11 +332,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           const SizedBox(height: 6),
           Row(
             children: [
-              Icon(
-                Icons.description_rounded,
-                size: 14,
-                color: Colors.grey,
-              ),
+              Icon(Icons.description_rounded, size: 14, color: Colors.grey),
               const SizedBox(width: 4),
               Text(
                 r['type'] as String,
@@ -365,65 +404,99 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
   }
 
   Widget _buildGenerate() {
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 1.2,
-      ),
-      itemCount: _docTypes.length,
-      itemBuilder: (_, i) {
-        final d = _docTypes[i];
-        return GestureDetector(
-          onTap: () => _showGenerateDialog(context, d['type'] as String),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.appTheme.surfaceVariant),
+    return Column(
+      children: [
+        _buildTemplateStrip(),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 10,
+              mainAxisSpacing: 10,
+              childAspectRatio: 1.2,
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
+            itemCount: _docTypes.length,
+            itemBuilder: (_, i) {
+              final d = _docTypes[i];
+              return GestureDetector(
+                onTap: () => _showGenerateDialog(context, d['type'] as String),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: (d['color'] as Color).withAlpha(20),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: context.appTheme.surfaceVariant),
                   ),
-                  child: Icon(
-                    d['icon'] as IconData,
-                    size: 26,
-                    color: d['color'] as Color,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (d['color'] as Color).withAlpha(20),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          d['icon'] as IconData,
+                          size: 26,
+                          color: d['color'] as Color,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        d['type'] as String,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        d['desc'] as String,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          color: Colors.grey,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  d['type'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  d['desc'] as String,
-                  style: GoogleFonts.dmSans(fontSize: 9, color: Colors.grey),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateStrip() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Certificate templates: ${_templates.length}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        );
-      },
+          TextButton.icon(
+            onPressed: _showTemplateDialog,
+            icon: const Icon(Icons.post_add_rounded, size: 18),
+            label: const Text('Template'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -482,10 +555,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                 onPressed: () => _requestReprint(r),
                 child: Text(
                   'Reprint',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: Colors.blue,
-                  ),
+                  style: GoogleFonts.dmSans(fontSize: 12, color: Colors.blue),
                 ),
               ),
             ],
@@ -536,7 +606,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
   ) async {
     try {
       await BackendApiClient.instance.updateRaw(
-        '/documents/requests/${request['id']}',
+        '/${request['resource'] ?? 'documents/requests'}/${request['id']}',
         {'status': status.toLowerCase()},
       );
       await _loadRequests();
@@ -553,6 +623,68 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         ),
       );
     }
+  }
+
+  Future<void> _showTemplateDialog() async {
+    final nameController = TextEditingController();
+    final bodyController = TextEditingController();
+    String selectedType = 'Bonafide Certificate';
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Certificate Template'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DropdownButtonFormField<String>(
+              initialValue: selectedType,
+              decoration: const InputDecoration(labelText: 'Certificate type'),
+              items: _docTypes
+                  .map(
+                    (doc) => DropdownMenuItem(
+                      value: doc['type'] as String,
+                      child: Text(doc['type'] as String),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) selectedType = value;
+              },
+            ),
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Template name'),
+            ),
+            TextField(
+              controller: bodyController,
+              decoration: const InputDecoration(labelText: 'Template body'),
+              minLines: 3,
+              maxLines: 5,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    await BackendApiClient.instance.createRaw('/documents/templates', {
+      'name': nameController.text.trim().isEmpty
+          ? selectedType
+          : nameController.text.trim(),
+      'document_type': selectedType,
+      'body': bodyController.text.trim(),
+      'status': 'active',
+    });
+    await _loadRequests();
   }
 
   Future<void> _requestReprint(Map<String, dynamic> request) async {

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
+import 'package:schooldesk1/routes/app_routes.dart';
 
 enum _AttendanceView { staff, students, classes, monitor, reports }
 
@@ -300,6 +301,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
             ),
           ),
           IconButton(
+            tooltip: 'Open Class Hub',
+            onPressed: _openClassHubAttendanceSetup,
+            icon: const Icon(Icons.class_outlined),
+          ),
+          IconButton(
             tooltip: 'Refresh',
             onPressed: _load,
             icon: const Icon(Icons.refresh_rounded),
@@ -374,6 +380,28 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
 
   void _setView(_AttendanceView view) {
     setState(() => _view = view);
+  }
+
+  Future<void> _openClassHubAttendanceSetup() async {
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.principalClasses,
+      arguments: {
+        'source': 'principal_attendance',
+        'action': 'attendance',
+        'selectedStep': 'attendance_setup',
+        'classId': _selectedGradeId,
+        'sectionId': _selectedSectionId,
+      },
+    );
+    if (mounted) await _load();
+  }
+
+  String get _selectedGradeId {
+    for (final section in _sections) {
+      if (section.id == _selectedSectionId) return section.gradeId;
+    }
+    return '';
   }
 
   Widget _staffView() {

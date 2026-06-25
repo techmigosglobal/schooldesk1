@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -58,8 +59,18 @@ class _TeacherLeaveRequestFormScreenState
   DateTime _toDate = DateTime.now().add(const Duration(days: 1));
 
   static const List<String> _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   String _displayDate(DateTime date) {
@@ -143,7 +154,7 @@ class _TeacherLeaveRequestFormScreenState
       return const TeacherFlowScaffold(
         title: 'Apply Leave',
         subtitle: 'Loading teacher leave context',
-        selectedIndex: 10,
+        selectedIndex: TeacherNav.leave,
         loading: true,
         child: SizedBox.shrink(),
       );
@@ -157,7 +168,7 @@ class _TeacherLeaveRequestFormScreenState
     return TeacherFlowScaffold(
       title: 'Apply Leave',
       subtitle: 'Submit leave for principal approval',
-      selectedIndex: 10,
+      selectedIndex: TeacherNav.leave,
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(

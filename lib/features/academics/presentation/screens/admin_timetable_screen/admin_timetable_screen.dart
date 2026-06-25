@@ -5,8 +5,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -122,7 +122,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF3F8FC),
-      drawer: AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.timetable,
+        onDestinationSelected: (_) {},
+      ),
       bottomNavigationBar: const PrincipalShellBottomBar(),
       body: SafeArea(
         child: Align(

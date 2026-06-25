@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -17,7 +19,7 @@ class ParentLeaveScreen extends StatefulWidget {
 }
 
 class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
-  int _selectedNavIndex = 7;
+  int _selectedNavIndex = ParentNav.leave;
   int _activeChildIndex = 0;
   bool _loading = true;
   String? _error;
@@ -43,13 +45,15 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
     try {
       final children = await _api.getMyStudents();
       final requests = await _api.getStudentLeaveApplications();
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
       if (!mounted) return;
       setState(() {
         _children = children;
         _requests = requests;
-        if (_activeChildIndex >= _children.length) {
-          _activeChildIndex = _children.isEmpty ? 0 : _children.length - 1;
-        }
+        _activeChildIndex = selectedIndex;
         _loading = false;
         _error = null;
       });
@@ -158,7 +162,9 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       decoration: BoxDecoration(
         color: context.appTheme.errorContainer,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: context.appTheme.error.withValues(alpha: 0.18)),
+        border: Border.all(
+          color: context.appTheme.error.withValues(alpha: 0.18),
+        ),
       ),
       child: Row(
         children: [
@@ -227,9 +233,14 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
                 color: isActive ? Colors.white : context.appTheme.onSurface,
               ),
               side: BorderSide(
-                color: isActive ? _headerColor : context.appTheme.outlineVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.outlineVariant,
               ),
-              onSelected: (_) => setState(() => _activeChildIndex = index),
+              onSelected: (_) {
+                setState(() => _activeChildIndex = index);
+                ParentChildSelectionService.saveIndex(_children, index);
+              },
             ),
           );
         }),
@@ -368,7 +379,10 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           Expanded(
             child: Text(
               'No leave requests found for the selected student.',
-              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
             ),
           ),
         ],
@@ -444,15 +458,24 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           const SizedBox(height: 6),
           Text(
             'Child: $studentName',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
           Text(
             'Date: $fromDate${days > 1 ? ' - $toDate' : ''}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
           Text(
             'Days: ${days.toStringAsFixed(days.truncateToDouble() == days ? 0 : 1)}',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
           Text(
             'Reason: $reason',
@@ -487,7 +510,10 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
             const SizedBox(height: 4),
             Text(
               'Rejected: $rejectionReason',
-              style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.error),
+              style: GoogleFonts.dmSans(
+                fontSize: 11,
+                color: context.appTheme.error,
+              ),
             ),
           ],
           if (isPending)
@@ -514,7 +540,10 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
           const SizedBox(height: 4),
           Text(
             'Submitted: $submittedOn',
-            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              color: context.appTheme.muted,
+            ),
           ),
         ],
       ),

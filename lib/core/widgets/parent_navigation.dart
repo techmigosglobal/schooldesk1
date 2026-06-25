@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
@@ -112,7 +113,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'Overview',
           items: [
             SchoolDeskNavigationItem(
-              index: 0,
+              index: ParentNav.dashboard,
               icon: Icons.dashboard_outlined,
               activeIcon: Icons.dashboard_rounded,
               label: 'Dashboard',
@@ -124,28 +125,35 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'Child Academics',
           items: [
             SchoolDeskNavigationItem(
-              index: 2,
+              index: ParentNav.attendance,
               icon: Icons.how_to_reg_outlined,
               activeIcon: Icons.how_to_reg_rounded,
               label: 'Attendance',
               route: AppRoutes.parentAttendance,
             ),
             SchoolDeskNavigationItem(
-              index: 3,
+              index: ParentNav.homework,
               icon: Icons.assignment_outlined,
               activeIcon: Icons.assignment_rounded,
               label: 'Homework',
               route: AppRoutes.parentHomework,
             ),
             SchoolDeskNavigationItem(
-              index: 13,
+              index: ParentNav.diary,
               icon: Icons.menu_book_outlined,
               activeIcon: Icons.menu_book_rounded,
               label: 'Class Diary',
               route: AppRoutes.parentDiary,
             ),
             SchoolDeskNavigationItem(
-              index: 20,
+              index: ParentNav.timetable,
+              icon: Icons.calendar_view_week_outlined,
+              activeIcon: Icons.calendar_view_week_rounded,
+              label: 'Timetable',
+              route: AppRoutes.parentTimetable,
+            ),
+            SchoolDeskNavigationItem(
+              index: ParentNav.lessonPlanner,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
               label: 'Lesson Planner',
@@ -157,7 +165,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'Communication',
           items: [
             SchoolDeskNavigationItem(
-              index: 4,
+              index: ParentNav.notices,
               icon: Icons.campaign_outlined,
               activeIcon: Icons.campaign_rounded,
               label: 'School Notices',
@@ -165,14 +173,21 @@ class _ParentDrawerState extends State<ParentDrawer> {
               badgeCount: _unreadCount,
             ),
             const SchoolDeskNavigationItem(
-              index: 5,
+              index: ParentNav.chat,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
               label: 'Teacher Chat / PTM',
               route: AppRoutes.parentTeacherChat,
             ),
+            const SchoolDeskNavigationItem(
+              index: ParentNav.ptm,
+              icon: Icons.event_available_outlined,
+              activeIcon: Icons.event_available_rounded,
+              label: 'PTM Slots',
+              route: AppRoutes.parentPTMBooking,
+            ),
             SchoolDeskNavigationItem(
-              index: 14,
+              index: ParentNav.homeworkFeedback,
               icon: Icons.feedback_outlined,
               activeIcon: Icons.feedback_rounded,
               label: 'Homework Feedback',
@@ -189,21 +204,21 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'Finance & Admin',
           items: [
             SchoolDeskNavigationItem(
-              index: 6,
+              index: ParentNav.fees,
               icon: Icons.account_balance_wallet_outlined,
               activeIcon: Icons.account_balance_wallet_rounded,
               label: SchoolDeskGlossary.fees,
               route: AppRoutes.parentFees,
             ),
             SchoolDeskNavigationItem(
-              index: 15,
+              index: ParentNav.receipts,
               icon: Icons.receipt_long_outlined,
               activeIcon: Icons.receipt_long_rounded,
               label: 'Pay & Receipts',
               route: AppRoutes.feePaymentReceipt,
             ),
             SchoolDeskNavigationItem(
-              index: 7,
+              index: ParentNav.leave,
               icon: Icons.event_busy_outlined,
               activeIcon: Icons.event_busy_rounded,
               label: 'Leave Requests',
@@ -215,44 +230,25 @@ class _ParentDrawerState extends State<ParentDrawer> {
           label: 'School',
           items: [
             SchoolDeskNavigationItem(
-              index: 8,
+              index: ParentNav.calendar,
               icon: Icons.calendar_month_outlined,
               activeIcon: Icons.calendar_month_rounded,
               label: SchoolDeskGlossary.calendar,
               route: AppRoutes.parentCalendar,
             ),
             SchoolDeskNavigationItem(
-              index: 9,
+              index: ParentNav.documents,
               icon: Icons.description_outlined,
               activeIcon: Icons.description_rounded,
               label: SchoolDeskGlossary.documents,
               route: AppRoutes.parentDocuments,
             ),
             SchoolDeskNavigationItem(
-              index: 18,
+              index: ParentNav.gallery,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,
               label: 'Gallery',
               route: AppRoutes.schoolGallery,
-            ),
-          ],
-        ),
-        const SchoolDeskNavigationSection(
-          label: 'Health & Info',
-          items: [
-            SchoolDeskNavigationItem(
-              index: 19,
-              icon: Icons.medical_services_outlined,
-              activeIcon: Icons.medical_services_rounded,
-              label: 'Health Updates',
-              route: AppRoutes.parentHealthUpdate,
-            ),
-            SchoolDeskNavigationItem(
-              index: 12,
-              icon: Icons.auto_stories_outlined,
-              activeIcon: Icons.auto_stories_rounded,
-              label: 'Academic Info',
-              route: AppRoutes.parentAcademicInfo,
             ),
           ],
         ),

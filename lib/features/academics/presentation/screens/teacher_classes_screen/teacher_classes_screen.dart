@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -60,7 +61,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
     return TeacherFlowScaffold(
       title: 'My Classes',
       subtitle: 'Your class teacher section, students, and classroom actions',
-      selectedIndex: 1,
+      selectedIndex: TeacherNav.classes,
       loading: _loading,
       error: _error,
       onRefresh: _loadClasses,
@@ -167,14 +168,6 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                             AppRoutes.teacherAttendance,
                           ),
                         ),
-                      TeacherFlowAction(
-                        label: 'Homework',
-                        icon: Icons.assignment_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherHomework,
-                        ),
-                      ),
                       TeacherFlowAction(
                         label: 'Diary',
                         icon: Icons.menu_book_rounded,

@@ -41,7 +41,7 @@ class NotificationRouteResolver {
       'staff_attendance_daily_report' ||
       'staff_attendance_monthly_report' => _attendanceRouteFor(role),
       'lesson_planner_weekly_digest' => _lessonPlannerRouteFor(role),
-      'health' => AppRoutes.parentHealthUpdate,
+      'health' => AppRoutes.notificationCenter,
       _ => AppRoutes.notificationCenter,
     };
     return NotificationRouteTarget(
@@ -98,7 +98,7 @@ class NotificationRouteResolver {
   static String _homeworkRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentHomework,
-      'teacher' => AppRoutes.teacherHomework,
+      'teacher' => AppRoutes.teacherDiary,
       _ => AppRoutes.notificationCenter,
     };
   }

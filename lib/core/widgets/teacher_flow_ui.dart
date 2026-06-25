@@ -101,7 +101,7 @@ const List<SchoolDeskModuleBottomAction> teacherFlowBottomActions = [
     label: 'Diary',
     icon: Icons.menu_book_outlined,
     activeIcon: Icons.menu_book_rounded,
-    route: AppRoutes.teacherHomework,
+    route: AppRoutes.teacherDiary,
   ),
   SchoolDeskModuleBottomAction(
     label: 'Profile',

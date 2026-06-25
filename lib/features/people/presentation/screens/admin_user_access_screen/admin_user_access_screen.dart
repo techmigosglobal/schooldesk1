@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -48,12 +48,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       'Communication',
       'All Access',
     ],
-    'Teacher': [
-      'Dashboard',
-      'Attendance',
-      'Exams',
-      'Communication',
-    ],
+    'Teacher': ['Dashboard', 'Attendance', 'Exams', 'Communication'],
     'Parent': ['Child Profile', 'Attendance View', 'Fee View', 'Notices'],
   };
 
@@ -170,8 +165,14 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
   Widget build(BuildContext context) {
     final title = _isPrincipalOwner ? 'Access & Permissions' : 'Access';
     final drawer = widget.ownerRole == 'principal'
-        ? PrincipalDrawer(selectedIndex: 1, onDestinationSelected: (_) {})
-        : AdminDrawer(selectedIndex: 10, onDestinationSelected: (_) {});
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          );
     return SchoolDeskModuleScaffold(
       title: title,
       subtitle: _isPrincipalOwner

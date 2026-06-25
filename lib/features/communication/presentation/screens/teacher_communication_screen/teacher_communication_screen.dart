@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -33,6 +34,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   List<AnnouncementModel> _notices = const [];
 
   Timer? _pollingTimer;
+  DateTime? _lastChatRefreshAt;
 
   @override
   void initState() {
@@ -43,7 +45,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
   }
 
   void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_loading) {
         _loadCommunication(background: true);
       }
@@ -68,10 +70,22 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     try {
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
+      final sentAfter = background
+          ? (_lastChatRefreshAt ??
+                DateTime.now().toUtc().subtract(const Duration(minutes: 30)))
+          : null;
       final profile = await api.getProfile();
       final schoolNotices = await api.getAnnouncements();
-      final conversations = await api.getMessageConversations();
-      final messages = await api.getChatMessages();
+      final conversations = await api.getMessageConversations(
+        pageSize: background ? 50 : null,
+      );
+      final incomingMessages = await api.getChatMessages(
+        pageSize: background ? 100 : null,
+        sentAfter: sentAfter,
+      );
+      final messages = background
+          ? _mergeMessageRows(_messages, incomingMessages)
+          : incomingMessages;
       final directMessages = await api.getCommunications();
       // Use /staff (accessible to all roles) instead of /users (Admin/Principal only).
       final staffList = await api.getStaff(status: 'active', pageSize: 1000);
@@ -120,6 +134,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         _messages = messages;
         _directMessages = directMessages;
         _chatTargets = chatTargets;
+        _lastChatRefreshAt = DateTime.now().toUtc();
         _loading = false;
       });
     } catch (error) {
@@ -129,6 +144,32 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
         _error = error.toString();
       });
     }
+  }
+
+  List<Map<String, dynamic>> _mergeMessageRows(
+    List<Map<String, dynamic>> current,
+    List<Map<String, dynamic>> incoming,
+  ) {
+    final merged = current.map((row) => {...row}).toList();
+    final seen = merged.map(_messageFingerprint).toSet();
+    for (final message in incoming) {
+      if (seen.add(_messageFingerprint(message))) {
+        merged.add(message);
+      }
+    }
+    merged.sort((a, b) => _messageTime(a).compareTo(_messageTime(b)));
+    return merged;
+  }
+
+  String _messageFingerprint(Map<String, dynamic> row) {
+    final id = teacherFlowText(row['id'] ?? row['message_id']);
+    if (id.isNotEmpty) return id;
+    return [
+      row['conversation_id'],
+      row['sender_id'],
+      row['sent_at'] ?? row['created_at'],
+      row['body'] ?? row['message'],
+    ].map(teacherFlowText).join('|');
   }
 
   Future<void> _sendMessage() async {
@@ -157,7 +198,7 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     return TeacherFlowScaffold(
       title: 'Communication',
       subtitle: 'Chats, school notices, and protected parent communication',
-      selectedIndex: 8,
+      selectedIndex: TeacherNav.communication,
       loading: _loading,
       error: _error,
       onRefresh: _loadCommunication,
@@ -691,11 +732,16 @@ class _TeacherCommunicationScreenState extends State<TeacherCommunicationScreen>
     return teacherFlowText(value).toLowerCase() == 'true';
   }
 
+  DateTime _messageTime(Map<String, dynamic> message) {
+    return DateTime.tryParse(
+          teacherFlowText(message['sent_at'] ?? message['created_at']),
+        ) ??
+        DateTime(1970);
+  }
+
   String _messageDate(Map<String, dynamic> message) {
-    final value = DateTime.tryParse(
-      teacherFlowText(message['sent_at'] ?? message['created_at']),
-    );
-    if (value == null) return '';
+    final value = _messageTime(message);
+    if (value.year == 1970) return '';
     return '${value.hour.toString().padLeft(2, '0')}:${value.minute.toString().padLeft(2, '0')}';
   }
 

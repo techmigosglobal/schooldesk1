@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/services/backend_data_service.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -79,7 +80,10 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
 
   @override
   Widget build(BuildContext context) {
-    final drawer = AdminDrawer(selectedIndex: 8, onDestinationSelected: (_) {});
+    final drawer = PrincipalDrawer(
+      selectedIndex: PrincipalNav.complaints,
+      onDestinationSelected: (_) {},
+    );
     if (_loading) {
       return SchoolDeskModuleScaffold(
         title: 'Parent Support / Helpdesk',
@@ -96,7 +100,9 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
       title: 'Parent Support / Helpdesk',
       subtitle: 'Track parent tickets, escalations, and resolution health',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(
@@ -261,7 +267,10 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
           ),
           Text(
             '$parentName (Parent of $studentName) • $category • $date',
-            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              color: context.appTheme.muted,
+            ),
           ),
           if (response.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -384,7 +393,9 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _buildStatCard('Open', open, context.appTheme.error)),
+              Expanded(
+                child: _buildStatCard('Open', open, context.appTheme.error),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: _buildStatCard(
@@ -395,7 +406,11 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildStatCard('Resolved', resolved, context.appTheme.success),
+                child: _buildStatCard(
+                  'Resolved',
+                  resolved,
+                  context.appTheme.success,
+                ),
               ),
             ],
           ),
@@ -497,7 +512,10 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appTheme.success,
+      ),
     );
   }
 
@@ -516,7 +534,10 @@ class _AdminHelpdeskScreenState extends State<AdminHelpdeskScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appTheme.success,
+      ),
     );
   }
 }

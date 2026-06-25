@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
@@ -135,7 +136,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
     return TeacherFlowScaffold(
       title: 'My Leaves',
       subtitle: 'Apply, track status, and see substitute coverage',
-      selectedIndex: 10,
+      selectedIndex: TeacherNav.leave,
       loading: _loading,
       error: _error,
       onRefresh: _loadLeave,

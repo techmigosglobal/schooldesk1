@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -17,7 +19,7 @@ class ParentFeesScreen extends StatefulWidget {
 
 class _ParentFeesScreenState extends State<ParentFeesScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 6;
+  int _selectedNavIndex = ParentNav.fees;
   late TabController _tabController;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
@@ -62,7 +64,11 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     });
     try {
       final children = await BackendApiClient.instance.getMyStudents();
-      if (_activeChildIndex >= children.length) _activeChildIndex = 0;
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
+      _activeChildIndex = selectedIndex;
       var feeList = <Map<String, dynamic>>[];
       var historyList = <Map<String, dynamic>>[];
 
@@ -264,6 +270,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 _activeChildIndex = i;
                 _loading = true;
               });
+              ParentChildSelectionService.saveIndex(_childrenData, i);
               _loadData();
             },
             child: Container(

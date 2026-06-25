@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -50,8 +50,14 @@ class _AccountChildAssignmentScreenState
   @override
   Widget build(BuildContext context) {
     final drawer = widget.args.isPrincipalOwner
-        ? PrincipalDrawer(selectedIndex: 1, onDestinationSelected: (_) {})
-        : AdminDrawer(selectedIndex: 10, onDestinationSelected: (_) {});
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          );
 
     return SchoolDeskModuleScaffold(
       title: 'Assign Children',
@@ -97,7 +103,9 @@ class _AccountChildAssignmentScreenState
                     decoration: BoxDecoration(
                       color: context.appTheme.surface,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.appTheme.outlineVariant),
+                      border: Border.all(
+                        color: context.appTheme.outlineVariant,
+                      ),
                     ),
                     child: TextFormField(
                       controller: _admissionController,

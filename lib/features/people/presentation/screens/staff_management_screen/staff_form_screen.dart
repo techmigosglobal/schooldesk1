@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
@@ -94,8 +94,14 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
   Widget build(BuildContext context) {
     final title = _isEdit ? 'Edit Staff' : 'Add Staff';
     final drawer = _isAdminOwner
-        ? AdminDrawer(selectedIndex: 2, onDestinationSelected: (_) {})
-        : PrincipalDrawer(selectedIndex: 1, onDestinationSelected: (_) {});
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.staff,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.staff,
+            onDestinationSelected: (_) {},
+          );
 
     return SchoolDeskModuleScaffold(
       title: title,

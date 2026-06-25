@@ -25,7 +25,8 @@ void main() {
       'parentCalendar',
       'parentDocuments',
       'parentDiary',
-      'parentAcademicInfo',
+      'parentTimetable',
+      'parentPTMBooking',
     ]) {
       expect(routes, contains('static const String $route'));
       expect(routes, contains('$route:'));

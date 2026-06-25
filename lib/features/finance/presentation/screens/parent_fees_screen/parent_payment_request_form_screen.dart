@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -138,7 +139,10 @@ class _ParentPaymentRequestFormScreenState
     return SchoolDeskModuleScaffold(
       title: 'Pay by UPI',
       subtitle: 'Scan, pay, and upload proof for school verification',
-      drawer: ParentDrawer(selectedIndex: 6, onDestinationSelected: (_) {}),
+      drawer: ParentDrawer(
+        selectedIndex: ParentNav.fees,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),

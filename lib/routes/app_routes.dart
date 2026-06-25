@@ -14,14 +14,14 @@ import 'package:schooldesk1/features/shell/shell.dart';
 import 'package:schooldesk1/features/homework/homework.dart';
 import 'package:schooldesk1/features/leave/leave.dart';
 import 'package:schooldesk1/features/profile/profile.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
-import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/schooldesk_route_frame.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/event_post_screen.dart';
 import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_screen.dart';
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
-import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
+import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
 
 class AppRoutes {
@@ -83,6 +83,8 @@ class AppRoutes {
   static const String principalEventApprovals =
       '/principal-event-approvals-screen';
   static const String principalTimetable = '/principal-timetable-screen';
+  static const String principalDocuments = '/principal-documents-screen';
+  static const String principalAuditLogs = '/principal-audit-logs-screen';
   static const String systemMonitor = '/system-monitor-screen';
 
   static const String idCardGeneration = '/id-card-generation-screen';
@@ -96,10 +98,6 @@ class AppRoutes {
   static const String teacherAttendanceHistory =
       '/teacher-attendance-history-screen';
   static const String teacherMyAttendance = '/teacher-my-attendance-screen';
-  static const String teacherHomework = '/teacher-homework-screen';
-  static const String teacherHomeworkForm = '/teacher-homework-screen/form';
-  static const String teacherHomeworkSubmissions =
-      '/teacher-homework-screen/submissions';
   static const String teacherCommunication = '/teacher-communication-screen';
   static const String teacherParentInteraction =
       '/teacher-parent-interaction-screen';
@@ -109,14 +107,13 @@ class AppRoutes {
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
-  static const String teacherDiscipline = '/teacher-discipline-screen';
+  static const String teacherDocuments = '/teacher-documents-screen';
 
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
   static const String kioskLogin = '/kiosk-login-screen';
   static const String kioskQrAttendance = '/kiosk-qr-attendance-screen';
   static const String parentDashboard = '/parent-dashboard-screen';
-  static const String parentAcademicInfo = '/parent-academic-info-screen';
   static const String parentAttendance = '/parent-attendance-screen';
   static const String parentHomework = '/parent-homework-screen';
   static const String parentHomeworkSubmit = '/parent-homework-screen/submit';
@@ -135,7 +132,6 @@ class AppRoutes {
   static const String parentTimetable = '/parent-timetable-screen';
   static const String parentPTMBooking = '/parent-ptm-booking-screen';
   static const String parentLessonPlanner = '/parent-lesson-planner-screen';
-  static const String parentHealthUpdate = '/parent-health-update-screen';
 
   // Shared Routes
   static const String schoolGallery = '/school-gallery-screen';
@@ -193,8 +189,11 @@ class AppRoutes {
     ),
     principalAcademicInfo: (context) => AcademicInfoScreen(
       role: 'principal',
-      drawer: PrincipalDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
-      drawerIndex: 5,
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.academics,
+        onDestinationSelected: (_) {},
+      ),
+      drawerIndex: PrincipalNav.academics,
     ),
     principalUserManagement: (context) =>
         const AdminUserAccessScreen(ownerRole: 'principal'),
@@ -213,6 +212,8 @@ class AppRoutes {
     ),
     principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
     principalTimetable: (context) => const AdminTimetableScreen(),
+    principalDocuments: (context) => const AdminDocumentsScreen(),
+    principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),
     principalAnalytics: (context) => PrincipalAnalyticsScreen(),
     systemMonitor: (context) => const SystemMonitorScreen(),
 
@@ -227,12 +228,6 @@ class AppRoutes {
     teacherAttendanceHistory: (context) =>
         const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
-    teacherHomework: (context) => const TeacherHomeworkScreen(),
-    teacherHomeworkForm: (context) =>
-        TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
-    teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
-      args: _teacherHomeworkSubmissionsArgs(context),
-    ),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
     teacherParentInteraction: (context) =>
         const TeacherParentInteractionScreen(),
@@ -243,7 +238,7 @@ class AppRoutes {
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
-    teacherDiscipline: (context) => const TeacherDisciplineScreen(),
+    teacherDocuments: (context) => const TeacherDocumentsScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),
 
@@ -252,11 +247,6 @@ class AppRoutes {
     kioskLogin: (context) => const AuthLoginScreen(),
     kioskQrAttendance: (context) => const KioskQrAttendanceScreen(),
     parentDashboard: (context) => const ParentDashboardScreen(),
-    parentAcademicInfo: (context) => AcademicInfoScreen(
-      role: 'parent',
-      drawer: ParentDrawer(selectedIndex: 19, onDestinationSelected: (_) {}),
-      drawerIndex: 19,
-    ),
     parentAttendance: (context) => const ParentAttendanceScreen(),
     parentHomework: (context) => const ParentHomeworkScreen(),
     parentHomeworkSubmit: (context) => ParentHomeworkSubmissionScreen(
@@ -284,7 +274,6 @@ class AppRoutes {
     parentTimetable: (context) => const ParentTimetableScreen(),
     parentPTMBooking: (context) => const ParentPTMBookingScreen(),
     parentLessonPlanner: (context) => const ParentLessonPlannerScreen(),
-    parentHealthUpdate: (context) => const ParentHealthUpdateScreen(),
 
     // Shared
     schoolGallery: (context) => const SchoolGalleryScreen(),
@@ -416,28 +405,6 @@ class AppRoutes {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ParentLeaveRequestFormArgs) return args;
     return const ParentLeaveRequestFormArgs(children: [], initialStudentId: '');
-  }
-
-  static TeacherHomeworkFormArgs _teacherHomeworkFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is TeacherHomeworkFormArgs) return args;
-    return const TeacherHomeworkFormArgs(
-      teacherStaffId: '',
-      defaultClassName: 'Not assigned',
-      defaultSubject: 'General',
-      assignedClasses: [],
-      students: [],
-    );
-  }
-
-  static TeacherHomeworkSubmissionsArgs _teacherHomeworkSubmissionsArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is TeacherHomeworkSubmissionsArgs) return args;
-    return const TeacherHomeworkSubmissionsArgs(homework: {});
   }
 
   static ParentHomeworkSubmissionArgs _parentHomeworkSubmissionArgs(

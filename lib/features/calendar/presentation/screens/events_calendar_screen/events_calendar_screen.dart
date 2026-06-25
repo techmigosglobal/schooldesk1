@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -696,9 +697,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   Widget _schoolCalendarDrawer() {
     switch (widget.portal) {
       case SchoolCalendarPortal.teacher:
-        return TeacherDrawer(selectedIndex: 30, onDestinationSelected: (_) {});
+        return TeacherDrawer(
+          selectedIndex: TeacherNav.calendar,
+          onDestinationSelected: (_) {},
+        );
       case SchoolCalendarPortal.parent:
-        return ParentDrawer(selectedIndex: 8, onDestinationSelected: (_) {});
+        return ParentDrawer(
+          selectedIndex: ParentNav.calendar,
+          onDestinationSelected: (_) {},
+        );
       case SchoolCalendarPortal.principal:
         return const SizedBox.shrink();
     }

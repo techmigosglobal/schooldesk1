@@ -357,34 +357,17 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-homework-screen',
-      title: 'Diary',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-homework-screen/form',
-      title: 'Diary Practice Form',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/teacher-homework-screen/submissions',
-      title: 'Diary Practice Review',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-student-notes-screen',
       title: 'Student Notes',
       module: 'Academics',
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-discipline-screen',
-      title: 'Student Discipline',
-      module: 'Academics',
+      route: '/teacher-documents-screen',
+      title: SchoolDeskGlossary.documents,
+      module: 'Classroom',
       portal: 'teacher',
+      feature: SchoolDeskFeature.documents,
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-communication-screen',
@@ -529,12 +512,6 @@ class SchoolDeskScreenRegistry {
       feature: SchoolDeskFeature.documents,
     ),
     SchoolDeskScreenMetadata(
-      route: '/parent-academic-info-screen',
-      title: 'Academic Info',
-      module: 'School Info',
-      portal: 'parent',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/parent-timetable-screen',
       title: 'Timetable',
       module: 'Child Academics',
@@ -548,13 +525,6 @@ class SchoolDeskScreenRegistry {
       portal: 'parent',
       feature: SchoolDeskFeature.teacherParentMeetings,
     ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-health-update-screen',
-      title: 'Health Update',
-      module: 'Student Support',
-      portal: 'parent',
-    ),
-
     SchoolDeskScreenMetadata(
       route: '/teacher-event-posts-screen',
       title: 'Event Posts',
@@ -584,6 +554,19 @@ class SchoolDeskScreenRegistry {
       route: '/principal-timetable-screen',
       title: 'Timetable',
       module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-documents-screen',
+      title: SchoolDeskGlossary.documents,
+      module: 'Records',
+      portal: 'principal',
+      feature: SchoolDeskFeature.documents,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-audit-logs-screen',
+      title: 'Audit Logs',
+      module: 'Records',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(

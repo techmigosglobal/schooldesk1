@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -1145,8 +1145,14 @@ class _AcademicFormScaffold extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       drawer: _isAdminOwner
-          ? AdminDrawer(selectedIndex: 15, onDestinationSelected: (_) {})
-          : PrincipalDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
+          ? PrincipalDrawer(
+              selectedIndex: PrincipalNav.academics,
+              onDestinationSelected: (_) {},
+            )
+          : PrincipalDrawer(
+              selectedIndex: PrincipalNav.academics,
+              onDestinationSelected: (_) {},
+            ),
       floatingActionButton: DashboardFabWidget(
         role: _isAdminOwner ? DashboardRole.principal : DashboardRole.principal,
       ),

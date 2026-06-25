@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -91,7 +92,10 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
     });
     try {
       final children = await BackendApiClient.instance.getMyStudents();
-      if (_activeChildIndex >= children.length) _activeChildIndex = 0;
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
       final rows = <Map<String, dynamic>>[];
       for (final child in children) {
         final studentId = '${child['id'] ?? child['student_id'] ?? ''}';
@@ -105,6 +109,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
       if (!mounted) return;
       setState(() {
         _children = children;
+        _activeChildIndex = selectedIndex;
         _entries = rows.map(_mapDiaryEntryFromApi).toList();
         _resetDiaryPagination();
         _loading = false;
@@ -293,6 +298,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
                       _activeChildIndex = i;
                       _filterSubject = 'All';
                       _resetDiaryPagination();
+                      ParentChildSelectionService.saveIndex(_children, i);
                     }),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -383,7 +389,13 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [_buildTodayTab(), _buildAllEntriesTab()],
+              children: [
+                RefreshIndicator(onRefresh: _loadData, child: _buildTodayTab()),
+                RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: _buildAllEntriesTab(),
+                ),
+              ],
             ),
           ),
         ],
@@ -405,6 +417,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
   Widget _buildTodayTab() {
     final todayEntries = _todayEntries;
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -537,6 +550,7 @@ class _ParentDiaryScreenState extends State<ParentDiaryScreen>
 
     return ListView.builder(
       controller: _allEntriesScrollCtrl,
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: totalItems,
       itemBuilder: (ctx, i) {

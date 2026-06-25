@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -84,7 +85,10 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
     return SchoolDeskModuleScaffold(
       title: 'Analytics',
       subtitle: 'Monitor attendance, fee collection, staff signals, and alerts',
-      drawer: PrincipalDrawer(selectedIndex: 13, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.analytics,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.principal,
       ),
@@ -228,7 +232,12 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  _bar(studentPct, 100, context.appTheme.primary, 14),
+                                  _bar(
+                                    studentPct,
+                                    100,
+                                    context.appTheme.primary,
+                                    14,
+                                  ),
                                   const SizedBox(width: 3),
                                   _bar(
                                     staffPct,
@@ -684,7 +693,9 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
                                   Container(
                                     height: 10,
                                     decoration: BoxDecoration(
-                                      color: context.appTheme.error.withAlpha(30),
+                                      color: context.appTheme.error.withAlpha(
+                                        30,
+                                      ),
                                       borderRadius: BorderRadius.circular(5),
                                     ),
                                   ),
@@ -1367,7 +1378,9 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
               duration: const Duration(milliseconds: 150),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: isSelected ? context.appTheme.surface : Colors.transparent,
+                color: isSelected
+                    ? context.appTheme.surface
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(6),
                 boxShadow: isSelected
                     ? [
@@ -1410,7 +1423,10 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
         const SizedBox(width: 6),
         Text(
           label,
-          style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+          style: GoogleFonts.dmSans(
+            fontSize: 11,
+            color: context.appTheme.muted,
+          ),
         ),
       ],
     );

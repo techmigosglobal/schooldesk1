@@ -7,145 +7,86 @@ import 'backend_api_sources.dart';
 import 'backend_route_sources.dart';
 
 void main() {
-  test('teacher and parent homework use routed screens with real submissions', () {
-    final teacherScreen = File(
-      'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_screen.dart',
-    ).readAsStringSync();
-    final teacherForms = File(
-      'lib/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart',
-    ).readAsStringSync();
-    final teacherDiary = File(
-      'lib/features/academics/presentation/screens/teacher_diary_screen/teacher_diary_screen.dart',
-    ).readAsStringSync();
-    final parentScreen = File(
-      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
-    ).readAsStringSync();
-    final parentForm = File(
-      'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart',
-    ).readAsStringSync();
-    final api = readBackendApiSources();
-    final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-    final guard = File('lib/routes/route_access_guard.dart').readAsStringSync();
-    final registry = File(
-      'lib/routes/schooldesk_screen_registry.dart',
-    ).readAsStringSync();
-    final main = readBackendRouteSources();
-    final models = File(
-      'school-backend/internal/models/hr_comms.go',
-    ).readAsStringSync();
-    final handler = File(
-      'school-backend/internal/handlers/homework_submission.go',
-    ).readAsStringSync();
+  test(
+    'parent homework and backend submissions remain while teacher UI is retired',
+    () {
+      final parentScreen = File(
+        'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_screen.dart',
+      ).readAsStringSync();
+      final parentForm = File(
+        'lib/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart',
+      ).readAsStringSync();
+      final api = readBackendApiSources();
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
+      final homeworkBarrel = File(
+        'lib/features/homework/homework.dart',
+      ).readAsStringSync();
+      final main = readBackendRouteSources();
+      final models = File(
+        'school-backend/internal/models/hr_comms.go',
+      ).readAsStringSync();
+      final handler = File(
+        'school-backend/internal/handlers/homework_submission.go',
+      ).readAsStringSync();
 
-    expect(teacherScreen, contains('AppRoutes.teacherHomeworkForm'));
-    expect(teacherScreen, contains('AppRoutes.teacherHomeworkSubmissions'));
-    expect(teacherScreen, contains('getHomework('));
-    expect(teacherScreen, contains('getHomeworkSubmissions('));
-    expect(teacherScreen, isNot(contains('showModalBottomSheet(')));
-    expect(teacherScreen, isNot(contains('showDialog(')));
-    expect(teacherScreen, isNot(contains('_showAddHomeworkSheet')));
-    expect(teacherScreen, isNot(contains('_showEditHomework')));
-    expect(teacherScreen, isNot(contains('_showSubmissions')));
+      for (final retired in const [
+        'teacherHomework',
+        'teacherHomeworkForm',
+        'teacherHomeworkSubmissions',
+        '/teacher-homework-screen',
+      ]) {
+        expect(routes, isNot(contains(retired)));
+        expect(guard, isNot(contains(retired)));
+        expect(registry, isNot(contains(retired)));
+      }
+      expect(homeworkBarrel, isNot(contains('teacher_homework_screen')));
 
-    expect(teacherForms, contains('TeacherHomeworkFormScreen'));
-    expect(teacherForms, contains('TeacherHomeworkSubmissionsScreen'));
-    expect(teacherForms, contains('RoleAccessService.initialize()'));
-    expect(teacherForms, contains('_loadMissingContext'));
-    expect(teacherForms, contains('createHomework('));
-    expect(teacherForms, contains('updateHomework('));
-    expect(
-      teacherForms,
-      contains("import 'package:file_picker/file_picker.dart';"),
-    );
-    expect(teacherForms, contains("import 'package:dio/dio.dart';"));
-    expect(teacherForms, contains("'/uploads'"));
-    expect(teacherForms, contains('attachmentUrl: _attachmentUrl'));
-    expect(teacherForms, contains('attachment_url'));
-    expect(teacherForms, contains('Pick attachment'));
-    expect(teacherForms, contains("createRaw('/diary-entries'"));
-    expect(teacherForms, contains("'entry_type': 'homework'"));
-    expect(teacherForms, contains('Future<void> _writeDiaryEntry()'));
-    expect(teacherForms, contains('getHomeworkSubmissions('));
-    expect(teacherForms, contains('reviewHomeworkSubmission('));
-    expect(teacherForms, isNot(contains('showModalBottomSheet(')));
-    expect(teacherForms, isNot(contains('showDialog(')));
-    expect(teacherDiary, contains("row['entry_date']"));
-    expect(teacherDiary, contains("row['period_number']"));
-    expect(teacherDiary, contains("row['entry_type']"));
-    expect(teacherDiary, contains("row['content']"));
-    expect(teacherDiary, contains('_archivedEntries'));
-    expect(teacherDiary, contains('Archived Diary Entries'));
-    expect(teacherDiary, contains('_prefillFromRouteArgs'));
-    expect(teacherDiary, contains('AppRoutes.teacherHomework'));
-    expect(teacherDiary, contains('Formal student work belongs in Homework.'));
-    expect(teacherDiary, isNot(contains("label: 'No Practice'")));
-    expect(
-      teacherScreen,
-      contains("TeacherFlowSectionHeader(title: 'Homework Log')"),
-    );
-    expect(teacherScreen, isNot(contains('Subject-wise Homework Logs')));
-    expect(
-      File(
-        'lib/features/attendance/presentation/screens/teacher_attendance_screen/teacher_attendance_screen.dart',
-      ).readAsStringSync(),
-      contains('_offerDiaryAfterPeriod'),
-    );
-    expect(
-      teacherDiary,
-      contains("'staff_id': RoleAccessService.teacherStaffId"),
-    );
-    expect(teacherDiary, contains("'period_number': _periodNumber"));
+      expect(parentScreen, contains('AppRoutes.parentHomeworkSubmit'));
+      expect(parentScreen, contains('getHomeworkSubmissions('));
+      expect(parentScreen, contains('getHomework('));
+      expect(parentForm, contains('ParentHomeworkSubmissionScreen'));
+      expect(parentForm, contains('submitHomework('));
+      expect(parentForm, isNot(contains('showModalBottomSheet(')));
+      expect(parentForm, isNot(contains('showDialog(')));
 
-    expect(parentScreen, contains('AppRoutes.parentHomeworkSubmit'));
-    expect(parentScreen, contains('getHomeworkSubmissions('));
-    expect(parentScreen, contains('getHomework('));
-    expect(parentForm, contains('ParentHomeworkSubmissionScreen'));
-    expect(parentForm, contains('submitHomework('));
-    expect(parentForm, isNot(contains('showModalBottomSheet(')));
-    expect(parentForm, isNot(contains('showDialog(')));
+      expect(api, contains('Future<List<Map<String, dynamic>>> getHomework'));
+      expect(api, contains('Future<Map<String, dynamic>> createHomework'));
+      expect(api, contains('Future<Map<String, dynamic>> updateHomework'));
+      expect(api, contains('String attachmentUrl ='));
+      expect(api, contains('attachmentUrl: attachmentUrl'));
+      expect(
+        api,
+        contains('Future<Map<String, dynamic>> getHomeworkSubmissions'),
+      );
+      expect(api, contains('Future<Map<String, dynamic>> submitHomework'));
+      expect(
+        api,
+        contains('Future<Map<String, dynamic>> reviewHomeworkSubmission'),
+      );
 
-    expect(api, contains('Future<List<Map<String, dynamic>>> getHomework'));
-    expect(api, contains('Future<Map<String, dynamic>> createHomework'));
-    expect(api, contains('Future<Map<String, dynamic>> updateHomework'));
-    expect(api, contains('String attachmentUrl ='));
-    expect(api, contains('attachmentUrl: attachmentUrl'));
-    expect(
-      api,
-      contains('Future<Map<String, dynamic>> getHomeworkSubmissions'),
-    );
-    expect(api, contains('Future<Map<String, dynamic>> submitHomework'));
-    expect(
-      api,
-      contains('Future<Map<String, dynamic>> reviewHomeworkSubmission'),
-    );
+      expect(routes, contains('parentHomeworkSubmit'));
+      expect(routes, contains('ParentHomeworkSubmissionScreen'));
+      expect(guard, contains('AppRoutes.parentHomeworkSubmit: {\'parent\'}'));
+      expect(registry, contains('/parent-homework-screen/submit'));
 
-    expect(routes, contains('teacherHomeworkForm'));
-    expect(routes, contains('TeacherHomeworkFormScreen'));
-    expect(routes, contains('teacherHomeworkSubmissions'));
-    expect(routes, contains('TeacherHomeworkSubmissionsScreen'));
-    expect(routes, contains('parentHomeworkSubmit'));
-    expect(routes, contains('ParentHomeworkSubmissionScreen'));
-    expect(guard, contains('AppRoutes.teacherHomeworkForm: {\'teacher\'}'));
-    expect(
-      guard,
-      contains('AppRoutes.teacherHomeworkSubmissions: {\'teacher\'}'),
-    );
-    expect(guard, contains('AppRoutes.parentHomeworkSubmit: {\'parent\'}'));
-    expect(registry, contains('/teacher-homework-screen/form'));
-    expect(registry, contains('/teacher-homework-screen/submissions'));
-    expect(registry, contains('/parent-homework-screen/submit'));
-
-    expect(models, contains('type HomeworkSubmission struct'));
-    expect(handler, contains('func (h *HomeworkSubmissionHandler) Submit'));
-    expect(handler, contains('func (h *HomeworkSubmissionHandler) Review'));
-    expect(main, contains('NewHomeworkSubmissionHandler()'));
-    expect(main, contains('homework.GET("/:id/submissions"'));
-    expect(main, contains('homework.POST("/:id/submissions"'));
-    expect(
-      main,
-      contains('homework.PUT("/:id/submissions/:submission_id/review"'),
-    );
-  });
+      expect(models, contains('type HomeworkSubmission struct'));
+      expect(handler, contains('func (h *HomeworkSubmissionHandler) Submit'));
+      expect(handler, contains('func (h *HomeworkSubmissionHandler) Review'));
+      expect(main, contains('NewHomeworkSubmissionHandler()'));
+      expect(main, contains('homework.GET("/:id/submissions"'));
+      expect(main, contains('homework.POST("/:id/submissions"'));
+      expect(
+        main,
+        contains('homework.PUT("/:id/submissions/:submission_id/review"'),
+      );
+    },
+  );
 
   test('homework edit uses canonical record id and refreshed display fields', () {
     final teacherScreen = File(

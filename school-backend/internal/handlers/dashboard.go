@@ -620,7 +620,6 @@ func pluralVerb(count int64, singular, plural string) string {
 var principalApprovalResources = []string{
 	"account-approvals",
 	"approval-requests",
-	"admissions/applications",
 	"fees/concessions",
 	"certificates/transfer-requests",
 	"class-approvals",

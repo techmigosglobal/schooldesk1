@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -43,7 +43,7 @@ class _ParentLeaveRequestFormScreenState
   String? _leaveTypeError;
   bool _halfDay = false;
   bool _submitting = false;
-  int _selectedNavIndex = 7;
+  int _selectedNavIndex = ParentNav.leave;
 
   @override
   void initState() {
@@ -224,7 +224,10 @@ class _ParentLeaveRequestFormScreenState
             const SizedBox(width: 10),
             Text(
               'Loading leave types...',
-              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),
@@ -269,24 +272,42 @@ class _ParentLeaveRequestFormScreenState
     return TextFormField(
       controller: controller,
       enabled: !_submitting && (!_halfDay || label == 'From date'),
-      keyboardType: TextInputType.datetime,
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
-        LengthLimitingTextInputFormatter(10),
-      ],
-      decoration: InputDecoration(labelText: label, hintText: 'YYYY-MM-DD'),
+      readOnly: true,
+      decoration: InputDecoration(
+        labelText: label,
+        suffixIcon: const Icon(Icons.calendar_month_rounded),
+      ),
+      onTap: _submitting || (_halfDay && label != 'From date')
+          ? null
+          : () => _pickDate(controller: controller, label: label),
       validator: (value) {
         final raw = (value ?? '').trim();
         if (raw.isEmpty) return 'Required';
         if (!_isIsoDate(raw)) return 'Use YYYY-MM-DD';
         return null;
       },
-      onChanged: (value) {
-        if (_halfDay && label == 'From date') {
-          _toDateController.text = value;
-        }
-      },
     );
+  }
+
+  Future<void> _pickDate({
+    required TextEditingController controller,
+    required String label,
+  }) async {
+    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    final value = _dateInput(picked);
+    setState(() {
+      controller.text = value;
+      if (_halfDay && label == 'From date') {
+        _toDateController.text = value;
+      }
+    });
   }
 
   Future<void> _submit() async {

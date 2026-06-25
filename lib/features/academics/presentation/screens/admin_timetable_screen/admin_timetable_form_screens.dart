@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -914,8 +914,14 @@ class _TimetableFormScaffold extends StatelessWidget {
       title: title,
       subtitle: subtitle,
       drawer: isPrincipal
-          ? PrincipalDrawer(selectedIndex: 4, onDestinationSelected: (_) {})
-          : AdminDrawer(selectedIndex: 5, onDestinationSelected: (_) {}),
+          ? PrincipalDrawer(
+              selectedIndex: PrincipalNav.timetable,
+              onDestinationSelected: (_) {},
+            )
+          : PrincipalDrawer(
+              selectedIndex: PrincipalNav.timetable,
+              onDestinationSelected: (_) {},
+            ),
       floatingActionButton: DashboardFabWidget(
         role: isPrincipal ? DashboardRole.principal : DashboardRole.principal,
       ),

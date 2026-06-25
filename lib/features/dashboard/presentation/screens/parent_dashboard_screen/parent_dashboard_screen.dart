@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -64,6 +65,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       final children = dashboardChildren.isNotEmpty
           ? dashboardChildren
           : linkedChildren;
+      final selectedChildIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
 
       final rawEvents = (results[2] as List).whereType<Map<String, dynamic>>();
 
@@ -92,7 +97,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         _dashboard = dashboard;
         _children = children;
         _eventPosts = feedItems;
-        if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
+        _activeChildIndex = selectedChildIndex;
         _loading = false;
       });
     } catch (e) {
@@ -156,7 +161,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         children: _children,
         dashboard: _dashboard,
         activeChildIndex: _activeChildIndex,
-        onChildSelected: (index) => setState(() => _activeChildIndex = index),
+        onChildSelected: _selectChild,
         eventPosts: _eventPosts,
       );
     }
@@ -170,6 +175,11 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
       ),
       child: AnimatedSwitcher(duration: tokens.motion.normal, child: child),
     );
+  }
+
+  void _selectChild(int index) {
+    setState(() => _activeChildIndex = index);
+    ParentChildSelectionService.saveIndex(_children, index);
   }
 }
 
@@ -735,7 +745,10 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
             _MediaFallbackPreview(type: 'Image', url: url),
       );
     } else {
-      preview = _MediaFallbackPreview(type: mediaType.isEmpty ? 'Media' : mediaType, url: url);
+      preview = _MediaFallbackPreview(
+        type: mediaType.isEmpty ? 'Media' : mediaType,
+        url: url,
+      );
     }
 
     return Padding(

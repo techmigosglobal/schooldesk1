@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -137,14 +138,19 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
 
   @override
   Widget build(BuildContext context) {
-    final drawer = AdminDrawer(selectedIndex: 3, onDestinationSelected: (_) {});
+    final drawer = PrincipalDrawer(
+      selectedIndex: PrincipalNav.attendance,
+      onDestinationSelected: (_) {},
+    );
     return SchoolDeskModuleScaffold(
       title: 'Attendance Administration',
       subtitle: 'Daily sessions, exceptions, and report exports',
       drawer: drawer,
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(
@@ -377,7 +383,9 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: isOpen ? context.appTheme.warning : context.appTheme.success,
+                        color: isOpen
+                            ? context.appTheme.warning
+                            : context.appTheme.success,
                       ),
                     ),
                   ),
@@ -386,7 +394,10 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
               const SizedBox(height: 4),
               Text(
                 '${e['class']} • ${e['date']}',
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
               Text(
                 e['issue'] as String,

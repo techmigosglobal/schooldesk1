@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -17,7 +19,7 @@ class ParentHomeworkScreen extends StatefulWidget {
 
 class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 3;
+  int _selectedNavIndex = ParentNav.homework;
   late TabController _tabController;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
@@ -76,10 +78,14 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           rows.add(mapped);
         }
       }
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
       if (!mounted) return;
       setState(() {
         _children = children;
-        if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
+        _activeChildIndex = selectedIndex;
         _homework = rows.map(_mapHomeworkFromApi).toList();
         _loading = false;
       });
@@ -205,8 +211,14 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _buildHomeworkList(_pending),
-                _buildHomeworkList(_submitted),
+                RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: _buildHomeworkList(_pending),
+                ),
+                RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: _buildHomeworkList(_submitted),
+                ),
               ],
             ),
           ),
@@ -223,12 +235,17 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         children: List.generate(_children.length, (i) {
           final isActive = i == _activeChildIndex;
           return GestureDetector(
-            onTap: () => setState(() => _activeChildIndex = i),
+            onTap: () {
+              setState(() => _activeChildIndex = i);
+              ParentChildSelectionService.saveIndex(_children, i);
+            },
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -296,25 +313,37 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
 
   Widget _buildHomeworkList(List<Map<String, dynamic>> list) {
     if (list.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.assignment_turned_in_rounded,
-              size: 48,
-              color: context.appTheme.muted,
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 320,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.assignment_turned_in_rounded,
+                    size: 48,
+                    color: context.appTheme.muted,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No homework published',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 14,
+                      color: context.appTheme.muted,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'No homework published',
-              style: GoogleFonts.dmSans(fontSize: 14, color: context.appTheme.muted),
-            ),
-          ],
-        ),
+          ),
+        ],
       );
     }
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: list.length,
       itemBuilder: (_, i) => _homeworkCard(list[i]),
@@ -364,7 +393,9 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             isPending
                 ? Icons.assignment_late_rounded
                 : Icons.assignment_turned_in_rounded,
-            color: isPending ? context.appTheme.warning : context.appTheme.success,
+            color: isPending
+                ? context.appTheme.warning
+                : context.appTheme.success,
             size: 20,
           ),
         ),
@@ -403,7 +434,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             ? null
             : Text(
                 subtitleParts.join(' • '),
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
         children: [
           const Divider(height: 1),

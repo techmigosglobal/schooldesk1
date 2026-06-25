@@ -5,9 +5,9 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -268,7 +268,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return SchoolDeskModuleScaffold(
       title: 'Notifications',
       subtitle: 'School alerts, fee reminders, and updates',
-      drawer: ParentDrawer(selectedIndex: 99, onDestinationSelected: (_) {}),
+      drawer: ParentDrawer(
+        selectedIndex: ParentNav.notices,
+        onDestinationSelected: (_) {},
+      ),
       showGlobalToolbarActions: false,
       actions: _notificationHeaderActions(context, 'parent'),
       floatingActionButton: const DashboardFabWidget(
@@ -455,7 +458,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return ParentDrawer(onDestinationSelected: (_) {});
       case 'admin':
       default:
-        return AdminDrawer(onDestinationSelected: (_) {});
+        return PrincipalDrawer(
+          selectedIndex: PrincipalNav.messages,
+          onDestinationSelected: (_) {},
+        );
     }
   }
 

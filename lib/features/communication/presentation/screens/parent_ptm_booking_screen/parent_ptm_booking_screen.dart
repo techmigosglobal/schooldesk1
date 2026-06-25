@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -14,7 +16,7 @@ class ParentPTMBookingScreen extends StatefulWidget {
 }
 
 class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
-  int _selectedNavIndex = 3; // Communication
+  int _selectedNavIndex = ParentNav.ptm;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
 
@@ -36,9 +38,18 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
       final slots = await BackendApiClient.instance.getRawList(
         '/parent-teacher-meetings',
       );
+      final childRows = children
+          .whereType<Map>()
+          .map((child) => Map<String, dynamic>.from(child))
+          .toList();
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        childRows,
+        fallback: _activeChildIndex,
+      );
       setState(() {
         _children = children;
         _ptmSlots = slots;
+        _activeChildIndex = selectedIndex;
         _loading = false;
       });
     } catch (e) {
@@ -81,41 +92,12 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     return status == 'booked' || status == 'confirmed';
   }
 
-  Future<void> _bookSlot(dynamic slot) async {
-    final id = (slot['id'] ?? '').toString();
-    if (id.isEmpty) return;
-
-    final teacher = slot['teacher'] ?? {};
-    final teacherName =
-        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
-
-    try {
-      await BackendApiClient.instance.bookParentTeacherMeeting(id);
-      _showSuccessSnackBar('PTM slot booked successfully with $teacherName!');
-      await _loadData();
-    } catch (e) {
-      _showErrorSnackBar('Failed to book PTM slot: $e');
-    }
-  }
-
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
           backgroundColor: context.appTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  void _showSuccessSnackBar(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -150,8 +132,8 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     );
 
     return SchoolDeskModuleScaffold(
-      title: 'PTM Booking',
-      subtitle: 'Book meeting slots with your child\'s teachers',
+      title: 'PTM Slots',
+      subtitle: 'View meeting slots shared by your child\'s teachers',
       drawer: drawer,
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
@@ -243,6 +225,13 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               setState(() {
                 _activeChildIndex = i;
               });
+              ParentChildSelectionService.saveIndex(
+                _children
+                    .whereType<Map>()
+                    .map((child) => Map<String, dynamic>.from(child))
+                    .toList(),
+                i,
+              );
             },
             child: Container(
               margin: const EdgeInsets.only(right: 8),
@@ -454,22 +443,11 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               ],
             ),
           ),
-          ElevatedButton(
-            onPressed: () => _bookSlot(slot),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _headerColor,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: Text(
-              'Book',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+          Chip(
+            avatar: const Icon(Icons.visibility_rounded, size: 16),
+            label: Text(
+              (slot['status'] ?? 'available').toString(),
+              style: GoogleFonts.dmSans(fontSize: 12),
             ),
           ),
         ],

@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -233,8 +233,8 @@ class _AdminFeeStructureFormScreenState
     final titleLabel = widget.args.isEditing
         ? _textValue(fee?['class'], fallback: 'Fee structure')
         : grade != null
-            ? 'Fee Structure for ${grade.gradeName}${section != null ? ' - ${section.sectionName}' : ' (All Sections)'}'
-            : 'Create backend fee structure';
+        ? 'Fee Structure for ${grade.gradeName}${section != null ? ' - ${section.sectionName}' : ' (All Sections)'}'
+        : 'Create backend fee structure';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1355,9 +1355,15 @@ class _AdminPaymentRecordFormScreenState
 
 Widget _financeDrawer(String ownerRole) {
   if (_isPrincipalOwner(ownerRole)) {
-    return PrincipalDrawer(selectedIndex: 7, onDestinationSelected: (_) {});
+    return PrincipalDrawer(
+      selectedIndex: PrincipalNav.fees,
+      onDestinationSelected: (_) {},
+    );
   }
-  return AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {});
+  return PrincipalDrawer(
+    selectedIndex: PrincipalNav.fees,
+    onDestinationSelected: (_) {},
+  );
 }
 
 DashboardRole _dashboardRole(String ownerRole) {

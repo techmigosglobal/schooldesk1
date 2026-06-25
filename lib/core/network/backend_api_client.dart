@@ -27,6 +27,7 @@ part 'api_modules/students_api.dart';
 part 'api_modules/attendance_api.dart';
 part 'api_modules/events_api.dart';
 part 'api_modules/fees_api.dart';
+part 'api_modules/fee_payments_api.dart';
 part 'api_modules/leave_api.dart';
 part 'api_modules/communications_api.dart';
 part 'api_modules/timetable_api.dart';
@@ -150,128 +151,6 @@ class BackendApiClient {
     if (store == null) return;
     for (final pattern in pathPatterns) {
       await store.deleteFromPath(RegExp(pattern));
-    }
-  }
-
-  List<Map<String, dynamic>> _asListMap(dynamic value) {
-    if (value is! List) return [];
-    return value
-        .whereType<Map>()
-        .map((e) => Map<String, dynamic>.from(e))
-        .toList();
-  }
-
-  // ─── Error Handling ─────────────────────────────────────────────────────────
-
-  Exception _handleError(DioException e) {
-    final path = e.requestOptions.path.toLowerCase();
-    if (!path.contains('/monitoring/error-events')) {
-      apiErrorReporter?.call(e);
-    }
-    if (e.type == DioExceptionType.connectionError ||
-        e.type == DioExceptionType.connectionTimeout) {
-      return const NetworkException(
-        message: 'Unable to connect to server. Please check your connection.',
-      );
-    }
-    if (e.response != null) {
-      final statusCode = e.response!.statusCode ?? 0;
-      final data = e.response!.data;
-      final message = data is Map<String, dynamic>
-          ? _serverErrorMessage(data)
-          : 'Server error occurred.';
-      final safeMessage = message.isEmpty ? 'Server error occurred.' : message;
-      if (statusCode == 401) return AuthException(message: safeMessage);
-      if (statusCode == 404) return NotFoundException(message: safeMessage);
-      return ServerException(message: safeMessage, statusCode: statusCode);
-    }
-    return NetworkException(message: e.message ?? 'Network error occurred.');
-  }
-
-  Map<String, dynamic> _asMap(dynamic value) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
-    return <String, dynamic>{};
-  }
-
-  int _asInt(dynamic value, {int fallback = 0}) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    return int.tryParse('${value ?? ''}') ?? fallback;
-  }
-
-  double _asDouble(dynamic value, {double fallback = 0}) {
-    if (value is num) return value.toDouble();
-    return double.tryParse('${value ?? ''}') ?? fallback;
-  }
-
-  String _trimmed(dynamic value) => value?.toString().trim() ?? '';
-
-  String _firstNonEmpty(Iterable<dynamic> values) {
-    for (final value in values) {
-      final text = _trimmed(value);
-      if (text.isNotEmpty) return text;
-    }
-    return '';
-  }
-
-  String _serverErrorMessage(Map<String, dynamic> data) {
-    final message = _firstNonEmpty([data['message']]);
-    if (message.isNotEmpty) return message;
-    final error = data['error'];
-    if (error is String) return error.trim();
-    if (error is Map) {
-      return _firstNonEmpty([
-        error['message'],
-        error['details'],
-        error['code'],
-      ]);
-    }
-    return '';
-  }
-
-  Future<Map<String, dynamic>> bulkImport({
-    required String importType,
-    required String filePath,
-    bool dryRun = true,
-  }) async {
-    try {
-      final formData = FormData.fromMap({
-        'import_type': importType,
-        'dry_run': dryRun.toString(),
-        'file': await MultipartFile.fromFile(filePath, filename: 'import.csv'),
-      });
-      final response = await _dio.post(
-        '/principal/bulk-import',
-        data: formData,
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) return _asMap(data['data']);
-      throw ServerException(message: data['error'] ?? 'Bulk import failed');
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Map<String, dynamic>> getBulkImportHistory({
-    String? importType,
-    int limit = 20,
-  }) async {
-    try {
-      final response = await _dio.get(
-        '/principal/bulk-import/history',
-        queryParameters: {
-          if (importType != null) 'import_type': importType,
-          'limit': limit,
-        },
-      );
-      final data = _asMap(response.data);
-      if (data['success'] == true) return _asMap(data['data']);
-      throw ServerException(
-        message: data['error'] ?? 'Failed to fetch import history',
-      );
-    } on DioException catch (e) {
-      throw _handleError(e);
     }
   }
 }

@@ -4,7 +4,8 @@ import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -171,12 +172,18 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
+    final bgColor = isDark
+        ? const Color(0xFF151C26)
+        : context.appTheme.background;
+    final surfaceColor = isDark
+        ? const Color(0xFF1E2530)
+        : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
         : context.appTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
+    final mutedColor = isDark
+        ? const Color(0xFF90A4AE)
+        : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
         : context.appTheme.outlineVariant;
@@ -187,8 +194,13 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
     return SchoolDeskModuleScaffold(
       title: 'ID Cards',
       subtitle: 'Generate and print student ID cards',
-      drawer: AdminDrawer(selectedIndex: 12, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.idCards,
+        onDestinationSelected: (_) {},
+      ),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         if (_selectedIds.isNotEmpty)
@@ -371,7 +383,9 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
       decoration: BoxDecoration(
         color: isSelected ? context.appTheme.primaryContainer : surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isSelected ? context.appTheme.primary : outlineColor),
+        border: Border.all(
+          color: isSelected ? context.appTheme.primary : outlineColor,
+        ),
       ),
       child: ListTile(
         leading: GestureDetector(
@@ -388,7 +402,9 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: isSelected ? context.appTheme.primary : context.appTheme.primaryContainer,
+              color: isSelected
+                  ? context.appTheme.primary
+                  : context.appTheme.primaryContainer,
               borderRadius: BorderRadius.circular(10),
             ),
             child: isSelected
@@ -424,7 +440,10 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : IconButton(
-                icon: Icon(Icons.badge_rounded, color: context.appTheme.primary),
+                icon: Icon(
+                  Icons.badge_rounded,
+                  color: context.appTheme.primary,
+                ),
                 tooltip: 'Generate ID Card',
                 onPressed: () => _generateIdCard(student),
               ),

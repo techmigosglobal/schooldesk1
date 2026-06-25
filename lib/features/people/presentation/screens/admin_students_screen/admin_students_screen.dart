@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -215,8 +215,14 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
   @override
   Widget build(BuildContext context) {
     final Widget drawer = _isPrincipal
-        ? PrincipalDrawer(selectedIndex: 2, onDestinationSelected: (_) {})
-        : AdminDrawer(selectedIndex: 1, onDestinationSelected: (_) {});
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.students,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.students,
+            onDestinationSelected: (_) {},
+          );
     return SchoolDeskModuleScaffold(
       title: _isPrincipal ? 'Student Oversight' : 'Students',
       subtitle: _isPrincipal
@@ -241,9 +247,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         FilledButton.icon(
           onPressed: _openAddStudentPage,
           icon: const Icon(Icons.person_add_rounded, size: 18),
-          label: Text(
-            _isPrincipal ? 'Add student' : 'Prepare Student Request',
-          ),
+          label: Text(_isPrincipal ? 'Add student' : 'Prepare Student Request'),
         ),
       ],
       bottom: TabBar(
@@ -331,12 +335,16 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   selectedColor: context.appTheme.primaryContainer,
                   backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? context.appTheme.primary : context.appTheme.outline,
+                    color: selected
+                        ? context.appTheme.primary
+                        : context.appTheme.outline,
                   ),
                   labelStyle: GoogleFonts.dmSans(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: selected ? context.appTheme.primary : context.appTheme.onSurface,
+                    color: selected
+                        ? context.appTheme.primary
+                        : context.appTheme.onSurface,
                   ),
                   onSelected: (_) => setState(() => _filterClass = _classes[i]),
                 );
@@ -430,9 +438,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             PopupMenuItem(
               value: 'transfer',
               child: Text(
-                _isPrincipal
-                    ? 'Transfer Student'
-                    : 'Prepare Transfer Request',
+                _isPrincipal ? 'Transfer Student' : 'Prepare Transfer Request',
               ),
             ),
             PopupMenuItem(
@@ -449,9 +455,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             ),
             PopupMenuItem(
               value: 'delete',
-              child: Text(
-                _isPrincipal ? 'Delete' : 'Prepare Removal Request',
-              ),
+              child: Text(_isPrincipal ? 'Delete' : 'Prepare Removal Request'),
             ),
           ],
         ),
@@ -516,9 +520,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(
-          _isPrincipal
-              ? 'Remove Student'
-              : 'Prepare Student Removal Request',
+          _isPrincipal ? 'Remove Student' : 'Prepare Student Removal Request',
         ),
         content: Text(
           _isPrincipal
@@ -561,7 +563,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                   ? '${s['name']} removed'
                   : '${s['name']} removal submitted for Principal approval',
             ),
-            backgroundColor: _isPrincipal ? context.appTheme.error : context.appTheme.success,
+            backgroundColor: _isPrincipal
+                ? context.appTheme.error
+                : context.appTheme.success,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -571,7 +575,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              _isPrincipal ? 'Removal failed: $e' : 'Removal request failed: $e',
+              _isPrincipal
+                  ? 'Removal failed: $e'
+                  : 'Removal request failed: $e',
             ),
             backgroundColor: context.appTheme.error,
           ),
@@ -734,9 +740,13 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                 );
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: context.appTheme.warning),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.appTheme.warning,
+            ),
             child: Text(
-              _isPrincipal ? 'Initiate Transfer' : 'Submit Transfer for Approval',
+              _isPrincipal
+                  ? 'Initiate Transfer'
+                  : 'Submit Transfer for Approval',
             ),
           ),
         ],
@@ -780,9 +790,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       context: context,
       builder: (_) => AlertDialog(
         title: Text(
-          _isPrincipal
-              ? 'Issue Transfer Certificate'
-              : 'Prepare TC Request',
+          _isPrincipal ? 'Issue Transfer Certificate' : 'Prepare TC Request',
           style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
         ),
         content: Text(
@@ -814,7 +822,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                 );
               }
             },
-            child: Text(_isPrincipal ? 'Generate TC' : 'Submit TC for Approval'),
+            child: Text(
+              _isPrincipal ? 'Generate TC' : 'Submit TC for Approval',
+            ),
           ),
         ],
       ),
@@ -1442,7 +1452,9 @@ class _StudentDocumentUploadPage extends StatelessWidget {
                       uploaded
                           ? Icons.check_circle_rounded
                           : Icons.upload_file_rounded,
-                      color: uploaded ? context.appTheme.success : context.appTheme.muted,
+                      color: uploaded
+                          ? context.appTheme.success
+                          : context.appTheme.muted,
                     ),
                     title: Text(
                       document,

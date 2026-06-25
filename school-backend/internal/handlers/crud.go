@@ -213,7 +213,7 @@ func (h *CRUDHandler[T]) scopedQuery(c *gin.Context) *gorm.DB {
 
 func (h *CRUDHandler[T]) idCondition() string {
 	switch h.actualTableName() {
-	case "messages", "parent_teacher_meetings", "terms", "staff_subjects":
+	case "messages", "parent_teacher_meetings", "terms", "staff_subjects", "student_documents":
 		return h.actualTableName() + ".id = ?"
 	default:
 		return "id = ?"
@@ -228,6 +228,10 @@ func (h *CRUDHandler[T]) applyListFilters(c *gin.Context, query *gorm.DB) *gorm.
 	switch h.TableName {
 	case "homework":
 		return h.applyHomeworkListFilters(c, query)
+	case "messages":
+		return h.applyMessageListFilters(c, query)
+	case "student_documents":
+		return h.applyStudentDocumentListFilters(c, query)
 	case "staff_subjects":
 		return h.applyStaffSubjectListFilters(c, query)
 	case "grade_subjects":
@@ -290,6 +294,47 @@ func (h *CRUDHandler[T]) applyHomeworkListFilters(c *gin.Context, query *gorm.DB
 	}
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
 		query = query.Where("LOWER("+table+".status) = ?", strings.ToLower(status))
+	}
+	return query
+}
+
+func (h *CRUDHandler[T]) applyMessageListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	if conversationID := strings.TrimSpace(c.Query("conversation_id")); conversationID != "" {
+		if !canAccessConversation(c, conversationID) {
+			return query.Where("1 = 0")
+		}
+		query = query.Where("messages.conversation_id = ?", conversationID)
+	}
+	if sentAfter := strings.TrimSpace(c.Query("sent_after")); sentAfter != "" {
+		parsed, err := time.Parse(time.RFC3339, sentAfter)
+		if err != nil {
+			parsed, err = time.Parse("2006-01-02", sentAfter)
+		}
+		if err == nil {
+			query = query.Where("(messages.sent_at > ? OR messages.created_at > ?)", parsed, parsed)
+		}
+	}
+	return query
+}
+
+func (h *CRUDHandler[T]) applyStudentDocumentListFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	if studentID := strings.TrimSpace(c.Query("student_id")); studentID != "" {
+		if !canAccessStudent(c, studentID) {
+			return query.Where("1 = 0")
+		}
+		query = query.Where("student_documents.student_id = ?", studentID)
+	}
+	if sectionID := strings.TrimSpace(c.Query("section_id")); sectionID != "" {
+		if !canAccessSection(c, sectionID) {
+			return query.Where("1 = 0")
+		}
+		sectionEnrollments := database.DB.Model(&models.Enrollment{}).
+			Select("student_id").
+			Where("section_id = ?", sectionID)
+		query = query.Where("(students.current_section_id = ? OR student_documents.student_id IN (?))", sectionID, sectionEnrollments)
+	}
+	if docType := strings.TrimSpace(c.Query("doc_type")); docType != "" {
+		query = query.Where("LOWER(student_documents.doc_type) = ?", strings.ToLower(docType))
 	}
 	return query
 }
@@ -379,6 +424,33 @@ func (h *CRUDHandler[T]) applyRoleRelationshipScope(c *gin.Context, query *gorm.
 			}
 			return query.Where("message_conversations.teacher_id = ?", staffID)
 		}
+	case "student_documents":
+		query = query.Joins("JOIN students ON students.id = student_documents.student_id").
+			Where("students.school_id = ?", schoolID)
+		switch role {
+		case "admin", "principal":
+			return query
+		case "parent":
+			return query.Where("students.id IN (?)", linkedStudentSubquery(c))
+		case "teacher":
+			staffID := currentStaffID(c)
+			if staffID == "" {
+				return query.Where("1 = 0")
+			}
+			sections := teacherSectionSubquery(staffID, schoolID)
+			return query.Where(`
+				(
+					students.current_section_id IN (?)
+					OR EXISTS (
+						SELECT 1 FROM enrollments
+						WHERE enrollments.student_id = students.id
+							AND enrollments.section_id IN (?)
+					)
+				)
+			`, sections, teacherSectionSubquery(staffID, schoolID))
+		default:
+			return query.Where("1 = 0")
+		}
 	case "messages":
 		query = query.Joins("JOIN message_conversations ON message_conversations.id = messages.conversation_id").
 			Where("message_conversations.school_id = ?", schoolID)
@@ -434,6 +506,10 @@ func (h *CRUDHandler[T]) validateRelationshipPolicy(c *gin.Context, row *T) erro
 	case "messages":
 		if !canAccessConversation(c, getStringField(row, "ConversationID")) {
 			return errors.New("conversation access denied")
+		}
+	case "student_documents":
+		if !canAccessStudent(c, getStringField(row, "StudentID")) {
+			return errors.New("student access denied")
 		}
 	case "parent_teacher_meetings":
 		return validatePTMPolicy(c, row)

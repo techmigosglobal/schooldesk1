@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -57,10 +58,12 @@ class _PrincipalChatCommunicationsScreenState
   List<_ParentChatThread> _parentThreads = const [];
   List<_TeacherDirectThread> _teacherThreads = const [];
   List<AnnouncementModel> _announcements = const [];
+  List<Map<String, dynamic>> _chatMessages = const [];
   _ParentChatThread? _selectedParentThread;
   _TeacherDirectThread? _selectedTeacherThread;
   UserAccountModel? _selectedTeacher;
   Timer? _pollingTimer;
+  DateTime? _lastChatRefreshAt;
 
   @override
   void initState() {
@@ -70,7 +73,7 @@ class _PrincipalChatCommunicationsScreenState
   }
 
   void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_sending && !_loading) {
         _loadData(background: true);
       }
@@ -96,9 +99,21 @@ class _PrincipalChatCommunicationsScreenState
 
     try {
       final api = BackendApiClient.instance;
+      final sentAfter = background
+          ? (_lastChatRefreshAt ??
+                DateTime.now().toUtc().subtract(const Duration(minutes: 30)))
+          : null;
       final profile = await api.getProfile();
-      final conversations = await api.getMessageConversations();
-      final messages = await api.getChatMessages();
+      final conversations = await api.getMessageConversations(
+        pageSize: background ? 100 : null,
+      );
+      final incomingMessages = await api.getChatMessages(
+        pageSize: background ? 200 : null,
+        sentAfter: sentAfter,
+      );
+      final messages = background
+          ? _mergeMessageRows(_chatMessages, incomingMessages)
+          : incomingMessages;
       final directMessages = await api.getCommunications();
       final announcements = await api.getAnnouncements();
       final teachers = await api.getUsers(
@@ -191,6 +206,7 @@ class _PrincipalChatCommunicationsScreenState
           ..sort((a, b) => _userLabel(a).compareTo(_userLabel(b)));
         _parents = parents.data.where((user) => user.isActive).toList()
           ..sort((a, b) => _userLabel(a).compareTo(_userLabel(b)));
+        _chatMessages = messages;
         _parentThreads = parentThreads;
         _teacherThreads = teacherThreads;
         _announcements = announcements
@@ -200,6 +216,7 @@ class _PrincipalChatCommunicationsScreenState
         _selectedParentThread = _reselectParentThread(parentThreads);
         _selectedTeacherThread = _reselectTeacherThread(teacherThreads);
         _selectedTeacher = _reselectTeacher(_teachers);
+        _lastChatRefreshAt = DateTime.now().toUtc();
         _loading = false;
       });
     } catch (error) {
@@ -211,6 +228,37 @@ class _PrincipalChatCommunicationsScreenState
         }
       });
     }
+  }
+
+  List<Map<String, dynamic>> _mergeMessageRows(
+    List<Map<String, dynamic>> current,
+    List<Map<String, dynamic>> incoming,
+  ) {
+    final merged = current.map((row) => {...row}).toList();
+    final seen = merged.map(_messageFingerprint).toSet();
+    for (final message in incoming) {
+      if (seen.add(_messageFingerprint(message))) {
+        merged.add(message);
+      }
+    }
+    merged.sort(
+      (a, b) => (_dateTime(a['sent_at'] ?? a['created_at']) ?? DateTime(1970))
+          .compareTo(
+            _dateTime(b['sent_at'] ?? b['created_at']) ?? DateTime(1970),
+          ),
+    );
+    return merged;
+  }
+
+  String _messageFingerprint(Map<String, dynamic> row) {
+    final id = _text(row['id'] ?? row['message_id']);
+    if (id.isNotEmpty) return id;
+    return [
+      row['conversation_id'],
+      row['sender_id'],
+      row['sent_at'] ?? row['created_at'],
+      row['body'] ?? row['message'],
+    ].map(_text).join('|');
   }
 
   Future<T> _loadOptional<T>({
@@ -410,7 +458,7 @@ class _PrincipalChatCommunicationsScreenState
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF6FAFE),
         drawer: PrincipalDrawer(
-          selectedIndex: 18,
+          selectedIndex: PrincipalNav.messages,
           onDestinationSelected: (_) {},
         ),
         body: SafeArea(
@@ -444,7 +492,10 @@ class _PrincipalChatCommunicationsScreenState
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: const Color(0xFFF6FAFE),
-      drawer: PrincipalDrawer(selectedIndex: 18, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.messages,
+        onDestinationSelected: (_) {},
+      ),
       bottomNavigationBar: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [PrincipalShellBottomBar()],

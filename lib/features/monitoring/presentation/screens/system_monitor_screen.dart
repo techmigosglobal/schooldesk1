@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 
 class SystemMonitorScreen extends StatefulWidget {
@@ -54,7 +55,10 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
-      drawer: PrincipalDrawer(selectedIndex: 26, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.monitor,
+        onDestinationSelected: (_) {},
+      ),
       bottomNavigationBar: const PrincipalShellBottomBar(),
       appBar: AppBar(
         leading: IconButton(

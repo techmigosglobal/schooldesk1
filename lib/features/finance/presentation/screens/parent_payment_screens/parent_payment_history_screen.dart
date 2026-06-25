@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -38,7 +39,10 @@ class _ParentPaymentHistoryScreenState
     return SchoolDeskModuleScaffold(
       title: 'Payment History',
       subtitle: 'View your past transactions and receipts',
-      drawer: ParentDrawer(selectedIndex: 6, onDestinationSelected: (i) {}),
+      drawer: ParentDrawer(
+        selectedIndex: ParentNav.fees,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),

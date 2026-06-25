@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 
@@ -391,7 +392,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     return TeacherFlowScaffold(
       title: 'Student Attendance',
       subtitle: 'Class teacher attendance',
-      selectedIndex: 2,
+      selectedIndex: TeacherNav.attendance,
       loading: _loading,
       error: _error,
       onRefresh: _loadFlow,

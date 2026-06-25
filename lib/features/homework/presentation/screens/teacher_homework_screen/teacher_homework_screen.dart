@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
-import 'package:schooldesk1/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
@@ -109,20 +109,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   }
 
   Future<void> _openForm({Map<String, dynamic>? homework}) async {
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.teacherHomeworkForm,
-      arguments: TeacherHomeworkFormArgs(
-        teacherStaffId: RoleAccessService.teacherStaffId,
-        defaultClassName: RoleAccessService.teacherClassName,
-        defaultSubject: RoleAccessService.teacherSubject,
-        assignedClasses: RoleAccessService.teacherClassTeacherClasses.isNotEmpty
-            ? RoleAccessService.teacherClassTeacherClasses
-            : RoleAccessService.teacherAssignedClasses,
-        students: RoleAccessService.teacherClassStudents,
-        homework: homework,
-      ),
-    );
+    final result = await Navigator.pushNamed(context, AppRoutes.teacherDiary);
     if (result != null) await _loadHomework(forceRefresh: true);
   }
 
@@ -174,7 +161,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
     return TeacherFlowScaffold(
       title: 'Homework / Assignments',
       subtitle: 'Assignments, homework sharing, and submission review',
-      selectedIndex: 3,
+      selectedIndex: TeacherNav.diary,
       loading: _loading,
       error: _error,
       onRefresh: _loadHomework,
@@ -310,10 +297,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                         icon: Icons.rate_review_rounded,
                         onTap: () => Navigator.pushNamed(
                           context,
-                          AppRoutes.teacherHomeworkSubmissions,
-                          arguments: TeacherHomeworkSubmissionsArgs(
-                            homework: row,
-                          ),
+                          AppRoutes.teacherDiary,
                         ).then((_) => _loadHomework(forceRefresh: true)),
                       ),
                       TeacherFlowAction(

@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/operations_workspace.dart';
@@ -116,7 +117,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       title: 'Finance Operations',
       subtitle:
           'Structures, invoices, payments, concessions, receipts, and reconciliation',
-      drawer: AdminDrawer(selectedIndex: 4, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.fees,
+        onDestinationSelected: (_) {},
+      ),
       railBreakpoint: double.infinity,
       navigationDrawerEnabled: false,
       floatingActionButton: const DashboardFabWidget(
@@ -734,51 +738,72 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       return;
     }
     bool removePending = true;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showModalBottomSheet<bool>(
       context: context,
+      showDragHandle: true,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Delete fee component?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}.',
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                value: removePending,
-                onChanged: (val) => setState(() => removePending = val == true),
-                title: const Text('Remove from unpaid invoices'),
-                subtitle: const Text(
-                  'Deducts this fee component from pending student invoices to avoid incorrect billing.',
+        builder: (context, setSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Delete fee component?',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
                 ),
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ],
+                const SizedBox(height: 12),
+                Text(
+                  'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}.',
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  value: removePending,
+                  onChanged: (val) =>
+                      setSheetState(() => removePending = val == true),
+                  title: const Text('Remove from unpaid invoices'),
+                  subtitle: const Text(
+                    'Deducts this fee component from pending student invoices to avoid incorrect billing.',
+                  ),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(context, true),
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('Delete'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.delete_outline_rounded),
-              label: const Text('Delete'),
-            ),
-          ],
         ),
       ),
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
-        id,
-        removePending: removePending,
-      );
+      if (removePending) {
+        await BackendApiClient.instance.deleteFeeStructure(
+          id,
+          removePending: true,
+        );
+      } else {
+        await BackendApiClient.instance.deleteFeeStructure(id);
+      }
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);

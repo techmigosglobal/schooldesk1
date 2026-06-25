@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -124,8 +125,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
       title: 'Reports',
       subtitle:
           'Generate operational, finance, attendance, and compliance outputs',
-      drawer: AdminDrawer(selectedIndex: 11, onDestinationSelected: (_) {}),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.reports,
+        onDestinationSelected: (_) {},
+      ),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottom: TabBar(
         controller: _tabController,
@@ -377,7 +383,10 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
               const SizedBox(height: 4),
               Text(
                 'Deadline: ${c['deadline']}',
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 8),
               Row(

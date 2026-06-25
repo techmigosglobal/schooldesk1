@@ -98,7 +98,7 @@ void main() {
   }
 
   test(
-    'teacher drawer exposes phase one screens and hides duplicate PTM route',
+    'teacher drawer exposes active screens and hides retired duplicate routes',
     () {
       for (final routeName in [
         'teacherDashboard',
@@ -107,13 +107,11 @@ void main() {
         'teacherAttendance',
         'teacherAttendanceHistory',
         'teacherMyAttendance',
-        'teacherHomework',
         'teacherDiary',
-
         'teacherEventPosts',
         'teacherLessonPlanner',
         'teacherStudentNotes',
-        'teacherDiscipline',
+        'teacherDocuments',
         'schoolGallery',
         'teacherCommunication',
         'teacherParentInteraction',
@@ -121,7 +119,6 @@ void main() {
         'notificationCenter',
         'profileScreen',
         'settingsScreen',
-        'homeworkMessaging',
       ]) {
         expect(
           teacherNavigationSource,
@@ -177,6 +174,10 @@ void main() {
       for (final removedRouteName in [
         'teacherStudyMaterials',
         'teacherStudyMaterialForm',
+        'teacherHomework',
+        'teacherHomeworkForm',
+        'teacherHomeworkSubmissions',
+        'teacherDiscipline',
       ]) {
         expect(
           teacherNavigationSource,
@@ -194,10 +195,8 @@ void main() {
       );
       expect(
         teacherNavigationSource,
-        contains(
-          "label: 'Homework',\n              route: AppRoutes.teacherHomework",
-        ),
-        reason: 'Homework should stay reachable as its own drawer item',
+        isNot(contains("label: 'Homework'")),
+        reason: 'Teacher Homework is retired from active teacher navigation',
       );
     },
   );

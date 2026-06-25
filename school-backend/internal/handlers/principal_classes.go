@@ -1231,7 +1231,7 @@ func issueCountsFromFrontendRecords(schoolID string) (map[string]int64, map[stri
 	complaints := map[string]int64{}
 	var rows []models.FrontendRecord
 	_ = database.DB.
-		Where("school_id = ? AND resource IN ?", schoolID, []string{"discipline-incidents", "complaints"}).
+		Where("school_id = ? AND resource = ?", schoolID, "complaints").
 		Find(&rows).Error
 	for _, row := range rows {
 		payload := frontendPayload(row.Payload)
@@ -1247,11 +1247,7 @@ func issueCountsFromFrontendRecords(schoolID string) (map[string]int64, map[stri
 		if strings.TrimSpace(sectionID) == "" {
 			continue
 		}
-		if row.Resource == "discipline-incidents" {
-			discipline[sectionID]++
-		} else {
-			complaints[sectionID]++
-		}
+		complaints[sectionID]++
 	}
 	return discipline, complaints
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -59,7 +60,10 @@ class _ParentHomeworkSubmissionScreenState
     return SchoolDeskModuleScaffold(
       title: 'Submit Homework',
       subtitle: _text(widget.args.homework['title'], fallback: 'Homework'),
-      drawer: ParentDrawer(selectedIndex: 3, onDestinationSelected: (_) {}),
+      drawer: ParentDrawer(
+        selectedIndex: ParentNav.homework,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),

@@ -44,7 +44,6 @@ void main() {
       'Analytics Dashboard',
       'Parent Helpdesk',
       'Documents & Certs',
-      'Documents & Certificates',
       'User & Access',
       'ID Card Generation',
       'Events & Calendar',

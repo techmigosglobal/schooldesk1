@@ -143,7 +143,7 @@ func (h *FrontendRecordHandler) parentOwnsRecords(c *gin.Context) bool {
 		return false
 	}
 	switch h.resource {
-	case "certificates/requests", "discipline-incidents", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
+	case "certificates/requests", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
 		return true
 	default:
 		return false
@@ -154,12 +154,7 @@ func (h *FrontendRecordHandler) teacherOwnsRecords(c *gin.Context) bool {
 	if currentRole(c) != "teacher" {
 		return false
 	}
-	switch h.resource {
-	case "discipline-incidents":
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func frontendRecordResponse(row models.FrontendRecord) gin.H {

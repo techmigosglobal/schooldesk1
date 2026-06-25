@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -16,7 +18,7 @@ class ParentAttendanceScreen extends StatefulWidget {
 
 class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 2;
+  int _selectedNavIndex = ParentNav.attendance;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
 
@@ -42,35 +44,37 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
     try {
       final childrenResponse = await BackendApiClient.instance.getMyStudents();
+      final childLabels = childrenResponse.map((c) {
+        final first = (c['first_name'] ?? '').toString();
+        final last = (c['last_name'] ?? '').toString();
+        final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+        final grade = (c['grade_name'] ?? '').toString();
+        final section = (c['section_name'] ?? '').toString();
+        final classLabel = [
+          grade,
+          section,
+        ].where((e) => e.isNotEmpty).join('-');
+        return classLabel.isEmpty ? name : '$name ($classLabel)';
+      }).toList();
+      final childIds = childrenResponse
+          .map((c) => (c['id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toList();
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        childrenResponse,
+        fallback: _activeChildIndex,
+      );
 
       setState(() {
-        _children = childrenResponse.map((c) {
-          final first = (c['first_name'] ?? '').toString();
-          final last = (c['last_name'] ?? '').toString();
-          final name = [
-            first,
-            last,
-          ].where((e) => e.isNotEmpty).join(' ').trim();
-          final grade = (c['grade_name'] ?? '').toString();
-          final section = (c['section_name'] ?? '').toString();
-          final classLabel = [
-            grade,
-            section,
-          ].where((e) => e.isNotEmpty).join('-');
-          return classLabel.isEmpty ? name : '$name ($classLabel)';
-        }).toList();
-        _childIds = childrenResponse
-            .map((c) => (c['id'] ?? '').toString())
-            .where((id) => id.isNotEmpty)
-            .toList();
-
-        // Load attendance for first child
-        if (_children.isNotEmpty && _childIds.isNotEmpty) {
-          _loadChildAttendance(0);
-        } else {
-          _loading = false;
-        }
+        _children = childLabels;
+        _childIds = childIds;
+        _activeChildIndex = selectedIndex;
       });
+      if (_children.isNotEmpty && _childIds.isNotEmpty) {
+        await _loadChildAttendance(selectedIndex);
+      } else {
+        setState(() => _loading = false);
+      }
     } catch (e) {
       setState(() => _loading = false);
       if (mounted) {
@@ -203,6 +207,13 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         return GestureDetector(
           onTap: () {
             setState(() => _activeChildIndex = i);
+            ParentChildSelectionService.saveIndex(
+              List.generate(
+                _childIds.length,
+                (index) => {'id': _childIds[index]},
+              ),
+              i,
+            );
             _loadChildAttendance(i);
           },
           child: Container(
@@ -354,7 +365,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: ['M', 'T', 'W', 'T', 'F', 'S']
+            children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
                 .map(
                   (d) => Text(
                     d,
@@ -385,18 +396,24 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 
   Widget _buildCalendarGrid() {
+    final now = DateTime.now();
+    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+    final leadingBlanks = DateTime(now.year, now.month, 1).weekday % 7;
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 6,
+        crossAxisCount: 7,
         childAspectRatio: 1.2,
         crossAxisSpacing: 4,
         mainAxisSpacing: 4,
       ),
-      itemCount: 30,
+      itemCount: leadingBlanks + daysInMonth,
       itemBuilder: (_, i) {
-        final day = i + 1;
+        if (i < leadingBlanks) {
+          return const SizedBox.shrink();
+        }
+        final day = i - leadingBlanks + 1;
         final status = _attendanceDayStatus[day];
         Color bg = Colors.transparent;
         Color textColor = context.appTheme.onSurface;
@@ -1005,6 +1022,18 @@ class _StudentLeaveRequestPageState extends State<_StudentLeaveRequestPage> {
     return null;
   }
 
+  Future<void> _pickDate(TextEditingController controller) async {
+    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    controller.text = DateFormat('yyyy-MM-dd').format(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1047,20 +1076,24 @@ class _StudentLeaveRequestPageState extends State<_StudentLeaveRequestPage> {
               TextFormField(
                 controller: _fromDateCtrl,
                 enabled: !_saving,
+                readOnly: true,
                 decoration: const InputDecoration(
                   labelText: 'From date',
-                  hintText: 'YYYY-MM-DD',
+                  suffixIcon: Icon(Icons.calendar_month_rounded),
                 ),
+                onTap: _saving ? null : () => _pickDate(_fromDateCtrl),
                 validator: _dateValidator,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _toDateCtrl,
                 enabled: !_saving,
+                readOnly: true,
                 decoration: const InputDecoration(
                   labelText: 'To date',
-                  hintText: 'YYYY-MM-DD',
+                  suffixIcon: Icon(Icons.calendar_month_rounded),
                 ),
+                onTap: _saving ? null : () => _pickDate(_toDateCtrl),
                 validator: _dateValidator,
               ),
               const SizedBox(height: 16),

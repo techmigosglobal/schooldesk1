@@ -242,3 +242,80 @@ class _ErrorInterceptor extends Interceptor {
     );
   }
 }
+
+extension BackendClientHelpers on BackendApiClient {
+  List<Map<String, dynamic>> _asListMap(dynamic value) {
+    if (value is! List) return [];
+    return value
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  Exception _handleError(DioException e) {
+    final path = e.requestOptions.path.toLowerCase();
+    if (!path.contains('/monitoring/error-events')) {
+      BackendApiClient.apiErrorReporter?.call(e);
+    }
+    if (e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout) {
+      return const NetworkException(
+        message: 'Unable to connect to server. Please check your connection.',
+      );
+    }
+    if (e.response != null) {
+      final statusCode = e.response!.statusCode ?? 0;
+      final data = e.response!.data;
+      final message = data is Map<String, dynamic>
+          ? _serverErrorMessage(data)
+          : 'Server error occurred.';
+      final safeMessage = message.isEmpty ? 'Server error occurred.' : message;
+      if (statusCode == 401) return AuthException(message: safeMessage);
+      if (statusCode == 404) return NotFoundException(message: safeMessage);
+      return ServerException(message: safeMessage, statusCode: statusCode);
+    }
+    return NetworkException(message: e.message ?? 'Network error occurred.');
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
+  }
+
+  int _asInt(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? fallback;
+  }
+
+  double _asDouble(dynamic value, {double fallback = 0}) {
+    if (value is num) return value.toDouble();
+    return double.tryParse('${value ?? ''}') ?? fallback;
+  }
+
+  String _trimmed(dynamic value) => value?.toString().trim() ?? '';
+
+  String _firstNonEmpty(Iterable<dynamic> values) {
+    for (final value in values) {
+      final text = _trimmed(value);
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _serverErrorMessage(Map<String, dynamic> data) {
+    final message = _firstNonEmpty([data['message']]);
+    if (message.isNotEmpty) return message;
+    final error = data['error'];
+    if (error is String) return error.trim();
+    if (error is Map) {
+      return _firstNonEmpty([
+        error['message'],
+        error['details'],
+        error['code'],
+      ]);
+    }
+    return '';
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -154,6 +155,19 @@ class _TeacherParentInteractionScreenState
     }
   }
 
+  Future<void> _pickSlotDate() async {
+    final current =
+        DateTime.tryParse(_dateController.text.trim()) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current,
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() => _dateController.text = teacherFlowDate(picked));
+  }
+
   Future<void> _updateMeetingStatus(
     Map<String, dynamic> meeting,
     String status,
@@ -177,7 +191,7 @@ class _TeacherParentInteractionScreenState
     return TeacherFlowScaffold(
       title: 'Parent Interaction / PTM',
       subtitle: 'PTM slots, booked discussions, and follow-up notes',
-      selectedIndex: 21,
+      selectedIndex: TeacherNav.ptm,
       loading: _loading,
       error: _error,
       onRefresh: _loadParentFlow,
@@ -231,6 +245,8 @@ class _TeacherParentInteractionScreenState
               Expanded(
                 child: TextField(
                   controller: _dateController,
+                  readOnly: true,
+                  onTap: _saving ? null : _pickSlotDate,
                   decoration: const InputDecoration(
                     labelText: 'Date',
                     prefixIcon: Icon(Icons.calendar_month_rounded),

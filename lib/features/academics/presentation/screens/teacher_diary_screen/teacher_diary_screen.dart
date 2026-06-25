@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 
 class TeacherDiaryScreen extends StatefulWidget {
   const TeacherDiaryScreen({super.key});
@@ -237,7 +237,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     return TeacherFlowScaffold(
       title: 'Class Diary',
       subtitle: 'Record classwork, next plans, and teacher notes',
-      selectedIndex: 3,
+      selectedIndex: TeacherNav.diary,
       loading: _loading,
       error: _error,
       onRefresh: _loadDiary,
@@ -253,15 +253,6 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
             classLabel: teacherCurrentClassLabel(),
             subject: RoleAccessService.teacherSubject,
             timeLabel: teacherFlowDate(DateTime.now()),
-            actions: [
-              TeacherFlowAction(
-                label: 'Homework',
-                icon: Icons.assignment_turned_in_rounded,
-                filled: true,
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.teacherHomework),
-              ),
-            ],
           ),
           const SizedBox(height: 18),
           TeacherFlowMetricGrid(

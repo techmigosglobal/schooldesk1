@@ -49,6 +49,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
   final _scrollCtrl = ScrollController();
   bool _sendingMessage = false;
   Timer? _pollingTimer;
+  DateTime? _lastChatRefreshAt;
 
   @override
   void initState() {
@@ -60,9 +61,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
   }
 
   void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_sendingMessage && !_chatLoadingMore) {
-        _loadData().then((_) {
+        _loadData(background: true).then((_) {
           if (_activeChatIndex != null) {
             final teacher = _teachers[_activeChatIndex!];
             final tid = teacher['id'] as String;
@@ -124,12 +125,24 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
     _chatHasMore = start > 0;
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool background = false}) async {
+    if (!background) {
+      setState(() => _loading = true);
+    }
     final api = BackendApiClient.instance;
+    final sentAfter = background
+        ? (_lastChatRefreshAt ??
+              DateTime.now().toUtc().subtract(const Duration(minutes: 30)))
+        : null;
     final profile = await api.getProfile();
     final children = await api.getMyStudents();
-    final conversations = await api.getMessageConversations();
-    final messages = await api.getChatMessages();
+    final conversations = await api.getMessageConversations(
+      pageSize: background ? 50 : null,
+    );
+    final messages = await api.getChatMessages(
+      pageSize: background ? 100 : null,
+      sentAfter: sentAfter,
+    );
     final directMessages = await api.getCommunications();
     final ptmSlots = await api.getRawList('/parent-teacher-meetings');
     final timetableRows = <Map<String, dynamic>>[];
@@ -201,6 +214,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       loadedUnread.putIfAbsent(teacherId, () => 0);
     }
 
+    if (!mounted) return;
     setState(() {
       _teachers = teacherRows.values.toList();
       _children = children
@@ -208,12 +222,61 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
           .map((child) => Map<String, dynamic>.from(child))
           .toList();
       if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
-      _allMessages = loadedMessages;
-      _unreadCounts = loadedUnread;
+      if (background) {
+        _allMessages = _mergeMessagesByTeacher(_allMessages, loadedMessages);
+        _unreadCounts = _recountUnread(_allMessages);
+      } else {
+        _allMessages = loadedMessages;
+        _unreadCounts = loadedUnread;
+      }
       _directMessages = directMessages;
       _ptmSlots = ptmSlots.map(_ptmSlotFromApi).toList();
+      _lastChatRefreshAt = DateTime.now().toUtc();
       _loading = false;
     });
+  }
+
+  Map<String, List<Map<String, dynamic>>> _mergeMessagesByTeacher(
+    Map<String, List<Map<String, dynamic>>> current,
+    Map<String, List<Map<String, dynamic>>> incoming,
+  ) {
+    final merged = {
+      for (final entry in current.entries)
+        entry.key: entry.value.map((row) => {...row}).toList(),
+    };
+    for (final entry in incoming.entries) {
+      final rows = merged.putIfAbsent(entry.key, () => []);
+      final seen = rows.map(_messageFingerprint).toSet();
+      for (final message in entry.value) {
+        if (seen.add(_messageFingerprint(message))) {
+          rows.add(message);
+        }
+      }
+      rows.sort(
+        (a, b) => (a['timestamp'] as int).compareTo(b['timestamp'] as int),
+      );
+    }
+    return merged;
+  }
+
+  Map<String, int> _recountUnread(
+    Map<String, List<Map<String, dynamic>>> messagesByTeacher,
+  ) {
+    return {
+      for (final entry in messagesByTeacher.entries)
+        entry.key: entry.value
+            .where(
+              (message) =>
+                  message['sender'] == 'teacher' && message['read'] == false,
+            )
+            .length,
+    };
+  }
+
+  String _messageFingerprint(Map<String, dynamic> message) {
+    final id = '${message['id'] ?? ''}'.trim();
+    if (id.isNotEmpty) return id;
+    return '${message['timestamp']}:${message['sender']}:${message['text']}';
   }
 
   Map<String, dynamic> _teacherRowFromConversation(
@@ -383,10 +446,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
       }
       setState(() {});
     }
-  }
-
-  Future<void> _savePtmSlots() async {
-    await _loadData();
   }
 
   @override
@@ -1390,25 +1449,11 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              OutlinedButton(
-                onPressed: () => _bookPtmSlot(slot),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0057FF),
-                  side: const BorderSide(color: Color(0xFF0057FF)),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  'Book',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
+              Chip(
+                avatar: const Icon(Icons.visibility_rounded, size: 16),
+                label: Text(
+                  '${slot['status'] ?? 'available'}',
+                  style: GoogleFonts.dmSans(fontSize: 12),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1506,42 +1551,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen>
         ],
       ),
     );
-  }
-
-  Future<void> _bookPtmSlot(Map<String, dynamic> slot) async {
-    final id = '${slot['id'] ?? ''}'.trim();
-    if (id.isEmpty) return;
-    final teacherName =
-        slot['teacherName'] as String? ?? slot['teacher'] as String? ?? '';
-    final index = _ptmSlots.indexWhere((row) => '${row['id']}' == id);
-    if (index >= 0) {
-      setState(() {
-        _ptmSlots[index]['status'] = 'booked';
-        _ptmSlots[index]['bookedBy'] = 'Parent';
-      });
-    }
-    try {
-      await BackendApiClient.instance.bookParentTeacherMeeting(id);
-      await _savePtmSlots();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PTM slot booked with $teacherName!'),
-          backgroundColor: context.appTheme.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } catch (_) {
-      await _savePtmSlots();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to book this PTM slot. Please try again.'),
-          backgroundColor: context.appTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 
   List<Map<String, dynamic>> _selectedChildPtmSlots() {

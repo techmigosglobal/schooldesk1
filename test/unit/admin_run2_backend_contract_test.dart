@@ -7,43 +7,44 @@ import 'backend_api_sources.dart';
 import 'backend_route_sources.dart';
 
 void main() {
-  test('student write contracts expose principal direct and admin approval paths', () {
-    final main = readBackendRouteSources();
+  test(
+    'student write contracts expose principal direct and admin approval paths',
+    () {
+      final main = readBackendRouteSources();
 
-    expect(
-      main,
-      contains(
-        'students.PUT("/:id", middleware.RBACMiddleware("Principal")',
-      ),
-    );
-    expect(main, contains('studentHandler.UpdateStudent'));
-    expect(
-      main,
-      contains(
-        'students.POST("/enrollments", middleware.RBACMiddleware("Principal")',
-      ),
-    );
-    expect(main, contains('studentHandler.CreateEnrollment'));
-    expect(
-      main,
-      contains(
-        'studentApprovals.POST("", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write"',
-      ),
-    );
-    expect(
-      main,
-      contains(
-        'attendance.POST("/staff", middleware.RBACMiddleware("Principal")',
-      ),
-    );
-    expect(main, contains('attendanceHandler.MarkStaffAttendance'));
-    expect(
-      main,
-      contains(
-        'fees.POST("/invoices", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write"',
-      ),
-    );
-  });
+      expect(
+        main,
+        contains('students.PUT("/:id", middleware.RBACMiddleware("Principal")'),
+      );
+      expect(main, contains('studentHandler.UpdateStudent'));
+      expect(
+        main,
+        contains(
+          'students.POST("/enrollments", middleware.RBACMiddleware("Principal")',
+        ),
+      );
+      expect(main, contains('studentHandler.CreateEnrollment'));
+      expect(
+        main,
+        contains(
+          'studentApprovals.POST("", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("student_write"',
+        ),
+      );
+      expect(
+        main,
+        contains(
+          'attendance.POST("/staff", middleware.RBACMiddleware("Principal")',
+        ),
+      );
+      expect(main, contains('attendanceHandler.MarkStaffAttendance'));
+      expect(
+        main,
+        contains(
+          'fees.POST("/invoices", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write"',
+        ),
+      );
+    },
+  );
 
   test('admin finance screen normalizes backend fee and invoice shapes', () {
     final source = File(
@@ -80,9 +81,15 @@ void main() {
     expect(routes, contains('principalPaymentRequests'));
     expect(routes, contains('AdminPaymentRequestsScreen'));
     expect(routes, contains('AdminPaymentRequestDecisionScreen'));
-    expect(guard, contains('AppRoutes.principalPaymentRequests: {\'principal\'}'));
+    expect(
+      guard,
+      contains('AppRoutes.principalPaymentRequests: {\'principal\'}'),
+    );
     expect(requestsScreen, contains('getParentPaymentRequests('));
-    expect(requestsScreen, contains('AppRoutes.principalPaymentRequestDecision'));
+    expect(
+      requestsScreen,
+      contains('AppRoutes.principalPaymentRequestDecision'),
+    );
     expect(decisionScreen, contains('decideParentPaymentRequest('));
     expect(
       api,
@@ -117,13 +124,16 @@ void main() {
     expect(feeForms, contains('AdminFeeStructureFormScreen'));
     expect(feeForms, contains('AdminInvoiceGenerationFormScreen'));
     expect(feeForms, contains('AdminPaymentRecordFormScreen'));
-    expect(feeForms, contains("createRaw('/fees/structures'"));
+    expect(feeForms, contains('createFeeStructure('));
     expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
     expect(feeForms, contains('recordPayment('));
     expect(feeForms, isNot(contains('showDialog(')));
     expect(routes, contains('academicYearFeesExport'));
     expect(routes, contains('AcademicYearFeesExportScreen'));
-    expect(guard, contains('AppRoutes.academicYearFeesExport: {\'principal\'}'));
+    expect(
+      guard,
+      contains('AppRoutes.academicYearFeesExport: {\'principal\'}'),
+    );
     expect(registry, contains('/academic-management-screen/year/fees-export'));
   });
 

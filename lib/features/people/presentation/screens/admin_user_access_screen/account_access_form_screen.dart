@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -105,8 +105,14 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
   Widget build(BuildContext context) {
     final title = _isEdit ? 'Edit Account' : 'Create Account';
     final drawer = _isPrincipalOwner
-        ? PrincipalDrawer(selectedIndex: 1, onDestinationSelected: (_) {})
-        : AdminDrawer(selectedIndex: 10, onDestinationSelected: (_) {});
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          );
 
     return SchoolDeskModuleScaffold(
       title: title,

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -257,7 +258,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       return TeacherFlowScaffold(
         title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
         subtitle: 'Loading teacher homework context',
-        selectedIndex: 3,
+        selectedIndex: TeacherNav.diary,
         loading: true,
         child: const SizedBox.shrink(),
       );
@@ -265,14 +266,14 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     if (_missingRequiredContext) {
       return _TeacherModuleEntryError(
         title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
-        selectedIndex: 3,
+        selectedIndex: TeacherNav.diary,
       );
     }
 
     return TeacherFlowScaffold(
       title: widget.args.isEditing ? 'Edit Homework' : 'Assign Homework',
       subtitle: 'Minimal typing flow with class defaults',
-      selectedIndex: 3,
+      selectedIndex: TeacherNav.diary,
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(
@@ -666,7 +667,7 @@ class _TeacherHomeworkSubmissionsScreenState
     if (teacherFlowText(widget.args.homework['id']).isEmpty) {
       return const _TeacherModuleEntryError(
         title: 'Submissions',
-        selectedIndex: 3,
+        selectedIndex: TeacherNav.diary,
       );
     }
 
@@ -677,7 +678,7 @@ class _TeacherHomeworkSubmissionsScreenState
     return TeacherFlowScaffold(
       title: 'Submissions',
       subtitle: title,
-      selectedIndex: 3,
+      selectedIndex: TeacherNav.diary,
       loading: _loading,
       error: _error,
       onRefresh: _loadSubmissions,

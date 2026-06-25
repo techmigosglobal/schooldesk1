@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -204,7 +205,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message, style: GoogleFonts.dmSans()),
-        backgroundColor: isError ? context.appTheme.error : context.appTheme.success,
+        backgroundColor: isError
+            ? context.appTheme.error
+            : context.appTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -215,7 +218,10 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
     return SchoolDeskModuleScaffold(
       title: 'School Profile',
       subtitle: 'Maintain trusted institution identity, contacts, and branding',
-      drawer: PrincipalDrawer(selectedIndex: 14, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.schoolProfile,
+        onDestinationSelected: (_) {},
+      ),
       actions: [
         if (!_loading && _error == null)
           TextButton.icon(
@@ -535,7 +541,9 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
             vertical: 12,
           ),
           filled: true,
-          fillColor: _editing ? context.appTheme.surface : context.appTheme.surfaceVariant,
+          fillColor: _editing
+              ? context.appTheme.surface
+              : context.appTheme.surfaceVariant,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),

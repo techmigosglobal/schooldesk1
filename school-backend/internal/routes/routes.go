@@ -625,8 +625,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		staffQualifications.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
 		{
 			h := handlers.NewCRUDHandler[models.StaffQualification]("staff_qualifications", "staff_qualifications", []string{"staff_id", "degree"}, false, "Staff")
-			staffQualifications.GET("", middleware.RBACMiddleware("Principal", "Teacher"), middleware.PermissionMiddleware("staff_qualifications", "read"), h.List)
-			staffQualifications.GET("/:id", middleware.RBACMiddleware("Principal", "Teacher"), middleware.PermissionMiddleware("staff_qualifications", "read"), h.Get)
+			staffQualifications.GET("", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("staff_qualifications", "read"), h.List)
+			staffQualifications.GET("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("staff_qualifications", "read"), h.Get)
 			staffQualifications.POST("", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("staff_qualifications", "create"), h.Create)
 			staffQualifications.PUT("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("staff_qualifications", "update"), h.Update)
 			staffQualifications.DELETE("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("staff_qualifications", "delete"), h.Delete)
@@ -635,17 +635,6 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		// Library and transport route groups are intentionally not registered in
 		// the current product scope. Historical schema models remain for data
 		// preservation, but no active API surface is exposed.
-
-		payroll := api.Group("/payroll")
-		payroll.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
-		{
-			h := handlers.NewCRUDHandler[models.Payroll]("payroll", "payrolls", []string{"staff_id", "academic_year_id", "month", "year"}, false, "Staff", "AcademicYear")
-			payroll.GET("", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("payroll", "read"), h.List)
-			payroll.GET("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("payroll", "read"), h.Get)
-			payroll.POST("", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("payroll", "create"), h.Create)
-			payroll.PUT("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("payroll", "update"), h.Update)
-			payroll.DELETE("/:id", middleware.RBACMiddleware("Principal"), middleware.PermissionMiddleware("payroll", "delete"), h.Delete)
-		}
 
 		ptm := api.Group("/parent-teacher-meetings")
 		ptm.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware())
@@ -751,13 +740,13 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			registerTableCRUD(principalReports, "principal_reports", []string{"Principal"}, []string{"Principal"})
 		}
 
-		frontendResource("/admissions/applications", "Principal")
 		frontendResource("/certificates/transfer-requests", "Principal")
 		frontendResource("/events/approvals", "Principal")
 		frontendResource("/timetable/approvals", "Principal")
 		frontendResource("/principal/timetable-advice", "Principal")
 		frontendResource("/principal/exam-advice", "Principal")
 		frontendResource("/documents/requests", "Principal")
+		frontendResource("/documents/templates", "Principal")
 		frontendResource("/documents/access-requests", "Principal", "Parent")
 		frontendResource("/certificates/requests", "Principal", "Parent")
 		frontendResource("/student-notes", "Principal", "Teacher")
@@ -765,11 +754,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		frontendResource("/notice-acknowledgements", "Principal", "Teacher", "Parent")
 		frontendResource("/documents", "Principal", "Teacher", "Parent")
 		frontendResource("/threads", "Principal", "Teacher", "Parent")
-		frontendResource("/curriculum", "Principal", "Teacher", "Parent")
-		frontendResource("/syllabus", "Principal", "Teacher", "Parent")
-		frontendResource("/complaints", "Principal", "Teacher")
-		frontendResource("/discipline-incidents", "Principal", "Teacher", "Parent")
-		frontendResource("/helpdesk-tickets", "Principal", "Teacher", "Parent")
+		frontendResource("/curriculum", "Principal")
+		frontendResource("/complaints", "Principal")
 		api.POST("/documents/requests/:id/prints", middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Principal"), handlers.NewFrontendRecordHandler("documents/requests/prints").Create)
 	}
 }

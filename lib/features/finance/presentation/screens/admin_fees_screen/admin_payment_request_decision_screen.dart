@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -44,7 +45,10 @@ class _AdminPaymentRequestDecisionScreenState
     return SchoolDeskModuleScaffold(
       title: 'Payment Decision',
       subtitle: 'Approve or reject parent-submitted fee payments',
-      drawer: PrincipalDrawer(selectedIndex: 7, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.fees,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.principal,
       ),

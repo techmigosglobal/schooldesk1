@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -15,7 +17,7 @@ class ParentTimetableScreen extends StatefulWidget {
 
 class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 1; // Academics/Schedule nav index
+  int _selectedNavIndex = ParentNav.timetable;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
 
@@ -51,33 +53,36 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     setState(() => _loading = true);
     try {
       final childrenResponse = await BackendApiClient.instance.getMyStudents();
+      final childLabels = childrenResponse.map((c) {
+        final first = (c['first_name'] ?? '').toString();
+        final last = (c['last_name'] ?? '').toString();
+        final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
+        final grade = (c['grade_name'] ?? '').toString();
+        final section = (c['section_name'] ?? '').toString();
+        final classLabel = [
+          grade,
+          section,
+        ].where((e) => e.isNotEmpty).join('-');
+        return classLabel.isEmpty ? name : '$name ($classLabel)';
+      }).toList();
+      final childIds = childrenResponse
+          .map((c) => (c['id'] ?? '').toString())
+          .where((id) => id.isNotEmpty)
+          .toList();
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        childrenResponse,
+        fallback: _activeChildIndex,
+      );
       setState(() {
-        _children = childrenResponse.map((c) {
-          final first = (c['first_name'] ?? '').toString();
-          final last = (c['last_name'] ?? '').toString();
-          final name = [
-            first,
-            last,
-          ].where((e) => e.isNotEmpty).join(' ').trim();
-          final grade = (c['grade_name'] ?? '').toString();
-          final section = (c['section_name'] ?? '').toString();
-          final classLabel = [
-            grade,
-            section,
-          ].where((e) => e.isNotEmpty).join('-');
-          return classLabel.isEmpty ? name : '$name ($classLabel)';
-        }).toList();
-        _childIds = childrenResponse
-            .map((c) => (c['id'] ?? '').toString())
-            .where((id) => id.isNotEmpty)
-            .toList();
-
-        if (_children.isNotEmpty && _childIds.isNotEmpty) {
-          _loadChildTimetable(_activeChildIndex);
-        } else {
-          _loading = false;
-        }
+        _children = childLabels;
+        _childIds = childIds;
+        _activeChildIndex = selectedIndex;
       });
+      if (_children.isNotEmpty && _childIds.isNotEmpty) {
+        await _loadChildTimetable(selectedIndex);
+      } else {
+        setState(() => _loading = false);
+      }
     } catch (e) {
       setState(() => _loading = false);
       _showErrorSnackBar('Failed to load child list: $e');
@@ -190,6 +195,13 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
               setState(() {
                 _activeChildIndex = i;
               });
+              ParentChildSelectionService.saveIndex(
+                List.generate(
+                  _childIds.length,
+                  (index) => {'id': _childIds[index]},
+                ),
+                i,
+              );
               _loadChildTimetable(i);
             },
             child: Container(

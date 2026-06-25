@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
@@ -54,7 +55,10 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
         _schoolName = safeText(school['name'], fallback: 'School');
         _schoolSubtitle = safeText(
           school['affiliation_board'],
-          fallback: safeText(school['school_type'], fallback: 'Teacher workspace'),
+          fallback: safeText(
+            school['school_type'],
+            fallback: 'Teacher workspace',
+          ),
         );
       });
     } catch (_) {
@@ -95,35 +99,35 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           label: 'Today',
           items: [
             SchoolDeskNavigationItem(
-              index: 0,
+              index: TeacherNav.dashboard,
               icon: Icons.dashboard_outlined,
               activeIcon: Icons.dashboard_rounded,
               label: 'Dashboard',
               route: AppRoutes.teacherDashboard,
             ),
             SchoolDeskNavigationItem(
-              index: 1,
+              index: TeacherNav.classes,
               icon: Icons.class_outlined,
               activeIcon: Icons.class_rounded,
               label: 'My Classes',
               route: AppRoutes.teacherClasses,
             ),
             SchoolDeskNavigationItem(
-              index: 18,
+              index: TeacherNav.timetable,
               icon: Icons.calendar_month_outlined,
               activeIcon: Icons.calendar_month_rounded,
               label: 'Timetable',
               route: AppRoutes.teacherTimetable,
             ),
             SchoolDeskNavigationItem(
-              index: 30,
+              index: TeacherNav.calendar,
               icon: Icons.event_note_outlined,
               activeIcon: Icons.event_note_rounded,
               label: 'School Calendar',
               route: AppRoutes.teacherCalendar,
             ),
             SchoolDeskNavigationItem(
-              index: 14,
+              index: TeacherNav.myAttendance,
               icon: Icons.qr_code_scanner_outlined,
               activeIcon: Icons.qr_code_scanner_rounded,
               label: 'My Staff Attendance',
@@ -135,63 +139,49 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           label: 'Academic Work',
           items: [
             const SchoolDeskNavigationItem(
-              index: 2,
+              index: TeacherNav.attendance,
               icon: Icons.how_to_reg_outlined,
               activeIcon: Icons.how_to_reg_rounded,
               label: 'Attendance',
               route: AppRoutes.teacherAttendance,
             ),
             const SchoolDeskNavigationItem(
-              index: 20,
+              index: TeacherNav.attendanceHistory,
               icon: Icons.fact_check_outlined,
               activeIcon: Icons.fact_check_rounded,
               label: 'Attendance History',
               route: AppRoutes.teacherAttendanceHistory,
             ),
             SchoolDeskNavigationItem(
-              index: 3,
+              index: TeacherNav.diary,
               icon: Icons.menu_book_outlined,
               activeIcon: Icons.menu_book_rounded,
               label: 'Diary',
               route: AppRoutes.teacherDiary,
             ),
             const SchoolDeskNavigationItem(
-              index: 26,
-              icon: Icons.assignment_outlined,
-              activeIcon: Icons.assignment_rounded,
-              label: 'Homework',
-              route: AppRoutes.teacherHomework,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 22,
+              index: TeacherNav.eventPosts,
               icon: Icons.post_add_outlined,
               activeIcon: Icons.post_add_rounded,
               label: 'Event Posts',
               route: AppRoutes.teacherEventPosts,
             ),
             const SchoolDeskNavigationItem(
-              index: 23,
+              index: TeacherNav.lessonPlanner,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
               label: 'Lesson Planner',
               route: AppRoutes.teacherLessonPlanner,
             ),
             const SchoolDeskNavigationItem(
-              index: 27,
+              index: TeacherNav.studentNotes,
               icon: Icons.sticky_note_2_outlined,
               activeIcon: Icons.sticky_note_2_rounded,
               label: 'Student Notes',
               route: AppRoutes.teacherStudentNotes,
             ),
             const SchoolDeskNavigationItem(
-              index: 28,
-              icon: Icons.shield_outlined,
-              activeIcon: Icons.shield_rounded,
-              label: 'Student Discipline',
-              route: AppRoutes.teacherDiscipline,
-            ),
-            const SchoolDeskNavigationItem(
-              index: 24,
+              index: TeacherNav.gallery,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,
               label: 'Gallery',
@@ -203,7 +193,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           label: 'Communication',
           items: [
             SchoolDeskNavigationItem(
-              index: 8,
+              index: TeacherNav.communication,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
               label: 'Parent Messages',
@@ -211,24 +201,18 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
             const SchoolDeskNavigationItem(
-              index: 21,
+              index: TeacherNav.ptm,
               icon: Icons.event_available_outlined,
               activeIcon: Icons.event_available_rounded,
               label: 'PTM Slots',
               route: AppRoutes.teacherParentInteraction,
             ),
             SchoolDeskNavigationItem(
-              index: 16,
-              icon: Icons.feedback_outlined,
-              activeIcon: Icons.feedback_rounded,
-              label: 'Homework Feedback',
-              route: AppRoutes.homeworkMessaging,
-              arguments: {
-                'role': 'teacher',
-                'userId': RoleAccessService.teacherUserId,
-                'staffId': RoleAccessService.teacherStaffId,
-                'userName': teacherName,
-              },
+              index: TeacherNav.documents,
+              icon: Icons.description_outlined,
+              activeIcon: Icons.description_rounded,
+              label: 'Documents',
+              route: AppRoutes.teacherDocuments,
             ),
           ],
         ),
@@ -236,7 +220,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           label: 'Administration',
           items: [
             SchoolDeskNavigationItem(
-              index: 10,
+              index: TeacherNav.leave,
               icon: Icons.event_busy_outlined,
               activeIcon: Icons.event_busy_rounded,
               label: 'Leave Requests',

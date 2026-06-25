@@ -131,12 +131,36 @@ extension BackendCommunicationsApi on BackendApiClient {
     return normalized;
   }
 
-  Future<List<Map<String, dynamic>>> getMessageConversations() {
-    return getRawList('/message-conversations');
+  Future<List<Map<String, dynamic>>> getMessageConversations({
+    int? pageSize,
+    Map<String, dynamic>? queryParameters,
+  }) {
+    final params = <String, dynamic>{...?queryParameters};
+    if (pageSize != null) params['page_size'] = pageSize;
+    return getRawList(
+      '/message-conversations',
+      queryParameters: params.isEmpty ? null : params,
+    );
   }
 
-  Future<List<Map<String, dynamic>>> getChatMessages() {
-    return getRawList('/messages');
+  Future<List<Map<String, dynamic>>> getChatMessages({
+    String? conversationId,
+    int? pageSize,
+    DateTime? sentAfter,
+    Map<String, dynamic>? queryParameters,
+  }) {
+    final params = <String, dynamic>{...?queryParameters};
+    if (conversationId != null && conversationId.trim().isNotEmpty) {
+      params['conversation_id'] = conversationId.trim();
+    }
+    if (pageSize != null) params['page_size'] = pageSize;
+    if (sentAfter != null) {
+      params['sent_after'] = sentAfter.toUtc().toIso8601String();
+    }
+    return getRawList(
+      '/messages',
+      queryParameters: params.isEmpty ? null : params,
+    );
   }
 
   Future<Map<String, dynamic>> sendChatMessage({

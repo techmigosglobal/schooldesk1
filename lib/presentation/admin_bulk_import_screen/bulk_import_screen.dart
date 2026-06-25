@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/app_theme.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 
 class BulkImportScreen extends StatefulWidget {
   final String ownerRole;
-  
+
   const BulkImportScreen({super.key, this.ownerRole = 'admin'});
 
   @override
@@ -20,15 +20,15 @@ class BulkImportScreen extends StatefulWidget {
 class _BulkImportScreenState extends State<BulkImportScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
+
   String _selectedImportType = 'student';
   PlatformFile? _selectedFile;
   bool _loading = false;
   bool _dryRun = true;
   bool _showPreview = false;
-  
+
   Map<String, dynamic>? _importResult;
-  
+
   final List<Map<String, String>> _templates = [
     {
       'type': 'student',
@@ -66,7 +66,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
         allowedExtensions: ['csv'],
         allowMultiple: false,
       );
-      
+
       if (result != null && result.files.isNotEmpty) {
         setState(() {
           _selectedFile = result.files.first;
@@ -74,18 +74,18 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error selecting file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error selecting file: $e')));
       }
     }
   }
 
   Future<void> _performImport({bool dryRun = true}) async {
     if (_selectedFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a CSV file')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a CSV file')));
       return;
     }
 
@@ -100,13 +100,13 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       if (filePath == null) {
         throw Exception('Cannot read file path');
       }
-      
+
       final result = await api.bulkImport(
         importType: _selectedImportType,
         filePath: filePath,
         dryRun: dryRun,
       );
-      
+
       if (mounted) {
         setState(() {
           _importResult = result;
@@ -115,9 +115,9 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
       }
     } finally {
       if (mounted) {
@@ -131,16 +131,22 @@ class _BulkImportScreenState extends State<BulkImportScreen>
   @override
   Widget build(BuildContext context) {
     final drawer = widget.ownerRole == 'principal'
-        ? PrincipalDrawer(selectedIndex: 2, onDestinationSelected: (_) {})
-        : AdminDrawer(selectedIndex: 11, onDestinationSelected: (_) {});
-    
+        ? PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          )
+        : PrincipalDrawer(
+            selectedIndex: PrincipalNav.access,
+            onDestinationSelected: (_) {},
+          );
+
     return SchoolDeskModuleScaffold(
       title: 'Bulk Import Users',
       subtitle: 'Upload CSV files to bulk import students, staff, and parents',
       drawer: drawer,
       floatingActionButton: DashboardFabWidget(
-        role: widget.ownerRole == 'principal' 
-            ? DashboardRole.principal 
+        role: widget.ownerRole == 'principal'
+            ? DashboardRole.principal
             : DashboardRole.principal,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
@@ -176,10 +182,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       children: [
         Text(
           'Select Import Type',
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         GridView.builder(
@@ -264,10 +267,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
       children: [
         Text(
           'Upload CSV File',
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         GestureDetector(
@@ -339,9 +339,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
                       ? const SizedBox(
                           height: 20,
                           width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Text(_dryRun ? 'Preview Import' : 'Perform Import'),
                 ),
@@ -371,7 +369,9 @@ class _BulkImportScreenState extends State<BulkImportScreen>
           decoration: BoxDecoration(
             border: Border.all(color: AppTheme.outlineVariant),
             borderRadius: BorderRadius.circular(12),
-            color: success ? AppTheme.successContainer : AppTheme.errorContainer,
+            color: success
+                ? AppTheme.successContainer
+                : AppTheme.errorContainer,
           ),
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -494,9 +494,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(_dryRun ? 'Perform Import' : 'Confirm Import'),
               ),

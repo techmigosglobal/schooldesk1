@@ -340,7 +340,7 @@ class RoleAccessService {
       return const {};
     }
     if (index < 0 || index >= _parentChildren.length) {
-      return _parentChildren.first;
+      throw RangeError.index(index, _parentChildren, 'index');
     }
     return _parentChildren[index];
   }

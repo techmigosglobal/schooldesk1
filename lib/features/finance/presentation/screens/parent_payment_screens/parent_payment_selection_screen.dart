@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
@@ -55,7 +56,10 @@ class _ParentPaymentSelectionScreenState
     return SchoolDeskModuleScaffold(
       title: 'Select installment',
       subtitle: 'Choose the fee installment you want to pay now',
-      drawer: ParentDrawer(selectedIndex: 6, onDestinationSelected: (i) {}),
+      drawer: ParentDrawer(
+        selectedIndex: ParentNav.fees,
+        onDestinationSelected: (_) {},
+      ),
       floatingActionButton: const DashboardFabWidget(
         role: DashboardRole.parent,
       ),

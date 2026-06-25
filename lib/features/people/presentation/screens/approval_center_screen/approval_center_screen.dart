@@ -202,13 +202,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         ),
         _loadApprovalSource('Student leave', _loadStudentLeaveApprovals),
         _loadApprovalSource(
-          'Admissions',
-          () => _loadGenericApprovals(
-            path: '/admissions/applications',
-            type: 'admission',
-          ),
-        ),
-        _loadApprovalSource(
           'Fee concessions',
           () => _loadGenericApprovals(
             path: '/fees/concessions',

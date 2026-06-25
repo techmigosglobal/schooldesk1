@@ -75,6 +75,8 @@ void main() {
         AppRoutes.principalAttendance,
         AppRoutes.principalSubjects,
         AppRoutes.principalLessonPlanner,
+        AppRoutes.principalDocuments,
+        AppRoutes.principalAuditLogs,
         AppRoutes.principalAccountCreate,
         AppRoutes.principalAccountEdit,
         AppRoutes.principalParentChildAssignment,
@@ -125,15 +127,15 @@ void main() {
         AppRoutes.teacherAttendance,
         AppRoutes.teacherAttendanceHistory,
         AppRoutes.teacherMyAttendance,
-        AppRoutes.teacherHomework,
-        AppRoutes.teacherHomeworkForm,
-        AppRoutes.teacherHomeworkSubmissions,
         AppRoutes.teacherCommunication,
+        AppRoutes.teacherParentInteraction,
         AppRoutes.teacherLeave,
         AppRoutes.teacherLeaveRequestForm,
         AppRoutes.teacherDiary,
         AppRoutes.teacherEventPosts,
         AppRoutes.teacherLessonPlanner,
+        AppRoutes.teacherStudentNotes,
+        AppRoutes.teacherDocuments,
         AppRoutes.schoolGallery,
         AppRoutes.notificationCenter,
         AppRoutes.profileScreen,
@@ -159,28 +161,7 @@ void main() {
       }
     });
 
-    test('guards homework input and submission screens by role', () {
-      for (final route in [
-        AppRoutes.teacherHomeworkForm,
-        AppRoutes.teacherHomeworkSubmissions,
-      ]) {
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Teacher',
-          ),
-          isNull,
-        );
-        expect(
-          RouteAccessGuard.redirectFor(
-            routeName: route,
-            isAuthenticated: true,
-            currentRole: 'Parent',
-          ),
-          AppRoutes.parentDashboard,
-        );
-      }
+    test('guards parent homework submission screen by role', () {
       expect(
         RouteAccessGuard.redirectFor(
           routeName: AppRoutes.parentHomeworkSubmit,

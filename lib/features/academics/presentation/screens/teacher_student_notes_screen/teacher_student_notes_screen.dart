@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -47,29 +48,31 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
       final students = RoleAccessService.teacherClassStudents;
       final rows = await BackendApiClient.instance.getRawList('/student-notes');
       if (!mounted) return;
-      final classStudentIds =
-          students.map((s) => teacherFlowText(s['id'])).toSet();
+      final classStudentIds = students
+          .map((s) => teacherFlowText(s['id']))
+          .toSet();
       setState(() {
         _students = students;
         if (_selectedStudentId.isEmpty && students.isNotEmpty) {
           _selectedStudentId = teacherFlowText(students.first['id']);
         }
-        _notes = rows
-            .where((note) {
-              final authorId = teacherFlowText(
-                note['author_id'] ?? note['teacher_id'] ?? note['staff_id'],
+        _notes =
+            rows
+                .where((note) {
+                  final authorId = teacherFlowText(
+                    note['author_id'] ?? note['teacher_id'] ?? note['staff_id'],
+                  );
+                  final noteStudentId = teacherFlowText(note['student_id']);
+                  return authorId == RoleAccessService.teacherStaffId ||
+                      classStudentIds.contains(noteStudentId);
+                })
+                .map(_mapNote)
+                .toList()
+              ..sort(
+                (a, b) => teacherFlowText(
+                  b['date'],
+                ).compareTo(teacherFlowText(a['date'])),
               );
-              final noteStudentId = teacherFlowText(note['student_id']);
-              return authorId == RoleAccessService.teacherStaffId ||
-                  classStudentIds.contains(noteStudentId);
-            })
-            .map(_mapNote)
-            .toList()
-          ..sort(
-            (a, b) => teacherFlowText(
-              b['date'],
-            ).compareTo(teacherFlowText(a['date'])),
-          );
         _loading = false;
       });
     } catch (error) {
@@ -148,7 +151,7 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
     return TeacherFlowScaffold(
       title: 'Student Notes',
       subtitle: 'Record observations and track student progress',
-      selectedIndex: 6,
+      selectedIndex: TeacherNav.studentNotes,
       loading: _loading,
       error: _error,
       onRefresh: _loadNotes,
@@ -234,14 +237,8 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
                       value: 'behaviour',
                       child: Text('Behaviour'),
                     ),
-                    DropdownMenuItem(
-                      value: 'health',
-                      child: Text('Health'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'general',
-                      child: Text('General'),
-                    ),
+                    DropdownMenuItem(value: 'health', child: Text('Health')),
+                    DropdownMenuItem(value: 'general', child: Text('General')),
                   ],
                   onChanged: _saving
                       ? null

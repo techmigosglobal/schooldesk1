@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -207,7 +208,7 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
     return TeacherFlowScaffold(
       title: 'PTM Management',
       subtitle: 'Schedule slots and view parent bookings',
-      selectedIndex: 9, // Communication/PTM index
+      selectedIndex: TeacherNav.ptm,
       loading: _loading,
       error: _error,
       onRefresh: _loadPTMFlow,

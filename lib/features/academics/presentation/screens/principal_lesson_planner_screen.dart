@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -74,7 +75,10 @@ class _PrincipalLessonPlannerScreenState
     return SchoolDeskModuleScaffold(
       title: 'Lesson Planners',
       subtitle: 'Class-wise lesson planner monitoring',
-      drawer: PrincipalDrawer(selectedIndex: 17, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.lessonPlanner,
+        onDestinationSelected: (_) {},
+      ),
       body: RefreshIndicator(
         onRefresh: _loadPlanners,
         child: ListView(

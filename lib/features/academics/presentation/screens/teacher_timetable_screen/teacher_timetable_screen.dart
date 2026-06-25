@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -120,7 +121,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
       subtitle: 'Read-only schedule from Principal timetable setup',
-      selectedIndex: 18,
+      selectedIndex: TeacherNav.timetable,
       loading: _loading,
       error: _error,
       onRefresh: _load,

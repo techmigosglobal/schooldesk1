@@ -5,7 +5,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/backend_data_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 
@@ -115,7 +116,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Admin',
-      drawer: AdminDrawer(selectedIndex: 0, onDestinationSelected: (_) {}),
+      drawer: PrincipalDrawer(
+        selectedIndex: PrincipalNav.dashboard,
+        onDestinationSelected: (_) {},
+      ),
       actions: [
         IconButton(
           tooltip: 'Refresh dashboard',
@@ -332,7 +336,8 @@ class _DashboardContent extends StatelessWidget {
               subtitle: 'Backend invoices',
               icon: Icons.account_balance_wallet_rounded,
               color: theme.colorScheme.secondary,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.feeMonitoring),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Pending dues',
@@ -340,7 +345,8 @@ class _DashboardContent extends StatelessWidget {
               subtitle: '$pendingInvoices invoices',
               icon: Icons.warning_rounded,
               color: theme.colorScheme.error,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.feeMonitoring),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.feeMonitoring),
             ),
             SchoolDeskKpiCard(
               title: 'Alerts',

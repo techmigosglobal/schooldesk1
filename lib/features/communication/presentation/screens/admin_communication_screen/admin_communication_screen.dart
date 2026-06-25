@@ -4,7 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/widgets/admin_navigation.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -98,7 +99,7 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
   }
 
   void _startPolling() {
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted && !_sendingChat && !_loading) {
         _loadData(background: true);
       }
@@ -191,12 +192,17 @@ class _AdminCommunicationScreenState extends State<AdminCommunicationScreen>
 
   @override
   Widget build(BuildContext context) {
-    final drawer = AdminDrawer(selectedIndex: 7, onDestinationSelected: (_) {});
+    final drawer = PrincipalDrawer(
+      selectedIndex: PrincipalNav.broadcasts,
+      onDestinationSelected: (_) {},
+    );
     return SchoolDeskModuleScaffold(
       title: 'Communication Management',
       subtitle: 'Publish role-wise notices and review delivery history',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       actions: [
         IconButton(

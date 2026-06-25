@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/schooldesk_glossary.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
@@ -122,21 +123,21 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Overview',
           items: [
             SchoolDeskNavigationItem(
-              index: 0,
+              index: PrincipalNav.dashboard,
               icon: Icons.dashboard_outlined,
               activeIcon: Icons.dashboard_rounded,
               label: SchoolDeskGlossary.dashboard,
               route: AppRoutes.principalDashboard,
             ),
             SchoolDeskNavigationItem(
-              index: 14,
+              index: PrincipalNav.schoolProfile,
               icon: Icons.apartment_outlined,
               activeIcon: Icons.apartment_rounded,
               label: SchoolDeskGlossary.schoolProfile,
               route: AppRoutes.principalSchoolProfile,
             ),
             SchoolDeskNavigationItem(
-              index: 1,
+              index: PrincipalNav.access,
               icon: Icons.manage_accounts_outlined,
               activeIcon: Icons.manage_accounts_rounded,
               label: SchoolDeskGlossary.accessPermissions,
@@ -148,21 +149,35 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Oversight',
           items: [
             SchoolDeskNavigationItem(
-              index: 2,
+              index: PrincipalNav.staff,
+              icon: Icons.people_outline_rounded,
+              activeIcon: Icons.people_rounded,
+              label: SchoolDeskGlossary.staff,
+              route: AppRoutes.staffManagement,
+            ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.students,
               icon: Icons.school_outlined,
               activeIcon: Icons.school_rounded,
               label: SchoolDeskGlossary.studentOversight,
               route: AppRoutes.studentOversight,
             ),
             SchoolDeskNavigationItem(
-              index: 3,
+              index: PrincipalNav.guardians,
+              icon: Icons.family_restroom_outlined,
+              activeIcon: Icons.family_restroom_rounded,
+              label: 'Parents & Guardians',
+              route: AppRoutes.guardianDirectory,
+            ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.approvals,
               icon: Icons.task_alt_outlined,
               activeIcon: Icons.task_alt_rounded,
               label: SchoolDeskGlossary.approvalCenter,
               route: AppRoutes.approvalCenter,
             ),
             SchoolDeskNavigationItem(
-              index: 15,
+              index: PrincipalNav.attendance,
               icon: Icons.fact_check_outlined,
               activeIcon: Icons.fact_check_rounded,
               label: SchoolDeskGlossary.attendance,
@@ -174,35 +189,35 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Academic Records',
           items: [
             SchoolDeskNavigationItem(
-              index: 16,
+              index: PrincipalNav.classes,
               icon: Icons.grid_view_outlined,
               activeIcon: Icons.grid_view_rounded,
               label: 'Class Hub',
               route: AppRoutes.principalClasses,
             ),
             SchoolDeskNavigationItem(
-              index: 28,
+              index: PrincipalNav.subjects,
               icon: Icons.menu_book_outlined,
               activeIcon: Icons.menu_book_rounded,
               label: 'Subjects',
               route: AppRoutes.principalSubjects,
             ),
             SchoolDeskNavigationItem(
-              index: 5,
+              index: PrincipalNav.academics,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
               label: SchoolDeskGlossary.academicManagement,
               route: AppRoutes.academicManagement,
             ),
             SchoolDeskNavigationItem(
-              index: 27,
+              index: PrincipalNav.timetable,
               icon: Icons.calendar_month_outlined,
               activeIcon: Icons.calendar_month_rounded,
               label: 'Timetable',
               route: AppRoutes.principalTimetable,
             ),
             SchoolDeskNavigationItem(
-              index: 17,
+              index: PrincipalNav.lessonPlanner,
               icon: Icons.event_note_outlined,
               activeIcon: Icons.event_note_rounded,
               label: 'Lesson Planners',
@@ -214,7 +229,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Finance',
           items: [
             SchoolDeskNavigationItem(
-              index: 7,
+              index: PrincipalNav.fees,
               icon: Icons.account_balance_wallet_outlined,
               activeIcon: Icons.account_balance_wallet_rounded,
               label: SchoolDeskGlossary.feeMonitoring,
@@ -226,35 +241,35 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Communication',
           items: [
             SchoolDeskNavigationItem(
-              index: 8,
+              index: PrincipalNav.broadcasts,
               icon: Icons.campaign_outlined,
               activeIcon: Icons.campaign_rounded,
               label: 'Broadcasts & Notices',
               route: AppRoutes.communicationCenter,
             ),
             SchoolDeskNavigationItem(
-              index: 18,
+              index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,
               label: 'Message Oversight',
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(
-              index: 25,
+              index: PrincipalNav.eventApprovals,
               icon: Icons.approval_outlined,
               activeIcon: Icons.approval_rounded,
               label: 'Event Approvals',
               route: AppRoutes.principalEventApprovals,
             ),
             SchoolDeskNavigationItem(
-              index: 9,
+              index: PrincipalNav.complaints,
               icon: Icons.support_agent_outlined,
               activeIcon: Icons.support_agent_rounded,
               label: SchoolDeskGlossary.complaints,
               route: AppRoutes.complaintManagement,
             ),
             SchoolDeskNavigationItem(
-              index: 10,
+              index: PrincipalNav.calendar,
               icon: Icons.event_outlined,
               activeIcon: Icons.event_rounded,
               label: SchoolDeskGlossary.calendar,
@@ -263,24 +278,45 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           ],
         ),
         SchoolDeskNavigationSection(
-          label: 'Reports',
+          label: 'Records & Reports',
           items: [
             SchoolDeskNavigationItem(
-              index: 11,
+              index: PrincipalNav.documents,
+              icon: Icons.description_outlined,
+              activeIcon: Icons.description_rounded,
+              label: SchoolDeskGlossary.documents,
+              route: AppRoutes.principalDocuments,
+            ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.idCards,
+              icon: Icons.badge_outlined,
+              activeIcon: Icons.badge_rounded,
+              label: SchoolDeskGlossary.idCards,
+              route: AppRoutes.idCardGeneration,
+            ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.auditLogs,
+              icon: Icons.history_rounded,
+              activeIcon: Icons.history_rounded,
+              label: 'Audit Logs',
+              route: AppRoutes.principalAuditLogs,
+            ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.reports,
               icon: Icons.bar_chart_outlined,
               activeIcon: Icons.bar_chart_rounded,
               label: SchoolDeskGlossary.reports,
               route: AppRoutes.reportsAnalytics,
             ),
             SchoolDeskNavigationItem(
-              index: 13,
+              index: PrincipalNav.analytics,
               icon: Icons.analytics_outlined,
               activeIcon: Icons.analytics_rounded,
               label: SchoolDeskGlossary.analytics,
               route: AppRoutes.principalAnalytics,
             ),
             SchoolDeskNavigationItem(
-              index: 26,
+              index: PrincipalNav.monitor,
               icon: Icons.monitor_heart_outlined,
               activeIcon: Icons.monitor_heart_rounded,
               label: 'System Monitor',
@@ -334,7 +370,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
     return '${EnvConfig.apiOrigin}$path';
   }
 }
-
 
 class PrincipalShellBottomBar extends StatelessWidget {
   const PrincipalShellBottomBar({super.key});

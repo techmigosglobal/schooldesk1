@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -232,7 +233,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         key: _scaffoldKey,
         backgroundColor: const Color(0xFFF7FAFF),
         drawer: PrincipalDrawer(
-          selectedIndex: 7,
+          selectedIndex: PrincipalNav.fees,
           onDestinationSelected: (_) {},
         ),
         bottomNavigationBar: const PrincipalShellBottomBar(),
@@ -1574,11 +1575,16 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 420),
                       child: rows.isEmpty
-                          ? const _FeeEmptyState(
+                          ? _FeeEmptyState(
                               icon: Icons.groups_2_outlined,
                               title: 'No classes found',
                               message:
                                   'Create classes and sections before assigning fee structures.',
+                              actionLabel: 'Open Class Hub',
+                              onAction: () {
+                                Navigator.pop(context);
+                                _openClassHubFeeSetup();
+                              },
                             )
                           : ListView.separated(
                               shrinkWrap: true,
@@ -1665,6 +1671,21 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         );
       },
     );
+  }
+
+  Future<void> _openClassHubFeeSetup() async {
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.principalClasses,
+      arguments: {
+        'source': 'principal_fees',
+        'action': 'fees',
+        'selectedStep': 'fee_setup',
+        'classId': _selectedGradeId,
+        'sectionId': _selectedSectionId,
+      },
+    );
+    if (mounted) await _loadData();
   }
 
   void _showPaymentQrEditor() {
@@ -2050,7 +2071,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             return AlertDialog(
               title: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 22),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Color(0xFFDC2626),
+                    size: 22,
+                  ),
                   const SizedBox(width: 8),
                   const Text('Delete Fee Structure?'),
                 ],
@@ -2066,7 +2091,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   const SizedBox(height: 6),
                   Text(
                     bundle.title,
-                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
+                    ),
                   ),
                   Text(
                     '${bundle.classLabel} · ${bundle.components.length} components',
@@ -2080,13 +2108,17 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       contentPadding: EdgeInsets.zero,
                       title: const Text(
                         'Remove from unpaid student invoices',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       subtitle: const Text(
                         'Deducts this fee component from pending invoices so students aren\'t overcharged',
                         style: TextStyle(fontSize: 11),
                       ),
-                      onChanged: (value) => setCheckState(() => removePending = value ?? true),
+                      onChanged: (value) =>
+                          setCheckState(() => removePending = value ?? true),
                     ),
                   ),
                 ],
@@ -2097,7 +2129,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   child: const Text('Cancel'),
                 ),
                 FilledButton.icon(
-                  onPressed: () => Navigator.pop(context, removePending ? true : false),
+                  onPressed: () =>
+                      Navigator.pop(context, removePending ? true : false),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFDC2626),
                   ),
@@ -2189,8 +2222,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           structure.gradeId.isNotEmpty &&
           structure.gradeId == _textValue(invoice['grade_id']);
       final sameSection =
-        structure.sectionId.isEmpty ||
-        structure.sectionId == _textValue(invoice['section_id']);
+          structure.sectionId.isEmpty ||
+          structure.sectionId == _textValue(invoice['section_id']);
       final sameYear =
           structure.academicYearId.isNotEmpty &&
           structure.academicYearId == _textValue(invoice['academic_year_id']);
@@ -2459,9 +2492,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         gradeId,
         fallback: _textValue(first['class'], fallback: 'Class pending'),
       );
-      final classLabel = [gradeLabel, sectionLabel]
-          .where((part) => part.isNotEmpty && part != 'All sections')
-          .join(' - ');
+      final classLabel = [
+        gradeLabel,
+        sectionLabel,
+      ].where((part) => part.isNotEmpty && part != 'All sections').join(' - ');
       final yearLabel = _yearLabelForId(
         yearId,
         fallback: _textValue(first['academic_year'], fallback: 'Academic year'),

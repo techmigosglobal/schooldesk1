@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -67,7 +68,7 @@ class _TeacherAttendanceHistoryScreenState
     return TeacherFlowScaffold(
       title: 'Attendance History',
       subtitle: 'Class day registers and review',
-      selectedIndex: 20,
+      selectedIndex: TeacherNav.attendanceHistory,
       loading: _loading,
       error: _error,
       onRefresh: _load,

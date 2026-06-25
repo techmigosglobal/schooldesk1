@@ -60,7 +60,8 @@ void main() {
       'lib/features/academics/presentation/screens/teacher_classes_screen/teacher_classes_screen.dart',
     ).readAsStringSync();
 
-    expect(source, contains("label: 'Homework'"));
+    expect(source, isNot(contains("label: 'Homework'")));
+    expect(source, isNot(contains('AppRoutes.teacherHomework')));
     expect(source, contains("label: 'Diary'"));
     expect(source, contains("label: 'Track Leave'"));
     expect(source, contains('AppRoutes.teacherLeave'));

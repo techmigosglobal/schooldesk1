@@ -10,6 +10,7 @@ import (
 	"school-backend/internal/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -29,11 +30,10 @@ func (h *TeacherSelfHandler) GetMyPTMSlots(c *gin.Context) {
 
 	var slots []models.ParentTeacherMeeting
 	if err := database.DB.
-		Preload("Event").
 		Preload("Section").
 		Preload("Guardian").
 		Preload("Student").
-		Joins("JOIN events ON events.id = parent_teacher_meetings.event_id").
+		Joins("JOIN events ON events.event_id = parent_teacher_meetings.event_id").
 		Where("events.school_id = ? AND parent_teacher_meetings.teacher_id = ?", schoolID, staffID).
 		Find(&slots).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load PTM slots")
@@ -74,31 +74,43 @@ func (h *TeacherSelfHandler) CreateMyPTMSlot(c *gin.Context) {
 
 	eventID := strings.TrimSpace(req.EventID)
 	if eventID == "" {
-		var activeEvent models.EventCalendar
-		err := database.DB.Where("school_id = ? AND event_type = ? AND is_holiday = ?", schoolID, "PTM", false).First(&activeEvent).Error
-		if err == nil {
-			eventID = activeEvent.ID
-		} else {
+		if err := database.DB.
+			Table("events").
+			Select("event_id").
+			Where("school_id = ? AND event_type = ? AND is_holiday = ?", schoolID, "PTM", false).
+			Order("start_date DESC, created_at DESC").
+			Limit(1).
+			Scan(&eventID).Error; err != nil {
+			fail(c, http.StatusInternalServerError, "Failed to load PTM event entry")
+			return
+		}
+		if eventID == "" {
 			var academicYear models.AcademicYear
 			if err := database.DB.Where("school_id = ? AND is_current = ?", schoolID, true).First(&academicYear).Error; err != nil {
 				fail(c, http.StatusBadRequest, "No current academic year found to create default PTM event")
 				return
 			}
-			newEvent := models.EventCalendar{
-				SchoolID:       schoolID,
-				AcademicYearID: academicYear.ID,
-				EventTitle:     "Parent-Teacher Meetings",
-				EventType:      "PTM",
-				Description:    "Automated calendar container for PTM slots",
-				StartDatetime:  time.Now(),
-				EndDatetime:    time.Now().AddDate(0, 0, 30),
-				CreatedBy:      c.GetString("user_id"),
+			eventID = uuid.NewString()
+			now := time.Now().UTC()
+			newEvent := map[string]interface{}{
+				"event_id":         eventID,
+				"school_id":        schoolID,
+				"academic_year_id": academicYear.ID,
+				"event_name":       "Parent-Teacher Meetings",
+				"event_type":       "PTM",
+				"description":      "Automated calendar container for PTM slots",
+				"start_date":       now.Format("2006-01-02"),
+				"end_date":         now.AddDate(0, 0, 30).Format("2006-01-02"),
+				"organizer_id":     staffID,
+				"status":           "scheduled",
+				"is_holiday":       false,
+				"created_at":       now,
+				"updated_at":       now,
 			}
-			if err := database.DB.Create(&newEvent).Error; err != nil {
+			if err := database.DB.Table("events").Create(newEvent).Error; err != nil {
 				fail(c, http.StatusInternalServerError, "Failed to create default PTM event entry")
 				return
 			}
-			eventID = newEvent.ID
 		}
 	}
 

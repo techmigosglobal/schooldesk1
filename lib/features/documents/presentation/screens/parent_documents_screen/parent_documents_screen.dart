@@ -4,6 +4,8 @@ import 'package:printing/printing.dart';
 import 'dart:typed_data';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -18,7 +20,7 @@ class ParentDocumentsScreen extends StatefulWidget {
 
 class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedNavIndex = 9;
+  int _selectedNavIndex = ParentNav.documents;
   late TabController _tabController;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
@@ -86,9 +88,14 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
             )
             .toList();
       }
+      final selectedIndex = await ParentChildSelectionService.indexFor(
+        children,
+        fallback: _activeChildIndex,
+      );
       if (!mounted) return;
       setState(() {
         _children = children;
+        _activeChildIndex = selectedIndex;
         _docsByStudent
           ..clear()
           ..addAll(docs);
@@ -216,7 +223,16 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
                 Expanded(
                   child: TabBarView(
                     controller: _tabController,
-                    children: [_buildDocumentsTab(), _buildCertificatesTab()],
+                    children: [
+                      RefreshIndicator(
+                        onRefresh: _loadData,
+                        child: _buildDocumentsTab(),
+                      ),
+                      RefreshIndicator(
+                        onRefresh: _loadData,
+                        child: _buildCertificatesTab(),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -242,7 +258,10 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
             const SizedBox(height: 8),
             Text(
               message,
-              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -259,12 +278,17 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
         children: List.generate(_children.length, (i) {
           final isActive = i == _activeChildIndex;
           return GestureDetector(
-            onTap: () => setState(() => _activeChildIndex = i),
+            onTap: () {
+              setState(() => _activeChildIndex = i);
+              ParentChildSelectionService.saveIndex(_children, i);
+            },
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -292,6 +316,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
       );
     }
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: _availableDocs.length,
       itemBuilder: (_, i) {
@@ -395,6 +420,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
 
   Widget _buildCertificatesTab() {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,7 +446,10 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
           if (_certificateRequests.isEmpty)
             Text(
               'No certificate requests yet.',
-              style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: context.appTheme.muted,
+              ),
             )
           else
             ..._certificateRequests.map((r) => _certRequestCard(r)),
@@ -750,7 +779,10 @@ class _CertificateRequestPageState extends State<_CertificateRequestPage> {
             children: [
               Text(
                 'For: ${widget.childName}',
-                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 16),
               if (_error != null) ...[
