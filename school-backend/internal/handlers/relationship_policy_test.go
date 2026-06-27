@@ -129,6 +129,7 @@ func setupRelationshipPolicyFixture(t *testing.T) relationshipFixture {
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-linked"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.sectionID, TeacherID: f.teacherStaffID, StudentID: f.studentID, Title: "Linked Diary", Subject: "Mathematics"},
 		&models.DiaryEntry{BaseModel: models.BaseModel{ID: "diary-other"}, SchoolID: f.schoolID, EntryDate: now, SectionID: f.otherSectionID, TeacherID: f.otherStaffID, StudentID: f.otherStudentID, Title: "Other Diary", Subject: "Science"},
 		&models.ParentTeacherMeeting{BaseModel: models.BaseModel{ID: "ptm-linked"}, EventID: f.eventID, SectionID: f.sectionID, SlotDate: now, SlotTime: "10:00", DurationMin: 15, TeacherID: f.teacherStaffID, GuardianID: "guardian-linked", StudentID: f.studentID, Status: "scheduled"},
+		&models.ParentTeacherMeeting{BaseModel: models.BaseModel{ID: "ptm-section-linked"}, EventID: f.eventID, SectionID: f.sectionID, SlotDate: now, SlotTime: "11:00", DurationMin: 15, TeacherID: f.teacherStaffID, GuardianID: "", StudentID: "", Status: "scheduled"},
 		&models.ParentTeacherMeeting{BaseModel: models.BaseModel{ID: "ptm-other"}, EventID: f.eventID, SectionID: f.otherSectionID, SlotDate: now, SlotTime: "10:30", DurationMin: 15, TeacherID: f.otherStaffID, GuardianID: "guardian-other", StudentID: f.otherStudentID, Status: "scheduled"},
 		&models.MessageConversation{BaseModel: models.BaseModel{ID: f.conversationID}, SchoolID: f.schoolID, TeacherID: f.teacherStaffID, ParentID: f.parentUserID, StudentID: f.studentID, Title: "Linked conversation", LastMessageTime: now},
 		&models.MessageConversation{BaseModel: models.BaseModel{ID: f.otherConvID}, SchoolID: f.schoolID, TeacherID: f.otherStaffID, ParentID: f.otherParentUserID, StudentID: f.otherStudentID, Title: "Other conversation", LastMessageTime: now},
@@ -783,8 +784,24 @@ func TestParentMessagingAndPTMAreParticipantScoped(t *testing.T) {
 	ptmResp := httptest.NewRecorder()
 	router.ServeHTTP(ptmResp, httptest.NewRequest(http.MethodGet, "/parent-teacher-meetings", nil))
 	ptmRows := decodePolicyList(t, ptmResp.Body.String())
-	if len(ptmRows) != 1 || ptmRows[0]["id"] != "ptm-linked" {
-		t.Fatalf("parent should only see linked PTM rows, rows=%v", ptmRows)
+	gotIDs := map[string]bool{}
+	for _, row := range ptmRows {
+		id := strings.TrimSpace(row["id"].(string))
+		if id != "" {
+			gotIDs[id] = true
+		}
+	}
+	wantIDs := map[string]bool{"ptm-linked": true, "ptm-section-linked": true}
+	if len(gotIDs) != len(wantIDs) {
+		t.Fatalf("parent should only see linked and linked-section PTM rows, ids=%v rows=%v", gotIDs, ptmRows)
+	}
+	for id := range wantIDs {
+		if !gotIDs[id] {
+			t.Fatalf("parent PTM rows missing %s, ids=%v rows=%v", id, gotIDs, ptmRows)
+		}
+	}
+	if gotIDs["ptm-other"] {
+		t.Fatalf("parent PTM rows should exclude unrelated student PTM, rows=%v", ptmRows)
 	}
 }
 

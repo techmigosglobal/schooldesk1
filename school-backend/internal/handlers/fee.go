@@ -778,6 +778,117 @@ func (h *FeeHandler) GetInvoices(c *gin.Context) {
 	c.JSON(http.StatusOK, paginationResult(page, pageSize, total, invoices))
 }
 
+func (h *FeeHandler) GetInvoiceDetail(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		fail(c, http.StatusBadRequest, "Invoice ID is required")
+		return
+	}
+
+	var invoice models.FeeInvoice
+	query := scopedFeeInvoiceQuery(c).Where("fee_invoices.id = ?", id)
+
+	if err := preloadFeeInvoiceDetails(query).First(&invoice).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			fail(c, http.StatusNotFound, "Invoice not found")
+		} else {
+			fail(c, http.StatusInternalServerError, "Failed to fetch invoice details")
+		}
+		return
+	}
+
+	success(c, http.StatusOK, invoice, "")
+}
+
+func (h *FeeHandler) UpdateInvoice(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		fail(c, http.StatusBadRequest, "Invoice ID is required")
+		return
+	}
+
+	var req struct {
+		DueDate          *string  `json:"due_date"`
+		TotalAmount      *float64 `json:"total_amount"`
+		ConcessionAmount *float64 `json:"concession_amount"`
+		FineAmount       *float64 `json:"fine_amount"`
+		Status           *string  `json:"status"`
+		Notes            *string  `json:"notes"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var invoice models.FeeInvoice
+	if err := database.DB.First(&invoice, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			fail(c, http.StatusNotFound, "Invoice not found")
+		} else {
+			fail(c, http.StatusInternalServerError, "Database error")
+		}
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.DueDate != nil {
+		parsed, err := parseDate(*req.DueDate)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "Invalid due_date format. Use YYYY-MM-DD")
+			return
+		}
+		updates["due_date"] = parsed
+	}
+	if req.TotalAmount != nil {
+		updates["total_amount"] = *req.TotalAmount
+	}
+	if req.ConcessionAmount != nil {
+		updates["concession_amount"] = *req.ConcessionAmount
+	}
+	if req.FineAmount != nil {
+		updates["fine_amount"] = *req.FineAmount
+	}
+	if req.Status != nil {
+		updates["status"] = *req.Status
+	}
+
+	// Calculate PayableAmount/NetAmount and Balance
+	total := invoice.TotalAmount
+	if req.TotalAmount != nil {
+		total = *req.TotalAmount
+	}
+	concession := invoice.ConcessionAmount
+	if req.ConcessionAmount != nil {
+		concession = *req.ConcessionAmount
+	}
+	fine := invoice.FineAmount
+	if req.FineAmount != nil {
+		fine = *req.FineAmount
+	}
+	payable := roundMoney(total - concession + fine)
+	if payable < 0 {
+		payable = 0
+	}
+	updates["payable_amount"] = payable
+	updates["net_amount"] = payable
+	updates["balance"] = roundMoney(payable - invoice.PaidAmount)
+
+	if err := database.DB.Model(&invoice).Updates(updates).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to update invoice")
+		return
+	}
+
+	// Fetch updated invoice with details preloaded
+	var updatedInvoice models.FeeInvoice
+	if err := preloadFeeInvoiceDetails(database.DB.Model(&models.FeeInvoice{}).Where("id = ?", id)).First(&updatedInvoice).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load updated invoice details")
+		return
+	}
+
+	success(c, http.StatusOK, updatedInvoice, "Invoice updated successfully")
+}
+
+
 func scopedFeeInvoiceQuery(c *gin.Context) *gorm.DB {
 	query := database.DB.Model(&models.FeeInvoice{}).
 		Joins("JOIN students ON students.id = fee_invoices.student_id").

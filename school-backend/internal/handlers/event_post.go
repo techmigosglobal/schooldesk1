@@ -101,7 +101,7 @@ func (h *EventPostHandler) ListTeacherEventPosts(c *gin.Context) {
 	teacherID := c.GetString("linked_id")
 
 	var posts []models.EventPost
-	if err := database.DB.Preload("CreatedByTeacher").Where("school_id = ? AND created_by_teacher_id = ?", schoolID, teacherID).Order("created_at desc").Find(&posts).Error; err != nil {
+	if err := database.DB.Preload("CreatedByTeacher").Where("school_id = ? AND created_by_teacher_id = ?", schoolID, teacherID).Order("updated_at desc, created_at desc").Find(&posts).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to fetch event posts")
 		return
 	}
@@ -169,6 +169,7 @@ func (h *EventPostHandler) ApproveEventPost(c *gin.Context) {
 	}
 
 	post.ApprovalStatus = models.ApprovalStatusApproved
+	post.Destinations = ensureEventPostDestinations(post.Destinations, models.DestinationSchoolGallery)
 	post.ApprovedByPrincipalID = &principalID
 	post.ApprovedAt = &now
 	post.PublishedAt = &now
@@ -188,6 +189,24 @@ func (h *EventPostHandler) ApproveEventPost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
+}
+
+func ensureEventPostDestinations(raw string, extra models.EventPostDestination) string {
+	seen := map[string]bool{}
+	destinations := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		normalized := strings.ToUpper(strings.TrimSpace(part))
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		destinations = append(destinations, normalized)
+	}
+	extraValue := strings.ToUpper(strings.TrimSpace(string(extra)))
+	if extraValue != "" && !seen[extraValue] {
+		destinations = append(destinations, extraValue)
+	}
+	return strings.Join(destinations, ",")
 }
 
 // Principal Reject

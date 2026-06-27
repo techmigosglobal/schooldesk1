@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class TeacherEventPostScreen extends StatefulWidget {
@@ -438,18 +439,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   }
 
   List<String> _labels(dynamic raw) {
-    if (raw is List) {
-      return raw
-          .map((e) => e.toString().trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-    }
-    return raw
-        .toString()
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    return parseEventPostMediaUrls(raw);
   }
 }
 

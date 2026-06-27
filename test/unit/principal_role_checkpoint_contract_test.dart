@@ -67,5 +67,7 @@ void main() {
     expect(screen, contains("label: 'Needs review'"));
     expect(screen, contains("label: 'Completion'"));
     expect(screen, isNot(contains("value: 'planned'")));
+    expect(screen, contains("teacherMap['first_name']"));
+    expect(screen, contains("teacherMap['last_name']"));
   });
 }

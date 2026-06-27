@@ -32,13 +32,9 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
     try {
       await RoleAccessService.initialize();
       if (!mounted) return;
-      final classTeacherOnly = RoleAccessService.teacherClassTeacherClasses;
-      final primaryClassTeacher = classTeacherOnly.isNotEmpty
-          ? [classTeacherOnly.first]
-          : const <Map<String, dynamic>>[];
+      final assignedClasses = RoleAccessService.teacherAssignedClasses;
       setState(() {
-        // Only the sections where this teacher IS the class teacher.
-        _classes = primaryClassTeacher;
+        _classes = assignedClasses;
         _students = RoleAccessService.teacherClassStudents;
         _loading = false;
       });

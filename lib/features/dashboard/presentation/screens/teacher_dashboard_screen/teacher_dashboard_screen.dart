@@ -184,26 +184,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       loading: _loading,
       error: _error,
       onRefresh: _loadDashboardData,
-      actions: [
-        IconButton(
-          tooltip: 'Notifications',
-          icon: const Icon(Icons.notifications_outlined),
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoutes.notificationCenter,
-            arguments: 'teacher',
-          ),
-        ),
-        IconButton(
-          tooltip: 'Profile',
-          icon: const Icon(Icons.account_circle_outlined),
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoutes.profileScreen,
-            arguments: 'teacher',
-          ),
-        ),
-      ],
       child: TeacherFlowScrollView(
         children: [
           if (_roleScopeLoaded && !RoleAccessService.hasTeacherStaffLink)

@@ -164,6 +164,8 @@ void main() {
     expect(screen, contains('Create New Class'));
     expect(screen, contains('Classes Directory'));
     expect(screen, contains('Search class, teacher, section'));
+    expect(screen, contains('hintMaxLines: 1'));
+    expect(screen, contains('fontSize: compact ? 13 : 14'));
     expect(screen, contains('View calendar'));
     expect(screen, contains('Your Classes'));
     expect(screen, contains('No pending actions'));
@@ -647,9 +649,9 @@ void main() {
     expect(events, contains('_EventFilter.month'));
     expect(events, contains('enum _EventsDisplayMode'));
     expect(events, contains('_EventsDisplayMode.calendar'));
-    expect(events, contains("_displayMode == _EventsDisplayMode.list"));
+    expect(events, contains('_EventsDisplayMode.week'));
     expect(events, contains('Calendar'));
-    expect(events, contains('List'));
+    expect(events, isNot(contains("label: Text('List')")));
     expect(events, contains('_buildCalendarMonth()'));
     expect(events, contains('class _EventCalendarMonth'));
     expect(events, contains('class _EventCalendarDayCell'));
@@ -691,7 +693,7 @@ void main() {
     expect(approvals, contains('Refresh'));
 
     expect(calendar, contains('_buildDisplayModeSelector'));
-    expect(calendar, contains('_buildStatusFilterStrip'));
+    expect(calendar, isNot(contains('_buildStatusFilterStrip')));
     expect(calendar, contains('_buildMonthStrip'));
     expect(calendar, contains('_buildCompactCalendarMetrics'));
     expect(calendar, contains('_resetCalendarFilters'));

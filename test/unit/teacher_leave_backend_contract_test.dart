@@ -61,8 +61,8 @@ void main() {
     expect(form, contains('staffId: _staffId'));
     expect(form, contains('leaveTypeId: _leaveTypeId'));
     expect(form, contains('_selectableLeaveTypes'));
-    expect(form, contains('General leave request'));
-    expect(form, contains('No type needed'));
+    expect(form, isNot(contains('General leave request')));
+    expect(form, isNot(contains('No type needed')));
     expect(
       form,
       isNot(

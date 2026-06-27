@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
@@ -123,7 +124,7 @@ class _GalleryPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final media = _firstMedia(post['media_urls']);
+    final media = firstEventPostMediaUrl(post['media_urls']);
     final title = _text(post['title'], fallback: 'School event');
     final description = _text(post['description']);
     final eventDate = _text(post['event_date']);
@@ -246,7 +247,7 @@ class _GalleryPostCard extends StatelessWidget {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) {
-        final media = _mediaList(post['media_urls']);
+        final media = parseEventPostMediaUrls(post['media_urls']);
         return DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.75,
@@ -338,40 +339,6 @@ String _assetUrl(String path) {
   final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
   final p = path.startsWith('/') ? path : '/$path';
   return '$origin$p';
-}
-
-List<String> _mediaList(dynamic raw) {
-  if (raw == null) return const [];
-  if (raw is List) {
-    return raw
-        .map((e) => e.toString().trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-  }
-  final text = raw.toString().trim();
-  if (text.isEmpty) return const [];
-  // Handle JSON array strings
-  if (text.startsWith('[')) {
-    try {
-      // Avoid importing dart:convert — basic bracket unwrap
-      final inner = text.substring(1, text.length - 1);
-      return inner
-          .split(',')
-          .map((e) => e.trim().replaceAll('"', ''))
-          .where((e) => e.isNotEmpty)
-          .toList();
-    } catch (_) {}
-  }
-  return text
-      .split(',')
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toList();
-}
-
-String _firstMedia(dynamic raw) {
-  final media = _mediaList(raw);
-  return media.isEmpty ? '' : media.first;
 }
 
 bool _isImageUrl(String url) {

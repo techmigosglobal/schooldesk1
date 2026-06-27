@@ -20,6 +20,9 @@ func TestTeacherAssignedClassesSQLSupportsPostgresDistinctOrdering(t *testing.T)
 	if !strings.Contains(query, "SELECT id, grade_id, section_name, grade_name, is_class_teacher") {
 		t.Fatalf("teacher class query must return grade_id in assigned_classes payload: %s", query)
 	}
+	if !strings.Contains(query, "sections.co_teacher_id") {
+		t.Fatalf("teacher class query must include co-teacher assignments: %s", query)
+	}
 	if !strings.Contains(query, "ORDER BY grade_number, section_name") {
 		t.Fatalf("teacher class query should order by selected aliases: %s", query)
 	}

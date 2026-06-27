@@ -336,6 +336,72 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> getInvoiceDetail(String invoiceId) async {
+    try {
+      final response = await _dio.get(
+        '/fees/invoices/${invoiceId.trim()}',
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to get invoice detail',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateInvoice(
+    String invoiceId, {
+    String? dueDate,
+    double? totalAmount,
+    double? concessionAmount,
+    double? fineAmount,
+    String? status,
+    String? notes,
+  }) async {
+    try {
+      final payload = <String, dynamic>{};
+      if (dueDate != null) payload['due_date'] = dueDate;
+      if (totalAmount != null) payload['total_amount'] = totalAmount;
+      if (concessionAmount != null) {
+        payload['concession_amount'] = concessionAmount;
+      }
+      if (fineAmount != null) payload['fine_amount'] = fineAmount;
+      if (status != null) payload['status'] = status;
+      if (notes != null) payload['notes'] = notes;
+      final response = await _dio.put(
+        '/fees/invoices/${invoiceId.trim()}',
+        data: payload,
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to update invoice',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> updateInvoiceInstallment(
+    String invoiceId, {
+    String? dueDate,
+    double? amount,
+    String? status,
+  }) async {
+    return updateInvoice(
+      invoiceId,
+      dueDate: dueDate,
+      totalAmount: amount,
+      status: status,
+    );
+  }
+
   Future<Map<String, dynamic>> generateFeeInvoices({
     required String academicYearId,
     required String gradeId,

@@ -59,6 +59,8 @@ func (h *TeacherSelfHandler) CreateMyPTMSlot(c *gin.Context) {
 		DurationMin int    `json:"duration_min" binding:"required"`
 		StudentID   string `json:"student_id"`
 		GuardianID  string `json:"guardian_id"`
+		Reason      string `json:"reason"`
+		Notes       string `json:"notes"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -114,6 +116,11 @@ func (h *TeacherSelfHandler) CreateMyPTMSlot(c *gin.Context) {
 		}
 	}
 
+	notes := strings.TrimSpace(req.Notes)
+	if notes == "" {
+		notes = strings.TrimSpace(req.Reason)
+	}
+
 	ptmSlot := models.ParentTeacherMeeting{
 		EventID:     eventID,
 		SectionID:   strings.TrimSpace(req.SectionID),
@@ -124,14 +131,92 @@ func (h *TeacherSelfHandler) CreateMyPTMSlot(c *gin.Context) {
 		StudentID:   strings.TrimSpace(req.StudentID),
 		GuardianID:  strings.TrimSpace(req.GuardianID),
 		Status:      "scheduled",
+		Notes:       notes,
 	}
 
-	if err := database.DB.Create(&ptmSlot).Error; err != nil {
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&ptmSlot).Error; err != nil {
+			return err
+		}
+		if _, err := notifyParentsForTeacherPTMSlotTx(tx, schoolID, ptmSlot); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to create PTM slot")
 		return
 	}
 
 	success(c, http.StatusCreated, ptmSlot, "PTM slot created successfully")
+}
+
+func notifyParentsForTeacherPTMSlotTx(
+	tx *gorm.DB,
+	schoolID string,
+	slot models.ParentTeacherMeeting,
+) ([]models.NotificationLog, error) {
+	schoolID = strings.TrimSpace(schoolID)
+	if schoolID == "" {
+		return nil, nil
+	}
+	var parentUserIDs []string
+	studentID := strings.TrimSpace(slot.StudentID)
+	if studentID != "" {
+		if err := tx.Model(&models.ParentStudentLink{}).
+			Where("school_id = ? AND student_id = ?", schoolID, studentID).
+			Pluck("parent_user_id", &parentUserIDs).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		if err := tx.Model(&models.ParentStudentLink{}).
+			Distinct("parent_student_links.parent_user_id").
+			Joins("JOIN enrollments ON enrollments.student_id = parent_student_links.student_id").
+			Where("parent_student_links.school_id = ? AND enrollments.section_id = ?", schoolID, slot.SectionID).
+			Pluck("parent_student_links.parent_user_id", &parentUserIDs).Error; err != nil {
+			return nil, err
+		}
+	}
+	if len(parentUserIDs) == 0 {
+		return nil, nil
+	}
+
+	teacherName := "Teacher"
+	var teacher models.Staff
+	if err := tx.Select("first_name", "last_name").First(&teacher, "id = ?", slot.TeacherID).Error; err == nil {
+		name := strings.TrimSpace(strings.TrimSpace(teacher.FirstName) + " " + strings.TrimSpace(teacher.LastName))
+		if name != "" {
+			teacherName = name
+		}
+	}
+
+	body := ""
+	if slot.SlotTime != "" {
+		body = "PTM scheduled at " + strings.TrimSpace(slot.SlotTime)
+	} else {
+		body = "A PTM slot has been scheduled"
+	}
+	if note := strings.TrimSpace(slot.Notes); note != "" {
+		body += ". Reason: " + note
+	}
+	body += ". By " + teacherName + "."
+
+	logs, err := createNotificationLogsForUserIDsTx(
+		tx,
+		schoolID,
+		parentUserIDs,
+		"PTM slot scheduled",
+		body,
+		"event",
+		"high",
+		"ptm",
+		slot.ID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	enqueuePushNotifications(logs)
+	return logs, nil
 }
 
 func (h *TeacherSelfHandler) RecallLeaveApplication(c *gin.Context) {

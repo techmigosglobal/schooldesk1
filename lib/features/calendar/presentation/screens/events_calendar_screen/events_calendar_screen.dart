@@ -22,7 +22,7 @@ enum _EventFilter {
   cancelled,
 }
 
-enum _EventsDisplayMode { calendar, week, list }
+enum _EventsDisplayMode { calendar, week }
 
 enum SchoolCalendarPortal { principal, teacher, parent }
 
@@ -550,7 +550,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildPrincipalCalendar() {
     final visible = _visibleEvents;
-    final showList = _displayMode == _EventsDisplayMode.list;
     return PrincipalDirectoryScaffold(
       title: 'School Calendar',
       subtitle:
@@ -581,44 +580,26 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               ),
             ]
           : null,
-      isEmpty: !_loading && _error == null && showList && visible.isEmpty,
+      isEmpty: !_loading && _error == null && visible.isEmpty,
       emptyState: _buildCalendarEmptyState(),
       filters: _buildFilters(),
       slivers: [
-        SliverToBoxAdapter(child: _buildCompactCalendarMetrics()),
-        SliverToBoxAdapter(child: _buildEventLegend()),
         if (_displayMode == _EventsDisplayMode.calendar)
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
             sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
-          )
-        else if (_displayMode == _EventsDisplayMode.week)
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-            sliver: SliverToBoxAdapter(child: _buildWeekView()),
           )
         else
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 96),
-            sliver: SliverList.separated(
-              itemCount: visible.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) => _EventDirectoryCard(
-                event: visible[index],
-                onTap: () => _openDetails(visible[index]),
-                canManage: _canManageEvents,
-                onAction: (action) =>
-                    _handleEventAction(action, visible[index]),
-              ),
-            ),
-          ),
+            padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
+            sliver: SliverToBoxAdapter(child: _buildWeekView()),
+          )
       ],
     );
   }
 
   Widget _buildReadOnlyCalendar() {
     final visible = _visibleEvents;
-    final showList = _displayMode == _EventsDisplayMode.list;
     return SchoolDeskModuleScaffold(
       title: 'School Calendar',
       subtitle: 'Holidays, events, PTMs, and school milestones',
@@ -652,41 +633,21 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 ),
               )
             else ...[
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: _buildCompactCalendarMetrics(includeApprovals: false),
-                ),
-              ),
-              if (showList && visible.isEmpty)
+              if (visible.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: _buildCalendarEmptyState()),
                 )
               else if (_displayMode == _EventsDisplayMode.calendar)
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
                   sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
-                )
-              else if (_displayMode == _EventsDisplayMode.week)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                  sliver: SliverToBoxAdapter(child: _buildWeekView()),
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                  sliver: SliverList.separated(
-                    itemCount: visible.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) => _EventDirectoryCard(
-                      event: visible[index],
-                      onTap: () => _openDetails(visible[index]),
-                      canManage: false,
-                      onAction: (_) async => false,
-                    ),
-                  ),
-                ),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
+                  sliver: SliverToBoxAdapter(child: _buildWeekView()),
+                )
             ],
           ],
         ),
@@ -868,7 +829,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   void _resetCalendarFilters() {
     setState(() {
       _query = '';
-      _filter = _EventFilter.all;
+      _filter = _EventFilter.month;
       _displayMode = _EventsDisplayMode.calendar;
       _selectedMonth = DateTime.now().month;
     });
@@ -934,8 +895,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               const SizedBox(height: 10),
               _buildDisplayModeSelector(),
               const SizedBox(height: 8),
-              _buildStatusFilterStrip(),
-              const SizedBox(height: 8),
               _buildMonthStrip(),
             ],
           );
@@ -957,39 +916,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           icon: Icon(Icons.view_week_rounded),
           label: Text('Week'),
         ),
-        ButtonSegment(
-          value: _EventsDisplayMode.list,
-          icon: Icon(Icons.view_agenda_rounded),
-          label: Text('List'),
-        ),
       ],
       selected: {_displayMode},
       onSelectionChanged: (value) {
         setState(() => _displayMode = value.first);
       },
-    );
-  }
-
-  Widget _buildStatusFilterStrip() {
-    final filters = _EventFilter.values
-        .where((filter) => filter != _EventFilter.month)
-        .toList();
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final filter in filters)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: PrincipalDirectoryChip(
-                label: _filterLabel(filter),
-                selected: _filter == filter,
-                icon: _filterIcon(filter),
-                onTap: () => setState(() => _filter = filter),
-              ),
-            ),
-        ],
-      ),
     );
   }
 

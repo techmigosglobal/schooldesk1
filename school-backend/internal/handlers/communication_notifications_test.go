@@ -397,14 +397,17 @@ func TestEventPostApprovalNotifiesSubmittingTeacherOnly(t *testing.T) {
 	handler := NewEventPostHandler()
 	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
 	teacherRouter.POST("/event-posts", handler.CreateEventPost)
+	teacherRouter.GET("/event-posts/teacher", handler.ListTeacherEventPosts)
 	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
 	principalRouter.POST("/event-posts/:id/approve", handler.ApproveEventPost)
+	galleryRouter := scopedPolicyRouter("Parent", f.parentUserID, "", "", "linked.parent@policy.test", f.schoolID)
+	galleryRouter.GET("/event-posts/gallery", handler.ListGalleryEventPosts)
 
 	create := httptest.NewRecorder()
 	teacherRouter.ServeHTTP(create, httptest.NewRequest(
 		http.MethodPost,
 		"/event-posts",
-		strings.NewReader(`{"title":"Science Fair","description":"Robotics demo","event_date":"2026-07-02T09:00:00Z","destinations":["SCHOOL_GALLERY"],"is_submit":true}`),
+		strings.NewReader(`{"title":"Science Fair","description":"Robotics demo","event_date":"2026-07-02T09:00:00Z","destinations":["PARENTS_HOME"],"is_submit":true}`),
 	))
 	if create.Code != http.StatusOK {
 		t.Fatalf("create event post status=%d body=%s", create.Code, create.Body.String())
@@ -444,6 +447,60 @@ func TestEventPostApprovalNotifiesSubmittingTeacherOnly(t *testing.T) {
 	}
 	if otherTeacherCount != 0 {
 		t.Fatalf("other teacher approval notifications=%d, want 0", otherTeacherCount)
+	}
+
+	listTeacher := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(listTeacher, httptest.NewRequest(http.MethodGet, "/event-posts/teacher", nil))
+	if listTeacher.Code != http.StatusOK {
+		t.Fatalf("teacher event history status=%d body=%s", listTeacher.Code, listTeacher.Body.String())
+	}
+	var teacherHistory struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(listTeacher.Body.Bytes(), &teacherHistory); err != nil {
+		t.Fatalf("decode teacher history response: %v", err)
+	}
+	if len(teacherHistory.Data) == 0 {
+		t.Fatalf("teacher event history should include approved post")
+	}
+	if teacherHistory.Data[0]["id"] != postID {
+		t.Fatalf("teacher event history first id=%v want %s", teacherHistory.Data[0]["id"], postID)
+	}
+	if teacherHistory.Data[0]["approval_status"] != string(models.ApprovalStatusApproved) {
+		t.Fatalf("teacher event history approval_status=%v want approved", teacherHistory.Data[0]["approval_status"])
+	}
+
+	gallery := httptest.NewRecorder()
+	galleryRouter.ServeHTTP(gallery, httptest.NewRequest(http.MethodGet, "/event-posts/gallery", nil))
+	if gallery.Code != http.StatusOK {
+		t.Fatalf("gallery status=%d body=%s", gallery.Code, gallery.Body.String())
+	}
+	var galleryResp struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(gallery.Body.Bytes(), &galleryResp); err != nil {
+		t.Fatalf("decode gallery response: %v", err)
+	}
+	if len(galleryResp.Data) == 0 {
+		t.Fatalf("approved event should appear in gallery feed")
+	}
+	found := false
+	for _, row := range galleryResp.Data {
+		if row["id"] == postID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("approved event post %s missing in gallery feed: %+v", postID, galleryResp.Data)
+	}
+
+	var post models.EventPost
+	if err := database.DB.Where("id = ?", postID).First(&post).Error; err != nil {
+		t.Fatalf("load event post row: %v", err)
+	}
+	if !strings.Contains(post.Destinations, string(models.DestinationSchoolGallery)) {
+		t.Fatalf("approved event destinations=%q should include SCHOOL_GALLERY", post.Destinations)
 	}
 }
 

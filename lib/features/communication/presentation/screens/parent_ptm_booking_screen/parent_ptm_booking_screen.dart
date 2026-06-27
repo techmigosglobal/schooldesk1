@@ -92,6 +92,24 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     return status == 'booked' || status == 'confirmed';
   }
 
+  String _teacherNameForSlot(dynamic slot) {
+    final teacher = (slot['teacher'] is Map)
+        ? Map<String, dynamic>.from(slot['teacher'] as Map)
+        : <String, dynamic>{};
+    final fromTeacher =
+        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
+    if (fromTeacher.isNotEmpty) return fromTeacher;
+    final fromFlat =
+        '${slot['teacher_first_name'] ?? ''} ${slot['teacher_last_name'] ?? ''}'
+            .trim();
+    if (fromFlat.isNotEmpty) return fromFlat;
+    return (slot['teacher_name'] ?? '').toString().trim();
+  }
+
+  String _reasonForSlot(dynamic slot) {
+    return (slot['notes'] ?? slot['reason'] ?? '').toString().trim();
+  }
+
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -322,13 +340,14 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
   Widget _buildAvailableSlotCard(dynamic slot) {
     final teacher = slot['teacher'] ?? {};
-    final teacherName =
-        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
-    final subject = slot['subject'] ?? teacher['designation'] ?? 'Teacher';
+    final teacherName = _teacherNameForSlot(slot);
+    final subject =
+        slot['subject'] ?? teacher['designation'] ?? slot['teacher_role'] ?? 'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
     final duration = slot['duration_min'] ?? slot['duration'] ?? 15;
     final room = slot['event']?['location'] ?? 'Meeting Room';
+    final reason = _reasonForSlot(slot);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -365,7 +384,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  teacherName,
+                  teacherName.isEmpty ? 'Teacher slot' : teacherName,
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -380,6 +399,16 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
+                if (reason.isNotEmpty) ...[
+                  Text(
+                    'Reason: $reason',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: context.appTheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 Wrap(
                   spacing: 12,
                   runSpacing: 4,
@@ -457,11 +486,12 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
 
   Widget _buildBookedSlotCard(dynamic slot) {
     final teacher = slot['teacher'] ?? {};
-    final teacherName =
-        '${teacher['first_name'] ?? ''} ${teacher['last_name'] ?? ''}'.trim();
-    final subject = slot['subject'] ?? teacher['designation'] ?? 'Teacher';
+    final teacherName = _teacherNameForSlot(slot);
+    final subject =
+        slot['subject'] ?? teacher['designation'] ?? slot['teacher_role'] ?? 'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
+    final reason = _reasonForSlot(slot);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -484,7 +514,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  teacherName,
+                  teacherName.isEmpty ? 'Teacher slot' : teacherName,
                   style: GoogleFonts.dmSans(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -507,6 +537,16 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
                     color: context.appTheme.onSurfaceVariant,
                   ),
                 ),
+                if (reason.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Reason: $reason',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 11,
+                      color: context.appTheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

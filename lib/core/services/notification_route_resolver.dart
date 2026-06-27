@@ -34,6 +34,7 @@ class NotificationRouteResolver {
       'homework' => _homeworkRouteFor(role),
       'fee' => _feeRouteFor(role),
       'exam' || 'exam_schedule' => _examRouteFor(role),
+      'ptm' || 'parent_teacher_meeting' => _ptmRouteFor(role),
       'event' || 'event_post' => _eventRouteFor(role),
       'approval' => AppRoutes.approvalCenter,
       'leave' => _leaveRouteFor(role),
@@ -105,6 +106,14 @@ class NotificationRouteResolver {
 
   static String _examRouteFor(String role) {
     return AppRoutes.notificationCenter;
+  }
+
+  static String _ptmRouteFor(String role) {
+    return switch (role) {
+      'parent' => AppRoutes.parentPTMBooking,
+      'teacher' => AppRoutes.teacherParentInteraction,
+      _ => AppRoutes.notificationCenter,
+    };
   }
 
   static String _eventRouteFor(String role) {

@@ -20,9 +20,14 @@ const (
 	refStaffAttendanceDailyReport   = "staff_attendance_daily_report"
 	refStaffAttendanceMonthlyReport = "staff_attendance_monthly_report"
 	refLessonPlannerWeeklyDigest    = "lesson_planner_weekly_digest"
+	refBirthdayWishStaff            = "birthday_wish_staff"
+	refBirthdayWishStudent          = "birthday_wish_student"
 
 	routePrincipalAttendance    = "/principal-attendance-screen"
 	routePrincipalLessonPlanner = "/principal-lesson-planner-screen"
+	routeTeacherDashboard       = "/teacher-dashboard-screen"
+	routePrincipalDashboard     = "/principal-dashboard-screen"
+	routeParentHome             = "/parent-home-screen"
 )
 
 func startScheduledPrincipalReportScheduler() {
@@ -57,6 +62,151 @@ func runScheduledPrincipalReports(now time.Time) error {
 	if local.Weekday() == time.Friday && local.Hour() == 18 && local.Minute() == 30 {
 		if err := createWeeklyLessonPlannerDigestNotifications(local); err != nil {
 			return err
+		}
+	}
+	if local.Hour() == 8 && local.Minute() == 0 {
+		if err := createBirthdayWishNotifications(local); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createBirthdayWishNotifications(local time.Time) error {
+	date := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, time.UTC)
+	dateText := date.Format("2006-01-02")
+	month := int(date.Month())
+	day := date.Day()
+	return forEachSchool(func(school models.School) error {
+		if err := createStaffBirthdayWishNotifications(school.ID, month, day, dateText); err != nil {
+			return err
+		}
+		if err := createStudentBirthdayWishNotifications(school.ID, month, day, dateText); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func createStaffBirthdayWishNotifications(schoolID string, month, day int, dateText string) error {
+	var recipients []struct {
+		UserID      string
+		Role        string
+		Name        string
+		DateOfBirth time.Time
+	}
+	err := database.DB.Table("users").
+		Select("users.id as user_id, LOWER(users.role) as role, TRIM(COALESCE(staffs.first_name, '') || ' ' || COALESCE(staffs.last_name, '')) as name, staffs.date_of_birth as date_of_birth").
+		Joins("JOIN staffs ON staffs.id = users.linked_id").
+		Joins("LEFT JOIN roles ON roles.id = users.role_id").
+		Where("users.school_id = ? AND users.is_active = ? AND users.linked_type = ?", schoolID, true, "staff").
+		Where("LOWER(staffs.status) = ?", "active").
+		Where("(LOWER(COALESCE(users.role, '')) IN (?, ?) OR LOWER(COALESCE(roles.role_name, '')) IN (?, ?))", "teacher", "principal", "teacher", "principal").
+		Scan(&recipients).Error
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, recipient := range recipients {
+		if recipient.DateOfBirth.IsZero() || int(recipient.DateOfBirth.Month()) != month || recipient.DateOfBirth.Day() != day {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(recipient.Role))
+		if role != "principal" {
+			role = "teacher"
+		}
+		name := strings.TrimSpace(recipient.Name)
+		if name == "" {
+			if role == "principal" {
+				name = "Principal"
+			} else {
+				name = "Teacher"
+			}
+		}
+		title := "Happy Birthday!"
+		body := fmt.Sprintf("Warm birthday wishes, %s! Have a wonderful day.", name)
+		route := routeTeacherDashboard
+		if role == "principal" {
+			route = routePrincipalDashboard
+		}
+		refID := schoolID + ":" + recipient.UserID + ":" + dateText
+		log, created, err := createIdempotentNotificationLog(database.DB, models.NotificationLog{
+			SchoolID:        schoolID,
+			RecipientUserID: recipient.UserID,
+			Channel:         "in_app",
+			Title:           title,
+			Body:            body,
+			Category:        "event",
+			Priority:        "medium",
+			Route:           route,
+			ReferenceType:   refBirthdayWishStaff,
+			ReferenceID:     &refID,
+			IsRead:          false,
+			SentAt:          now,
+			DeliveryStatus:  "delivered",
+			PushStatus:      "pending",
+		})
+		if err != nil {
+			return err
+		}
+		if created {
+			enqueueScheduledPushNotification(log)
+		}
+	}
+	return nil
+}
+
+func createStudentBirthdayWishNotifications(schoolID string, month, day int, dateText string) error {
+	var rows []struct {
+		UserID       string
+		StudentID    string
+		StudentName  string
+		DateOfBirth  time.Time
+	}
+	err := database.DB.Table("parent_student_links").
+		Select("parent_student_links.parent_user_id as user_id, students.id as student_id, TRIM(COALESCE(students.first_name, '') || ' ' || COALESCE(students.last_name, '')) as student_name, students.date_of_birth as date_of_birth").
+		Joins("JOIN students ON students.id = parent_student_links.student_id").
+		Joins("JOIN users ON users.id = parent_student_links.parent_user_id").
+		Where("parent_student_links.school_id = ?", schoolID).
+		Where("users.is_active = ?", true).
+		Where("LOWER(COALESCE(students.status, 'active')) != ?", "inactive").
+		Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, row := range rows {
+		if row.DateOfBirth.IsZero() || int(row.DateOfBirth.Month()) != month || row.DateOfBirth.Day() != day {
+			continue
+		}
+		studentName := strings.TrimSpace(row.StudentName)
+		if studentName == "" {
+			studentName = "your child"
+		}
+		title := "Birthday wishes"
+		body := fmt.Sprintf("Today is %s's birthday. Wishing a joyful day!", studentName)
+		refID := schoolID + ":" + row.UserID + ":" + row.StudentID + ":" + dateText
+		log, created, err := createIdempotentNotificationLog(database.DB, models.NotificationLog{
+			SchoolID:        schoolID,
+			RecipientUserID: row.UserID,
+			Channel:         "in_app",
+			Title:           title,
+			Body:            body,
+			Category:        "event",
+			Priority:        "medium",
+			Route:           routeParentHome,
+			ReferenceType:   refBirthdayWishStudent,
+			ReferenceID:     &refID,
+			IsRead:          false,
+			SentAt:          now,
+			DeliveryStatus:  "delivered",
+			PushStatus:      "pending",
+		})
+		if err != nil {
+			return err
+		}
+		if created {
+			enqueueScheduledPushNotification(log)
 		}
 	}
 	return nil

@@ -109,6 +109,47 @@ func TestScheduledWeeklyLessonPlannerDigestIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestScheduledBirthdayWishesNotifyTeacherPrincipalAndParentForChild(t *testing.T) {
+	seedScheduledReportFixture(t)
+	birthdayRun := time.Date(2026, 6, 23, 2, 30, 0, 0, time.UTC) // 08:00 IST
+
+	if err := runScheduledPrincipalReports(birthdayRun); err != nil {
+		t.Fatalf("run birthday scheduler: %v", err)
+	}
+	if err := runScheduledPrincipalReports(birthdayRun); err != nil {
+		t.Fatalf("rerun birthday scheduler: %v", err)
+	}
+
+	var staffLogs []models.NotificationLog
+	if err := database.DB.Where("reference_type = ?", refBirthdayWishStaff).Find(&staffLogs).Error; err != nil {
+		t.Fatalf("load staff birthday logs: %v", err)
+	}
+	if len(staffLogs) != 2 {
+		t.Fatalf("staff birthday logs=%d, want 2", len(staffLogs))
+	}
+	staffRecipients := map[string]bool{}
+	for _, log := range staffLogs {
+		staffRecipients[log.RecipientUserID] = true
+	}
+	if !staffRecipients["teacher-report-user"] || !staffRecipients["principal-report-user"] {
+		t.Fatalf("staff birthday recipients=%v, want teacher-report-user and principal-report-user", staffRecipients)
+	}
+
+	var studentLogs []models.NotificationLog
+	if err := database.DB.Where("reference_type = ?", refBirthdayWishStudent).Find(&studentLogs).Error; err != nil {
+		t.Fatalf("load student birthday logs: %v", err)
+	}
+	if len(studentLogs) != 1 {
+		t.Fatalf("student birthday logs=%d, want 1", len(studentLogs))
+	}
+	if studentLogs[0].RecipientUserID != "parent-report-user" {
+		t.Fatalf("student birthday recipient=%q, want parent-report-user", studentLogs[0].RecipientUserID)
+	}
+	if !strings.Contains(studentLogs[0].Body, "Birthday Child") {
+		t.Fatalf("student birthday body should include child name: %q", studentLogs[0].Body)
+	}
+}
+
 func seedScheduledReportFixture(t *testing.T) {
 	t.Helper()
 	if err := database.SetupTestDB(); err != nil {
@@ -118,20 +159,32 @@ func seedScheduledReportFixture(t *testing.T) {
 	principalRoleID := "role-report-principal"
 	adminRoleID := "role-report-admin"
 	teacherRoleID := "role-report-teacher"
+	parentRoleID := "role-report-parent"
+	principalStaffID := "staff-report-principal"
 	teacherStaffID := "staff-report-teacher"
 	missingStaffID := "staff-report-missing"
 	now := time.Date(2026, 6, 22, 9, 0, 0, 0, time.UTC)
+	birthdayDate := time.Date(2026, 6, 23, 0, 0, 0, 0, time.UTC)
+	childSectionID := "section-report-student"
+	birthdayStudentID := "student-report-birthday"
 	seeds := []any{
 		&models.School{BaseModel: models.BaseModel{ID: schoolID}, Name: "Report School", SchoolType: "cbse"},
 		&models.Role{BaseModel: models.BaseModel{ID: principalRoleID}, SchoolID: schoolID, RoleName: "Principal", IsSystemRole: true},
 		&models.Role{BaseModel: models.BaseModel{ID: adminRoleID}, SchoolID: schoolID, RoleName: "Admin", IsSystemRole: true},
 		&models.Role{BaseModel: models.BaseModel{ID: teacherRoleID}, SchoolID: schoolID, RoleName: "Teacher", IsSystemRole: true},
-		&models.User{BaseModel: models.BaseModel{ID: "principal-report-user"}, SchoolID: schoolID, Name: "Principal", Email: "principal@report.test", RoleID: principalRoleID, RoleSlug: "principal", PasswordHash: "hash", IsActive: true, IsVerified: true},
+		&models.Role{BaseModel: models.BaseModel{ID: parentRoleID}, SchoolID: schoolID, RoleName: "Parent", IsSystemRole: true},
+		&models.User{BaseModel: models.BaseModel{ID: "principal-report-user"}, SchoolID: schoolID, Name: "Principal", Email: "principal@report.test", RoleID: principalRoleID, RoleSlug: "principal", LinkedType: "staff", LinkedID: &principalStaffID, PasswordHash: "hash", IsActive: true, IsVerified: true},
 		&models.User{BaseModel: models.BaseModel{ID: "admin-report-user"}, SchoolID: schoolID, Name: "Admin", Email: "admin@report.test", RoleID: adminRoleID, RoleSlug: "admin", PasswordHash: "hash", IsActive: true, IsVerified: true},
 		&models.User{BaseModel: models.BaseModel{ID: "teacher-report-user"}, SchoolID: schoolID, Name: "Teacher", Email: "teacher@report.test", RoleID: teacherRoleID, RoleSlug: "teacher", LinkedType: "staff", LinkedID: &teacherStaffID, PasswordHash: "hash", IsActive: true, IsVerified: true},
 		&models.User{BaseModel: models.BaseModel{ID: "teacher-report-missing-user"}, SchoolID: schoolID, Name: "Missing Teacher", Email: "missing@report.test", RoleID: teacherRoleID, RoleSlug: "teacher", LinkedType: "staff", LinkedID: &missingStaffID, PasswordHash: "hash", IsActive: true, IsVerified: true},
-		&models.Staff{BaseModel: models.BaseModel{ID: teacherStaffID}, SchoolID: schoolID, StaffCode: "REP-1", FirstName: "Report", LastName: "Teacher", Email: "teacher@report.test", DateOfBirth: now.AddDate(-32, 0, 0), Gender: "female", Designation: "Teacher", EmploymentType: "full-time", JoinDate: now.AddDate(-5, 0, 0), Status: "active"},
+		&models.User{BaseModel: models.BaseModel{ID: "parent-report-user"}, SchoolID: schoolID, Name: "Parent", Email: "parent@report.test", RoleID: parentRoleID, RoleSlug: "parent", PasswordHash: "hash", IsActive: true, IsVerified: true},
+		&models.Staff{BaseModel: models.BaseModel{ID: principalStaffID}, SchoolID: schoolID, StaffCode: "REP-P", FirstName: "Report", LastName: "Principal", Email: "principal@report.test", DateOfBirth: birthdayDate.AddDate(-40, 0, 0), Gender: "female", Designation: "Principal", EmploymentType: "full-time", JoinDate: now.AddDate(-6, 0, 0), Status: "active"},
+		&models.Staff{BaseModel: models.BaseModel{ID: teacherStaffID}, SchoolID: schoolID, StaffCode: "REP-1", FirstName: "Report", LastName: "Teacher", Email: "teacher@report.test", DateOfBirth: birthdayDate.AddDate(-32, 0, 0), Gender: "female", Designation: "Teacher", EmploymentType: "full-time", JoinDate: now.AddDate(-5, 0, 0), Status: "active"},
 		&models.Staff{BaseModel: models.BaseModel{ID: missingStaffID}, SchoolID: schoolID, StaffCode: "REP-2", FirstName: "Missing", LastName: "Teacher", Email: "missing@report.test", DateOfBirth: now.AddDate(-32, 0, 0), Gender: "female", Designation: "Teacher", EmploymentType: "full-time", JoinDate: now.AddDate(-5, 0, 0), Status: "active"},
+		&models.Grade{BaseModel: models.BaseModel{ID: "grade-report"}, SchoolID: schoolID, GradeName: "Grade 2", GradeNumber: 2},
+		&models.Section{BaseModel: models.BaseModel{ID: childSectionID}, SchoolID: schoolID, AcademicYearID: "year-report", GradeID: "grade-report", SectionName: "A", Capacity: 30},
+		&models.Student{BaseModel: models.BaseModel{ID: birthdayStudentID}, SchoolID: schoolID, StudentCode: "STU-REP-1", AdmissionNumber: "ADM-REP-1", FirstName: "Birthday", LastName: "Child", DateOfBirth: birthdayDate.AddDate(-10, 0, 0), AdmissionDate: now, CurrentSectionID: &childSectionID, Status: "active"},
+		&models.ParentStudentLink{BaseModel: models.BaseModel{ID: "link-report-parent-child"}, SchoolID: schoolID, ParentUserID: "parent-report-user", StudentID: birthdayStudentID, StudentAdmissionNumber: "ADM-REP-1"},
 		&models.StaffAttendance{StaffID: teacherStaffID, Date: time.Date(2026, 6, 22, 0, 0, 0, 0, time.UTC), CheckIn: &now, Status: "present", Source: "qr"},
 		&models.StaffAttendance{StaffID: teacherStaffID, Date: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC), CheckIn: &now, Status: "present", Source: "qr"},
 		&models.LessonPlanner{SchoolID: schoolID, TeacherID: teacherStaffID, GradeID: "grade-report", SectionID: "section-report", WeekStartDate: time.Date(2026, 6, 22, 0, 0, 0, 0, time.UTC), WeekEndDate: time.Date(2026, 6, 28, 23, 59, 0, 0, time.UTC), Status: models.LessonPlannerStatusUploaded},

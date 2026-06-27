@@ -336,10 +336,15 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                                 AppRoutes.principalAttendance,
                                 rows.first,
                               ),
-                        onFees: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.feeMonitoring,
-                        ),
+                        onFees: () => rows.isEmpty
+                            ? Navigator.pushNamed(
+                                context,
+                                AppRoutes.feeMonitoring,
+                              )
+                            : _openRoute(
+                                AppRoutes.feeMonitoring,
+                                rows.first,
+                              ),
                       ),
                     ],
                   ),
@@ -759,6 +764,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       arguments: {
         'section_id': _text(row['section_id']),
         'sectionId': _text(row['section_id']),
+        'grade_id': _text(row['grade_id']),
+        'gradeId': _text(row['grade_id']),
         'class_name': _text(row['class_name']),
         'className': _text(row['class_name']),
         'section_name': _text(row['section_name']),
@@ -1130,10 +1137,11 @@ class _ClassesDirectorySearchField extends StatelessWidget {
               ),
               decoration: InputDecoration(
                 hintText: 'Search class, teacher, section',
+                hintMaxLines: 1,
                 hintStyle: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,
-                  fontSize: compact ? 14 : 15,
-                  fontWeight: FontWeight.w600,
+                  fontSize: compact ? 13 : 14,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 0,
                 ),
                 border: InputBorder.none,

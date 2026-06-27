@@ -208,19 +208,20 @@ class _TeacherLeaveRequestFormScreenState
                   ),
                   const SizedBox(height: 12),
                 ],
+                // General leave request card was removed from here.
                 Row(
                   children: [
                     Expanded(
                       child: TextFormField(
                         controller: _fromDateController,
                         readOnly: true,
-                        style: const TextStyle(overflow: TextOverflow.visible),
                         decoration: const InputDecoration(
                           labelText: 'From date',
                           hintText: 'DD MMM YYYY',
                           prefixIcon: Icon(Icons.event_rounded),
                           suffixIcon: Icon(Icons.calendar_today_outlined),
                           isDense: true,
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
@@ -234,13 +235,13 @@ class _TeacherLeaveRequestFormScreenState
                       child: TextFormField(
                         controller: _toDateController,
                         readOnly: true,
-                        style: const TextStyle(overflow: TextOverflow.visible),
                         decoration: const InputDecoration(
                           labelText: 'To date',
                           hintText: 'DD MMM YYYY',
                           prefixIcon: Icon(Icons.event_available_rounded),
                           suffixIcon: Icon(Icons.calendar_today_outlined),
                           isDense: true,
+                          floatingLabelBehavior: FloatingLabelBehavior.always,
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,

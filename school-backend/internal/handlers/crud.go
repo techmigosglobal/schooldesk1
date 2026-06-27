@@ -475,7 +475,15 @@ func (h *CRUDHandler[T]) applyRoleRelationshipScope(c *gin.Context, query *gorm.
 		case "admin", "principal":
 			return query
 		case "parent":
-			return query.Where("parent_teacher_meetings.student_id IN (?)", linkedStudentSubquery(c))
+			return query.Where(`
+				(
+					parent_teacher_meetings.student_id IN (?)
+					OR (
+						COALESCE(parent_teacher_meetings.student_id, '') = ''
+						AND parent_teacher_meetings.section_id IN (?)
+					)
+				)
+			`, linkedStudentSubquery(c), linkedSectionSubquery(c))
 		case "teacher":
 			staffID := currentStaffID(c)
 			if staffID == "" {

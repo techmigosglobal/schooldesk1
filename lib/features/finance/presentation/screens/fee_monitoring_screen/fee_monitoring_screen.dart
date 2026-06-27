@@ -83,6 +83,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   bool _uploadingQr = false;
   bool _showFeeNavigation = false;
   bool _routeArgsApplied = false;
+  bool _classHubFilter = false;
+  bool _generatingReport = false;
   String? _error;
   String _query = '';
   String _reportRange = '01 May 2024 - 15 May 2024';
@@ -122,8 +124,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     _routeArgsApplied = true;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
-      _selectedGradeId = _textValue(args['grade_id'] ?? args['classId']);
-      _selectedSectionId = _textValue(args['section_id'] ?? args['sectionId']);
+      final gradeId = _textValue(args['grade_id'] ?? args['classId']);
+      final sectionId = _textValue(args['section_id'] ?? args['sectionId']);
+      if (gradeId.isNotEmpty || sectionId.isNotEmpty) {
+        _selectedGradeId = gradeId;
+        _selectedSectionId = sectionId;
+        _classHubFilter = true;
+        // After data loads, _loadData will set _view to students.
+      }
     }
   }
 
@@ -213,6 +221,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         _loading = false;
       });
       _syncPaymentConfigControllers();
+      // Auto-navigate to students when opened from the Classes Hub.
+      if (_classHubFilter && mounted) {
+        setState(() => _view = _FeeView.students);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -795,9 +807,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     return _FeePage(
       header: _FeeHeader(
         title: 'Students',
-        subtitle: title == 'Students'
-            ? 'All fee accounts'
-            : '$title - ${_selectedStructure?.title ?? 'Fee Structure'}',
+        subtitle: _selectedStructure != null
+            ? '$title - ${_selectedStructure?.title ?? 'Fee Structure'}'
+            : (_selectedGradeId.isNotEmpty
+                ? 'Viewing fees for $_selectedClassLabel'
+                : 'All fee accounts'),
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
         trailing: IconButton(
@@ -812,6 +826,59 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           hint: 'Search student',
           onChanged: _setQuery,
         ),
+        if (_selectedGradeId.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: Color(0xFF2563EB), size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Viewing class-specific fees for $_selectedClassLabel',
+                    style: const TextStyle(
+                      color: Color(0xFF1E3A8A),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedGradeId = '';
+                      _selectedSectionId = '';
+                      _classHubFilter = false;
+                    });
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                  child: const Text(
+                    'Clear',
+                    style: TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 4,
@@ -1025,6 +1092,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        const _FeeSectionTitle('Invoices & Installments'),
+        const SizedBox(height: 10),
+        if (account.invoices.isEmpty)
+          const _FeeEmptyState(
+            icon: Icons.receipt_outlined,
+            title: 'No invoices',
+            message: 'No invoices have been generated for this student yet.',
+          )
+        else
+          for (final invoice in account.invoices)
+            _buildInvoiceInstallmentCard(invoice),
+        const SizedBox(height: 16),
         const _FeeSectionTitle('Payment History'),
         const SizedBox(height: 10),
         if (account.payments.isEmpty)
@@ -1037,11 +1116,23 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           for (final payment in account.payments)
             _FeePaymentHistoryTile(payment: payment),
         const SizedBox(height: 10),
-        FilledButton(
-          onPressed: account.balance <= 0
-              ? null
-              : () => _openCollectForAccount(account),
-          child: const Text('Make Payment'),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            FilledButton.icon(
+              onPressed: account.balance <= 0
+                  ? null
+                  : () => _openCollectForAccount(account),
+              icon: const Icon(Icons.payments_outlined, size: 18),
+              label: const Text('Make Payment'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _previewInvoicePdf(account),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Print Invoice'),
+            ),
+          ],
         ),
       ],
     );
@@ -1387,7 +1478,109 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         ),
       ),
       children: [
-        const _FeeSectionTitle('Select Report Type'),
+        // In-app Summary card
+        _FeeCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _FeeIconBadge(
+                    icon: Icons.bar_chart_rounded,
+                    color: const Color(0xFF4F46E5),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Live Fee Summary',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          'Current data snapshot',
+                          style: TextStyle(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Total Expected',
+                      value: _money(_totalExpected),
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Collected',
+                      value: _money(_totalCollected),
+                      highlighted: true,
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Outstanding',
+                      value: _money(_totalDue),
+                      danger: _totalDue > 0,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Students',
+                      value: '${_studentAccounts.length}',
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Structures',
+                      value: '${_structureBundles.length}',
+                    ),
+                  ),
+                  Expanded(
+                    child: _FeeInfoTile(
+                      label: 'Collection%',
+                      value:
+                          '${(_collectionRate * 100).toStringAsFixed(1)}%',
+                      highlighted: _collectionRate >= 0.8,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed:
+                    _generatingReport ? null : _generateInAppReport,
+                icon: _generatingReport
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: Text(
+                  _generatingReport
+                      ? 'Generating...'
+                      : 'Download PDF Summary',
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const _FeeSectionTitle('Server-side Exports'),
         const SizedBox(height: 10),
         for (final report in reports)
           _FeeReportTile(
@@ -1413,9 +1606,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        FilledButton(
+        OutlinedButton.icon(
           onPressed: () => _requestReportExport(reports.first),
-          child: const Text('Generate Report'),
+          icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+          label: const Text('Queue Server Export'),
         ),
       ],
     );
@@ -2235,6 +2429,387 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     });
   }
 
+  Widget _buildInvoiceInstallmentCard(Map<String, dynamic> invoice) {
+    final invoiceNumber = _textValue(
+      invoice['invoice_number'],
+      fallback: 'Invoice',
+    );
+    final total = _numValue(invoice['total']);
+    final paid = _numValue(invoice['paid']);
+    final balance = _numValue(invoice['balance']);
+    final status = _textValue(invoice['status'], fallback: 'pending');
+    final dueDate = _textValue(invoice['due_date']);
+    final rawInstallments = invoice['installments'];
+    final installments =
+        rawInstallments is List
+            ? rawInstallments.whereType<Map>().toList()
+            : <Map>[];
+
+    return _FeeCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _FeeIconBadge(
+                icon: Icons.receipt_long_outlined,
+                color: _statusColor(status),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      invoiceNumber,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    if (dueDate.isNotEmpty)
+                      Text(
+                        'Due: ${_displayDateStr(dueDate)}',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: context.appTheme.muted,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              _FeeStatusPill(
+                label: status.toUpperCase(),
+                color: _statusColor(status),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _generateInvoicePdf(invoice),
+                child: Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 18,
+                  color: context.appTheme.muted,
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _editInvoiceSheet(invoice),
+                child: Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: context.appTheme.muted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _FeeInfoTile(label: 'Total', value: _money(total)),
+              ),
+              Expanded(
+                child: _FeeInfoTile(
+                  label: 'Paid',
+                  value: _money(paid),
+                  highlighted: paid > 0,
+                ),
+              ),
+              Expanded(
+                child: _FeeInfoTile(
+                  label: 'Balance',
+                  value: _money(balance),
+                  danger: balance > 0,
+                ),
+              ),
+            ],
+          ),
+          if (installments.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            Text(
+              'Installments (${installments.length})',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                color: context.appTheme.muted,
+              ),
+            ),
+            const SizedBox(height: 6),
+            for (final inst in installments)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      size: 7,
+                      color: _statusColor(
+                        _textValue(inst['status'], fallback: 'pending'),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _textValue(
+                          inst['label'] ?? inst['name'],
+                          fallback:
+                              'Installment ${installments.indexOf(inst) + 1}',
+                        ),
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      _money(_numValue(inst['amount'])),
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _FeeStatusPill(
+                      label: _textValue(
+                        inst['status'],
+                        fallback: 'pending',
+                      ).toLowerCase() == 'paid'
+                          ? 'Paid'
+                          : 'Due',
+                      color: _statusColor(
+                        _textValue(inst['status'], fallback: 'pending'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _displayDateStr(String raw) {
+    if (raw.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(raw);
+      return '${dt.day.toString().padLeft(2, '0')}/'
+          '${dt.month.toString().padLeft(2, '0')}/'
+          '${dt.year}';
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  void _editInvoiceSheet(Map<String, dynamic> invoice) {
+    final invoiceId = _textValue(invoice['id']);
+    if (invoiceId.isEmpty) {
+      _snack('Invoice ID is missing.');
+      return;
+    }
+    final dueDateController = TextEditingController(
+      text: _textValue(invoice['due_date']),
+    );
+    final amountController = TextEditingController(
+      text: _numValue(invoice['total'] ?? invoice['total_amount']).toStringAsFixed(0),
+    );
+    final concessionController = TextEditingController(
+      text: _numValue(invoice['concession_amount'] ?? invoice['discount']).toStringAsFixed(0),
+    );
+    final notesController = TextEditingController(
+      text: _textValue(invoice['notes']),
+    );
+    String currentStatus = _textValue(invoice['status'], fallback: 'pending').toLowerCase();
+    if (!['pending', 'unpaid', 'partially_paid', 'paid', 'overdue', 'cancelled'].contains(currentStatus)) {
+      currentStatus = 'pending';
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 18,
+            right: 18,
+            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 18,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Edit Installment Invoice',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: dueDateController,
+                decoration: const InputDecoration(
+                  labelText: 'Due Date (YYYY-MM-DD)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Installment Amount (₹)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.currency_rupee_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: concessionController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Concession Amount (₹)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.discount_outlined),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: currentStatus,
+                decoration: const InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.info_outline_rounded),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'pending', child: Text('Pending (Unpaid)')),
+                  DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
+                  DropdownMenuItem(value: 'partially_paid', child: Text('Partially Paid')),
+                  DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                  DropdownMenuItem(value: 'overdue', child: Text('Overdue')),
+                  DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    currentStatus = val;
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: notesController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final dueDate = dueDateController.text.trim();
+                  final amount = double.tryParse(amountController.text.trim());
+                  final concession =
+                      double.tryParse(concessionController.text.trim()) ?? 0;
+                  final notes = notesController.text.trim();
+                  try {
+                    await BackendApiClient.instance.updateInvoice(
+                      invoiceId,
+                      dueDate: dueDate.isEmpty ? null : dueDate,
+                      totalAmount: amount,
+                      concessionAmount: concession > 0 ? concession : null,
+                      status: currentStatus,
+                      notes: notes.isEmpty ? null : notes,
+                    );
+                    await _loadData();
+                    if (mounted) {
+                      _snack('Invoice updated successfully.', success: true);
+                    }
+                  } catch (error) {
+                    if (mounted) _snack('Failed to update invoice: $error');
+                  }
+                },
+                child: const Text('Save Changes'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _generateInvoicePdf(Map<String, dynamic> invoice) async {
+    try {
+      final pdfService = PdfService.getInstance();
+      final invoiceId = _textValue(invoice['id']);
+      if (invoiceId.isEmpty) {
+        _snack('Invoice ID is missing.');
+        return;
+      }
+      
+      List<Map<String, dynamic>> feeItems = [];
+      try {
+        final detail = await BackendApiClient.instance.getInvoiceDetail(invoiceId);
+        final rawItems = detail['items'];
+        if (rawItems is List && rawItems.isNotEmpty) {
+          feeItems = rawItems.whereType<Map>().map((item) {
+            return <String, dynamic>{
+              'description': _textValue(
+                item['category_name'] ?? item['description'] ?? item['name'],
+                fallback: 'Fee component',
+              ),
+              'amount': _numValue(item['amount']),
+              'status': _textValue(item['status'], fallback: 'Pending'),
+            };
+          }).toList();
+        }
+      } catch (_) {}
+      
+      if (feeItems.isEmpty) {
+        feeItems = [
+          {
+            'description': 'Academic Fees',
+            'amount': _numValue(invoice['total']),
+            'status': 'Pending',
+          }
+        ];
+      }
+      
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: _textValue(invoice['invoice_number'], fallback: 'INV'),
+        studentName: _selectedAccount?.name ?? _textValue(invoice['name'], fallback: 'Student'),
+        className: _selectedAccount?.classLabel ?? _textValue(invoice['class'], fallback: 'Class'),
+        rollNo: _selectedAccount?.rollNumber ?? _textValue(invoice['roll'], fallback: '-'),
+        parentName: _textValue(invoice['parent_name'], fallback: 'Parent'),
+        feeItems: feeItems,
+        totalAmount: _numValue(invoice['total']),
+        paidAmount: _numValue(invoice['paid']),
+        balance: _numValue(invoice['balance']),
+        paymentMode: 'Invoice',
+        paymentDate: DateTime.tryParse(_textValue(invoice['due_date'])) ?? DateTime.now(),
+      );
+      
+      if (!mounted) return;
+      await pdfService.previewDocument(context, bytes, 'Fee Invoice');
+    } catch (error) {
+      _snack('Unable to preview invoice: $error');
+    }
+  }
+
+
+
   void _openStudentsForCollection({_FeeStructureBundle? structure}) {
     setState(() {
       _selectedStructure = structure;
@@ -2428,6 +3003,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   Future<void> _previewLastReceipt() async {
     final result = _lastPayment;
     if (result == null) return;
+    // Try to build itemized fee items from the student's invoice data.
+    final account = _selectedAccount;
+    final List<Map<String, dynamic>> feeItems;
+    if (account != null) {
+      feeItems = _buildFeeItemsFromAccount(account);
+    } else {
+      feeItems = [
+        {
+          'description': 'Fee payment',
+          'amount': result.amount,
+          'status': 'Paid',
+        },
+      ];
+    }
     try {
       final pdfService = PdfService.getInstance();
       final bytes = await pdfService.generateFeeReceipt(
@@ -2436,13 +3025,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         className: result.classLabel,
         rollNo: result.rollNumber,
         parentName: 'Parent',
-        feeItems: [
-          {
-            'description': 'Fee payment',
-            'amount': result.amount,
-            'status': 'Paid',
-          },
-        ],
+        feeItems: feeItems,
         totalAmount: result.amount + result.balanceAfterPayment,
         paidAmount: result.amount,
         balance: result.balanceAfterPayment,
@@ -2453,6 +3036,153 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       await pdfService.previewDocument(context, bytes, 'Fee Receipt');
     } catch (error) {
       _snack('Unable to preview receipt: $error');
+    }
+  }
+
+  Future<void> _previewInvoicePdf(_FeeStudentAccount account) async {
+    final feeItems = _buildFeeItemsFromAccount(account);
+    try {
+      final pdfService = PdfService.getInstance();
+      final dueInvoice = _primaryDueInvoice(account) ?? account.invoices.first;
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: _textValue(dueInvoice['invoice_number'],
+            fallback: 'INV-${account.studentId.substring(0, 6).toUpperCase()}'),
+        studentName: account.name,
+        className: account.classLabel,
+        rollNo: account.rollNumber,
+        parentName: 'Parent / Guardian',
+        feeItems: feeItems,
+        totalAmount: account.total,
+        paidAmount: account.paid,
+        balance: account.balance,
+        paymentMode:
+            account.payments.isNotEmpty
+            ? _textValue(account.payments.last['mode'], fallback: 'N/A')
+            : 'Pending',
+        paymentDate:
+            account.payments.isNotEmpty
+            ? (DateTime.tryParse(_textValue(account.payments.last['date']))
+                   ?? DateTime.now())
+            : DateTime.now(),
+      );
+      if (!mounted) return;
+      await pdfService.previewDocument(
+          context, bytes, 'Invoice — ${account.name}');
+    } catch (error) {
+      _snack('Unable to generate invoice PDF: $error');
+    }
+  }
+
+  List<Map<String, dynamic>> _buildFeeItemsFromAccount(
+    _FeeStudentAccount account,
+  ) {
+    final items = <Map<String, dynamic>>[];
+    for (final invoice in account.invoices) {
+      final rawItems = invoice['items'];
+      if (rawItems is List && rawItems.isNotEmpty) {
+        for (final item in rawItems.whereType<Map>()) {
+          final desc = _textValue(
+            item['category_name'] ?? item['description'] ?? item['name'],
+            fallback: 'Fee component',
+          );
+          final amount = _numValue(item['amount']);
+          final status = _textValue(item['status'], fallback: 'Pending');
+          items.add({
+            'description': desc,
+            'amount': amount,
+            'status': status,
+          });
+        }
+      } else {
+        // Fallback: create a single line item per invoice.
+        final label = _textValue(
+          invoice['invoice_label'] ?? invoice['invoice_number'],
+          fallback: 'Fee',
+        );
+        items.add({
+          'description': label,
+          'amount': _numValue(invoice['total']),
+          'status': _textValue(invoice['status'], fallback: 'pending'),
+        });
+      }
+    }
+    if (items.isEmpty) {
+      items.add({
+        'description': 'Fee payment',
+        'amount': account.total,
+        'status': account.balance <= 0 ? 'Paid' : 'Pending',
+      });
+    }
+    return items;
+  }
+
+  Future<void> _generateInAppReport() async {
+    setState(() => _generatingReport = true);
+    try {
+      // Build class-wise breakdown.
+      final classMap = <String, Map<String, double>>{};
+      for (final account in _studentAccounts) {
+        final classKey =
+            account.classLabel.isEmpty ? 'Unknown' : account.classLabel;
+        classMap.putIfAbsent(
+          classKey,
+          () => {'total': 0, 'paid': 0, 'balance': 0},
+        );
+        classMap[classKey]!['total'] =
+            (classMap[classKey]!['total'] ?? 0) + account.total;
+        classMap[classKey]!['paid'] =
+            (classMap[classKey]!['paid'] ?? 0) + account.paid;
+        classMap[classKey]!['balance'] =
+            (classMap[classKey]!['balance'] ?? 0) + account.balance;
+      }
+
+      // Build fee items list for the PDF summary.
+      final summaryItems = <Map<String, dynamic>>[
+        {
+          'description': 'Total Expected',
+          'amount': _totalExpected,
+          'status': 'Summary',
+        },
+        {
+          'description': 'Total Collected',
+          'amount': _totalCollected,
+          'status': 'Collected',
+        },
+        {
+          'description': 'Outstanding Dues',
+          'amount': _totalDue,
+          'status': _totalDue > 0 ? 'Pending' : 'Clear',
+        },
+        for (final entry in classMap.entries)
+          {
+            'description': entry.key,
+            'amount': entry.value['paid'] ?? 0,
+            'status': 'Collected ₹${(entry.value['balance'] ?? 0).toStringAsFixed(0)} due',
+          },
+      ];
+
+      final pdfService = PdfService.getInstance();
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: 'RPT-${DateTime.now().millisecondsSinceEpoch}',
+        studentName: 'All Students',
+        className: _selectedClassLabel,
+        rollNo: '${_studentAccounts.length} students',
+        parentName: 'Fee Report',
+        feeItems: summaryItems,
+        totalAmount: _totalExpected,
+        paidAmount: _totalCollected,
+        balance: _totalDue,
+        paymentMode: 'Summary Report',
+        paymentDate: DateTime.now(),
+        schoolName: 'School Fee Summary',
+        schoolAddress: 'Date range: $_reportRange',
+      );
+      if (!mounted) return;
+      await pdfService.previewDocument(context, bytes, 'Fee Collection Report');
+    } catch (error) {
+      if (mounted) _snack('Unable to generate report: $error');
+    } finally {
+      if (mounted) setState(() => _generatingReport = false);
     }
   }
 
@@ -2610,6 +3340,17 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             account.academicYearId.isEmpty ||
             account.academicYearId == structure.academicYearId;
         if (!sameGrade || !sameSection || !sameYear) return false;
+      } else {
+        if (_selectedGradeId.isNotEmpty) {
+          if (account.gradeId.isNotEmpty && account.gradeId != _selectedGradeId) {
+            return false;
+          }
+        }
+        if (_selectedSectionId.isNotEmpty) {
+          if (account.sectionId.isNotEmpty && account.sectionId != _selectedSectionId) {
+            return false;
+          }
+        }
       }
       if (!_matchesStatus(account)) return false;
       if (query.isEmpty) return true;

@@ -367,10 +367,19 @@ String _classLabel(Map<String, dynamic> planner) {
   return '$grade - $section';
 }
 
-String _teacherName(Map<String, dynamic> planner) => _text(
-  planner['teacher_name'] ?? planner['staff_name'],
-  fallback: 'Teacher',
-);
+String _teacherName(Map<String, dynamic> planner) {
+  final teacher = planner['teacher'];
+  if (teacher is Map) {
+    final teacherMap = Map<String, dynamic>.from(teacher);
+    final first = _text(teacherMap['first_name']);
+    final last = _text(teacherMap['last_name']);
+    final full = '$first $last'.trim();
+    if (full.isNotEmpty) return full;
+    final explicit = _text(teacherMap['full_name'] ?? teacherMap['name']);
+    if (explicit.isNotEmpty) return explicit;
+  }
+  return _text(planner['teacher_name'] ?? planner['staff_name'], fallback: 'Teacher');
+}
 
 String _shortDate(Object? raw) {
   if (raw == null) return '-';

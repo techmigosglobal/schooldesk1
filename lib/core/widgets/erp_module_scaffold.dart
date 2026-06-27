@@ -112,9 +112,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         !widget.isPortalRoot &&
         (ModalRoute.of(context)?.canPop ?? false);
     final globalToolbarActions =
-        widget.showGlobalToolbarActions &&
-            _hasRoleShell &&
-            (showRail || widget.actions.isEmpty)
+        widget.showGlobalToolbarActions && _hasRoleShell
         ? (showRail ? _globalToolbarActions() : _compactToolbarActions())
         : const <Widget>[];
 
@@ -236,6 +234,9 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
           onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
         ),
       ];
+    }
+    if (_role == 'teacher') {
+      return const <Widget>[];
     }
     return [
       _ToolbarIconButton(

@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -44,6 +45,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   final _qrNoteController = TextEditingController();
   bool _savingPaymentConfig = false;
   bool _uploadingQr = false;
+  bool _generatingInAppReport = false;
 
   String _paymentSearchQuery = '';
   String _paymentModeFilter = 'All';
@@ -489,6 +491,11 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                           color: Colors.orange,
                         ),
                         IconButton(
+                          tooltip: 'Preview Invoice',
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          onPressed: () => _previewInvoicePdf(invoice),
+                        ),
+                        IconButton(
                           tooltip: 'Record Payment',
                           icon: const Icon(Icons.payments_outlined),
                           onPressed: () =>
@@ -708,7 +715,58 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       title: 'Reports And Reconciliation',
       subtitle: 'Exports use typed report lifecycle artifacts',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // In-app PDF summary
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.bar_chart_rounded, color: Color(0xFF4F46E5)),
+                      SizedBox(width: 8),
+                      Text(
+                        'In-App PDF Summary',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Generates an instant fee collection summary PDF from live data. '  
+                    'Includes class-wise breakdown, totals, and outstanding dues.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _generatingInAppReport ? null : _generateAdminInAppReport,
+                    icon: _generatingInAppReport
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    label: Text(
+                      _generatingInAppReport ? 'Generating...' : 'Generate PDF',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           for (final report in reports)
             OpsListRow(
               icon: Icons.summarize_outlined,
@@ -796,17 +854,20 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
     if (confirmed != true) return;
     try {
-      if (removePending) {
-        await BackendApiClient.instance.deleteFeeStructure(
-          id,
-          removePending: true,
-        );
-      } else {
-        await BackendApiClient.instance.deleteFeeStructure(id);
-      }
+      await BackendApiClient.instance.deleteFeeStructure(
+        id,
+        removePending: removePending,
+      );
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);
+    } on ServerException catch (e) {
+      // Unwrap backend error message explicitly for clarity.
+      _snack(
+        e.message.isNotEmpty
+            ? 'Delete failed: ${e.message}'
+            : 'Unable to delete fee component.',
+      );
     } catch (error) {
       _snack('Unable to delete fee component: $error');
     }
@@ -930,15 +991,53 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     try {
       final pdfService = PdfService.getInstance();
       final amount = _numValue(payment['amount']);
+      // Attempt to fetch full invoice for itemized fee line items.
+      List<Map<String, dynamic>> feeItems;
+      final invoiceId = _textValue(payment['invoice_id']);
+      if (invoiceId.isNotEmpty) {
+        try {
+          final detail = await BackendApiClient.instance
+              .getInvoiceDetail(invoiceId);
+          final rawItems = detail['items'];
+          if (rawItems is List && rawItems.isNotEmpty) {
+            feeItems = rawItems.whereType<Map>().map((item) {
+              return <String, dynamic>{
+                'description': _textValue(
+                  item['category_name'] ?? item['description'] ?? item['name'],
+                  fallback: 'Fee component',
+                ),
+                'amount': _numValue(item['amount']),
+                'status': _textValue(item['status'], fallback: 'Paid'),
+              };
+            }).toList();
+          } else {
+            throw Exception('No items in invoice');
+          }
+        } catch (_) {
+          feeItems = [
+            {
+              'description': 'Fee payment',
+              'amount': amount,
+              'status': 'Paid',
+            },
+          ];
+        }
+      } else {
+        feeItems = [
+          {
+            'description': 'Fee payment',
+            'amount': amount,
+            'status': 'Paid',
+          },
+        ];
+      }
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: _textValue(payment['receipt'], fallback: 'RCP'),
         studentName: _textValue(payment['name'], fallback: 'Student'),
         className: _textValue(payment['class'], fallback: 'Class'),
         rollNo: _textValue(payment['roll'], fallback: '-'),
         parentName: _textValue(payment['parent_name'], fallback: 'Parent'),
-        feeItems: [
-          {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
-        ],
+        feeItems: feeItems,
         totalAmount: amount,
         paidAmount: amount,
         balance: 0,
@@ -953,7 +1052,143 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     }
   }
 
+  Future<void> _previewInvoicePdf(Map<String, dynamic> invoice) async {
+    try {
+      final pdfService = PdfService.getInstance();
+      final invoiceId = _textValue(invoice['id']);
+      if (invoiceId.isEmpty) {
+        _snack('Invoice ID is missing.');
+        return;
+      }
+      
+      List<Map<String, dynamic>> feeItems = [];
+      try {
+        final detail = await BackendApiClient.instance.getInvoiceDetail(invoiceId);
+        final rawItems = detail['items'];
+        if (rawItems is List && rawItems.isNotEmpty) {
+          feeItems = rawItems.whereType<Map>().map((item) {
+            return <String, dynamic>{
+              'description': _textValue(
+                item['category_name'] ?? item['description'] ?? item['name'],
+                fallback: 'Fee component',
+              ),
+              'amount': _numValue(item['amount']),
+              'status': _textValue(item['status'], fallback: 'Pending'),
+            };
+          }).toList();
+        }
+      } catch (_) {}
+      
+      if (feeItems.isEmpty) {
+        feeItems = [
+          {
+            'description': 'Academic Fees',
+            'amount': _numValue(invoice['total']),
+            'status': 'Pending',
+          }
+        ];
+      }
+      
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: _textValue(invoice['invoice_number'], fallback: 'INV'),
+        studentName: _textValue(invoice['name'], fallback: 'Student'),
+        className: _textValue(invoice['class'], fallback: 'Class'),
+        rollNo: _textValue(invoice['roll'], fallback: '-'),
+        parentName: _textValue(invoice['parent_name'], fallback: 'Parent'),
+        feeItems: feeItems,
+        totalAmount: _numValue(invoice['total']),
+        paidAmount: _numValue(invoice['paid']),
+        balance: _numValue(invoice['balance']),
+        paymentMode: 'Invoice',
+        paymentDate: DateTime.tryParse(_textValue(invoice['due_date'])) ?? DateTime.now(),
+      );
+      
+      if (!mounted) return;
+      await pdfService.previewDocument(context, bytes, 'Fee Invoice');
+    } catch (error) {
+      _snack('Unable to preview invoice: $error');
+    }
+  }
+
+  Future<void> _generateAdminInAppReport() async {
+    setState(() => _generatingInAppReport = true);
+    try {
+      // Build class-wise breakdown from invoices.
+      final classMap = <String, Map<String, double>>{};
+      final allInvoices = [..._pendingDues, ..._recentPayments];
+      for (final inv in allInvoices) {
+        final classKey = _textValue(inv['class'], fallback: 'Unknown');
+        classMap.putIfAbsent(
+          classKey,
+          () => {'total': 0, 'paid': 0, 'balance': 0},
+        );
+        classMap[classKey]!['paid'] =
+            (classMap[classKey]!['paid'] ?? 0) +
+            _numValue(inv['amount'] ?? inv['paid_amount']);
+      }
+      for (final inv in _pendingDues) {
+        final classKey = _textValue(inv['class'], fallback: 'Unknown');
+        classMap.putIfAbsent(classKey, () => {'total': 0, 'paid': 0, 'balance': 0});
+        classMap[classKey]!['balance'] =
+            (classMap[classKey]!['balance'] ?? 0) + _numValue(inv['balance']);
+      }
+
+      final totalCollected = _recentPayments.fold<double>(
+        0,
+        (sum, p) => sum + _numValue(p['amount']),
+      );
+      final totalDue = _pendingDues.fold<double>(
+        0,
+        (sum, p) => sum + _numValue(p['balance']),
+      );
+
+      final summaryItems = <Map<String, dynamic>>[
+        {
+          'description': 'Total Collected',
+          'amount': totalCollected,
+          'status': 'Collected',
+        },
+        {
+          'description': 'Outstanding Dues',
+          'amount': totalDue,
+          'status': totalDue > 0 ? 'Pending' : 'Clear',
+        },
+        for (final entry in classMap.entries)
+          {
+            'description': entry.key,
+            'amount': entry.value['paid'] ?? 0,
+            'status':
+                '₹${(entry.value['balance'] ?? 0).toStringAsFixed(0)} due',
+          },
+      ];
+
+      final pdfService = PdfService.getInstance();
+      final bytes = await pdfService.generateFeeReceipt(
+        receiptNo: 'RPT-${DateTime.now().millisecondsSinceEpoch}',
+        studentName: 'All Students',
+        className: 'All Classes',
+        rollNo: '${_pendingDues.length + _recentPayments.length} invoices',
+        parentName: 'Fee Collection Report',
+        feeItems: summaryItems,
+        totalAmount: totalCollected + totalDue,
+        paidAmount: totalCollected,
+        balance: totalDue,
+        paymentMode: 'Summary Report',
+        paymentDate: DateTime.now(),
+        schoolName: 'School Fee Summary',
+        schoolAddress: 'Generated: ${DateTime.now().toString().substring(0, 16)}',
+      );
+      if (!mounted) return;
+      await pdfService.previewDocument(context, bytes, 'Fee Collection Report');
+    } catch (error) {
+      if (mounted) _snack('Unable to generate report: $error');
+    } finally {
+      if (mounted) setState(() => _generatingInAppReport = false);
+    }
+  }
+
   Future<void> _savePaymentConfig() async {
+
     setState(() => _savingPaymentConfig = true);
     try {
       final config = await BackendApiClient.instance

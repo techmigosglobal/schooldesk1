@@ -152,6 +152,31 @@ void main() {
     'teacher classes screen initializes backend role scope before rendering assigned class',
     (tester) async {
       _seedTeacherScope(adapter, nonTodayWeekday: DateTime.monday);
+      adapter.routes['GET /dashboard/teacher'] = _ok({
+        'role': 'Teacher',
+        'staff_id': 'staff-1',
+        'metrics': {
+          'assigned_classes': 2,
+          'assigned_students': 1,
+          'homework_total': 0,
+          'homework_due': 0,
+          'unread_messages': 0,
+        },
+        'assigned_classes': [
+          {
+            'id': 'section-1',
+            'grade_name': 'Grade 2',
+            'section_name': 'A',
+            'is_class_teacher': true,
+          },
+          {
+            'id': 'section-2',
+            'grade_name': 'Grade 3',
+            'section_name': 'B',
+            'is_class_teacher': false,
+          },
+        ],
+      });
 
       await tester.pumpWidget(const MaterialApp(home: TeacherClassesScreen()));
       await tester.pumpAndSettle();

@@ -680,7 +680,7 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 			FROM sections
 			JOIN grades ON grades.id = sections.grade_id
 			LEFT JOIN timetable_slots ON timetable_slots.section_id = sections.id
-			WHERE grades.school_id = ? AND (sections.class_teacher_id = ? OR timetable_slots.staff_id = ?)
+			WHERE grades.school_id = ? AND (sections.class_teacher_id = ? OR sections.co_teacher_id = ? OR timetable_slots.staff_id = ?)
 		)
 		SELECT
 			(SELECT COUNT(*) FROM assigned_sections) AS assigned_classes,
@@ -693,13 +693,13 @@ func (h *DashboardHandler) Teacher(c *gin.Context) {
 				(SELECT COUNT(*) FROM homework WHERE school_id = ? AND staff_id = ? AND submission_date >= ? AND status NOT IN ('completed', 'closed')) AS homework_due,
 				(SELECT COUNT(*) FROM diary_entries WHERE school_id = ? AND teacher_id = ? AND entry_date >= ? AND entry_date < ?) AS diary_today,
 				(SELECT COUNT(*) FROM messages JOIN message_conversations ON message_conversations.id = messages.conversation_id WHERE message_conversations.school_id = ? AND message_conversations.teacher_id = ? AND messages.sender_role = 'parent' AND messages.is_read = false) AS unread_messages
-		`, schoolID, staffID, staffID, schoolID, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, schoolID, staffID, schoolID, staffID, todayStart, todayEnd, schoolID, staffID, todayStart, schoolID, staffID, todayStart, todayEnd, schoolID, staffID).Scan(&row).Error; err != nil {
+		`, schoolID, staffID, staffID, staffID, schoolID, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, staffID, todayStart, todayEnd, schoolID, staffID, schoolID, staffID, todayStart, todayEnd, schoolID, staffID, todayStart, schoolID, staffID, todayStart, todayEnd, schoolID, staffID).Scan(&row).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load teacher dashboard")
 		return
 	}
 	reminderStatus, _ := homeworkReminderStatusFor(schoolID, staffID, "", time.Now())
 	var classes []teacherClassSummary
-	if err := database.DB.Raw(teacherAssignedClassesSQL(), staffID, schoolID, staffID, staffID).Scan(&classes).Error; err != nil {
+	if err := database.DB.Raw(teacherAssignedClassesSQL(), staffID, schoolID, staffID, staffID, staffID).Scan(&classes).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to load assigned classes")
 		return
 	}
@@ -735,7 +735,7 @@ func teacherAssignedClassesSQL() string {
 			FROM sections
 			JOIN grades ON grades.id = sections.grade_id
 			LEFT JOIN timetable_slots ON timetable_slots.section_id = sections.id
-			WHERE grades.school_id = ? AND (sections.class_teacher_id = ? OR timetable_slots.staff_id = ?)
+			WHERE grades.school_id = ? AND (sections.class_teacher_id = ? OR sections.co_teacher_id = ? OR timetable_slots.staff_id = ?)
 		) AS assigned_classes
 		ORDER BY grade_number, section_name
 	`
