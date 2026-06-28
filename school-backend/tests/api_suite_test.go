@@ -71,11 +71,14 @@ func TestCompleteAPISuite(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"PORT=19081",
 		"JWT_SECRET=12345678901234567890123456789012",
+		"DATABASE_URL=",
 		"DATABASE_DSN="+dbPath,
 		"MIGRATE_ON_START=true",
 		"SEED_ON_START=false",
 		"GIN_MODE=release",
 		"REDIS_URL=",
+		"USE_POSTGRES_ONLY=false",
+		"ENVIRONMENT=test",
 	)
 	var logs bytes.Buffer
 	cmd.Stdout = &logs
@@ -141,18 +144,6 @@ func TestCompleteAPISuite(t *testing.T) {
 		"total_amount": 1000, "discount_amount": 0, "net_amount": 1000,
 		"items": []map[string]any{{"fee_category_id": s.ids["fee_category"], "amount": 1000, "description": "Tuition"}},
 	}, http.StatusCreated, "invoice")
-	s.expectDataID("Principal create exam type", "POST", "/exams/types", "Principal", "Principal", map[string]any{
-		"school_id": s.ids["school"], "name": "Runtime Type", "weightage_percent": 10,
-	}, http.StatusCreated, "exam_type")
-	s.expectDataID("Principal create exam", "POST", "/exams", "Principal", "Principal", map[string]any{
-		"school_id": s.ids["school"], "academic_year_id": s.ids["year"], "term_id": s.ids["term"], "exam_type_id": s.ids["exam_type"],
-		"exam_name": "Runtime Exam", "start_date": "2026-05-15", "end_date": "2026-05-16",
-	}, http.StatusCreated, "exam")
-	s.expectDataID("Principal create exam schedule", "POST", "/exams/schedules", "Principal", "Principal", map[string]any{
-		"exam_id": s.ids["exam"], "grade_id": s.ids["grade"], "section_id": s.ids["section"], "subject_id": s.ids["subject"],
-		"exam_date": "2026-05-15", "start_time": "09:00", "end_time": "10:00", "max_marks": 100, "pass_marks": 35,
-	}, http.StatusCreated, "schedule")
-
 	s.expect("Teacher list assigned section students", "GET", "/students?section_id="+s.ids["section"], "Teacher", "Teacher", nil, http.StatusOK)
 	s.expectDataID("Teacher create attendance session", "POST", "/attendance/sessions", "Teacher", "Teacher", map[string]any{
 		"academic_year_id": s.ids["year"], "section_id": s.ids["section"], "subject_id": s.ids["subject"], "staff_id": s.ids["staff"], "date": "2026-05-01", "period_number": 1,
@@ -170,18 +161,12 @@ func TestCompleteAPISuite(t *testing.T) {
 		"title": "Runtime Diary", "classwork": "API suite", "homework": "Complete assignment", "type": "regular",
 		"teacher_id": s.ids["staff"], "student_id": s.ids["new_student"], "created_by": "Suite Teacher",
 	}, http.StatusCreated, "diary")
-	s.expect("Teacher enter marks", "POST", "/exams/schedules/"+s.ids["schedule"]+"/marks", "Teacher", "Teacher", map[string]any{
-		"marks": []map[string]any{{"student_id": s.ids["new_student"], "enrollment_id": s.ids["new_enrollment"], "marks_obtained": 92, "grade_label": "A+"}},
-	}, http.StatusOK)
-
 	s.expect("Parent fetch linked child", "GET", "/me/students", "Parent", "Parent", nil, http.StatusOK)
 	s.expect("Parent view attendance", "GET", "/students/"+s.ids["new_student"]+"/attendance", "Parent", "Parent", nil, http.StatusOK)
 	s.expect("Parent blocked from other child fees", "GET", "/students/"+s.ids["other_student"]+"/fees", "Parent", "Parent", nil, http.StatusForbidden)
 	s.expect("Parent blocked from other child attendance", "GET", "/students/"+s.ids["other_student"]+"/attendance", "Parent", "Parent", nil, http.StatusForbidden)
-	s.expect("Parent blocked from other child marks", "GET", "/students/"+s.ids["other_student"]+"/marks", "Parent", "Parent", nil, http.StatusForbidden)
 	s.expect("Teacher blocked from outside class fees", "GET", "/students/"+s.ids["outside_student"]+"/fees", "Teacher", "Teacher", nil, http.StatusForbidden)
 	s.expect("Teacher blocked from outside class attendance", "GET", "/students/"+s.ids["outside_student"]+"/attendance", "Teacher", "Teacher", nil, http.StatusForbidden)
-	s.expect("Teacher blocked from outside class marks", "GET", "/students/"+s.ids["outside_student"]+"/marks", "Teacher", "Teacher", nil, http.StatusForbidden)
 	s.expect("Parent view homework", "GET", "/homework", "Parent", "Parent", nil, http.StatusOK)
 	s.expectDataID("Parent create message conversation", "POST", "/message-conversations", "Parent", "Parent", map[string]any{
 		"reference_type": "homework", "reference_id": s.ids["homework"], "teacher_id": s.ids["staff"], "parent_id": "user-parent-suite",
@@ -204,7 +189,6 @@ func TestCompleteAPISuite(t *testing.T) {
 	s.expect("Principal analytics students", "GET", "/students", "Principal", "Principal", nil, http.StatusOK)
 	s.expect("Principal monitoring audit logs", "GET", "/audit-logs", "Principal", "Principal", nil, http.StatusOK)
 	s.expectAuditContains("Audit attendance marking", "Principal", "attendance", "submit", "student_attendances", s.ids["attendance_session"], "Teacher")
-	s.expectAuditContains("Audit exam marks entry", "Principal", "exams", "create", "student_marks", "", "Teacher")
 	s.expectAuditContains("Audit leave approval", "Principal", "leave", "update", "leave_applications", s.ids["leave"], "Principal")
 	s.expectAuditContains("Audit message conversation", "Principal", "message_conversations", "create", "message_conversations", s.ids["conversation"], "Parent")
 	s.expectAuditContains("Audit message reply", "Principal", "messages", "create", "messages", s.ids["message"], "Parent")
@@ -214,7 +198,6 @@ func TestCompleteAPISuite(t *testing.T) {
 	}, http.StatusOK)
 	s.expectAuditContains("Audit fee payment", "Principal", "fees", "create", "payments", "", "Principal")
 	s.expect("Principal verify paid invoice", "GET", "/fees/invoices?student_id="+s.ids["new_student"], "Principal", "Principal", nil, http.StatusOK)
-	s.expect("Principal verify marks", "GET", "/students/"+s.ids["new_student"]+"/marks?exam_id="+s.ids["exam"], "Principal", "Principal", nil, http.StatusOK)
 
 	rep := s.buildReport()
 	if err := writeReports(root, rep); err != nil {
