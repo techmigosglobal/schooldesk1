@@ -84,7 +84,7 @@ Future<void> _initializeDeferredStartupServices() async {
     await RoleAccessService.initialize();
     await PushNotificationService.instance.initialize();
     await PushNotificationService.instance.registerDeviceTokenIfPossible();
-  } catch (error, stackTrace) {
+  } catch (error) {
     // ignore: avoid_print
     print('Deferred startup services failed: $error');
   }

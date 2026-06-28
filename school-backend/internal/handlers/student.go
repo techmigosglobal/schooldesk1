@@ -880,9 +880,10 @@ func (h *StudentHandler) CreateEnrollment(c *gin.Context) {
 
 	enrollDate := time.Now()
 	if req.EnrollmentDate != "" {
-		enrollDate, err = time.Parse("2006-01-02", req.EnrollmentDate)
-		if err != nil {
-			log.Printf("Invalid enrollment date format: %v", err)
+		var parseErr error
+		enrollDate, parseErr = time.Parse("2006-01-02", req.EnrollmentDate)
+		if parseErr != nil {
+			log.Printf("Invalid enrollment date format: %v", parseErr)
 			enrollDate = time.Now()
 		}
 	}

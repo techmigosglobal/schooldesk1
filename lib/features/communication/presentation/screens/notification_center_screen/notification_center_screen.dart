@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
-import 'package:schooldesk1/core/services/push_notification_service.dart';
+
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
@@ -259,7 +259,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   Widget _buildParentNotificationCenter(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
-    final unreadCount = _service?.getUnreadCountForRole('parent') ?? 0;
     final items = _parentFilteredNotifications();
     final horizontal = SchoolDeskResponsive.contentHorizontalPaddingForWidth(
       MediaQuery.sizeOf(context).width,
@@ -1037,146 +1036,8 @@ class _ParentFilterPill extends StatelessWidget {
   }
 }
 
-class _ParentUnreadSummaryCard extends StatelessWidget {
-  final int unreadCount;
 
-  const _ParentUnreadSummaryCard({required this.unreadCount});
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    const green = Color(0xFF16A34A);
-    return Container(
-      padding: EdgeInsets.all(tokens.spacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.panel,
-        borderRadius: BorderRadius.circular(tokens.radius.card),
-        border: Border.all(color: tokens.panelBorder),
-        boxShadow: tokens.elevation.card,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: green.withAlpha(18),
-              borderRadius: BorderRadius.circular(tokens.radius.card),
-            ),
-            child: const Icon(
-              Icons.notifications_none_rounded,
-              color: green,
-              size: 32,
-            ),
-          ),
-          SizedBox(width: tokens.spacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'You have $unreadCount unread notification${unreadCount == 1 ? '' : 's'}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.xs),
-                Text(
-                  "Stay updated with your child's activities",
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: tokens.textMuted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, color: tokens.textMuted),
-        ],
-      ),
-    );
-  }
-}
-
-class _ParentPushStatusCard extends StatelessWidget {
-  const _ParentPushStatusCard({required this.status, required this.onRetry});
-
-  final PushNotificationRuntimeStatus status;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final ready = status.readyForPush;
-    final color = ready ? const Color(0xFF16A34A) : const Color(0xFFEA580C);
-    final title = ready ? 'Push notifications active' : 'Enable Push';
-
-    return Container(
-      padding: EdgeInsets.all(tokens.spacing.lg),
-      decoration: BoxDecoration(
-        color: color.withAlpha(18),
-        borderRadius: BorderRadius.circular(tokens.radius.card),
-        border: Border.all(color: color.withAlpha(80)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            ready
-                ? Icons.notifications_active_rounded
-                : Icons.notifications_paused_rounded,
-            color: color,
-          ),
-          SizedBox(width: tokens.spacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: tokens.spacing.xs),
-                Text(
-                  ready
-                      ? 'This device is registered for real-time school alerts.'
-                      : _pushStatusMessage(status),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: tokens.textMuted,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!ready) ...[
-            SizedBox(width: tokens.spacing.sm),
-            TextButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-String _pushStatusMessage(PushNotificationRuntimeStatus status) {
-  if (!status.firebaseAvailable) {
-    return 'Firebase is not initialized on this device.';
-  }
-  if (!status.hasDeviceToken) {
-    return 'Notification permission is ${status.permissionStatus}. Open app permissions if alerts are blocked.';
-  }
-  if (!status.deviceRegistrationSucceeded) {
-    return status.lastRegistrationError.isEmpty
-        ? 'This device token has not reached the school server yet.'
-        : status.lastRegistrationError;
-  }
-  return 'Push setup is almost ready.';
-}
 
 class _ParentNotificationEmptyCard extends StatelessWidget {
   final String filter;
