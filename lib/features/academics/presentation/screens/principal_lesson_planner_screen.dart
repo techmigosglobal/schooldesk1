@@ -358,24 +358,37 @@ class _StatePanel extends StatelessWidget {
 }
 
 String _classLabel(Map<String, dynamic> planner) {
-  final grade = _text(
-    planner['grade_name'] ?? planner['class_name'] ?? planner['grade'],
-    fallback: 'Class',
-  );
-  final section = _text(planner['section_name'] ?? planner['section']);
-  if (section.isEmpty) return grade;
-  return '$grade - $section';
+  String gradeName = '';
+  final grade = planner['grade'];
+  if (grade is Map) {
+    gradeName = _text(grade['grade_name'] ?? grade['name'] ?? grade['gradeName']);
+  }
+  if (gradeName.isEmpty) {
+    gradeName = _text(planner['grade_name'] ?? planner['class_name'], fallback: 'Class');
+  }
+
+  String sectionName = '';
+  final section = planner['section'];
+  if (section is Map) {
+    sectionName = _text(section['section_name'] ?? section['name'] ?? section['sectionName']);
+  }
+  if (sectionName.isEmpty) {
+    sectionName = _text(planner['section_name'] ?? planner['section']);
+  }
+
+  if (sectionName.isEmpty) return gradeName;
+  return '$gradeName - $sectionName';
 }
 
 String _teacherName(Map<String, dynamic> planner) {
   final teacher = planner['teacher'];
   if (teacher is Map) {
     final teacherMap = Map<String, dynamic>.from(teacher);
-    final first = _text(teacherMap['first_name']);
-    final last = _text(teacherMap['last_name']);
+    final first = _text(teacherMap['first_name'] ?? teacherMap['firstName']);
+    final last = _text(teacherMap['last_name'] ?? teacherMap['lastName']);
     final full = '$first $last'.trim();
     if (full.isNotEmpty) return full;
-    final explicit = _text(teacherMap['full_name'] ?? teacherMap['name']);
+    final explicit = _text(teacherMap['full_name'] ?? teacherMap['name'] ?? teacherMap['fullName']);
     if (explicit.isNotEmpty) return explicit;
   }
   return _text(planner['teacher_name'] ?? planner['staff_name'], fallback: 'Teacher');

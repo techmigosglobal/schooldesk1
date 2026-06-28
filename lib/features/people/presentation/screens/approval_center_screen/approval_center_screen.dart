@@ -175,6 +175,23 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     super.initState();
     _tabController = TabController(length: _tabLabels.length, vsync: this);
     _loadData();
+    NotificationService.getInstance().then((s) {
+      if (mounted) s.addListener(_onNotificationChanged);
+    });
+  }
+
+  void _onNotificationChanged() {
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    NotificationService.getInstance().then((s) {
+      s.removeListener(_onNotificationChanged);
+    });
+    _searchController.dispose();
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {

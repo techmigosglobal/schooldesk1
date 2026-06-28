@@ -4,6 +4,8 @@ import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PrincipalEventApprovalScreen extends StatefulWidget {
   const PrincipalEventApprovalScreen({super.key});
@@ -167,15 +169,35 @@ class _PrincipalEventApprovalScreenState
                 itemBuilder: (context, index) {
                   final post = _posts[index];
                   final destinations = _labels(post['destinations']);
+                  final mediaUrls = parseEventPostMediaUrls(post['media_urls']);
                   return Card(
                     margin: const EdgeInsets.only(bottom: 16),
                     child: ListTile(
                       title: Text(post['title'] ?? 'No Title'),
-                      subtitle: Text(
-                        '${post['description'] ?? ''}\n'
-                        'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if ((post['description'] ?? '').isNotEmpty)
+                            Text('${post['description']}\n'),
+                          Text(
+                            'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
+                          ),
+                          if (mediaUrls.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: mediaUrls.map((url) {
+                                return OutlinedButton.icon(
+                                  onPressed: () => launchUrl(Uri.parse(url)),
+                                  icon: const Icon(Icons.attachment, size: 16),
+                                  label: const Text('View Attachment'),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ],
                       ),
-                      isThreeLine: true,
                       trailing: post['approval_status'] == 'pending'
                           ? Row(
                               mainAxisSize: MainAxisSize.min,

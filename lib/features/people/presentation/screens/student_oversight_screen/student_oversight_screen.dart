@@ -238,13 +238,24 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final loaded = students
           .map((student) => _mapApiStudentToUi(student, sectionMap, gradeMap))
           .toList();
-      final classes =
-          loaded
-              .map((student) => student.classSection)
-              .where((value) => value.trim().isNotEmpty)
-              .toSet()
-              .toList()
-            ..sort();
+      final classes = {
+        ...sections.map((section) {
+          final grade = gradeMap[section.gradeId];
+          final gradeName = _gradeLabel(grade, section);
+          final sectionName = section.sectionName.trim();
+          return gradeName.isNotEmpty && sectionName.isNotEmpty
+              ? 'Class $gradeName / Section $sectionName'
+              : gradeName.isNotEmpty
+              ? 'Class $gradeName'
+              : sectionName.isNotEmpty
+              ? 'Section $sectionName'
+              : 'Class not assigned';
+        }),
+        ...loaded.map((student) => student.classSection),
+      }
+          .where((value) => value.trim().isNotEmpty && value != 'Class not assigned')
+          .toList()
+        ..sort();
       final classOptions = ['All', ...classes];
       final scopedClassLabel = _routeClassFilterLabel(sectionMap, gradeMap);
       if (scopedClassLabel.isNotEmpty &&

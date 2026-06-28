@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -34,6 +35,12 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   String? _error;
   List<dynamic> _posts = [];
 
+  void _onNotificationChanged() {
+    if (_tabController.index == 1) {
+      _loadPosts();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -41,10 +48,16 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _tabController.addListener(() {
       if (_tabController.index == 1) _loadPosts();
     });
+    NotificationService.getInstance().then((s) {
+      if (mounted) s.addListener(_onNotificationChanged);
+    });
   }
 
   @override
   void dispose() {
+    NotificationService.getInstance().then((s) {
+      s.removeListener(_onNotificationChanged);
+    });
     _tabController.dispose();
     _titleController.dispose();
     _descController.dispose();

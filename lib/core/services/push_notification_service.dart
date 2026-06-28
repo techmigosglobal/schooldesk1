@@ -14,6 +14,7 @@ import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> schoolDeskFirebaseMessagingBackgroundHandler(
@@ -315,6 +316,7 @@ class PushNotificationService {
       ),
       payload: jsonEncode(message.data),
     );
+    NotificationService.getInstance().then((s) => s.refresh());
   }
 
   Future<void> _handleRemoteInteraction(RemoteMessage message) async {

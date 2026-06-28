@@ -106,10 +106,18 @@ class _PlannerCard extends StatelessWidget {
         planner['section_id']?.toString() ??
         '';
     final classLabel = [grade, section].where((s) => s.isNotEmpty).join(' – ');
-    final teacher =
-        _nested(planner['teacher'], 'full_name') ??
-        _nested(planner['teacher'], 'name') ??
-        'Teacher';
+    String teacher = 'Teacher';
+    if (planner['teacher'] is Map) {
+      final t = Map<String, dynamic>.from(planner['teacher']);
+      final first = t['first_name']?.toString() ?? t['firstName']?.toString() ?? '';
+      final last = t['last_name']?.toString() ?? t['lastName']?.toString() ?? '';
+      final full = '$first $last'.trim();
+      if (full.isNotEmpty) {
+        teacher = full;
+      } else {
+        teacher = t['full_name']?.toString() ?? t['name']?.toString() ?? 'Teacher';
+      }
+    }
     final weekStart = _shortDate(planner['week_start_date']);
     final weekEnd = _shortDate(planner['week_end_date']);
     final note = planner['note']?.toString() ?? '';
