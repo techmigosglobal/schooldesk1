@@ -180,13 +180,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return rows;
   }
 
-  Future<void> _openCreateEvent() async {
+  Future<void> _openCreateEvent({DateTime? initialDate}) async {
     final saved = await Navigator.of(context).push<_EventFormResult>(
       MaterialPageRoute(
         builder: (_) => _EventFormPage(
           academicYears: _academicYears,
           selectedAcademicYearId: _selectedAcademicYearId,
           initialMonth: _selectedMonth,
+          initialDate: initialDate,
         ),
       ),
     );
@@ -653,6 +654,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       year: _calendarYear,
       eventsForDay: _eventsForDay,
       onEventTap: _openDetails,
+      onEmptyDayTap: (day) => _openCreateEvent(initialDate: day),
       onPrevMonth: () {
         setState(() {
           if (_selectedMonth == 1) {
@@ -682,6 +684,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       endOfWeek: endOfWeek,
       eventsForDay: _eventsForDay,
       onEventTap: _openDetails,
+      onEmptyDayTap: (day) => _openCreateEvent(initialDate: day),
       onPrevWeek: () {
         setState(() {
           _selectedWeekStart = _selectedWeekStart.subtract(
@@ -863,6 +866,7 @@ class _EventCalendarMonth extends StatelessWidget {
   final int year;
   final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
   final ValueChanged<_PrincipalEvent> onEventTap;
+  final ValueChanged<DateTime>? onEmptyDayTap;
   final VoidCallback? onPrevMonth;
   final VoidCallback? onNextMonth;
 
@@ -871,6 +875,7 @@ class _EventCalendarMonth extends StatelessWidget {
     required this.year,
     required this.eventsForDay,
     required this.onEventTap,
+    this.onEmptyDayTap,
     this.onPrevMonth,
     this.onNextMonth,
   });
@@ -895,7 +900,9 @@ class _EventCalendarMonth extends StatelessWidget {
         day: day,
         events: events,
         onTap: events.isEmpty
-            ? null
+            ? () {
+                onEmptyDayTap?.call(day);
+              }
             : () {
                 if (events.length == 1) {
                   onEventTap(events.first);
@@ -1340,12 +1347,14 @@ class _EventFormPage extends StatefulWidget {
   final List<AcademicYearModel> academicYears;
   final String selectedAcademicYearId;
   final int initialMonth;
+  final DateTime? initialDate;
   final _PrincipalEvent? event;
 
   const _EventFormPage({
     required this.academicYears,
     required this.selectedAcademicYearId,
     required this.initialMonth,
+    this.initialDate,
     this.event,
   });
 
@@ -1399,7 +1408,7 @@ class _EventFormPageState extends State<_EventFormPage> {
     super.initState();
     final event = widget.event;
     final now = DateTime.now();
-    final fallbackDate = DateTime(now.year, widget.initialMonth, 1);
+    final fallbackDate = widget.initialDate ?? DateTime(now.year, widget.initialMonth, 1);
     _academicYearId =
         event?.academicYearId ??
         (widget.selectedAcademicYearId.isNotEmpty
@@ -1949,6 +1958,7 @@ class _EventCalendarWeek extends StatelessWidget {
   final DateTime endOfWeek;
   final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
   final ValueChanged<_PrincipalEvent> onEventTap;
+  final ValueChanged<DateTime>? onEmptyDayTap;
   final VoidCallback? onPrevWeek;
   final VoidCallback? onNextWeek;
   final VoidCallback? onGoToToday;
@@ -1958,6 +1968,7 @@ class _EventCalendarWeek extends StatelessWidget {
     required this.endOfWeek,
     required this.eventsForDay,
     required this.onEventTap,
+    this.onEmptyDayTap,
     this.onPrevWeek,
     this.onNextWeek,
     this.onGoToToday,
@@ -2081,15 +2092,7 @@ class _EventCalendarWeek extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: events.isEmpty
-                        ? Text(
-                            'No events',
-                            style: GoogleFonts.dmSans(
-                              color: principalDirectoryMuted,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          )
+                    child: events.isEmpty ? InkWell(onTap: () => onEmptyDayTap?.call(day), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text('No events', style: GoogleFonts.dmSans(color: principalDirectoryMuted, fontSize: 12, fontWeight: FontWeight.w700))))
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: events.map((event) {
@@ -2787,3 +2790,4 @@ abstract final class _SchoolCalendarData {
     ),
   ];
 }
+
