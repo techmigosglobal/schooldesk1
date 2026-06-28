@@ -88,7 +88,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	refreshToken := uuid.NewString()
 	refreshIssuedAt := time.Now().UTC()
-	refreshPayload, _ := json.Marshal(map[string]string{
+	refreshPayload, err := json.Marshal(map[string]string{
 		"user_id":     user.ID,
 		"email":       user.Email,
 		"role_id":     user.RoleID,
@@ -98,6 +98,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"linked_id":   stringValue(user.LinkedID),
 		"issued_at":   refreshIssuedAt.Format(time.RFC3339Nano),
 	})
+	if err != nil {
+		log.Printf("Failed to marshal refresh token payload: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate session"})
+		return
+	}
 	if services.Sessions != nil {
 		if err := services.Sessions.StoreRefreshToken(context.Background(), refreshToken, string(refreshPayload), 7*24*time.Hour); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to persist session"})
@@ -207,20 +212,31 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 	if strings.EqualFold(payload["role_name"], "Admin") || strings.EqualFold(user.RoleSlug, "admin") {
-		_ = services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken)
+		if err := services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken); err != nil {
+			log.Printf("Failed to revoke admin refresh token: %v", err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Admin role is no longer supported"})
 		return
 	}
 	if !refreshTokenIssuedAfterInvalidation(payload["issued_at"], user.AuthInvalidatedAt) {
-		_ = services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken)
+		if err := services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken); err != nil {
+			log.Printf("Failed to revoke expired refresh token: %v", err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token has been revoked"})
 		return
 	}
 
-	_ = services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken)
+	if err := services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken); err != nil {
+		log.Printf("Failed to revoke old refresh token: %v", err)
+	}
 	newRefresh := uuid.NewString()
 	payload["issued_at"] = time.Now().UTC().Format(time.RFC3339Nano)
-	rotatedPayload, _ := json.Marshal(payload)
+	rotatedPayload, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Failed to marshal rotated payload: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rotate session"})
+		return
+	}
 	if err := services.Sessions.StoreRefreshToken(context.Background(), newRefresh, string(rotatedPayload), 7*24*time.Hour); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rotate refresh token"})
 		return
@@ -258,15 +274,21 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Logout request binding failed: %v", err)
+	}
 
 	if services.Sessions != nil {
 		jti := c.GetString("jti")
 		if jti != "" {
-			_ = services.Sessions.RevokeJTI(context.Background(), jti, 24*time.Hour)
+			if err := services.Sessions.RevokeJTI(context.Background(), jti, 24*time.Hour); err != nil {
+				log.Printf("Failed to revoke JTI during logout: %v", err)
+			}
 		}
 		if strings.TrimSpace(req.RefreshToken) != "" {
-			_ = services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken)
+			if err := services.Sessions.RevokeRefreshToken(context.Background(), req.RefreshToken); err != nil {
+				log.Printf("Failed to revoke refresh token during logout: %v", err)
+			}
 		}
 	}
 
@@ -318,12 +340,16 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
 		return
 	}
-	_ = database.DB.Model(&models.UserSession{}).
+	if err := database.DB.Model(&models.UserSession{}).
 		Where("user_id = ?", user.ID).
-		Update("is_revoked", true).Error
+		Update("is_revoked", true).Error; err != nil {
+		log.Printf("Failed to revoke user sessions: %v", err)
+	}
 	if services.Sessions != nil {
 		if jti := strings.TrimSpace(c.GetString("jti")); jti != "" {
-			_ = services.Sessions.RevokeJTI(context.Background(), jti, 24*time.Hour)
+			if err := services.Sessions.RevokeJTI(context.Background(), jti, 24*time.Hour); err != nil {
+				log.Printf("Failed to revoke JTI after password change: %v", err)
+			}
 		}
 	}
 

@@ -204,9 +204,11 @@ func (h *FeeHandler) CreateFeeStructure(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create fee structure"})
 		return
 	}
-	_ = database.DB.Preload("FeeCategory").Preload("Grade").Preload("Section").Preload("AcademicYear").Preload("Installments", func(db *gorm.DB) *gorm.DB {
+	if err := database.DB.Preload("FeeCategory").Preload("Grade").Preload("Section").Preload("AcademicYear").Preload("Installments", func(db *gorm.DB) *gorm.DB {
 		return db.Order("installment_number ASC")
-	}).First(&structure, "id = ?", structure.ID).Error
+	}).First(&structure, "id = ?", structure.ID).Error; err != nil {
+		log.Printf("Failed to reload fee structure after creation: %v", err)
+	}
 
 	id := structure.ID
 	auditAction(c, "fees", "create", "fee_structures", &id)
@@ -654,7 +656,9 @@ func (h *FeeHandler) ApplyFeeInvoiceSync(c *gin.Context) {
 	var req struct {
 		IncludePartiallyPaid bool `json:"include_partially_paid"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Failed to bind fee invoice sync request: %v", err)
+	}
 	rows, summary, err := feeInvoiceSyncRows(scopedSchoolID(c), c.Param("id"), req.IncludePartiallyPaid, true)
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -1015,14 +1019,16 @@ func (h *FeeHandler) CreateInvoice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create invoice"})
 		return
 	}
-	_ = database.DB.
+	if err := database.DB.
 		Preload("Student").
 		Preload("Student.CurrentSection").
 		Preload("Student.CurrentSection.Grade").
 		Preload("AcademicYear").
 		Preload("Items").
 		Preload("Items.FeeCategory").
-		First(&invoice, "id = ?", invoice.ID).Error
+		First(&invoice, "id = ?", invoice.ID).Error; err != nil {
+		log.Printf("Failed to reload invoice after creation: %v", err)
+	}
 
 	id := invoice.ID
 	auditAction(c, "fees", "create", "fee_invoices", &id)

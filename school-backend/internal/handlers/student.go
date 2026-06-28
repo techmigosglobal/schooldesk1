@@ -164,7 +164,7 @@ func activeEnrollmentIDsForStudents(db *gorm.DB, schoolID string, studentIDs []s
 		ID        string
 		StudentID string
 	}
-	_ = db.Model(&models.Enrollment{}).
+	if err := db.Model(&models.Enrollment{}).
 		Select("enrollments.id, enrollments.student_id").
 		Joins("JOIN students ON students.id = enrollments.student_id").
 		Where("students.school_id = ? AND enrollments.student_id IN ?", schoolID, studentIDs).
@@ -177,7 +177,9 @@ func activeEnrollmentIDsForStudents(db *gorm.DB, schoolID string, studentIDs []s
 			enrollments.enrollment_date DESC,
 			enrollments.created_at DESC
 		`).
-		Scan(&rows)
+		Scan(&rows).Error; err != nil {
+		log.Printf("Failed to load active enrollments: %v", err)
+	}
 	for _, row := range rows {
 		if _, exists := out[row.StudentID]; exists {
 			continue
@@ -202,7 +204,7 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 	out.enrollments = activeEnrollmentIDsForStudents(db, schoolID, studentIDs)
 
 	var fees []studentFeeSummary
-	_ = db.Model(&models.FeeInvoice{}).
+	if err := db.Model(&models.FeeInvoice{}).
 		Select(`
 			student_id,
 			COALESCE(SUM(total_amount), 0) AS total_amount,
@@ -215,13 +217,15 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 		`, time.Now().UTC()).
 		Where("student_id IN ?", studentIDs).
 		Group("student_id").
-		Scan(&fees).Error
+		Scan(&fees).Error; err != nil {
+		log.Printf("Failed to load fee summaries: %v", err)
+	}
 	for _, fee := range fees {
 		out.fees[fee.StudentID] = fee
 	}
 
 	var attendance []studentAttendanceSummary
-	_ = db.Model(&models.StudentAttendance{}).
+	if err := db.Model(&models.StudentAttendance{}).
 		Select(`
 			student_id,
 			COUNT(*) AS total_marked,
@@ -231,15 +235,19 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 		`).
 		Where("student_id IN ?", studentIDs).
 		Group("student_id").
-		Scan(&attendance).Error
+		Scan(&attendance).Error; err != nil {
+		log.Printf("Failed to load attendance summaries: %v", err)
+	}
 	for _, row := range attendance {
 		out.attendance[row.StudentID] = row
 	}
 
 	var latest []models.StudentAttendance
-	_ = db.Where("student_id IN ?", studentIDs).
+	if err := db.Where("student_id IN ?", studentIDs).
 		Order("marked_at DESC").
-		Find(&latest).Error
+		Find(&latest).Error; err != nil {
+		log.Printf("Failed to load latest attendance status: %v", err)
+	}
 	for _, row := range latest {
 		if _, exists := out.lastStatus[row.StudentID]; exists {
 			continue
@@ -248,7 +256,7 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 	}
 
 	var performance []studentPerformanceSummary
-	_ = db.Table("student_marks").
+	if err := db.Table("student_marks").
 		Select(`
 			student_marks.student_id AS student_id,
 			COUNT(*) AS marks_count,
@@ -265,15 +273,19 @@ func loadStudentSummaries(db *gorm.DB, schoolID string, studentIDs []string) stu
 		Joins("JOIN exam_schedules ON exam_schedules.id = student_marks.exam_schedule_id").
 		Where("student_marks.student_id IN ? AND student_marks.is_absent = false AND student_marks.is_exempted = false", studentIDs).
 		Group("student_marks.student_id").
-		Scan(&performance).Error
+		Scan(&performance).Error; err != nil {
+		log.Printf("Failed to load performance summaries: %v", err)
+	}
 	for _, row := range performance {
 		out.performance[row.StudentID] = row
 	}
 
 	var links []models.ParentStudentLink
-	_ = db.Preload("ParentUser").
+	if err := db.Preload("ParentUser").
 		Where("school_id = ? AND student_id IN ?", schoolID, studentIDs).
-		Find(&links).Error
+		Find(&links).Error; err != nil {
+		log.Printf("Failed to load parent links: %v", err)
+	}
 	for _, link := range links {
 		if link.ParentUser == nil {
 			continue
@@ -868,7 +880,11 @@ func (h *StudentHandler) CreateEnrollment(c *gin.Context) {
 
 	enrollDate := time.Now()
 	if req.EnrollmentDate != "" {
-		enrollDate, _ = time.Parse("2006-01-02", req.EnrollmentDate)
+		enrollDate, err = time.Parse("2006-01-02", req.EnrollmentDate)
+		if err != nil {
+			log.Printf("Invalid enrollment date format: %v", err)
+			enrollDate = time.Now()
+		}
 	}
 
 	enrollment := models.Enrollment{

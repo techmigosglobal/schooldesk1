@@ -72,7 +72,7 @@ void main() async {
   _deferStartupServices();
 }
 
-void _deferStartupServices() {
+  void _deferStartupServices() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_initializeDeferredStartupServices());
   });
@@ -84,10 +84,12 @@ Future<void> _initializeDeferredStartupServices() async {
     await RoleAccessService.initialize();
     await PushNotificationService.instance.initialize();
     await PushNotificationService.instance.registerDeviceTokenIfPossible();
-  } catch (_) {
-    // Startup should not be blocked by optional role hydration or push setup.
+  } catch (error, stackTrace) {
+    // ignore: avoid_print
+    print('Deferred startup services failed: $error');
   }
 }
+
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

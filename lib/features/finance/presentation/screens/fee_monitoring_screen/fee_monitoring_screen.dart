@@ -4707,8 +4707,7 @@ class _FeeStudentRow extends StatelessWidget {
             color: _studentStatusColor(account.status),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 76,
+          Flexible(
             child: Text(
               NumberFormat.currency(
                 locale: 'en_IN',
@@ -4717,8 +4716,11 @@ class _FeeStudentRow extends StatelessWidget {
               ).format(account.balance > 0 ? account.balance : account.total),
               textAlign: TextAlign.end,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w900),
+              overflow: TextOverflow.visible,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 12,
+              ),
             ),
           ),
         ],

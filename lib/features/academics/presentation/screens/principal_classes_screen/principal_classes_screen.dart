@@ -1137,7 +1137,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
                 letterSpacing: 0,
               ),
               decoration: InputDecoration(
-                hintText: 'Search class, teacher, section',
+                hintText: tiny ? 'Search' : (compact ? 'Search class' : 'Search class, teacher'),
                 hintMaxLines: 1,
                 hintStyle: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,

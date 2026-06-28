@@ -4,6 +4,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -35,6 +36,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _homeworkToday = 0;
   String _homeworkReminderStatus = 'pending';
   int _unreadMessages = 0;
+  int _unreadNotifications = 0;
   int _attendancePending = 0;
   int _attendancePresentToday = 0;
   int _attendanceMarkedToday = 0;
@@ -67,6 +69,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         api.getAnnouncements(),
         _loadMyAttendanceSafely(api),
         _loadHomeworkReminderSafely(api),
+        _loadUnreadNotificationsCount(),
       ]);
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
       final metrics = Map<String, dynamic>.from(
@@ -104,6 +107,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
             .toList();
+        _unreadNotifications = results[4] as int? ?? 0;
         _loading = false;
       });
       _checkEndOfDayReminder();
@@ -174,6 +178,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
   }
 
+  Future<int> _loadUnreadNotificationsCount() async {
+    try {
+      final service = await NotificationService.getInstance();
+      return service.getUnreadCountForRole('teacher');
+    } catch (_) {
+      return 0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final shortName = _teacherName.split(' ').take(2).join(' ');
@@ -182,14 +195,48 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       subtitle: '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
       actions: [
-        IconButton(
-          tooltip: 'Notifications',
-          icon: const Icon(Icons.notifications_none_rounded),
-          onPressed: () => Navigator.pushNamed(
-            context,
-            AppRoutes.notificationCenter,
-            arguments: 'teacher',
-          ),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            IconButton(
+              tooltip: 'Notifications',
+              icon: const Icon(Icons.notifications_none_rounded),
+              onPressed: () => Navigator.pushNamed(
+                context,
+                AppRoutes.notificationCenter,
+                arguments: 'teacher',
+              ),
+            ),
+            if (_unreadNotifications > 0)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: context.appTheme.error,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: teacherFlowBackground,
+                      width: 2,
+                    ),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
+                    minHeight: 18,
+                  ),
+                  child: Text(
+                    _unreadNotifications > 9 ? '9+' : '$_unreadNotifications',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
         ),
       ],
       loading: _loading,

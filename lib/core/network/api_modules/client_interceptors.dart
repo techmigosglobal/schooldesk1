@@ -209,9 +209,19 @@ class _ErrorInterceptor extends Interceptor {
                 _client.clearAuthToken();
               }
               handler.next(retryErr);
+            } catch (error) {
+              developer.log(
+                'Unexpected error during retry: $error',
+                name: 'ErrorInterceptor',
+              );
+              handler.next(err);
             }
           })
-          .catchError((_) {
+          .catchError((error) {
+            developer.log(
+              'Session refresh failed: $error',
+              name: 'ErrorInterceptor',
+            );
             handler.next(err);
           });
       return;

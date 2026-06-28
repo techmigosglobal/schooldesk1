@@ -351,6 +351,8 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.PUT("/concessions/:id/decision", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideConcession)
 			fees.PATCH("/concessions/:id/decision", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideConcession)
 			fees.DELETE("/concessions/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DeleteConcession)
+			fees.GET("/diagnostics", middleware.RBACMiddleware("Principal"), feeHandler.DiagnoseFeeStructures)
+			fees.POST("/recalculate", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.RecalculateInvoices)
 			fees.POST("/reminders", middleware.RBACMiddleware("Principal"), aliasHandler.QueueFeeReminders)
 			fees.GET("/reports/exports", middleware.RBACMiddleware("Principal"), reportExportHandler.List("fee_reports"))
 			fees.POST("/reports/exports", middleware.RBACMiddleware("Principal"), reportExportHandler.Create("fee_reports"))

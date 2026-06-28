@@ -78,7 +78,10 @@ func auditAction(c *gin.Context, module, action, tableName string, recordID *str
 		IPAddress:  c.ClientIP(),
 		CreatedAt:  time.Now(),
 	}
-	_ = database.DB.Create(&log).Error
+	if err := database.DB.Create(&log).Error; err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Failed to create audit log: %v\n", err)
+	}
 }
 
 func parsePagination(c *gin.Context) (int, int) {
