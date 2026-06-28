@@ -894,7 +894,64 @@ class _EventCalendarMonth extends StatelessWidget {
       return _EventCalendarDayCell(
         day: day,
         events: events,
-        onTap: events.isEmpty ? null : () => onEventTap(events.first),
+        onTap: events.isEmpty
+            ? null
+            : () {
+                if (events.length == 1) {
+                  onEventTap(events.first);
+                } else {
+                  showModalBottomSheet<void>(
+                    context: context,
+                    backgroundColor: context.appTheme.surface,
+                    builder: (sheetCtx) {
+                      return SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                '${events.length} events on ${day.day} ${_monthName(day.month)}',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: context.appTheme.onSurface,
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            Flexible(
+                              child: ListView.builder(
+                                shrinkWrap: true,
+                                itemCount: events.length,
+                                itemBuilder: (ctx, i) {
+                                  final ev = events[i];
+                                  return ListTile(
+                                    title: Text(
+                                      ev.title,
+                                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                                    ),
+                                    subtitle: Text(
+                                      ev.typeLabel,
+                                      style: GoogleFonts.dmSans(),
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                                    onTap: () {
+                                      Navigator.pop(sheetCtx);
+                                      onEventTap(ev);
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                }
+              },
       );
     });
 

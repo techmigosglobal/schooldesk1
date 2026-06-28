@@ -583,7 +583,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              rec['date'],
+              rec['date'] ?? '',
               style: GoogleFonts.dmSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -591,7 +591,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             ),
           ),
           Text(
-            rec['time'],
+            rec['time'] ?? (rec['period_number'] != null ? 'Period ${rec['period_number']}' : '—'),
             style: GoogleFonts.dmSans(
               fontSize: 12,
               color: context.appTheme.muted,
@@ -605,7 +605,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              rec['status'],
+              rec['status'] ?? 'Unknown',
               style: GoogleFonts.dmSans(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

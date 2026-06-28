@@ -1720,7 +1720,7 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                         icon: Icons.currency_rupee_rounded,
                         color: const Color(0xFFF97316),
                         value: _formatCurrencyCompact(dueFees),
-                        label: 'Due Fees',
+                        label: 'Total Dues',
                       ),
                     ];
                     if (constraints.maxWidth < 370) {
@@ -2786,9 +2786,9 @@ List<_ClassIssueItem> _classIssueBreakdown(Map<String, dynamic> row) {
     if (feeDueStudents > 0)
       _ClassIssueItem(
         icon: Icons.account_balance_wallet_outlined,
-        label: 'Fee due students',
-        value: '$feeDueStudents',
-        note: '${_formatCurrencyCompact(feeDueAmount)} due',
+        label: 'Total Dues',
+        value: _formatCurrencyCompact(feeDueAmount),
+        note: '$feeDueStudents student${feeDueStudents == 1 ? '' : 's'}',
         color: const Color(0xFFDC2626),
       ),
     if (disciplineNotes > 0)

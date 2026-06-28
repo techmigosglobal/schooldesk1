@@ -183,11 +183,27 @@ class _PrincipalEventApprovalScreenState
                             'Destinations: ${destinations.isEmpty ? 'None' : destinations.join(', ')}',
                           ),
                           if (mediaUrls.isNotEmpty) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: mediaUrls.map((url) {
+                                final isImage = _isImage(url);
+                                if (isImage) {
+                                  return GestureDetector(
+                                    onTap: () => launchUrl(Uri.parse(url)),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        url,
+                                        height: 150,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                      ),
+                                    ),
+                                  );
+                                }
                                 return OutlinedButton.icon(
                                   onPressed: () => launchUrl(Uri.parse(url)),
                                   icon: const Icon(Icons.attachment, size: 16),
@@ -264,5 +280,14 @@ class _PrincipalEventApprovalScreenState
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList();
+  }
+
+  bool _isImage(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
   }
 }
