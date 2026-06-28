@@ -46,8 +46,15 @@ extension BackendStudentsApi on BackendApiClient {
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final payload = data['data'];
+        List<dynamic> studentsList = [];
         if (payload is List) {
-          return payload
+          studentsList = payload;
+        } else if (payload is Map && payload['students'] is List) {
+          studentsList = payload['students'];
+        }
+        
+        if (studentsList.isNotEmpty) {
+          return studentsList
               .whereType<Map>()
               .map((e) => _parentStudentDashboardMap(e))
               .toList();
@@ -79,6 +86,7 @@ extension BackendStudentsApi on BackendApiClient {
       lastName,
     ].where((part) => part.isNotEmpty).join(' ');
     row['name'] = _firstNonEmpty([row['name'], row['full_name'], fullName]);
+    row['id'] = _firstNonEmpty([row['id'], row['student_id']]);
     row['class'] = _firstNonEmpty([
       row['class'],
       row['grade_name'],

@@ -392,15 +392,24 @@ class _ParentWorkflowShortcuts extends StatelessWidget {
         AppRoutes.parentDocuments,
       ),
     ];
-    final tokens = Theme.of(context).schoolDesk;
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
     return Wrap(
       spacing: tokens.spacing.sm,
       runSpacing: tokens.spacing.sm,
       children: [
         for (final action in actions)
           ActionChip(
-            avatar: Icon(action.icon, size: 18),
-            label: Text(action.label),
+            avatar: Icon(action.icon, size: 18, color: theme.colorScheme.primary),
+            label: Text(
+              action.label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            backgroundColor: theme.colorScheme.surface,
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
             onPressed: () => Navigator.pushNamed(context, action.route),
           ),
       ],
