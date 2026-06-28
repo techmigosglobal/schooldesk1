@@ -46,6 +46,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   bool _savingPaymentConfig = false;
   bool _uploadingQr = false;
   bool _generatingInAppReport = false;
+  final Set<String> _updatingConcessionIds = <String>{};
 
   String _paymentSearchQuery = '';
   String _paymentModeFilter = 'All';
@@ -75,6 +76,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final api = BackendApiClient.instance;
       final feeStructures = await api.getFeeStructures();
       final invoices = await api.getInvoices();
+      final invoicesWithFineSync = await _applyLateFineAdjustments(invoices);
       final feeCategories = await api.getRawList('/fees/categories');
       final concessions = await api.getRawList('/fees/concessions');
       final paymentConfig = await api.getPaymentConfig();
@@ -83,7 +85,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final grades = await api.getGrades();
       final sections = await api.getSections();
       final students = await api.getStudents(page: 1, pageSize: 500);
-      final normalizedInvoices = invoices.map(_normalizeInvoice).toList();
+      final normalizedInvoices = invoicesWithFineSync.map(_normalizeInvoice).toList();
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
@@ -101,7 +103,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _pendingDues = normalizedInvoices
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
-        _recentPayments = invoices.expand(_normalizePayments).toList();
+        _recentPayments = invoicesWithFineSync.expand(_normalizePayments).toList();
         _loading = false;
       });
     } catch (error) {
@@ -152,7 +154,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return _buildLoadingSkeleton();
     }
     if (_error != null) {
       return OpsEmptyState(
@@ -201,6 +203,106 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _buildViewPicker(),
         _buildPaymentQrSettings(),
         _buildCurrentView(),
+      ],
+    );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    final base = context.appTheme.surfaceVariant.withOpacity(0.35);
+    final highlight = context.appTheme.surfaceVariant.withOpacity(0.6);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Metric cards skeleton
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: List.generate(
+            4,
+            (_) => Container(
+              width: 160,
+              height: 80,
+              decoration: BoxDecoration(
+                color: base,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 80,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: highlight,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 50,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: highlight,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        // Row skeletons
+        for (var i = 0; i < 4; i++) ...[
+          Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: base,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: highlight,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 130,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: highlight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 80,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: highlight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -669,40 +771,178 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
   }
 
+  String _concessionStatusFilter = 'All';
+
   Widget _buildConcessions() {
+    final filtered = _concessionStatusFilter == 'All'
+        ? _concessions
+        : _concessions
+              .where(
+                (c) =>
+                    _textValue(c['status'], fallback: 'pending')
+                        .toLowerCase() ==
+                    _concessionStatusFilter.toLowerCase(),
+              )
+              .toList();
+    final pendingCount = _concessions
+        .where(
+          (c) =>
+              _textValue(c['status'], fallback: 'pending').toLowerCase() ==
+              'pending',
+        )
+        .length;
+    final totalAmount = _concessions.fold<double>(
+      0,
+      (sum, c) =>
+          sum +
+          (double.tryParse(_textValue(c['amount'] ?? c['concession_amount'])) ??
+              0),
+    );
     return OpsPanel(
       title: 'Concessions',
       subtitle:
-          'Review fee concessions without mixing them into invoice balances',
-      child: _concessions.isEmpty
-          ? OpsEmptyState(
+          'Review fee concessions — $pendingCount pending · ₹${totalAmount.toStringAsFixed(0)} total',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final status in ['All', 'Pending', 'Approved', 'Rejected'])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(status),
+                      selected: _concessionStatusFilter == status,
+                      onSelected: (_) =>
+                          setState(() => _concessionStatusFilter = status),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (filtered.isEmpty)
+            OpsEmptyState(
               icon: Icons.volunteer_activism_outlined,
               title: 'No concession requests',
               message:
                   'Backend concession requests will appear here for finance review.',
             )
-          : Column(
-              children: [
-                for (final concession in _concessions.take(20))
-                  OpsListRow(
-                    icon: Icons.volunteer_activism_outlined,
-                    title: _textValue(
-                      concession['student_name'] ?? concession['student_id'],
-                      fallback: 'Concession request',
-                    ),
-                    subtitle:
-                        '${_textValue(concession['reason'], fallback: 'Reason pending')} | ${_textValue(concession['status'], fallback: 'pending')}',
-                    trailing: OpsStatusPill(
-                      label: _textValue(
-                        concession['status'],
-                        fallback: 'Pending',
-                      ),
-                      color: _statusColor(_textValue(concession['status'])),
-                    ),
-                  ),
-              ],
-            ),
+          else
+            for (final concession in filtered.take(20))
+              _buildConcessionRow(concession),
+        ],
+      ),
     );
+  }
+
+  Widget _buildConcessionRow(Map<String, dynamic> concession) {
+    final status = _textValue(concession['status'], fallback: 'pending');
+    final id = _textValue(concession['id']);
+    final canDecide = id.isNotEmpty &&
+        status.toLowerCase() != 'approved' &&
+        status.toLowerCase() != 'rejected';
+    final saving = id.isNotEmpty && _updatingConcessionIds.contains(id);
+    final amount = double.tryParse(
+          _textValue(concession['amount'] ?? concession['concession_amount']),
+        ) ??
+        0;
+    final reason = _textValue(
+      concession['reason'] ?? concession['concession_reason'],
+      fallback: 'Reason pending',
+    );
+    return OpsListRow(
+      icon: Icons.volunteer_activism_outlined,
+      title: _textValue(
+        concession['student_name'] ?? concession['student_id'],
+        fallback: 'Concession request',
+      ),
+      subtitle:
+          '$reason${amount > 0 ? ' · ₹${amount.toStringAsFixed(0)}' : ''} | $status',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OpsStatusPill(
+            label: status,
+            color: _statusColor(status),
+          ),
+          if (canDecide) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Approve concession',
+              onPressed: saving
+                  ? null
+                  : () => _updateConcessionStatus(
+                        concession,
+                        approved: true,
+                      ),
+              icon: saving
+                  ? const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check_circle_outline_rounded, size: 18),
+              color: Colors.green,
+            ),
+            IconButton(
+              tooltip: 'Reject concession',
+              onPressed: saving
+                  ? null
+                  : () => _updateConcessionStatus(
+                        concession,
+                        approved: false,
+                      ),
+              icon: const Icon(Icons.cancel_outlined, size: 18),
+              color: Colors.red,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _updateConcessionStatus(
+    Map<String, dynamic> concession, {
+    required bool approved,
+  }) async {
+    final id = _textValue(concession['id']);
+    if (id.isEmpty) {
+      _snack('Concession id is missing, cannot update status.');
+      return;
+    }
+    setState(() => _updatingConcessionIds.add(id));
+    final targetStatus = approved ? 'approved' : 'rejected';
+    try {
+      final updated = await BackendApiClient.instance.updateRaw(
+        '/fees/concessions/$id',
+        {'status': targetStatus},
+      );
+      if (!mounted) return;
+      setState(() {
+        _concessions = _concessions.map((row) {
+          if (_textValue(row['id']) != id) return row;
+          return {
+            ...row,
+            ...updated,
+            'status': _textValue(updated['status'], fallback: targetStatus),
+          };
+        }).toList();
+      });
+      _snack(
+        approved
+            ? 'Concession approved successfully.'
+            : 'Concession rejected successfully.',
+        success: true,
+      );
+    } catch (error) {
+      _snack('Unable to update concession: $error');
+    } finally {
+      if (mounted) {
+        setState(() => _updatingConcessionIds.remove(id));
+      }
+    }
   }
 
   Widget _buildReports() {
@@ -717,6 +957,8 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildAgingSummaryCard(),
+          const SizedBox(height: 12),
           // In-app PDF summary
           Card(
             margin: const EdgeInsets.only(bottom: 16),
@@ -780,6 +1022,98 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAgingSummaryCard() {
+    final buckets = _agingBuckets;
+    Widget tile(String label, int count, Color color) {
+      return Expanded(
+        child: Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withAlpha(22),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withAlpha(50)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$count',
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.timer_outlined, color: Color(0xFFD97706)),
+                SizedBox(width: 8),
+                Text(
+                  'Overdue Aging Summary',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                tile('0-30 days', buckets.$1, const Color(0xFFF59E0B)),
+                tile('31-60 days', buckets.$2, const Color(0xFFEF4444)),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withAlpha(22),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF7C3AED).withAlpha(50)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${buckets.$3}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '61+ days',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1327,6 +1661,81 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
   double get _collectedTotal =>
       _recentPayments.fold(0, (sum, row) => sum + _numValue(row['amount']));
+
+  (int, int, int) get _agingBuckets {
+    var bucket0To30 = 0;
+    var bucket31To60 = 0;
+    var bucket61Plus = 0;
+    for (final invoice in _pendingDues) {
+      final due = DateTime.tryParse(_textValue(invoice['due_date']));
+      if (due == null) continue;
+      final days = DateTime.now().difference(due).inDays;
+      if (days <= 0) continue;
+      if (days <= 30) {
+        bucket0To30++;
+      } else if (days <= 60) {
+        bucket31To60++;
+      } else {
+        bucket61Plus++;
+      }
+    }
+    return (bucket0To30, bucket31To60, bucket61Plus);
+  }
+
+  Future<List<Map<String, dynamic>>> _applyLateFineAdjustments(
+    List<Map<String, dynamic>> invoices,
+  ) async {
+    final today = DateTime.now();
+    final updatedList = invoices.map(Map<String, dynamic>.from).toList();
+    for (var i = 0; i < updatedList.length; i++) {
+      final invoice = Map<String, dynamic>.from(updatedList[i]);
+      final invoiceId = _textValue(invoice['id']);
+      final status = _textValue(invoice['status']).toLowerCase();
+      final due = DateTime.tryParse(_textValue(invoice['due_date']));
+      final balance = _numValue(invoice['balance']);
+      if (invoiceId.isEmpty || due == null || balance <= 0) continue;
+      if (status == 'paid' || status == 'cancelled') continue;
+      final overdueDays = today.difference(due).inDays;
+      if (overdueDays <= 0) continue;
+
+      final structure = _mapValue(invoice['fee_structure']);
+      final perDayFine = _numValue(
+        invoice['late_fine_per_day'] ?? structure['late_fine_per_day'],
+      );
+      if (perDayFine <= 0) continue;
+
+      final expectedFine = perDayFine * overdueDays;
+      final currentFine = _numValue(invoice['fine_amount']);
+      if ((expectedFine - currentFine).abs() < 0.5) continue;
+      try {
+        final updated = await BackendApiClient.instance.updateInvoice(
+          invoiceId,
+          fineAmount: expectedFine,
+          status: 'overdue',
+        );
+        updatedList[i] = {
+          ...invoice,
+          ...updated,
+          'fine_amount':
+              updated.containsKey('fine_amount')
+              ? _numValue(updated['fine_amount'])
+              : expectedFine,
+          'status': _textValue(updated['status'], fallback: 'overdue'),
+          'balance':
+              updated.containsKey('balance')
+              ? _numValue(updated['balance'])
+              : balance,
+        };
+      } catch (_) {
+        updatedList[i] = {
+          ...invoice,
+          'fine_amount': expectedFine,
+          'status': 'overdue',
+        };
+      }
+    }
+    return updatedList;
+  }
 
   Color _statusColor(String status) {
     final lower = status.toLowerCase();

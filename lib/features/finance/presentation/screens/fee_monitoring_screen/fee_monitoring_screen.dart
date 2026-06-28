@@ -100,6 +100,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _recentPayments = const [];
   List<Map<String, dynamic>> _paymentRequests = const [];
+  List<Map<String, dynamic>> _concessions = const [];
   List<AcademicYearModel> _academicYears = const [];
   List<GradeModel> _grades = const [];
   List<SectionModel> _sections = const [];
@@ -190,6 +191,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       } catch (_) {
         // Payment requests endpoint may not exist yet — fail gracefully.
       }
+      List<Map<String, dynamic>> concessionList = const [];
+      try {
+        concessionList = await api.getRawList('/fees/concessions');
+      } catch (_) {
+        // Concessions endpoint may not exist yet — fail gracefully.
+      }
       Map<String, dynamic> paymentConfig = const {};
       try {
         paymentConfig = await api.getPaymentConfig();
@@ -210,6 +217,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         _invoices = invoices;
         _recentPayments = payments;
         _paymentRequests = prList;
+        _concessions = concessionList;
         _academicYears = years;
         _grades = grades;
         _sections = sections;
@@ -264,9 +272,59 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     if (_loading) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 260),
-          Center(child: CircularProgressIndicator()),
+        padding: const EdgeInsets.all(18),
+        children: [
+          for (var i = 0; i < 5; i++) ...[
+            Container(
+              height: i == 0 ? 100 : 64,
+              decoration: BoxDecoration(
+                color: context.appTheme.surfaceVariant.withOpacity(0.35),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: context.appTheme.surfaceVariant.withOpacity(0.6),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 140,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: context.appTheme.surfaceVariant
+                                .withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: 90,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: context.appTheme.surfaceVariant
+                                .withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       );
     }
@@ -461,6 +519,31 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               value: '${_studentAccounts.length}',
               icon: Icons.groups_outlined,
               color: const Color(0xFFF59E0B),
+            ),
+            _FeeMetricTile(
+              label: 'Concessions Granted',
+              value: _money(
+                _concessions
+                    .where(
+                      (c) =>
+                          (_textValue(c['status'], fallback: 'pending')
+                              .toLowerCase()) ==
+                          'approved',
+                    )
+                    .fold<double>(
+                      0,
+                      (sum, c) =>
+                          sum +
+                          (double.tryParse(
+                                _textValue(
+                                  c['amount'] ?? c['concession_amount'],
+                                ),
+                              ) ??
+                              0),
+                    ),
+              ),
+              icon: Icons.volunteer_activism_outlined,
+              color: const Color(0xFF7C3AED),
             ),
           ],
         ),
@@ -1131,6 +1214,15 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               onPressed: () => _previewInvoicePdf(account),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Print Invoice'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _showGrantConcessionSheet(account),
+              icon: const Icon(Icons.volunteer_activism_outlined, size: 18),
+              label: const Text('Grant Concession'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF7C3AED),
+                side: const BorderSide(color: Color(0xFF7C3AED)),
+              ),
             ),
           ],
         ),
@@ -2011,7 +2103,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       );
       if (!mounted) return;
       setState(() => _paymentConfig = config);
-      _snack('Parent payment QR updated.', success: true);
+      _syncPaymentConfigControllers();
+      // Auto-save so the QR URL is persisted immediately
+      await _savePaymentConfig();
     } catch (error) {
       _snack('Unable to upload payment QR: $error');
     } finally {
@@ -2020,9 +2114,15 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   }
 
   void _showFeeStructureEditor() {
-    final amountController = TextEditingController();
     var method = 'equal';
+    var installmentCount = 3;
     var saving = false;
+
+    // Multi-component support: each entry has a name controller & amount controller
+    final components = <_FeeComponentEntry>[
+      _FeeComponentEntry(name: 'Tuition Fee'),
+    ];
+
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -2058,14 +2158,63 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      TextField(
-                        controller: amountController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Fee amount',
-                          prefixText: '₹ ',
-                          border: OutlineInputBorder(),
+                      // --- Fee Components ---
+                      for (var i = 0; i < components.length; i++) ...[
+                        Row(
+                          children: [
+                            Text(
+                              'Component ${i + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (components.length > 1)
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.remove_circle_outline,
+                                  size: 20,
+                                ),
+                                tooltip: 'Remove component',
+                                onPressed: () {
+                                  setSheetState(() {
+                                    components[i].dispose();
+                                    components.removeAt(i);
+                                  });
+                                },
+                              ),
+                          ],
                         ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: components[i].nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Component name',
+                            hintText: 'e.g. Tuition Fee, Transport, Lab Fee',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: components[i].amountController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Fee amount',
+                            prefixText: '₹ ',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      OutlinedButton.icon(
+                        onPressed: () => setSheetState(
+                          () => components.add(
+                            _FeeComponentEntry(name: ''),
+                          ),
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Add Fee Component'),
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -2103,24 +2252,58 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                         onChanged: (value) =>
                             setSheetState(() => method = value ?? 'equal'),
                       ),
+                      if (method != 'one_time') ...[
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          value: method == 'monthly' ? 12 : installmentCount,
+                          decoration: const InputDecoration(
+                            labelText: 'Number of installments',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: List.generate(
+                            12,
+                            (i) => DropdownMenuItem(
+                              value: i + 1,
+                              child: Text('${i + 1}'),
+                            ),
+                          ),
+                          onChanged: method == 'monthly'
+                              ? null
+                              : (value) => setSheetState(
+                                    () => installmentCount = value ?? 3,
+                                  ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       _FeeInfoBanner(
                         text:
-                            'This creates a class-linked fee component and saves installment rows used by invoice generation and parent payments.',
+                            'Add multiple fee components (Tuition, Transport, Lab, etc.) and save them all at once. Each component creates a separate fee structure entry.',
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
                         onPressed: saving
                             ? null
                             : () async {
-                                final amount =
-                                    double.tryParse(
-                                      amountController.text.trim(),
-                                    ) ??
-                                    0;
-                                if (amount <= 0) {
-                                  _snack('Enter a valid fee amount.');
-                                  return;
+                                // Validate all components
+                                for (final comp in components) {
+                                  final name =
+                                      comp.nameController.text.trim();
+                                  final amt = double.tryParse(
+                                        comp.amountController.text.trim(),
+                                      ) ??
+                                      0;
+                                  if (name.isEmpty) {
+                                    _snack(
+                                      'Enter a name for each fee component.',
+                                    );
+                                    return;
+                                  }
+                                  if (amt <= 0) {
+                                    _snack(
+                                      'Enter a valid amount for "$name".',
+                                    );
+                                    return;
+                                  }
                                 }
                                 final gradeId = _selectedGradeId.isNotEmpty
                                     ? _selectedGradeId
@@ -2139,43 +2322,67 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                   final api = BackendApiClient.instance;
                                   final categories = await api
                                       .getFeeCategories();
-                                  final category = categories.firstWhereOrNull(
-                                    (row) => _textValue(
-                                      row['category_name'] ?? row['name'],
-                                    ).toLowerCase().contains('tuition'),
-                                  );
-                                  final categoryId = category == null
-                                      ? _textValue(
-                                          (await api.createFeeCategory(
-                                            categoryName: 'Tuition Fee',
-                                            frequency: method == 'one_time'
-                                                ? 'one_time'
-                                                : 'term',
-                                          ))['id'],
-                                        )
-                                      : _textValue(category['id']);
-                                  await api.createFeeStructure(
-                                    academicYearId: yearId,
-                                    gradeId: gradeId,
-                                    sectionId: _selectedSectionId,
-                                    feeCategoryId: categoryId,
-                                    amount: amount,
-                                    installmentCount: method == 'one_time'
-                                        ? 1
-                                        : 3,
-                                    installmentMethod: method,
-                                    effectiveFrom: DateFormat(
-                                      'yyyy-MM-dd',
-                                    ).format(DateTime.now()),
-                                    installments: _defaultInstallmentPayload(
-                                      method,
-                                      amount,
-                                    ),
-                                  );
+                                  final effectiveCount = method == 'one_time'
+                                      ? 1
+                                      : method == 'monthly'
+                                          ? 12
+                                          : installmentCount;
+
+                                  for (final comp in components) {
+                                    final compName =
+                                        comp.nameController.text.trim();
+                                    final amount = double.tryParse(
+                                          comp.amountController.text.trim(),
+                                        ) ??
+                                        0;
+
+                                    // Find or create the fee category
+                                    final existing =
+                                        categories.firstWhereOrNull(
+                                      (row) =>
+                                          _textValue(
+                                            row['category_name'] ??
+                                                row['name'],
+                                          ).toLowerCase() ==
+                                          compName.toLowerCase(),
+                                    );
+                                    final categoryId = existing != null
+                                        ? _textValue(existing['id'])
+                                        : _textValue(
+                                            (await api.createFeeCategory(
+                                              categoryName: compName,
+                                              frequency: method == 'one_time'
+                                                  ? 'one_time'
+                                                  : 'term',
+                                            ))['id'],
+                                          );
+
+                                    await api.createFeeStructure(
+                                      academicYearId: yearId,
+                                      gradeId: gradeId,
+                                      sectionId: _selectedSectionId,
+                                      feeCategoryId: categoryId,
+                                      amount: amount,
+                                      installmentCount: effectiveCount,
+                                      installmentMethod: method,
+                                      effectiveFrom: DateFormat(
+                                        'yyyy-MM-dd',
+                                      ).format(DateTime.now()),
+                                      installments:
+                                          _defaultInstallmentPayload(
+                                        method,
+                                        amount,
+                                        count: effectiveCount,
+                                      ),
+                                    );
+                                  }
                                   setSheetState(() => saving = false);
                                   if (!mounted) return;
                                   Navigator.pop(context);
-                                  _snack('Fee structure saved.', success: true);
+                                  _snack(
+                                    '${components.length} fee component(s) saved.',
+                                    success: true,
+                                  );
                                   await _loadData();
                                 } catch (error) {
                                   _snack(
@@ -2202,15 +2409,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           },
         );
       },
-    ).whenComplete(amountController.dispose);
+    ).whenComplete(() {
+      for (final c in components) {
+        c.dispose();
+      }
+    });
   }
 
   List<Map<String, dynamic>> _defaultInstallmentPayload(
     String method,
-    double total,
-  ) {
+    double total, {
+    int count = 3,
+  }) {
     final now = DateTime.now();
-    if (method == 'one_time') {
+    if (method == 'one_time' || count <= 1) {
       return [
         {
           'installment_name': 'One Time Payment',
@@ -2224,23 +2436,41 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         },
       ];
     }
-    final labels = method == 'monthly'
-        ? ['Month 1', 'Month 2', 'Month 3']
-        : method == 'term'
-        ? ['Term 1', 'Term 2', 'Term 3']
-        : ['Installment 1', 'Installment 2', 'Installment 3'];
-    return List.generate(3, (index) {
-      final amount = index == 2
-          ? total - (total / 3).roundToDouble() * 2
-          : (total / 3).roundToDouble();
+    String label(int index) {
+      if (method == 'monthly') return 'Month ${index + 1}';
+      if (method == 'term') return 'Term ${index + 1}';
+      return 'Installment ${index + 1}';
+    }
+
+    // For monthly, space due dates 1 month apart; for term, use ~term-length
+    // gaps; otherwise spread evenly across the academic year (~10 months).
+    int dayGap(int index) {
+      if (method == 'monthly') {
+        return 30 * index;
+      }
+      if (method == 'term') {
+        final termLength = (300 / count).round(); // ~10 months / terms
+        return termLength * index;
+      }
+      final gap = (300 / count).round();
+      return gap * index;
+    }
+
+    final perInstallment = (total / count).floorToDouble();
+    return List.generate(count, (index) {
+      final isLast = index == count - 1;
+      final amount = isLast ? total - perInstallment * (count - 1) : perInstallment;
+      final pct = isLast
+          ? (100 - (100 ~/ count) * (count - 1))
+          : (100 ~/ count);
       return {
-        'installment_name': labels[index],
+        'installment_name': label(index),
         'installment_number': index + 1,
         'amount': amount,
-        'percentage': index == 2 ? 34 : 33,
+        'percentage': pct,
         'due_date': DateFormat(
           'yyyy-MM-dd',
-        ).format(now.add(Duration(days: 10 + (index * 90)))),
+        ).format(now.add(Duration(days: 10 + dayGap(index)))),
         'status': 'upcoming',
       };
     });
@@ -2619,6 +2849,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final concessionController = TextEditingController(
       text: _numValue(invoice['concession_amount'] ?? invoice['discount']).toStringAsFixed(0),
     );
+    final concessionReasonController = TextEditingController(
+      text: _textValue(invoice['concession_reason']),
+    );
     final notesController = TextEditingController(
       text: _textValue(invoice['notes']),
     );
@@ -2680,6 +2913,16 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              TextField(
+                controller: concessionReasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Concession Reason',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.notes_rounded),
+                  hintText: 'e.g. Scholarship, Financial hardship, Staff ward',
+                ),
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: currentStatus,
                 decoration: const InputDecoration(
@@ -2718,6 +2961,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   final amount = double.tryParse(amountController.text.trim());
                   final concession =
                       double.tryParse(concessionController.text.trim()) ?? 0;
+                  final concessionReason =
+                      concessionReasonController.text.trim();
                   final notes = notesController.text.trim();
                   try {
                     await BackendApiClient.instance.updateInvoice(
@@ -2725,6 +2970,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       dueDate: dueDate.isEmpty ? null : dueDate,
                       totalAmount: amount,
                       concessionAmount: concession > 0 ? concession : null,
+                      concessionReason: concessionReason.isEmpty
+                          ? null
+                          : concessionReason,
                       status: currentStatus,
                       notes: notes.isEmpty ? null : notes,
                     );
@@ -2845,6 +3093,256 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       _notesController.clear();
       _view = _FeeView.collectMode;
     });
+  }
+
+  Future<void> _showGrantConcessionSheet(_FeeStudentAccount account) async {
+    final amountController = TextEditingController();
+    final reasonController = TextEditingController();
+    String selectedType = 'Financial Hardship';
+    const types = [
+      'Academic',
+      'Financial Hardship',
+      'Sibling Discount',
+      'Sports / Arts',
+      'Staff Ward',
+      'Other',
+    ];
+    bool saving = false;
+
+    final granted = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            20 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7C3AED).withAlpha(18),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.volunteer_activism_outlined,
+                      color: Color(0xFF7C3AED),
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Grant Concession',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          account.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(sheetContext)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              // Student info strip
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C3AED).withAlpha(12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFF7C3AED).withAlpha(40),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${account.name}  •  ${account.classLabel}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      account.rollNumber,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(sheetContext)
+                            .colorScheme
+                            .onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                value: selectedType,
+                decoration: const InputDecoration(
+                  labelText: 'Concession Type',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: types
+                    .map(
+                      (t) => DropdownMenuItem(value: t, child: Text(t)),
+                    )
+                    .toList(),
+                onChanged: (v) =>
+                    setSheetState(() => selectedType = v ?? selectedType),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Concession Amount (₹)',
+                  prefixText: '₹ ',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reasonController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Reason',
+                  hintText: 'Why is this concession being granted?',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(sheetContext, false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              final amount = double.tryParse(
+                                amountController.text.trim(),
+                              );
+                              if (amount == null || amount <= 0) {
+                                ScaffoldMessenger.of(sheetContext)
+                                    .showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Enter a valid concession amount.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              setSheetState(() => saving = true);
+                              try {
+                                await BackendApiClient.instance.createRaw(
+                                  '/fees/concessions',
+                                  {
+                                    'student_id': account.studentId,
+                                    'student_name': account.name,
+                                    'class_section': account.classLabel,
+                                    'type': selectedType,
+                                    'amount': amount,
+                                    'concession_amount': amount,
+                                    'reason': reasonController.text.trim(),
+                                    'concession_reason':
+                                        reasonController.text.trim(),
+                                    'status': 'pending',
+                                    'submitted_at':
+                                        DateTime.now().toIso8601String(),
+                                    'academic_year_id':
+                                        account.academicYearId,
+                                  },
+                                );
+                                if (sheetContext.mounted) {
+                                  Navigator.pop(sheetContext, true);
+                                }
+                              } catch (error) {
+                                setSheetState(() => saving = false);
+                                if (sheetContext.mounted) {
+                                  ScaffoldMessenger.of(sheetContext)
+                                      .showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to submit concession: $error',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      icon: saving
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(
+                              Icons.volunteer_activism_outlined,
+                              size: 18,
+                            ),
+                      label: Text(saving ? 'Submitting...' : 'Grant'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C3AED),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (granted == true && mounted) {
+      await _loadData();
+      _snack('Concession request submitted for approval.', success: true);
+    }
   }
 
   void _continueToPaymentDetails() {
@@ -4611,6 +5109,18 @@ class _FeeAvatar extends StatelessWidget {
             )
           : null,
     );
+  }
+}
+
+class _FeeComponentEntry {
+  _FeeComponentEntry({String name = ''})
+      : nameController = TextEditingController(text: name),
+        amountController = TextEditingController();
+  final TextEditingController nameController;
+  final TextEditingController amountController;
+  void dispose() {
+    nameController.dispose();
+    amountController.dispose();
   }
 }
 

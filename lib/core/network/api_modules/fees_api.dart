@@ -358,6 +358,7 @@ extension BackendFeesApi on BackendApiClient {
     String? dueDate,
     double? totalAmount,
     double? concessionAmount,
+    String? concessionReason,
     double? fineAmount,
     String? status,
     String? notes,
@@ -368,6 +369,9 @@ extension BackendFeesApi on BackendApiClient {
       if (totalAmount != null) payload['total_amount'] = totalAmount;
       if (concessionAmount != null) {
         payload['concession_amount'] = concessionAmount;
+      }
+      if (concessionReason != null) {
+        payload['concession_reason'] = concessionReason;
       }
       if (fineAmount != null) payload['fine_amount'] = fineAmount;
       if (status != null) payload['status'] = status;

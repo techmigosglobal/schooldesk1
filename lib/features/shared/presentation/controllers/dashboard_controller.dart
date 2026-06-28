@@ -239,7 +239,7 @@ class AdminDashboardController extends BaseDashboardController {
           value: '$pendingFees',
           icon: Icons.payment,
           color: Colors.orange,
-          route: '/admin-fees-screen',
+          route: '/fee-monitoring-screen',
         ),
         DashboardKpi(
           title: 'Leave Requests',

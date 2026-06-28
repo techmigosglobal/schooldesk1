@@ -181,6 +181,17 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       title: 'Teacher',
       subtitle: '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
+      actions: [
+        IconButton(
+          tooltip: 'Notifications',
+          icon: const Icon(Icons.notifications_none_rounded),
+          onPressed: () => Navigator.pushNamed(
+            context,
+            AppRoutes.notificationCenter,
+            arguments: 'teacher',
+          ),
+        ),
+      ],
       loading: _loading,
       error: _error,
       onRefresh: _loadDashboardData,

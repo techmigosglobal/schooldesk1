@@ -44,6 +44,8 @@ class ParentPaymentRequestFormScreen extends StatefulWidget {
 
 class _ParentPaymentRequestFormScreenState
     extends State<ParentPaymentRequestFormScreen> {
+  static const List<String> _paymentModes = ['upi', 'cash', 'bank_transfer'];
+
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _utrController;
   late final TextEditingController _paymentDateController;
@@ -56,6 +58,7 @@ class _ParentPaymentRequestFormScreenState
   String? _proofName;
   String? _configError;
   Map<String, dynamic> _paymentConfig = const {};
+  String _paymentMode = 'upi';
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -78,6 +81,10 @@ class _ParentPaymentRequestFormScreenState
   bool get _upiEnabled =>
       _paymentConfig['upi_enabled'] == true &&
       (_upiId.isNotEmpty || _qrImageUrl.isNotEmpty);
+  bool get _isUpiMode => _paymentMode == 'upi';
+  bool get _isCashMode => _paymentMode == 'cash';
+  bool get _requiresProof => _isUpiMode;
+  bool get _requiresReference => !_isCashMode;
 
   String get _upiUri {
     final params = {
@@ -137,8 +144,8 @@ class _ParentPaymentRequestFormScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Pay by UPI',
-      subtitle: 'Scan, pay, and upload proof for school verification',
+      title: 'Fee Payment Request',
+      subtitle: 'Choose payment mode and submit request for verification',
       drawer: ParentDrawer(
         selectedIndex: ParentNav.fees,
         onDestinationSelected: (_) {},
@@ -155,6 +162,8 @@ class _ParentPaymentRequestFormScreenState
             _buildStudentSummary(),
             const SizedBox(height: 14),
             _buildFeeBreakdown(),
+            const SizedBox(height: 14),
+            _buildPaymentModeSelector(),
             const SizedBox(height: 14),
             _buildUpiPanel(),
             const SizedBox(height: 14),
@@ -188,7 +197,7 @@ class _ParentPaymentRequestFormScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : 'Submit UPI Proof INR ${_totalAmount.toStringAsFixed(0)}',
+                    : 'Submit ${_paymentModeLabel(_paymentMode)} Request INR ${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -210,9 +219,51 @@ class _ParentPaymentRequestFormScreenState
   bool get _canSubmit =>
       !_submitting &&
       !_loadingConfig &&
-      _upiEnabled &&
       _fees.isNotEmpty &&
-      _proofUrl != null;
+      (!_isUpiMode || _upiEnabled) &&
+      _isIsoDate(_paymentDateController.text.trim()) &&
+      (!_requiresReference || _utrController.text.trim().length >= 6) &&
+      (!_requiresProof || (_proofUrl?.isNotEmpty ?? false));
+
+  Widget _buildPaymentModeSelector() {
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Payment mode',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _paymentModes
+                .map(
+                  (mode) => ChoiceChip(
+                    label: Text(_paymentModeLabel(mode)),
+                    selected: _paymentMode == mode,
+                    onSelected: _submitting
+                        ? null
+                        : (_) => setState(() => _paymentMode = mode),
+                  ),
+                )
+                .toList(),
+          ),
+          if (_isCashMode) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Cash mode submits a pay-at-office request. No UPI setup is required.',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _buildStudentSummary() {
     final student = widget.args.student ?? const <String, dynamic>{};
@@ -314,7 +365,7 @@ class _ParentPaymentRequestFormScreenState
           Row(
             children: [
               Text(
-                'Total UPI amount',
+                'Total payable amount',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
               ),
               const Spacer(),
@@ -333,6 +384,19 @@ class _ParentPaymentRequestFormScreenState
   }
 
   Widget _buildUpiPanel() {
+    if (!_isUpiMode) {
+      return _panel(
+        child: Text(
+          _isCashMode
+              ? 'Pay this amount at the school office and submit this request for approval.'
+              : 'Enter your bank transfer reference below and submit for verification.',
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            color: context.appTheme.onSurface,
+          ),
+        ),
+      );
+    }
     if (_loadingConfig) {
       return _panel(child: const Center(child: CircularProgressIndicator()));
     }
@@ -347,7 +411,8 @@ class _ParentPaymentRequestFormScreenState
             ),
             const SizedBox(height: 8),
             Text(
-              _configError ?? 'Please contact the school office before paying.',
+              _configError ??
+                  'UPI is not available. Switch to Cash or Bank Transfer to continue.',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 color: context.appTheme.error,
@@ -440,21 +505,27 @@ class _ParentPaymentRequestFormScreenState
     return _panel(
       child: Column(
         children: [
-          TextFormField(
-            controller: _utrController,
-            enabled: !_submitting,
-            decoration: const InputDecoration(
-              labelText: 'UTR / transaction reference',
-              hintText: 'Enter UTR after successful UPI payment',
+          if (_requiresReference) ...[
+            TextFormField(
+              controller: _utrController,
+              enabled: !_submitting,
+              decoration: InputDecoration(
+                labelText: _isUpiMode
+                    ? 'UTR / transaction reference'
+                    : 'Bank transfer reference',
+                hintText: _isUpiMode
+                    ? 'Enter UTR after successful UPI payment'
+                    : 'Enter NEFT/RTGS/IMPS transaction reference',
+              ),
+              validator: (value) {
+                if ((value ?? '').trim().length < 6) {
+                  return 'Enter a valid transaction reference';
+                }
+                return null;
+              },
             ),
-            validator: (value) {
-              if ((value ?? '').trim().length < 6) {
-                return 'Enter a valid UTR / transaction reference';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
+          ],
           TextFormField(
             controller: _paymentDateController,
             enabled: !_submitting,
@@ -485,12 +556,16 @@ class _ParentPaymentRequestFormScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Upload payment screenshot',
+            _requiresProof
+                ? 'Upload payment screenshot'
+                : 'Upload proof (optional)',
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
-            'Upload the UPI success screenshot so the school can verify the transaction.',
+            _requiresProof
+                ? 'Upload the UPI success screenshot so the school can verify the transaction.'
+                : 'Optional: attach a transfer receipt or payment note for faster verification.',
             style: GoogleFonts.dmSans(
               fontSize: 12,
               color: context.appTheme.muted,
@@ -629,7 +704,7 @@ class _ParentPaymentRequestFormScreenState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_proofUrl == null || _proofUrl!.isEmpty) {
+    if (_requiresProof && (_proofUrl == null || _proofUrl!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Upload payment screenshot before submitting.'),
@@ -643,27 +718,31 @@ class _ParentPaymentRequestFormScreenState
     final references = <String>[];
     try {
       for (final fee in _fees) {
+        final reference = _utrController.text.trim();
+        final fallbackReference =
+            'REQ-${_paymentMode.toUpperCase()}-${DateTime.now().millisecondsSinceEpoch}-${_text(fee['id'])}';
         final request = await BackendApiClient.instance
             .submitParentPaymentRequest(
               PaymentRequest(
                 invoiceId: '${fee['id']}',
-                receiptNumber: _utrController.text.trim(),
+                receiptNumber:
+                    reference.isNotEmpty ? reference : fallbackReference,
                 amountPaid: (fee['amount'] as num?)?.toDouble() ?? 0,
                 paymentDate: _paymentDateController.text.trim(),
-                paymentMode: 'upi',
-                transactionId: _utrController.text.trim(),
-                proofUrl: _proofUrl,
+                paymentMode: _paymentMode,
+                transactionId: reference.isNotEmpty ? reference : null,
+                proofUrl: (_proofUrl?.isNotEmpty ?? false) ? _proofUrl : null,
               ),
               remarks: _remarksController.text.trim(),
             );
-        final reference = '${request['request_reference'] ?? ''}'.trim();
-        if (reference.isNotEmpty) references.add(reference);
+        final requestReference = '${request['request_reference'] ?? ''}'.trim();
+        if (requestReference.isNotEmpty) references.add(requestReference);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Payment proof submitted. Fees will be updated in 12-24 hrs.',
+            '${_paymentModeLabel(_paymentMode)} request submitted. Fees will be updated in 12-24 hrs.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -712,6 +791,17 @@ class _ParentPaymentRequestFormScreenState
     }
     if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
     return '${EnvConfig.apiOrigin}/$trimmed';
+  }
+
+  String _paymentModeLabel(String mode) {
+    switch (mode) {
+      case 'cash':
+        return 'Cash';
+      case 'bank_transfer':
+        return 'Bank Transfer';
+      default:
+        return 'UPI';
+    }
   }
 }
 

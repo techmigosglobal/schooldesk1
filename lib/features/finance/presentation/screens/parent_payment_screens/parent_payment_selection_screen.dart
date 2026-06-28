@@ -124,6 +124,9 @@ class _ParentPaymentSelectionScreenState
         final isSelected = _selectedInvoiceIds.contains(id);
         final amount = (fee['amount'] as num?)?.toDouble() ?? 0;
         final dueDate = fee['dueDate'] ?? fee['due_date'] ?? '';
+        final instNum = fee['installment_number'];
+        final instTotal = fee['installment_count'];
+        final hasInstallmentInfo = instNum != null && instTotal != null;
 
         return InkWell(
           onTap: () {
@@ -186,6 +189,36 @@ class _ParentPaymentSelectionScreenState
                           color: context.appTheme.onSurface,
                         ),
                       ),
+                      if (hasInstallmentInfo) ...[
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    context.appTheme.primary.withAlpha(15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color:
+                                      context.appTheme.primary.withAlpha(40),
+                                ),
+                              ),
+                              child: Text(
+                                'Installment $instNum of $instTotal',
+                                style: GoogleFonts.ibmPlexSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.appTheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       if (dueDate.toString().isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(

@@ -104,6 +104,10 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             'dueDate': (inv['due_date'] ?? '').toString(),
             'status': _statusFromInvoice(status, balance, inv['due_date']),
             'items': _invoiceItems(inv),
+            // Installment position fields for badge and progress indicator
+            'installment_number': inv['installment_number'],
+            'installment_count':
+                inv['installment_count'] ?? inv['total_installments'],
           };
         }).toList();
 
@@ -190,7 +194,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         title: 'My Fees',
         subtitle: 'Fee overview, installments, and payment history',
         drawer: drawer,
-        body: const Center(child: CircularProgressIndicator()),
+        body: const _FeeLoadingSkeleton(),
       );
     }
     if (_error != null || _childrenData.isEmpty) {
@@ -608,12 +612,23 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     final isPaid = status == 'Paid';
     final meta = <String>[
       if (_text(fee['dueDate']).isNotEmpty) 'Due: ${_text(fee['dueDate'])}',
-    ].where((part) => part.isNotEmpty).join(' • ');
+    ].where((part) => part.isNotEmpty).join(' \u2022 ');
     final statusColor = isPaid
         ? context.appTheme.success
         : isPending
         ? context.appTheme.warning
         : context.appTheme.muted;
+
+    // Installment position fields
+    final instNum = fee['installment_number'];
+    final instTotal = fee['installment_count'];
+    final hasInstallmentInfo = instNum != null && instTotal != null;
+    final instProgress = hasInstallmentInfo
+        ? (int.tryParse('$instNum') ?? 0) /
+              (int.tryParse('$instTotal') ?? 1)
+              .clamp(1, double.infinity)
+        : null;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -626,98 +641,163 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
               : context.appTheme.outlineVariant,
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: statusColor.withAlpha(18),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              isPaid
-                  ? Icons.check_circle_rounded
-                  : isPending
-                  ? Icons.schedule_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: statusColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _text(fee['component'], fallback: 'Invoice'),
-                  style: GoogleFonts.ibmPlexSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                if (meta.isNotEmpty)
-                  Text(
-                    meta,
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 11,
-                      color: context.appTheme.muted,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          Row(
             children: [
-              Text(
-                _money((fee['amount'] as num?)?.toDouble() ?? 0),
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusColor.withAlpha(18),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  isPaid
+                      ? Icons.check_circle_rounded
+                      : isPending
+                      ? Icons.schedule_rounded
+                      : Icons.radio_button_unchecked_rounded,
                   color: statusColor,
+                  size: 20,
                 ),
               ),
-              if (showPayBtn && isPending)
-                TextButton(
-                  onPressed: () => _openPaymentRequestForm(singleFee: fee),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _text(fee['component'], fallback: 'Invoice'),
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (hasInstallmentInfo)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _headerColor.withAlpha(18),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _headerColor.withAlpha(50),
+                              ),
+                            ),
+                            child: Text(
+                              '$instNum/$instTotal',
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _headerColor,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                  child: Text(
-                    'Pay installment',
+                    if (meta.isNotEmpty)
+                      Text(
+                        meta,
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 11,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _money((fee['amount'] as num?)?.toDouble() ?? 0),
                     style: GoogleFonts.ibmPlexSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _headerColor,
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withAlpha(18),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    status,
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                       color: statusColor,
                     ),
                   ),
-                ),
+                  if (showPayBtn && isPending)
+                    TextButton(
+                      onPressed: () => _openPaymentRequestForm(singleFee: fee),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                      ),
+                      child: Text(
+                        'Pay installment',
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _headerColor,
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withAlpha(18),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        status,
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
+          // Installment progress bar
+          if (hasInstallmentInfo && instProgress != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: instProgress,
+                      minHeight: 5,
+                      backgroundColor:
+                          context.appTheme.outlineVariant.withAlpha(80),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isPaid ? context.appTheme.success : _headerColor,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Installment $instNum of $instTotal',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: context.appTheme.muted,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -1086,34 +1166,47 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   String _installmentLabel(Map<String, dynamic> invoice) {
     final term = invoice['term'];
+    String base = '';
     if (term is Map) {
       final termName = term['term_name'] ?? term['name'] ?? '';
       if (termName.toString().isNotEmpty) {
-        return termName.toString();
+        base = termName.toString();
       }
     }
-    final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
-    final invoiceNumber = _text(invoice['invoice_number']);
-    if (dueDate == null) {
-      return invoiceNumber.isEmpty
-          ? 'Fee installment'
-          : 'Invoice $invoiceNumber';
+    if (base.isEmpty) {
+      final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
+      final invoiceNumber = _text(invoice['invoice_number']);
+      if (dueDate == null) {
+        base = invoiceNumber.isEmpty
+            ? 'Fee installment'
+            : 'Invoice $invoiceNumber';
+      } else {
+        const months = [
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
+        ];
+        base = '${months[dueDate.month - 1]} ${dueDate.year}';
+      }
     }
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return '${months[dueDate.month - 1]} ${dueDate.year}';
+    // Append installment number if available (e.g., "1 of 3")
+    final instNum = invoice['installment_number'];
+    final instTotal = invoice['installment_count'] ?? invoice['total_installments'];
+    if (instNum != null && instTotal != null) {
+      return '$base ($instNum of $instTotal)';
+    } else if (instNum != null) {
+      return '$base (#$instNum)';
+    }
+    return base;
   }
 
   String _statusFromInvoice(String rawStatus, double balance, Object? dueDate) {
@@ -1145,12 +1238,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   String _paymentStatusLabel(dynamic raw) {
     switch ('${raw ?? ''}'.toLowerCase()) {
       case 'approved':
+        return 'Verified & Approved';
       case 'paid':
         return 'Paid';
       case 'rejected':
         return 'Rejected';
+      case 'pending':
+      case 'submitted':
+        return 'Pending Principal Approval';
       default:
-        return 'Pending verification';
+        return 'Pending Verification';
     }
   }
 
@@ -1212,5 +1309,121 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   String _text(dynamic value, {String fallback = ''}) {
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? fallback : text;
+  }
+}
+
+class _FeeLoadingSkeleton extends StatelessWidget {
+  const _FeeLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final shimmerBase = context.appTheme.surfaceVariant.withOpacity(0.4);
+    final shimmerHighlight = context.appTheme.surfaceVariant.withOpacity(0.7);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Summary card skeleton
+        Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color: shimmerBase,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 120,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: shimmerHighlight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: 200,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: shimmerHighlight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 160,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: shimmerHighlight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Fee row skeletons
+        for (var i = 0; i < 4; i++) ...[
+          Container(
+            height: 72,
+            decoration: BoxDecoration(
+              color: shimmerBase,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: shimmerHighlight,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 140,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: shimmerHighlight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: 90,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: shimmerHighlight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 60,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: shimmerHighlight,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
   }
 }

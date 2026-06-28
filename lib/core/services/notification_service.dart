@@ -177,6 +177,39 @@ class NotificationService extends ChangeNotifier {
       ),
     );
   }
+
+  Future<void> triggerInvoiceGeneratedAlert({
+    required int invoiceCount,
+    required String classLabel,
+    required String termLabel,
+  }) async {
+    if (!getSetting('fee_reminders')) return;
+    // Notify parents about new invoices
+    await addNotification(
+      AppNotification.transient(
+        title: 'New Fee Invoices Generated',
+        body:
+            '$invoiceCount invoice(s) generated for $classLabel — $termLabel. Please check "My Fees" for details.',
+        category: NotificationCategory.feeDue,
+        role: 'parent',
+        priority: NotificationPriority.high,
+      ),
+    );
+    // Also create a backend notification so parents see it on next login
+    try {
+      await _api.createRaw('/notifications', {
+        'title': 'New Fee Invoices Generated',
+        'body':
+            '$invoiceCount invoice(s) generated for $classLabel — $termLabel. Please check "My Fees" for payment details and due dates.',
+        'category': NotificationCategory.feeDue,
+        'target_role': 'parent',
+        'priority': 'high',
+        'reference_type': 'fee_invoice',
+      });
+    } catch (_) {
+      // Notification delivery is best-effort
+    }
+  }
 }
 
 class NotificationCategory {

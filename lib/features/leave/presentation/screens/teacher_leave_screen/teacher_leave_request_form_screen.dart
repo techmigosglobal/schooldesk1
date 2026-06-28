@@ -208,11 +208,11 @@ class _TeacherLeaveRequestFormScreenState
                   ),
                   const SizedBox(height: 12),
                 ],
-                // General leave request card was removed from here.
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compactDates = constraints.maxWidth < 380;
+                    final fields = [
+                      TextFormField(
                         controller: _fromDateController,
                         readOnly: true,
                         decoration: const InputDecoration(
@@ -222,6 +222,14 @@ class _TeacherLeaveRequestFormScreenState
                           suffixIcon: Icon(Icons.calendar_today_outlined),
                           isDense: true,
                           floatingLabelBehavior: FloatingLabelBehavior.always,
+                          prefixIconConstraints: BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          suffixIconConstraints: BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
@@ -229,10 +237,7 @@ class _TeacherLeaveRequestFormScreenState
                             ? null
                             : () => _pickDateField(isFrom: true),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextFormField(
+                      TextFormField(
                         controller: _toDateController,
                         readOnly: true,
                         decoration: const InputDecoration(
@@ -242,6 +247,14 @@ class _TeacherLeaveRequestFormScreenState
                           suffixIcon: Icon(Icons.calendar_today_outlined),
                           isDense: true,
                           floatingLabelBehavior: FloatingLabelBehavior.always,
+                          prefixIconConstraints: BoxConstraints(
+                            minWidth: 40,
+                            minHeight: 40,
+                          ),
+                          suffixIconConstraints: BoxConstraints(
+                            minWidth: 36,
+                            minHeight: 36,
+                          ),
                         ),
                         validator: (value) =>
                             (value ?? '').trim().isEmpty ? 'Required' : null,
@@ -249,8 +262,24 @@ class _TeacherLeaveRequestFormScreenState
                             ? null
                             : () => _pickDateField(isFrom: false),
                       ),
-                    ),
-                  ],
+                    ];
+                    if (compactDates) {
+                      return Column(
+                        children: [
+                          fields[0],
+                          const SizedBox(height: 10),
+                          fields[1],
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: fields[0]),
+                        const SizedBox(width: 10),
+                        Expanded(child: fields[1]),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile(

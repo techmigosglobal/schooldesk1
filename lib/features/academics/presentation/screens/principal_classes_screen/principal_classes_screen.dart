@@ -1101,6 +1101,7 @@ class _ClassesDirectorySearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = _classesCompact(context);
+    final tiny = _classesTiny(context);
     return Container(
       constraints: BoxConstraints(minHeight: compact ? 48 : 52),
       padding: EdgeInsets.symmetric(vertical: compact ? 4 : 5),
@@ -1118,20 +1119,20 @@ class _ClassesDirectorySearchField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox(width: compact ? 12 : 16),
+          SizedBox(width: tiny ? 8 : (compact ? 12 : 16)),
           Icon(
             Icons.search_rounded,
             color: _classesDirectoryMuted,
-            size: compact ? 21 : 23,
+            size: tiny ? 20 : (compact ? 21 : 23),
           ),
-          SizedBox(width: compact ? 7 : 10),
+          SizedBox(width: tiny ? 6 : (compact ? 7 : 10)),
           Expanded(
             child: TextField(
               onChanged: onChanged,
               maxLines: 1,
               style: GoogleFonts.dmSans(
                 color: _classesDirectoryInk,
-                fontSize: compact ? 14 : 15,
+                fontSize: tiny ? 13 : (compact ? 14 : 15),
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0,
               ),
@@ -1140,9 +1141,9 @@ class _ClassesDirectorySearchField extends StatelessWidget {
                 hintMaxLines: 1,
                 hintStyle: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,
-                  fontSize: compact ? 13 : 14,
+                  fontSize: tiny ? 12 : (compact ? 13 : 14),
                   fontWeight: FontWeight.w500,
-                  letterSpacing: 0,
+                  letterSpacing: tiny ? -0.2 : 0,
                 ),
                 border: InputBorder.none,
                 isDense: true,
@@ -1153,11 +1154,18 @@ class _ClassesDirectorySearchField extends StatelessWidget {
           IconButton(
             tooltip: 'Filter classes',
             onPressed: onFilter,
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-            icon: Icon(Icons.tune_rounded, size: compact ? 21 : 23),
+            constraints: BoxConstraints(
+              minWidth: tiny ? 32 : 40,
+              minHeight: tiny ? 32 : 40,
+            ),
+            padding: tiny ? EdgeInsets.zero : const EdgeInsets.all(8.0),
+            icon: Icon(
+              Icons.tune_rounded,
+              size: tiny ? 20 : (compact ? 21 : 23),
+            ),
             color: _classesDirectoryMuted,
           ),
-          SizedBox(width: compact ? 4 : 8),
+          SizedBox(width: tiny ? 4 : (compact ? 4 : 8)),
         ],
       ),
     );

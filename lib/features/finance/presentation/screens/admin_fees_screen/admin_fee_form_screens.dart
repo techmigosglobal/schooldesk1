@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
@@ -288,7 +289,7 @@ class _AdminFeeStructureFormScreenState
     return Column(
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _selectedYearId,
+          value: _selectedYearId,
           decoration: const InputDecoration(labelText: 'Academic year'),
           items: widget.args.academicYears
               .map(
@@ -305,7 +306,7 @@ class _AdminFeeStructureFormScreenState
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _selectedGradeId,
+          value: _selectedGradeId,
           decoration: const InputDecoration(labelText: 'Class'),
           items: widget.args.grades
               .map(
@@ -329,7 +330,7 @@ class _AdminFeeStructureFormScreenState
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _selectedSectionId,
+          value: _selectedSectionId,
           decoration: const InputDecoration(labelText: 'Section scope'),
           items: [
             const DropdownMenuItem(value: '', child: Text('All sections')),
@@ -345,7 +346,7 @@ class _AdminFeeStructureFormScreenState
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _selectedCategoryId,
+          value: _selectedCategoryId,
           decoration: const InputDecoration(labelText: 'Fee category'),
           items: widget.args.feeCategories
               .map(
@@ -707,7 +708,7 @@ class _AdminInvoiceGenerationFormScreenState
     return Column(
       children: [
         DropdownButtonFormField<String>(
-          initialValue: _selectedYearId,
+          value: _selectedYearId,
           decoration: const InputDecoration(labelText: 'Academic year'),
           items: widget.args.academicYears
               .map(
@@ -725,7 +726,7 @@ class _AdminInvoiceGenerationFormScreenState
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           key: ValueKey('invoice-term-$_selectedYearId-$_selectedTermId'),
-          initialValue: _selectedTermId.isEmpty ? null : _selectedTermId,
+          value: _selectedTermId.isEmpty ? null : _selectedTermId,
           decoration: const InputDecoration(labelText: 'Term'),
           items: _terms
               .map(
@@ -752,7 +753,7 @@ class _AdminInvoiceGenerationFormScreenState
           ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _selectedGradeId,
+          value: _selectedGradeId,
           decoration: const InputDecoration(labelText: 'Class'),
           items: widget.args.grades
               .map(
@@ -801,7 +802,7 @@ class _AdminInvoiceGenerationFormScreenState
         if (_scope == 'section' || _scope == 'student') ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _selectedSectionId.isEmpty
+            value: _selectedSectionId.isEmpty
                 ? null
                 : _selectedSectionId,
             decoration: InputDecoration(
@@ -832,7 +833,7 @@ class _AdminInvoiceGenerationFormScreenState
         if (_scope == 'student') ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            initialValue: _selectedStudentId.isEmpty
+            value: _selectedStudentId.isEmpty
                 ? null
                 : _selectedStudentId,
             decoration: const InputDecoration(labelText: 'Student'),
@@ -966,10 +967,30 @@ class _AdminInvoiceGenerationFormScreenState
             'due_date': _dueDateController.text.trim(),
           });
       if (!mounted) return;
+      final createdCount = (result['created'] as num?)?.toInt() ?? 0;
+      // Send notification to parents about new invoices
+      if (createdCount > 0) {
+        try {
+          final gradeLabel = widget.args.grades
+                  .where((g) => g.id == _selectedGradeId)
+                  .firstOrNull
+                  ?.gradeName ??
+              'Class';
+          final notifService = await NotificationService.getInstance();
+          await notifService.triggerInvoiceGeneratedAlert(
+            invoiceCount: createdCount,
+            classLabel: gradeLabel,
+            termLabel: _selectedTermLabel,
+          );
+        } catch (_) {
+          // Notification is best-effort
+        }
+      }
+      if (!mounted) return;
       Navigator.pop(
         context,
         AdminInvoiceGenerationFormResult(
-          created: (result['created'] as num?)?.toInt() ?? 0,
+          created: createdCount,
           skipped: (result['skipped'] as num?)?.toInt() ?? 0,
         ),
       );
@@ -1156,7 +1177,7 @@ class _AdminPaymentRecordFormScreenState
 
   Widget _buildInvoiceSelector() {
     return DropdownButtonFormField<String>(
-      initialValue: _selectedInvoiceId,
+      value: _selectedInvoiceId,
       decoration: const InputDecoration(labelText: 'Outstanding invoice'),
       items: _pendingDues
           .map(
@@ -1223,7 +1244,7 @@ class _AdminPaymentRecordFormScreenState
         ),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          initialValue: _paymentMode,
+          value: _paymentMode,
           decoration: const InputDecoration(labelText: 'Payment mode'),
           items: const [
             DropdownMenuItem(value: 'cash', child: Text('Cash')),

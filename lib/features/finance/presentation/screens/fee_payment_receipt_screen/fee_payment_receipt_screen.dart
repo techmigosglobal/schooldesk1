@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:printing/printing.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -27,27 +28,52 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
   final _amountCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   String _selectedMethod = 'UPI';
-  String _selectedFeeType = 'Term 1 Fee';
+  String _selectedFeeType = '';
+  String _historyStatusFilter = 'all';
   int _activeChildIndex = 0;
-
-  final List<String> _paymentMethods = [
-    'UPI',
-    'Net Banking',
-    'Credit Card',
-    'Debit Card',
-    'Cash',
-  ];
-  final List<String> _feeTypes = [
-    'Term 1 Fee',
-    'Term 2 Fee',
-    'Term 3 Fee',
-    'Activity Fee',
-  ];
+  DateTimeRange? _historyDateRange;
 
   List<Map<String, dynamic>> _children = [];
 
   List<Map<String, dynamic>> _receipts = [];
   List<Map<String, dynamic>> _invoices = [];
+
+  List<String> get _paymentMethods {
+    if (_children.isEmpty) return const ['UPI', 'Cash', 'Bank Transfer'];
+    final methods = <String>{'UPI', 'Cash', 'Bank Transfer'};
+    for (final receipt in _receipts) {
+      if ('${receipt['studentId'] ?? ''}' != _activeStudentId) continue;
+      final mode = '${receipt['paymentMethod'] ?? ''}'.trim();
+      if (mode.isNotEmpty) methods.add(mode);
+    }
+    return methods.toList();
+  }
+
+  List<String> get _feeTypes {
+    final types = <String>{};
+    for (final invoice in _activeInvoices) {
+      final invoiceNumber = '${invoice['invoice_number'] ?? ''}'.trim();
+      final termName = '${invoice['term_name'] ?? invoice['term'] ?? ''}'.trim();
+      if (invoiceNumber.isNotEmpty) types.add(invoiceNumber);
+      if (termName.isNotEmpty) types.add(termName);
+    }
+    return types.isEmpty ? const ['Fee Payment'] : types.toList();
+  }
+
+  List<int> get _amountSuggestions {
+    final amounts = <int>{};
+    for (final invoice in _activeInvoices) {
+      final balance = (invoice['balance'] as num?)?.toInt() ??
+          ((invoice['net_amount'] as num?)?.toInt() ?? 0) -
+              ((invoice['paid_amount'] as num?)?.toInt() ?? 0);
+      if (balance > 0) amounts.add(balance);
+    }
+    if (amounts.isEmpty) {
+      final due = _activeDueAmount.toInt();
+      if (due > 0) amounts.add(due);
+    }
+    return amounts.take(4).toList();
+  }
 
   @override
   void initState() {
@@ -59,15 +85,28 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
   Future<void> _loadData() async {
     try {
       final children = await BackendApiClient.instance.getMyStudents();
+      final safeIndex =
+          children.isEmpty
+          ? 0
+          : (_activeChildIndex >= children.length ? 0 : _activeChildIndex);
+      final activeStudentId =
+          children.isEmpty
+          ? ''
+          : '${children[safeIndex]['id'] ?? children[safeIndex]['student_id'] ?? ''}'
+                .trim();
       final invoices = await BackendApiClient.instance.getInvoices();
       final paymentRequests = await BackendApiClient.instance
-          .getParentPaymentRequests();
+          .getParentPaymentRequests(
+            studentId: activeStudentId.isEmpty ? null : activeStudentId,
+          );
       final receipts = <Map<String, dynamic>>[];
       for (final invoice in invoices) {
         final payments = invoice['payments'];
         final student = invoice['student'] is Map
             ? Map<String, dynamic>.from(invoice['student'] as Map)
             : const <String, dynamic>{};
+        final studentId =
+            '${invoice['student_id'] ?? student['id'] ?? student['student_id'] ?? ''}';
         if (payments is List) {
           for (final rawPayment in payments.whereType<Map>()) {
             final payment = Map<String, dynamic>.from(rawPayment);
@@ -77,6 +116,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
             receipts.add({
               'id': payment['id'] ?? invoice['id'],
               'receiptNo': payment['receipt_number'] ?? '',
+              'studentId': studentId,
               'studentName':
                   '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                       .trim(),
@@ -106,6 +146,8 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
         receipts.add({
           'id': request['id'] ?? invoice['id'],
           'receiptNo': request['request_reference'] ?? '',
+          'studentId':
+              '${request['student_id'] ?? student['id'] ?? student['student_id'] ?? ''}',
           'studentName':
               '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
                   .trim(),
@@ -125,6 +167,13 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
         if (_activeChildIndex >= _children.length) _activeChildIndex = 0;
         _invoices = invoices;
         _receipts = receipts;
+        if (_feeTypes.isNotEmpty && !_feeTypes.contains(_selectedFeeType)) {
+          _selectedFeeType = _feeTypes.first;
+        }
+        if (_paymentMethods.isNotEmpty &&
+            !_paymentMethods.contains(_selectedMethod)) {
+          _selectedMethod = _paymentMethods.first;
+        }
         _loading = false;
       });
     } catch (e) {
@@ -235,7 +284,16 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
           final isActive = e.key == _activeChildIndex;
           return Expanded(
             child: GestureDetector(
-              onTap: () => setState(() => _activeChildIndex = e.key),
+              onTap: () => setState(() {
+                _activeChildIndex = e.key;
+                if (_feeTypes.isNotEmpty && !_feeTypes.contains(_selectedFeeType)) {
+                  _selectedFeeType = _feeTypes.first;
+                }
+                if (_paymentMethods.isNotEmpty &&
+                    !_paymentMethods.contains(_selectedMethod)) {
+                  _selectedMethod = _paymentMethods.first;
+                }
+              }),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: EdgeInsets.only(right: e.key == 0 ? 8 : 0),
@@ -551,7 +609,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 8,
-                    children: [22000, 18000, 5000, 2500].map((amt) {
+                    children: _amountSuggestions.map((amt) {
                       return GestureDetector(
                         onTap: () =>
                             setState(() => _amountCtrl.text = amt.toString()),
@@ -704,10 +762,32 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
   }
 
   Widget _buildReceiptHistoryTab() {
-    final childName = _studentName(_children[_activeChildIndex]);
-    final filtered =
-        _receipts.where((r) => r['studentName'] == childName).toList()
-          ..sort((a, b) => (b['date'] as int).compareTo(a['date'] as int));
+    final childId = _activeStudentId;
+    final filtered = _receipts.where((receipt) {
+      if ('${receipt['studentId'] ?? ''}' != childId) return false;
+      if (_historyStatusFilter != 'all' &&
+          '${receipt['status'] ?? ''}'.toLowerCase() != _historyStatusFilter) {
+        return false;
+      }
+      if (_historyDateRange != null) {
+        final date = DateTime.fromMillisecondsSinceEpoch(receipt['date'] as int);
+        final start = DateTime(
+          _historyDateRange!.start.year,
+          _historyDateRange!.start.month,
+          _historyDateRange!.start.day,
+        );
+        final end = DateTime(
+          _historyDateRange!.end.year,
+          _historyDateRange!.end.month,
+          _historyDateRange!.end.day,
+          23,
+          59,
+          59,
+        );
+        if (date.isBefore(start) || date.isAfter(end)) return false;
+      }
+      return true;
+    }).toList()..sort((a, b) => (b['date'] as int).compareTo(a['date'] as int));
 
     if (filtered.isEmpty) {
       return Center(
@@ -732,12 +812,78 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: filtered.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) => _buildReceiptCard(filtered[i]),
+    return Column(
+      children: [
+        _buildHistoryFilters(),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: filtered.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) => _buildReceiptCard(filtered[i]),
+          ),
+        ),
+      ],
     );
+  }
+
+  Widget _buildHistoryFilters() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      color: const Color(0xFFF5F6FA),
+      child: Row(
+        children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _historyStatusFilter,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Status',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All')),
+                DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+              ],
+              onChanged: (value) => setState(
+                () => _historyStatusFilter = (value ?? 'all').toLowerCase(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton.icon(
+            onPressed: _pickHistoryDateRange,
+            icon: const Icon(Icons.date_range_rounded, size: 18),
+            label: Text(
+              _historyDateRange == null
+                  ? 'Date range'
+                  : '${_historyDateRange!.start.day}/${_historyDateRange!.start.month} - ${_historyDateRange!.end.day}/${_historyDateRange!.end.month}',
+            ),
+          ),
+          if (_historyDateRange != null)
+            IconButton(
+              tooltip: 'Clear date filter',
+              onPressed: () => setState(() => _historyDateRange = null),
+              icon: const Icon(Icons.clear_rounded),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickHistoryDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: _historyDateRange,
+      saveText: 'Apply',
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _historyDateRange = picked);
   }
 
   Widget _buildReceiptCard(Map<String, dynamic> receipt) {
@@ -872,25 +1018,41 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
                 ),
               ),
               if (isPaid)
-                TextButton.icon(
-                  onPressed: () => _downloadReceipt(receipt),
-                  icon: const Icon(Icons.download_rounded, size: 16),
-                  label: Text(
-                    'PDF',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () => _downloadReceipt(receipt),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      label: Text(
+                        'PDF',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: _headerColor,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: _headerColor,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+                    IconButton(
+                      tooltip: 'Share receipt',
+                      onPressed: () => _shareReceipt(receipt),
+                      icon: const Icon(Icons.share_rounded, size: 18),
+                      color: _headerColor,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      padding: EdgeInsets.zero,
                     ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+                  ],
                 ),
             ],
           ),
@@ -923,6 +1085,7 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
     var newReceipt = {
       'id': invoice['id'],
       'receiptNo': receiptNo,
+      'studentId': _activeStudentId,
       'studentName': _studentName(child),
       'className': _studentClass(child),
       'rollNo': _studentRoll(child),
@@ -946,10 +1109,26 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
               transactionId: txnId,
             ),
           );
+      final backendReference =
+          '${request['request_reference'] ?? request['receipt_number'] ?? ''}'
+              .trim();
+      final backendTransaction =
+          '${request['transaction_id'] ?? request['txn_id'] ?? ''}'.trim();
+      final backendMode =
+          '${request['payment_mode'] ?? request['mode'] ?? ''}'.trim();
       newReceipt = {
         ...newReceipt,
         'id': request['id'] ?? newReceipt['id'],
-        'receiptNo': request['request_reference'] ?? newReceipt['receiptNo'],
+        'receiptNo':
+            backendReference.isNotEmpty
+            ? backendReference
+            : newReceipt['receiptNo'],
+        'paymentMethod':
+            backendMode.isNotEmpty ? backendMode : newReceipt['paymentMethod'],
+        'transactionId':
+            backendTransaction.isNotEmpty
+            ? backendTransaction
+            : newReceipt['transactionId'],
         'status': _paymentStatusLabel(request['status']),
       };
       await _loadData();
@@ -984,8 +1163,14 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
   String _studentRoll(Map<String, dynamic> student) =>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';
 
-  String get _activeStudentId =>
-      '${_children[_activeChildIndex]['id'] ?? _children[_activeChildIndex]['student_id'] ?? ''}';
+  String _studentId(Map<String, dynamic> student) =>
+      '${student['id'] ?? student['student_id'] ?? ''}'.trim();
+
+  String get _activeStudentId {
+    if (_children.isEmpty) return '';
+    final index = _activeChildIndex >= _children.length ? 0 : _activeChildIndex;
+    return _studentId(_children[index]);
+  }
 
   List<Map<String, dynamic>> get _activeInvoices => _invoices.where((invoice) {
     final invoiceStudent = invoice['student'] is Map
@@ -1122,40 +1307,9 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
 
   Future<void> _downloadReceipt(Map<String, dynamic> receipt) async {
     try {
-      if (receipt['status'] != 'Paid') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Receipt PDF is available after school approval.'),
-          ),
-        );
-        return;
-      }
-      final pdfService = PdfService.getInstance();
-      final amount = (receipt['amount'] as num).toDouble();
-      final date = DateTime.fromMillisecondsSinceEpoch(receipt['date'] as int);
-
-      final pdfBytes = await pdfService.generateFeeReceipt(
-        receiptNo: receipt['receiptNo'] as String,
-        studentName: receipt['studentName'] as String,
-        className: receipt['className'] as String,
-        rollNo: receipt['rollNo'] as String,
-        parentName: receipt['parentName'] as String? ?? '',
-        feeItems: [
-          {
-            'description': receipt['feeType'] as String,
-            'amount': amount,
-            'status': receipt['status'] as String,
-          },
-        ],
-        totalAmount: amount,
-        paidAmount: amount,
-        balance: 0,
-        paymentMode: receipt['paymentMethod'] as String,
-        paymentDate: date,
-      );
-
-      if (!mounted) return;
-      await pdfService.previewDocument(
+      final pdfBytes = await _buildReceiptPdf(receipt);
+      if (pdfBytes == null || !mounted) return;
+      await PdfService.getInstance().previewDocument(
         context,
         pdfBytes,
         'Fee receipt ${receipt['receiptNo']}',
@@ -1169,6 +1323,60 @@ class _FeePaymentReceiptScreenState extends State<FeePaymentReceiptScreen>
         ),
       );
     }
+  }
+
+  Future<void> _shareReceipt(Map<String, dynamic> receipt) async {
+    try {
+      final pdfBytes = await _buildReceiptPdf(receipt);
+      if (pdfBytes == null || !mounted) return;
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: 'fee_receipt_${receipt['receiptNo']}.pdf',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not share receipt: $e'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+    }
+  }
+
+  Future<Uint8List?> _buildReceiptPdf(Map<String, dynamic> receipt) async {
+    if (receipt['status'] != 'Paid') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Receipt PDF is available after school approval.'),
+          ),
+        );
+      }
+      return null;
+    }
+    final pdfService = PdfService.getInstance();
+    final amount = (receipt['amount'] as num).toDouble();
+    final date = DateTime.fromMillisecondsSinceEpoch(receipt['date'] as int);
+    return pdfService.generateFeeReceipt(
+      receiptNo: receipt['receiptNo'] as String,
+      studentName: receipt['studentName'] as String,
+      className: receipt['className'] as String,
+      rollNo: receipt['rollNo'] as String,
+      parentName: receipt['parentName'] as String? ?? '',
+      feeItems: [
+        {
+          'description': receipt['feeType'] as String,
+          'amount': amount,
+          'status': receipt['status'] as String,
+        },
+      ],
+      totalAmount: amount,
+      paidAmount: amount,
+      balance: 0,
+      paymentMode: receipt['paymentMethod'] as String,
+      paymentDate: date,
+    );
   }
 
   IconData _methodIcon(String method) {
