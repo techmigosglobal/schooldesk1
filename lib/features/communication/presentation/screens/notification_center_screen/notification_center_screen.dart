@@ -302,17 +302,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         setState(() => _parentFilter = filter),
                   ),
                   SizedBox(height: tokens.spacing.lg),
-                  _ParentUnreadSummaryCard(unreadCount: unreadCount),
-                  SizedBox(height: tokens.spacing.lg),
-                  _ParentPushStatusCard(
-                    status: PushNotificationService.instance.runtimeStatus,
-                    onRetry: () async {
-                      await PushNotificationService.instance
-                          .registerDeviceTokenIfPossible();
-                      if (mounted) setState(() {});
-                    },
-                  ),
-                  SizedBox(height: tokens.spacing.lg),
                   Text(
                     'Today',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(

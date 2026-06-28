@@ -1147,7 +1147,9 @@ class _ClassesDirectorySearchField extends StatelessWidget {
                 ),
                 border: InputBorder.none,
                 isDense: true,
-                contentPadding: EdgeInsets.zero,
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: tiny ? 10 : (compact ? 12 : 14),
+                ),
               ),
             ),
           ),

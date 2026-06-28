@@ -969,7 +969,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 8,
           mainAxisSpacing: 8,
-          childAspectRatio: 1,
+          childAspectRatio: 0.88,
           children: [
             _FeeMiniMetric(
               label: 'Total Students',
@@ -4403,12 +4403,26 @@ class _FeeMiniMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _FeeCard(
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: context.appTheme.onSurface.withAlpha(8),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           _FeeIconBadge(icon: icon, color: color, compact: true),
-          const SizedBox(height: 7),
+          const SizedBox(height: 6),
           Text(
             value,
             maxLines: 1,
@@ -4423,7 +4437,7 @@ class _FeeMiniMetric extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 8.5,
-              height: 1.05,
+              height: 1.1,
               fontWeight: FontWeight.w800,
               color: context.appTheme.muted,
             ),
