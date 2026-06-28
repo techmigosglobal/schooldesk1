@@ -48,7 +48,13 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> markAsRead(String id) async {
-    await _api.markNotificationRead(id);
+    if (!id.startsWith('transient_')) {
+      try {
+        await _api.markNotificationRead(id);
+      } catch (_) {
+        // If the backend fails, still mark it locally so the user isn't stuck
+      }
+    }
     final idx = _notifications.indexWhere((n) => n.id == id);
     if (idx >= 0) {
       _notifications[idx] = _notifications[idx].copyWith(isRead: true);
@@ -61,7 +67,13 @@ class NotificationService extends ChangeNotifier {
       (n) => (n.role == role || n.role == 'all') && !n.isRead,
     );
     for (final notification in targets) {
-      await _api.markNotificationRead(notification.id);
+      if (!notification.id.startsWith('transient_')) {
+        try {
+          await _api.markNotificationRead(notification.id);
+        } catch (_) {
+          // Ignore individual failures to ensure all are marked locally
+        }
+      }
     }
     _notifications = _notifications
         .map(
