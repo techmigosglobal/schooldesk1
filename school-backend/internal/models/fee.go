@@ -26,6 +26,10 @@ type FeeStructure struct {
 	SectionID         *string          `gorm:"type:uuid;index" json:"section_id,omitempty"`
 	FeeCategoryID     string           `gorm:"type:uuid;not null" json:"fee_category_id"`
 	Amount            float64          `json:"amount"`
+	FeeType           string           `gorm:"type:text;default:'tuition';index" json:"fee_type"`
+	BillingMode       string           `gorm:"type:text;default:'term_wise';index" json:"billing_mode"`
+	Priority          int              `gorm:"default:2;index" json:"priority"`
+	IsActive          bool             `gorm:"default:true;index" json:"is_active"`
 	DueDay            int              `json:"due_day"`
 	LateFinePerDay    float64          `json:"late_fine_per_day"`
 	InstallmentCount  int              `gorm:"default:3" json:"installment_count"`

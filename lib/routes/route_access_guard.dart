@@ -197,6 +197,8 @@ class RouteAccessGuard {
   }
 
   static String _normalizeRole(String? role) {
-    return (role ?? '').trim().toLowerCase();
+    final normalized = (role ?? '').trim().toLowerCase();
+    if (normalized == 'admin') return 'principal';
+    return normalized;
   }
 }

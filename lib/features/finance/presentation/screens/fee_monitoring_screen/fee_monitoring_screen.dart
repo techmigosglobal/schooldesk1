@@ -669,9 +669,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                     _FeeActionRow(
                       icon: Icons.calendar_month_outlined,
                       iconColor: const Color(0xFF7C3AED),
-                      title: 'Installment Plan',
+                      title: 'Fee Items & Payment Rules',
                       subtitle:
-                          'Equal Installments, Percentage Division, Custom Amounts, Monthly Payments, Term Wise, One Time Payment',
+                          'Book & Kit is one-time; Tuition is split automatically for parents',
                       onTap: () {
                         final bundle =
                             selectedBundle ?? _structureBundles.firstOrNull;
@@ -2121,12 +2121,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   }
 
   void _showFeeStructureEditor() {
-    var method = 'equal';
-    var installmentCount = 3;
     var saving = false;
 
-    // Multi-component support: each entry has a name controller & amount controller
     final components = <_FeeComponentEntry>[
+      _FeeComponentEntry(name: 'Book & Kit Fee'),
       _FeeComponentEntry(name: 'Tuition Fee'),
     ];
 
@@ -2198,7 +2196,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           controller: components[i].nameController,
                           decoration: const InputDecoration(
                             labelText: 'Component name',
-                            hintText: 'e.g. Tuition Fee, Transport, Lab Fee',
+                            hintText: 'Book & Kit Fee or Tuition Fee',
                             border: OutlineInputBorder(),
                           ),
                         ),
@@ -2219,70 +2217,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           () => components.add(_FeeComponentEntry(name: '')),
                         ),
                         icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Add Fee Component'),
+                        label: const Text('Add Fee Item'),
                       ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: method,
-                        decoration: const InputDecoration(
-                          labelText: 'Installment method',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'equal',
-                            child: Text('Equal Installments'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'percentage',
-                            child: Text('Percentage Division'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'custom',
-                            child: Text('Custom Amounts'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'monthly',
-                            child: Text('Monthly Payments'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'term',
-                            child: Text('Term Wise'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'one_time',
-                            child: Text('One Time Payment'),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setSheetState(() => method = value ?? 'equal'),
-                      ),
-                      if (method != 'one_time') ...[
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<int>(
-                          value: method == 'monthly' ? 12 : installmentCount,
-                          decoration: const InputDecoration(
-                            labelText: 'Number of installments',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: List.generate(
-                            12,
-                            (i) => DropdownMenuItem(
-                              value: i + 1,
-                              child: Text('${i + 1}'),
-                            ),
-                          ),
-                          onChanged: method == 'monthly'
-                              ? null
-                              : (value) => setSheetState(
-                                  () => installmentCount = value ?? 3,
-                                ),
-                        ),
-                      ],
                       const SizedBox(height: 12),
                       _FeeInfoBanner(
                         text:
-                            'Add multiple fee components (Tuition, Transport, Lab, etc.) and save them all at once. Each component creates a separate fee structure entry.',
+                            'Principal sets only the total amount and due date. Book & Kit Fee stays one-time. Tuition Fee is automatically divided monthly or term-wise for parents.',
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -2325,11 +2265,6 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                   final api = BackendApiClient.instance;
                                   final categories = await api
                                       .getFeeCategories();
-                                  final effectiveCount = method == 'one_time'
-                                      ? 1
-                                      : method == 'monthly'
-                                      ? 12
-                                      : installmentCount;
 
                                   for (final comp in components) {
                                     final compName = comp.nameController.text
@@ -2339,6 +2274,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                           comp.amountController.text.trim(),
                                         ) ??
                                         0;
+                                    final feeType = _feeTypeForName(compName);
+                                    final billingMode = feeType == 'book_kit'
+                                        ? 'one_time'
+                                        : 'term_wise';
 
                                     // Find or create the fee category
                                     final existing = categories
@@ -2355,9 +2294,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                         : _textValue(
                                             (await api.createFeeCategory(
                                               categoryName: compName,
-                                              frequency: method == 'one_time'
+                                              frequency: feeType == 'book_kit'
                                                   ? 'one_time'
-                                                  : 'term',
+                                                  : 'yearly',
                                             ))['id'],
                                           );
 
@@ -2367,16 +2306,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                       sectionId: _selectedSectionId,
                                       feeCategoryId: categoryId,
                                       amount: amount,
-                                      installmentCount: effectiveCount,
-                                      installmentMethod: method,
+                                      feeType: feeType,
+                                      billingMode: billingMode,
+                                      priority: feeType == 'book_kit' ? 1 : 2,
                                       effectiveFrom: DateFormat(
                                         'yyyy-MM-dd',
                                       ).format(DateTime.now()),
-                                      installments: _defaultInstallmentPayload(
-                                        method,
-                                        amount,
-                                        count: effectiveCount,
-                                      ),
                                     );
                                   }
                                   setSheetState(() => saving = false);
@@ -2419,66 +2354,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     });
   }
 
-  List<Map<String, dynamic>> _defaultInstallmentPayload(
-    String method,
-    double total, {
-    int count = 3,
-  }) {
-    final now = DateTime.now();
-    if (method == 'one_time' || count <= 1) {
-      return [
-        {
-          'installment_name': 'One Time Payment',
-          'installment_number': 1,
-          'amount': total,
-          'percentage': 100,
-          'due_date': DateFormat(
-            'yyyy-MM-dd',
-          ).format(now.add(const Duration(days: 10))),
-          'status': 'upcoming',
-        },
-      ];
-    }
-    String label(int index) {
-      if (method == 'monthly') return 'Month ${index + 1}';
-      if (method == 'term') return 'Term ${index + 1}';
-      return 'Installment ${index + 1}';
-    }
-
-    // For monthly, space due dates 1 month apart; for term, use ~term-length
-    // gaps; otherwise spread evenly across the academic year (~10 months).
-    int dayGap(int index) {
-      if (method == 'monthly') {
-        return 30 * index;
-      }
-      if (method == 'term') {
-        final termLength = (300 / count).round(); // ~10 months / terms
-        return termLength * index;
-      }
-      final gap = (300 / count).round();
-      return gap * index;
-    }
-
-    final perInstallment = (total / count).floorToDouble();
-    return List.generate(count, (index) {
-      final isLast = index == count - 1;
-      final amount = isLast
-          ? total - perInstallment * (count - 1)
-          : perInstallment;
-      final pct = isLast
-          ? (100 - (100 ~/ count) * (count - 1))
-          : (100 ~/ count);
-      return {
-        'installment_name': label(index),
-        'installment_number': index + 1,
-        'amount': amount,
-        'percentage': pct,
-        'due_date': DateFormat(
-          'yyyy-MM-dd',
-        ).format(now.add(Duration(days: 10 + dayGap(index)))),
-        'status': 'upcoming',
-      };
-    });
+  String _feeTypeForName(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('book') || lower.contains('kit')) return 'book_kit';
+    return 'tuition';
   }
 
   void _openStructureDetails(_FeeStructureBundle bundle) {

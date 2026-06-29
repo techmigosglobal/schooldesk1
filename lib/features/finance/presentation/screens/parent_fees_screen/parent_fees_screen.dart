@@ -75,6 +75,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       if (children.isNotEmpty) {
         final child = children[_activeChildIndex];
         final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
+        final feeRows = studentId.isEmpty
+            ? <Map<String, dynamic>>[]
+            : await BackendApiClient.instance.getParentStudentFees(studentId);
         final invoices = studentId.isEmpty
             ? <Map<String, dynamic>>[]
             : await BackendApiClient.instance.getInvoices(studentId: studentId);
@@ -83,33 +86,45 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             : await BackendApiClient.instance.getParentPaymentRequests(
                 studentId: studentId,
               );
-        feeList = invoices.map((inv) {
-          final status = (inv['status'] ?? '').toString().toLowerCase();
-          final balance = (inv['balance'] as num?)?.toDouble() ?? 0;
-          final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0;
-          final total =
-              (inv['net_amount'] as num?)?.toDouble() ??
-              (inv['total_amount'] as num?)?.toDouble() ??
-              balance + paid;
-          // Backend integration: invoice/payment values are rendered only from
-          // the fee APIs. Missing payment metadata remains empty in the UI.
-          return {
-            'id': inv['id'],
-            'invoiceNumber': inv['invoice_number'] ?? '',
-            'component': _installmentLabel(inv),
-            'frequency': 'Installment',
-            'amount': balance,
-            'paidAmount': paid,
-            'totalAmount': total,
-            'dueDate': (inv['due_date'] ?? '').toString(),
-            'status': _statusFromInvoice(status, balance, inv['due_date']),
-            'items': _invoiceItems(inv),
-            // Installment position fields for badge and progress indicator
-            'installment_number': inv['installment_number'],
-            'installment_count':
-                inv['installment_count'] ?? inv['total_installments'],
-          };
-        }).toList();
+        feeList =
+            feeRows.map((inv) {
+              final balance =
+                  (inv['balance_amount'] as num?)?.toDouble() ??
+                  (inv['balance'] as num?)?.toDouble() ??
+                  0;
+              final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0;
+              final total =
+                  (inv['total_amount'] as num?)?.toDouble() ?? balance + paid;
+              final feeType = _text(inv['fee_type']);
+              return {
+                'id': inv['id'],
+                'invoiceNumber': inv['invoice_number'] ?? '',
+                'component': _text(
+                  inv['fee_item_name'],
+                  fallback: feeType == 'book_kit'
+                      ? 'Book & Kit Fee'
+                      : 'Tuition Fee',
+                ),
+                'fee_type': feeType,
+                'billing_mode': inv['billing_mode'],
+                'priority': inv['priority'],
+                'frequency': feeType == 'book_kit' ? 'One Time' : 'Tuition',
+                'amount': balance,
+                'paidAmount': paid,
+                'totalAmount': total,
+                'dueDate': (inv['due_date'] ?? '').toString(),
+                'status': _statusFromFeeRow(inv),
+                'monthly_amount': inv['monthly_amount'],
+                'term_amount': inv['term_amount'],
+                'term_count': inv['term_count'],
+                'rejection_reason': inv['rejection_reason'],
+                'items': _invoiceItems(inv),
+              };
+            }).toList()..sort((a, b) {
+              final left = (a['priority'] as num?)?.toInt() ?? 99;
+              final right = (b['priority'] as num?)?.toInt() ?? 99;
+              return left.compareTo(right);
+            });
 
         for (final inv in invoices) {
           final payments = inv['payments'];
@@ -405,7 +420,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           _buildDueSummaryCard(),
           const SizedBox(height: 16),
           Text(
-            'Fee Installments',
+            'Fee Items',
             style: GoogleFonts.ibmPlexSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -436,7 +451,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   onPressed: () => _openPaymentRequestForm(),
                   icon: const Icon(Icons.payment_rounded, size: 18),
                   label: Text(
-                    'Pay installment — ${_money(_pendingAmount)}',
+                    'Pay next fee',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -537,7 +552,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Next Installment Due',
+                    'Next Fee Due',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -589,7 +604,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                         elevation: 0,
                       ),
                       child: Text(
-                        'Pay installment',
+                        'Pay fee',
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -735,7 +750,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                         ),
                       ),
                       child: Text(
-                        'Pay installment',
+                        'Pay fee',
                         style: GoogleFonts.ibmPlexSans(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -787,7 +802,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Installment $instNum of $instTotal',
+                  'Fee interval $instNum of $instTotal',
                   style: GoogleFonts.ibmPlexSans(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -1128,9 +1143,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   }) async {
     final pendingFees = singleFee != null
         ? [singleFee]
-        : _feeStructure
-              .where((f) => ((f['amount'] as num?)?.toDouble() ?? 0) > 0)
-              .toList();
+        : [
+            if (_nextPendingFee != null) _nextPendingFee!,
+          ];
     if (pendingFees.isEmpty) return;
     final student = _childrenData.isEmpty
         ? null
@@ -1162,57 +1177,28 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   String _studentRoll(Map<String, dynamic> student) =>
       '${student['rollNo'] ?? student['roll_no'] ?? student['student_code'] ?? ''}';
 
-  String _installmentLabel(Map<String, dynamic> invoice) {
-    final term = invoice['term'];
-    String base = '';
-    if (term is Map) {
-      final termName = term['term_name'] ?? term['name'] ?? '';
-      if (termName.toString().isNotEmpty) {
-        base = termName.toString();
-      }
+  String _statusFromFeeRow(Map<String, dynamic> row) {
+    final raw = _text(row['status']).toLowerCase();
+    final balance =
+        (row['balance_amount'] as num?)?.toDouble() ??
+        (row['balance'] as num?)?.toDouble() ??
+        0;
+    switch (raw) {
+      case 'paid':
+        return 'Paid';
+      case 'partial':
+        return 'Partial';
+      case 'pending_approval':
+        return 'Pending Approval';
+      case 'rejected':
+        return 'Rejected';
+      case 'overdue':
+        return 'Due';
     }
-    if (base.isEmpty) {
-      final dueDate = DateTime.tryParse('${invoice['due_date'] ?? ''}');
-      final invoiceNumber = _text(invoice['invoice_number']);
-      if (dueDate == null) {
-        base = invoiceNumber.isEmpty
-            ? 'Fee installment'
-            : 'Invoice $invoiceNumber';
-      } else {
-        const months = [
-          'January',
-          'February',
-          'March',
-          'April',
-          'May',
-          'June',
-          'July',
-          'August',
-          'September',
-          'October',
-          'November',
-          'December',
-        ];
-        base = '${months[dueDate.month - 1]} ${dueDate.year}';
-      }
-    }
-    // Append installment number if available (e.g., "1 of 3")
-    final instNum = invoice['installment_number'];
-    final instTotal =
-        invoice['installment_count'] ?? invoice['total_installments'];
-    if (instNum != null && instTotal != null) {
-      return '$base ($instNum of $instTotal)';
-    } else if (instNum != null) {
-      return '$base (#$instNum)';
-    }
-    return base;
-  }
-
-  String _statusFromInvoice(String rawStatus, double balance, Object? dueDate) {
-    if (rawStatus == 'paid' || balance <= 0) return 'Paid';
-    final date = DateTime.tryParse('${dueDate ?? ''}');
+    if (balance <= 0) return 'Paid';
+    final date = DateTime.tryParse('${row['due_date'] ?? ''}');
     if (date != null && date.isBefore(DateTime.now())) return 'Due';
-    return 'Upcoming';
+    return 'Pending';
   }
 
   List<Map<String, dynamic>> _invoiceItems(Map<String, dynamic> invoice) {

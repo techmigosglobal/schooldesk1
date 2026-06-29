@@ -116,7 +116,6 @@ class _AdminFeeStructureFormScreenState
   late String _selectedGradeId;
   late String _selectedSectionId;
   late String _selectedCategoryId;
-  late int _selectedInstallmentCount;
   bool _replaceExisting = false;
   bool _saving = false;
 
@@ -124,15 +123,6 @@ class _AdminFeeStructureFormScreenState
       widget.args.academicYears.isNotEmpty &&
       widget.args.grades.isNotEmpty &&
       widget.args.feeCategories.isNotEmpty;
-
-  double get _enteredAmount => double.tryParse(_amountController.text) ?? 0;
-
-  double get _perInstallmentAmount {
-    final count = _selectedInstallmentCount <= 0
-        ? 3
-        : _selectedInstallmentCount;
-    return _enteredAmount / count;
-  }
 
   @override
   void initState() {
@@ -154,8 +144,6 @@ class _AdminFeeStructureFormScreenState
       '${fee['fee_category_id'] ?? ''}',
       widget.args.feeCategories.map((category) => '${category['id']}'),
     );
-    _selectedInstallmentCount =
-        (fee['installment_count'] as num?)?.toInt() ?? 3;
     _amountController = TextEditingController(
       text: _controllerNumber(fee['amount'] ?? fee['total'] ?? fee['tuition']),
     );
@@ -415,30 +403,7 @@ class _AdminFeeStructureFormScreenState
           },
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<int>(
-          value: _selectedInstallmentCount,
-          decoration: const InputDecoration(
-            labelText: 'Installments parents can pay',
-            helperText:
-                'Default is 3. This controls how parent dues are split.',
-          ),
-          items: List.generate(12, (index) => index + 1)
-              .map(
-                (count) => DropdownMenuItem(
-                  value: count,
-                  child: Text(
-                    '$count ${count == 1 ? 'Installment' : 'Installments'}',
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: _saving
-              ? null
-              : (value) =>
-                    setState(() => _selectedInstallmentCount = value ?? 3),
-        ),
-        const SizedBox(height: 12),
-        _buildInstallmentPreview(),
+        _automaticSplitNotice(),
         if (!widget.args.isEditing) ...[
           const SizedBox(height: 12),
           SwitchListTile.adaptive(
@@ -457,7 +422,7 @@ class _AdminFeeStructureFormScreenState
     );
   }
 
-  Widget _buildInstallmentPreview() {
+  Widget _automaticSplitNotice() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -467,8 +432,7 @@ class _AdminFeeStructureFormScreenState
         border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Text(
-        'Per installment: INR ${_perInstallmentAmount.toStringAsFixed(0)} '
-        'x $_selectedInstallmentCount = INR ${_enteredAmount.toStringAsFixed(0)}',
+        'Principal sets only the fee amount and due day. Book & Kit stays one-time; Tuition is automatically divided monthly or term-wise for parents.',
         style: GoogleFonts.dmSans(
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -495,7 +459,6 @@ class _AdminFeeStructureFormScreenState
           amount: double.parse(_amountController.text),
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
-          installmentCount: _selectedInstallmentCount,
         );
       } else {
         await BackendApiClient.instance.createFeeStructure(
@@ -506,7 +469,6 @@ class _AdminFeeStructureFormScreenState
           amount: double.parse(_amountController.text),
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
-          installmentCount: _selectedInstallmentCount,
           replaceExisting: _replaceExisting,
         );
       }
@@ -802,9 +764,7 @@ class _AdminInvoiceGenerationFormScreenState
         if (_scope == 'section' || _scope == 'student') ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _selectedSectionId.isEmpty
-                ? null
-                : _selectedSectionId,
+            value: _selectedSectionId.isEmpty ? null : _selectedSectionId,
             decoration: InputDecoration(
               labelText: _scope == 'section' ? 'Section' : 'Filter by section',
             ),
@@ -833,9 +793,7 @@ class _AdminInvoiceGenerationFormScreenState
         if (_scope == 'student') ...[
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _selectedStudentId.isEmpty
-                ? null
-                : _selectedStudentId,
+            value: _selectedStudentId.isEmpty ? null : _selectedStudentId,
             decoration: const InputDecoration(labelText: 'Student'),
             items: _studentOptions
                 .map(
@@ -971,7 +929,8 @@ class _AdminInvoiceGenerationFormScreenState
       // Send notification to parents about new invoices
       if (createdCount > 0) {
         try {
-          final gradeLabel = widget.args.grades
+          final gradeLabel =
+              widget.args.grades
                   .where((g) => g.id == _selectedGradeId)
                   .firstOrNull
                   ?.gradeName ??

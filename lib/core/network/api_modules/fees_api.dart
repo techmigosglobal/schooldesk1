@@ -97,6 +97,10 @@ extension BackendFeesApi on BackendApiClient {
     String sectionId = '',
     required String feeCategoryId,
     required double amount,
+    String feeType = '',
+    String billingMode = '',
+    int priority = 0,
+    bool isActive = true,
     int dueDay = 10,
     double lateFinePerDay = 0,
     int installmentCount = 3,
@@ -114,6 +118,10 @@ extension BackendFeesApi on BackendApiClient {
           if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
           'fee_category_id': feeCategoryId.trim(),
           'amount': amount,
+          if (feeType.trim().isNotEmpty) 'fee_type': feeType.trim(),
+          if (billingMode.trim().isNotEmpty) 'billing_mode': billingMode.trim(),
+          if (priority > 0) 'priority': priority,
+          'is_active': isActive,
           'due_day': dueDay,
           'late_fine_per_day': lateFinePerDay,
           'installment_count': installmentCount,
@@ -143,6 +151,10 @@ extension BackendFeesApi on BackendApiClient {
     String? sectionId,
     String? feeCategoryId,
     double? amount,
+    String? feeType,
+    String? billingMode,
+    int? priority,
+    bool? isActive,
     int? dueDay,
     double? lateFinePerDay,
     int? installmentCount,
@@ -157,6 +169,10 @@ extension BackendFeesApi on BackendApiClient {
       if (sectionId != null) payload['section_id'] = sectionId;
       if (feeCategoryId != null) payload['fee_category_id'] = feeCategoryId;
       if (amount != null) payload['amount'] = amount;
+      if (feeType != null) payload['fee_type'] = feeType;
+      if (billingMode != null) payload['billing_mode'] = billingMode;
+      if (priority != null) payload['priority'] = priority;
+      if (isActive != null) payload['is_active'] = isActive;
       if (dueDay != null) payload['due_day'] = dueDay;
       if (lateFinePerDay != null) {
         payload['late_fine_per_day'] = lateFinePerDay;

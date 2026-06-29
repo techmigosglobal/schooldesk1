@@ -40,6 +40,65 @@ extension BackendFeePaymentsApi on BackendApiClient {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getParentStudentFees(
+    String studentId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '/parent/students/${studentId.trim()}/fees',
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return _asListMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to load student fees',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> submitFeePaymentProof({
+    required String studentFeeId,
+    required double amount,
+    required String paymentMethod,
+    required String transactionRef,
+    required String screenshotPath,
+    required String screenshotName,
+    int selectedMonths = 0,
+    int selectedTerms = 0,
+    String remarks = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payments/submit',
+        data: FormData.fromMap({
+          'student_fee_id': studentFeeId.trim(),
+          'amount': amount.toStringAsFixed(2),
+          'payment_method': paymentMethod.trim(),
+          'transaction_ref': transactionRef.trim(),
+          if (selectedMonths > 0) 'selected_months': selectedMonths,
+          if (selectedTerms > 0) 'selected_terms': selectedTerms,
+          if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+          'screenshot': await MultipartFile.fromFile(
+            screenshotPath,
+            filename: screenshotName,
+          ),
+        }),
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to submit payment proof',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> getPaymentConfig({String invoiceId = ''}) async {
     try {
       final response = await _dio.get(

@@ -59,14 +59,14 @@ void main() {
       expect(source, contains('Manage Fee Structures'));
       expect(source, contains('Payments Overview'));
       expect(source, contains('Student Payments'));
-      expect(source, contains('Installment Plan'));
+      expect(source, contains('Fee Items & Payment Rules'));
       expect(source, contains('Create / Edit Structure'));
       expect(source, contains('Fee Structure Details'));
       expect(source, contains('Fee Components'));
       expect(source, contains('Equal Installments'));
       expect(source, contains('Percentage Division'));
       expect(source, contains('Custom Amounts'));
-      expect(source, contains('Monthly Payments'));
+      expect(source, contains('Tuition is split automatically'));
       expect(source, contains('Term Wise'));
       expect(source, contains('One Time Payment'));
       expect(source, contains('Students'));

@@ -592,10 +592,23 @@ class _PrincipalEventApprovalScreenState
   }
 
   Widget _metaChip(IconData icon, String label) {
+    final colors = context.appTheme;
     return Chip(
-      avatar: Icon(icon, size: 16),
-      label: Text(label, overflow: TextOverflow.ellipsis),
+      avatar: Icon(icon, size: 16, color: colors.onSurfaceVariant),
+      label: Text(
+        label,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: colors.onSurface,
+        ),
+      ),
+      backgroundColor: colors.surface,
+      side: BorderSide(color: colors.outlineVariant),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     );
   }
 

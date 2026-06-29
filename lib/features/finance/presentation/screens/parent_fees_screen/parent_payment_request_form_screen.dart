@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,11 +53,14 @@ class _ParentPaymentRequestFormScreenState
   bool _loadingConfig = true;
   bool _uploadingProof = false;
   bool _submitting = false;
-  String? _proofUrl;
   String? _proofName;
+  String? _proofPath;
   String? _configError;
   Map<String, dynamic> _paymentConfig = const {};
   String _paymentMode = 'upi';
+  String _intervalMode = 'full';
+  int _selectedMonths = 1;
+  int _selectedTerms = 1;
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -69,10 +71,26 @@ class _ParentPaymentRequestFormScreenState
       .map((fee) => Map<String, dynamic>.from(fee))
       .toList();
 
-  double get _totalAmount => _fees.fold<double>(
-    0,
-    (sum, fee) => sum + ((fee['amount'] as num?)?.toDouble() ?? 0),
-  );
+  Map<String, dynamic> get _selectedFee =>
+      _fees.isEmpty ? const <String, dynamic>{} : _fees.first;
+
+  bool get _isTuition => _text(_selectedFee['fee_type']) == 'tuition';
+  double get _totalAmount {
+    final balance =
+        (_selectedFee['amount'] as num?)?.toDouble() ??
+        (_selectedFee['balance_amount'] as num?)?.toDouble() ??
+        0;
+    if (_isTuition && _intervalMode == 'monthly') {
+      final monthly =
+          (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? balance / 12;
+      return monthly * _selectedMonths;
+    }
+    if (_isTuition && _intervalMode == 'term_wise') {
+      final term = (_selectedFee['term_amount'] as num?)?.toDouble() ?? balance;
+      return term * _selectedTerms;
+    }
+    return balance;
+  }
 
   String get _upiId => _text(_paymentConfig['upi_id']);
   String get _payeeName =>
@@ -163,6 +181,8 @@ class _ParentPaymentRequestFormScreenState
             const SizedBox(height: 14),
             _buildFeeBreakdown(),
             const SizedBox(height: 14),
+            _buildIntervalSelector(),
+            const SizedBox(height: 14),
             _buildPaymentModeSelector(),
             const SizedBox(height: 14),
             _buildUpiPanel(),
@@ -223,7 +243,7 @@ class _ParentPaymentRequestFormScreenState
       (!_isUpiMode || _upiEnabled) &&
       _isIsoDate(_paymentDateController.text.trim()) &&
       (!_requiresReference || _utrController.text.trim().length >= 6) &&
-      (!_requiresProof || (_proofUrl?.isNotEmpty ?? false));
+      (!_requiresProof || (_proofPath?.isNotEmpty ?? false));
 
   Widget _buildPaymentModeSelector() {
     return _panel(
@@ -334,7 +354,7 @@ class _ParentPaymentRequestFormScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Selected installment breakdown',
+            'Selected fee breakdown',
             style: GoogleFonts.dmSans(
               fontSize: 13,
               fontWeight: FontWeight.w700,
@@ -348,7 +368,7 @@ class _ParentPaymentRequestFormScreenState
                 children: [
                   Expanded(
                     child: Text(
-                      'Selected installment: ${fee['component'] ?? fee['invoiceNumber'] ?? 'Invoice'}',
+                      'Selected fee: ${fee['component'] ?? fee['fee_item_name'] ?? fee['invoiceNumber'] ?? 'Invoice'}',
                       style: GoogleFonts.dmSans(fontSize: 12),
                     ),
                   ),
@@ -375,6 +395,110 @@ class _ParentPaymentRequestFormScreenState
                 'INR ${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(
                   fontWeight: FontWeight.w800,
+                  color: context.appTheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIntervalSelector() {
+    if (_fees.isEmpty) return const SizedBox.shrink();
+    if (!_isTuition) {
+      return _panel(
+        child: Row(
+          children: [
+            Icon(Icons.shopping_bag_rounded, color: context.appTheme.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Book & Kit is a one-time fee. It cannot be split into monthly or term payments.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: context.appTheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final monthly = (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? 0;
+    final termAmount = (_selectedFee['term_amount'] as num?)?.toDouble() ?? 0;
+    final termCount = (_selectedFee['term_count'] as num?)?.toInt() ?? 0;
+    return _panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tuition payment interval',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'monthly', label: Text('Monthly')),
+              ButtonSegment(value: 'term_wise', label: Text('Term-wise')),
+            ],
+            selected: {_intervalMode == 'full' ? 'monthly' : _intervalMode},
+            onSelectionChanged: _submitting
+                ? null
+                : (values) => setState(() => _intervalMode = values.first),
+          ),
+          const SizedBox(height: 12),
+          if ((_intervalMode == 'full' || _intervalMode == 'monthly')) ...[
+            Text(
+              '₹${monthly.toStringAsFixed(0)} per month',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
+            ),
+            Slider(
+              value: _selectedMonths.toDouble(),
+              min: 1,
+              max: 12,
+              divisions: 11,
+              label: '$_selectedMonths month(s)',
+              onChanged: _submitting
+                  ? null
+                  : (value) => setState(() => _selectedMonths = value.round()),
+            ),
+            Text('Selected months: $_selectedMonths'),
+          ] else ...[
+            Text(
+              termCount > 0
+                  ? '₹${termAmount.toStringAsFixed(0)} per term'
+                  : 'Academic terms are not configured yet.',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
+            ),
+            if (termCount > 0) ...[
+              Slider(
+                value: _selectedTerms.clamp(1, termCount).toDouble(),
+                min: 1,
+                max: termCount.toDouble(),
+                divisions: termCount > 1 ? termCount - 1 : null,
+                label: '$_selectedTerms term(s)',
+                onChanged: _submitting
+                    ? null
+                    : (value) => setState(() => _selectedTerms = value.round()),
+              ),
+              Text('Selected terms: $_selectedTerms'),
+            ],
+          ],
+          const Divider(height: 18),
+          Row(
+            children: [
+              Text(
+                'Payable now',
+                style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Text(
+                'INR ${_totalAmount.toStringAsFixed(0)}',
+                style: GoogleFonts.dmSans(
+                  fontWeight: FontWeight.w900,
                   color: context.appTheme.primary,
                 ),
               ),
@@ -584,7 +708,7 @@ class _ParentPaymentRequestFormScreenState
                 : const Icon(Icons.upload_file_rounded, size: 18),
             label: Text(_uploadingProof ? 'Uploading...' : 'Upload Screenshot'),
           ),
-          if (_proofUrl != null) ...[
+          if (_proofPath != null) ...[
             const SizedBox(height: 10),
             Row(
               children: [
@@ -596,7 +720,7 @@ class _ParentPaymentRequestFormScreenState
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    _proofName ?? 'Payment proof uploaded',
+                    _proofName ?? 'Payment proof selected',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.dmSans(
@@ -610,8 +734,8 @@ class _ParentPaymentRequestFormScreenState
                   onPressed: _submitting
                       ? null
                       : () => setState(() {
-                          _proofUrl = null;
                           _proofName = null;
+                          _proofPath = null;
                         }),
                   icon: const Icon(Icons.close_rounded, size: 18),
                 ),
@@ -669,44 +793,16 @@ class _ParentPaymentRequestFormScreenState
     final file = result.files.single;
     final path = file.path;
     if (path == null || path.isEmpty) return;
-    setState(() => _uploadingProof = true);
-    try {
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(path, filename: file.name),
-      });
-      final response = await BackendApiClient.instance.dio.post(
-        '/uploads',
-        data: formData,
-      );
-      final responseData = response.data;
-      final data = responseData is Map ? responseData['data'] : null;
-      final url =
-          '${responseData is Map ? responseData['url'] : ''}'.trim().isNotEmpty
-          ? '${responseData['url']}'.trim()
-          : '${data is Map ? data['url'] : ''}'.trim();
-      if (url.isEmpty) throw Exception('Upload did not return a proof URL');
-      if (!mounted) return;
-      setState(() {
-        _proofUrl = url;
-        _proofName = file.name;
-      });
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Proof upload failed: $error'),
-          backgroundColor: context.appTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _uploadingProof = false);
-    }
+    setState(() {
+      _uploadingProof = false;
+      _proofPath = path;
+      _proofName = file.name;
+    });
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_requiresProof && (_proofUrl == null || _proofUrl!.isEmpty)) {
+    if (_requiresProof && (_proofPath == null || _proofPath!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Upload payment screenshot before submitting.'),
@@ -719,28 +815,24 @@ class _ParentPaymentRequestFormScreenState
     setState(() => _submitting = true);
     final references = <String>[];
     try {
-      for (final fee in _fees) {
-        final reference = _utrController.text.trim();
-        final fallbackReference =
-            'REQ-${_paymentMode.toUpperCase()}-${DateTime.now().millisecondsSinceEpoch}-${_text(fee['id'])}';
-        final request = await BackendApiClient.instance
-            .submitParentPaymentRequest(
-              PaymentRequest(
-                invoiceId: '${fee['id']}',
-                receiptNumber: reference.isNotEmpty
-                    ? reference
-                    : fallbackReference,
-                amountPaid: (fee['amount'] as num?)?.toDouble() ?? 0,
-                paymentDate: _paymentDateController.text.trim(),
-                paymentMode: _paymentMode,
-                transactionId: reference.isNotEmpty ? reference : null,
-                proofUrl: (_proofUrl?.isNotEmpty ?? false) ? _proofUrl : null,
-              ),
-              remarks: _remarksController.text.trim(),
-            );
-        final requestReference = '${request['request_reference'] ?? ''}'.trim();
-        if (requestReference.isNotEmpty) references.add(requestReference);
-      }
+      final reference = _utrController.text.trim();
+      final request = await BackendApiClient.instance.submitFeePaymentProof(
+        studentFeeId: '${_selectedFee['id']}',
+        amount: _totalAmount,
+        paymentMethod: _paymentMode,
+        transactionRef: reference,
+        screenshotPath: _proofPath!,
+        screenshotName: _proofName ?? 'payment-proof',
+        selectedMonths: _isTuition && _intervalMode != 'term_wise'
+            ? _selectedMonths
+            : 0,
+        selectedTerms: _isTuition && _intervalMode == 'term_wise'
+            ? _selectedTerms
+            : 0,
+        remarks: _remarksController.text.trim(),
+      );
+      final requestReference = '${request['request_reference'] ?? ''}'.trim();
+      if (requestReference.isNotEmpty) references.add(requestReference);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -753,7 +845,7 @@ class _ParentPaymentRequestFormScreenState
       Navigator.pop(
         context,
         ParentPaymentRequestFormResult(
-          submittedCount: _fees.length,
+          submittedCount: 1,
           references: references,
         ),
       );

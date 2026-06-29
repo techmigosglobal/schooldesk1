@@ -324,8 +324,10 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.PUT("/structures/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
 			fees.PATCH("/structures/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateFeeStructure)
 			fees.DELETE("/structures/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DeleteFeeStructure)
+			fees.POST("/structures/:id/generate-student-fees", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.GenerateStudentFeesForStructure)
 			fees.POST("/structures/:id/invoice-sync/preview", middleware.RBACMiddleware("Principal"), feeHandler.PreviewFeeInvoiceSync)
 			fees.POST("/structures/:id/invoice-sync/apply", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.ApplyFeeInvoiceSync)
+			fees.GET("/dashboard", middleware.RBACMiddleware("Principal"), feeHandler.GetFeesDashboard)
 			fees.GET("/invoices", feeHandler.GetInvoices)
 			fees.GET("/invoices/:id", middleware.RBACMiddleware("Principal", "Parent"), feeHandler.GetInvoiceDetail)
 			fees.POST("/invoices/generate", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.GenerateInvoices)
@@ -334,6 +336,11 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.PUT("/invoices/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateInvoice)
 			fees.PATCH("/invoices/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateInvoice)
 			fees.POST("/payments", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.RecordPayment)
+			fees.GET("/payments/pending", middleware.RBACMiddleware("Principal"), feeHandler.GetPendingFeePayments)
+			fees.POST("/payments/submit", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.SubmitFeePayment)
+			fees.GET("/payments/history", middleware.RBACMiddleware("Principal", "Parent"), feeHandler.GetFeePaymentHistory)
+			fees.POST("/payments/:id/approve", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.ApproveFeePayment)
+			fees.POST("/payments/:id/reject", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.RejectFeePayment)
 			fees.GET("/payment-requests", middleware.RBACMiddleware("Principal", "Parent"), feeHandler.GetPaymentRequests)
 			fees.POST("/payment-requests", middleware.RBACMiddleware("Parent"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateParentPaymentRequest)
 			fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.DecideParentPaymentRequest)
@@ -539,6 +546,12 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			parents.GET("/:parent_user_id/students", middleware.RBACMiddleware("Principal"), parentLinkHandler.GetParentStudents)
 			parents.GET("/me/students", middleware.RBACMiddleware("Parent"), parentFeeHandler.GetMyStudents)
 			parents.GET("/students/:student_id/fees/summary", middleware.RBACMiddleware("Parent"), parentFeeHandler.GetStudentFeeSummary)
+		}
+
+		parent := api.Group("/parent")
+		parent.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Parent"))
+		{
+			parent.GET("/students/:studentId/fees", feeHandler.GetParentStudentFees)
 		}
 
 		parentFees := api.Group("/parents/fees")

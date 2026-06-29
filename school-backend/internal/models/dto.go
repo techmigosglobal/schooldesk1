@@ -160,6 +160,10 @@ type CreateFeeStructureRequest struct {
 	SectionID         string                  `json:"section_id"`
 	FeeCategoryID     string                  `json:"fee_category_id" binding:"required"`
 	Amount            float64                 `json:"amount" binding:"required"`
+	FeeType           string                  `json:"fee_type"`
+	BillingMode       string                  `json:"billing_mode"`
+	Priority          int                     `json:"priority"`
+	IsActive          *bool                   `json:"is_active"`
 	DueDay            int                     `json:"due_day"`
 	LateFinePerDay    float64                 `json:"late_fine_per_day"`
 	InstallmentCount  int                     `json:"installment_count"`
