@@ -20,7 +20,7 @@ class NotificationRouteResolver {
     if (_isRouteAllowed(requestedRoute, role)) {
       return NotificationRouteTarget(
         route: requestedRoute,
-        arguments: _argumentsFor(requestedRoute, role),
+        arguments: _argumentsFor(requestedRoute, role, data),
       );
     }
 
@@ -47,7 +47,7 @@ class NotificationRouteResolver {
     };
     return NotificationRouteTarget(
       route: fallbackRoute,
-      arguments: _argumentsFor(fallbackRoute, role),
+      arguments: _argumentsFor(fallbackRoute, role, data),
     );
   }
 
@@ -61,11 +61,46 @@ class NotificationRouteResolver {
         null;
   }
 
-  static Object? _argumentsFor(String route, String role) {
+  static Object? _argumentsFor(
+    String route,
+    String role,
+    Map<String, dynamic> data,
+  ) {
     if (route == AppRoutes.notificationCenter ||
         route == AppRoutes.settingsScreen ||
         route == AppRoutes.profileScreen) {
       return role.isEmpty ? 'principal' : role;
+    }
+    final referenceType = (data['reference_type'] ?? data['type'] ?? '')
+        .toString()
+        .toLowerCase()
+        .trim();
+    final referenceId = (data['reference_id'] ?? data['referenceId'] ?? '')
+        .toString()
+        .trim();
+    if (referenceId.isEmpty) return null;
+    if (route == AppRoutes.principalEventApprovals &&
+        (referenceType == 'event_post' || referenceType == 'event')) {
+      return {
+        'referenceType': 'event_post',
+        'referenceId': referenceId,
+        'initialTab': 'event_posts',
+      };
+    }
+    if (route == AppRoutes.approvalCenter || referenceType == 'approval') {
+      return {
+        'referenceType': referenceType.isEmpty ? 'approval' : referenceType,
+        'referenceId': referenceId,
+        'initialTab': 'approvals',
+      };
+    }
+    if (route == AppRoutes.teacherEventPosts &&
+        (referenceType == 'event_post' || referenceType == 'event')) {
+      return {
+        'referenceType': 'event_post',
+        'referenceId': referenceId,
+        'initialTab': 'event_posts',
+      };
     }
     return null;
   }

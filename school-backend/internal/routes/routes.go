@@ -329,6 +329,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			fees.GET("/invoices", feeHandler.GetInvoices)
 			fees.GET("/invoices/:id", middleware.RBACMiddleware("Principal", "Parent"), feeHandler.GetInvoiceDetail)
 			fees.POST("/invoices/generate", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.GenerateInvoices)
+			fees.POST("/invoices/late-fines/apply", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.ApplyLateFineAdjustments)
 			fees.POST("/invoices", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.CreateInvoice)
 			fees.PUT("/invoices/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateInvoice)
 			fees.PATCH("/invoices/:id", middleware.RBACMiddleware("Principal"), middleware.RateLimitMiddleware("fee_write", cfg.RateLimitMaxAPI, time.Duration(cfg.RateLimitWindowSeconds)*time.Second), feeHandler.UpdateInvoice)
@@ -467,10 +468,13 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			eventPosts.GET("", middleware.RBACMiddleware("Principal"), eventPostHandler.ListAllEventPosts)
 			eventPosts.GET("/teacher", middleware.RBACMiddleware("Teacher"), eventPostHandler.ListTeacherEventPosts)
 			eventPosts.GET("/pending", middleware.RBACMiddleware("Principal"), eventPostHandler.ListPendingEventPosts)
+			eventPosts.PUT("/:id", middleware.RBACMiddleware("Teacher"), eventPostHandler.UpdateEventPost)
+			eventPosts.DELETE("/:id", middleware.RBACMiddleware("Teacher"), eventPostHandler.DeleteEventPost)
 			eventPosts.POST("/:id/approve", middleware.RBACMiddleware("Principal"), eventPostHandler.ApproveEventPost)
 			eventPosts.POST("/:id/reject", middleware.RBACMiddleware("Principal"), eventPostHandler.RejectEventPost)
 			eventPosts.GET("/gallery", middleware.RBACMiddleware("Principal", "Teacher", "Parent"), eventPostHandler.ListGalleryEventPosts)
 			eventPosts.GET("/home-feed", middleware.RBACMiddleware("Parent"), eventPostHandler.ListParentHomeFeed)
+			eventPosts.GET("/:id", middleware.RBACMiddleware("Principal", "Teacher"), eventPostHandler.GetEventPost)
 		}
 
 		lessonPlanners := api.Group("/lesson-planners")

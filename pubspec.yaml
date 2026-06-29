@@ -33,6 +33,7 @@ dependencies:
   firebase_messaging: ^16.2.0
   flutter_local_notifications: ^21.0.0
   url_launcher: ^6.3.2
+  video_player: ^2.10.0
   package_info_plus: ^9.0.1
   file_picker: ^11.0.2
   qr_flutter: ^4.1.0
@@ -55,8 +56,6 @@ dev_dependencies:
     sdk: flutter
   json_serializable: ^6.9.5
   retrofit_generator: ^10.2.6
-  patrol: ^4.6.1
-  patrol_cli: ^4.4.0
 
 dependency_overrides:
   printing:

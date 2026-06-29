@@ -241,7 +241,9 @@ class _ParentPaymentRequestFormScreenState
             children: _paymentModes
                 .map(
                   (mode) => ChoiceChip(
-                    label: Text(_paymentModeLabel(mode)),
+                    label: Text(
+                      mode == 'upi' ? 'Pay by UPI' : _paymentModeLabel(mode),
+                    ),
                     selected: _paymentMode == mode,
                     onSelected: _submitting
                         ? null
@@ -725,8 +727,9 @@ class _ParentPaymentRequestFormScreenState
             .submitParentPaymentRequest(
               PaymentRequest(
                 invoiceId: '${fee['id']}',
-                receiptNumber:
-                    reference.isNotEmpty ? reference : fallbackReference,
+                receiptNumber: reference.isNotEmpty
+                    ? reference
+                    : fallbackReference,
                 amountPaid: (fee['amount'] as num?)?.toDouble() ?? 0,
                 paymentDate: _paymentDateController.text.trim(),
                 paymentMode: _paymentMode,

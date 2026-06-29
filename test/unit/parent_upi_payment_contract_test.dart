@@ -95,6 +95,36 @@ void main() {
       expect(handler, contains('replace_existing'));
     });
 
+    test('fee structure delete preserves generated invoices and payments', () {
+      final api = File(
+        'lib/core/network/api_modules/fees_api.dart',
+      ).readAsStringSync();
+      final adminFees = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
+      ).readAsStringSync();
+      final monitoring = File(
+        'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
+      ).readAsStringSync();
+
+      expect(api, isNot(contains('remove_pending')));
+      expect(api, isNot(contains('removePending')));
+      expect(
+        adminFees,
+        contains('existing invoices and payments are not changed'),
+      );
+      expect(
+        monitoring,
+        contains('existing invoices and payments are not changed'),
+      );
+      expect(adminFees, isNot(contains('Remove from unpaid invoices')));
+      expect(
+        monitoring,
+        isNot(contains('Remove from unpaid student invoices')),
+      );
+      expect(adminFees, contains('deleteFeeStructure(id)'));
+      expect(monitoring, contains('deleteFeeStructure(bundle.id)'));
+    });
+
     test('parent payment flow presents installment payments', () {
       final parentFees = File(
         'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',

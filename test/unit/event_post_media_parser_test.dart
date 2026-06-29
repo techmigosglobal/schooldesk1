@@ -22,12 +22,47 @@ void main() {
       expect(media.first, raw);
     });
 
-    test('splits comma-separated URL list when delimiter starts another URL', () {
-      const raw = 'https://cdn.test/a.jpg, https://cdn.test/b.jpg';
+    test(
+      'splits comma-separated URL list when delimiter starts another URL',
+      () {
+        const raw = 'https://cdn.test/a.jpg, https://cdn.test/b.jpg';
 
-      final media = parseEventPostMediaUrls(raw);
+        final media = parseEventPostMediaUrls(raw);
 
-      expect(media, const ['https://cdn.test/a.jpg', 'https://cdn.test/b.jpg']);
+        expect(media, const [
+          'https://cdn.test/a.jpg',
+          'https://cdn.test/b.jpg',
+        ]);
+      },
+    );
+
+    test('parses structured media object arrays with video metadata', () {
+      const raw =
+          '[{"url":"/uploads/shared/school/clip.mp4","name":"Annual Day.mp4","mime_type":"video/mp4","kind":"video","size":12345}]';
+
+      final media = EventPostMediaItem.parseList(raw);
+
+      expect(media, hasLength(1));
+      expect(media.single.url, '/uploads/shared/school/clip.mp4');
+      expect(media.single.name, 'Annual Day.mp4');
+      expect(media.single.mimeType, 'video/mp4');
+      expect(media.single.kind, EventPostMediaKind.video);
+      expect(media.single.size, 12345);
+      expect(media.single.isVideo, isTrue);
+    });
+
+    test('infers media metadata for legacy URL strings', () {
+      const raw =
+          'https://cdn.test/photo.jpg, https://cdn.test/document.pdf, https://cdn.test/movie.webm';
+
+      final media = EventPostMediaItem.parseList(raw);
+
+      expect(media.map((item) => item.kind), [
+        EventPostMediaKind.image,
+        EventPostMediaKind.pdf,
+        EventPostMediaKind.video,
+      ]);
+      expect(media.last.isVideo, isTrue);
     });
   });
 }

@@ -303,8 +303,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           width: 140,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: context.appTheme.surfaceVariant
-                                .withOpacity(0.6),
+                            color: context.appTheme.surfaceVariant.withOpacity(
+                              0.6,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -313,8 +314,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           width: 90,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: context.appTheme.surfaceVariant
-                                .withOpacity(0.6),
+                            color: context.appTheme.surfaceVariant.withOpacity(
+                              0.6,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -526,8 +528,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                 _concessions
                     .where(
                       (c) =>
-                          (_textValue(c['status'], fallback: 'pending')
-                              .toLowerCase()) ==
+                          (_textValue(
+                            c['status'],
+                            fallback: 'pending',
+                          ).toLowerCase()) ==
                           'approved',
                     )
                     .fold<double>(
@@ -893,8 +897,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         subtitle: _selectedStructure != null
             ? '$title - ${_selectedStructure?.title ?? 'Fee Structure'}'
             : (_selectedGradeId.isNotEmpty
-                ? 'Viewing fees for $_selectedClassLabel'
-                : 'All fee accounts'),
+                  ? 'Viewing fees for $_selectedClassLabel'
+                  : 'All fee accounts'),
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
         trailing: IconButton(
@@ -920,7 +924,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: Color(0xFF2563EB), size: 18),
+                const Icon(
+                  Icons.info_outline,
+                  color: Color(0xFF2563EB),
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -941,7 +949,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                     });
                   },
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     backgroundColor: Colors.white,
@@ -1642,8 +1653,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   Expanded(
                     child: _FeeInfoTile(
                       label: 'Collection%',
-                      value:
-                          '${(_collectionRate * 100).toStringAsFixed(1)}%',
+                      value: '${(_collectionRate * 100).toStringAsFixed(1)}%',
                       highlighted: _collectionRate >= 0.8,
                     ),
                   ),
@@ -1651,8 +1661,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
-                onPressed:
-                    _generatingReport ? null : _generateInAppReport,
+                onPressed: _generatingReport ? null : _generateInAppReport,
                 icon: _generatingReport
                     ? const SizedBox.square(
                         dimension: 16,
@@ -1663,9 +1672,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       )
                     : const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 label: Text(
-                  _generatingReport
-                      ? 'Generating...'
-                      : 'Download PDF Summary',
+                  _generatingReport ? 'Generating...' : 'Download PDF Summary',
                 ),
               ),
             ],
@@ -2209,9 +2216,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       ],
                       OutlinedButton.icon(
                         onPressed: () => setSheetState(
-                          () => components.add(
-                            _FeeComponentEntry(name: ''),
-                          ),
+                          () => components.add(_FeeComponentEntry(name: '')),
                         ),
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Add Fee Component'),
@@ -2270,8 +2275,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           onChanged: method == 'monthly'
                               ? null
                               : (value) => setSheetState(
-                                    () => installmentCount = value ?? 3,
-                                  ),
+                                  () => installmentCount = value ?? 3,
+                                ),
                         ),
                       ],
                       const SizedBox(height: 12),
@@ -2286,9 +2291,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                             : () async {
                                 // Validate all components
                                 for (final comp in components) {
-                                  final name =
-                                      comp.nameController.text.trim();
-                                  final amt = double.tryParse(
+                                  final name = comp.nameController.text.trim();
+                                  final amt =
+                                      double.tryParse(
                                         comp.amountController.text.trim(),
                                       ) ??
                                       0;
@@ -2299,9 +2304,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                     return;
                                   }
                                   if (amt <= 0) {
-                                    _snack(
-                                      'Enter a valid amount for "$name".',
-                                    );
+                                    _snack('Enter a valid amount for "$name".');
                                     return;
                                   }
                                 }
@@ -2325,27 +2328,28 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                   final effectiveCount = method == 'one_time'
                                       ? 1
                                       : method == 'monthly'
-                                          ? 12
-                                          : installmentCount;
+                                      ? 12
+                                      : installmentCount;
 
                                   for (final comp in components) {
-                                    final compName =
-                                        comp.nameController.text.trim();
-                                    final amount = double.tryParse(
+                                    final compName = comp.nameController.text
+                                        .trim();
+                                    final amount =
+                                        double.tryParse(
                                           comp.amountController.text.trim(),
                                         ) ??
                                         0;
 
                                     // Find or create the fee category
-                                    final existing =
-                                        categories.firstWhereOrNull(
-                                      (row) =>
-                                          _textValue(
-                                            row['category_name'] ??
-                                                row['name'],
-                                          ).toLowerCase() ==
-                                          compName.toLowerCase(),
-                                    );
+                                    final existing = categories
+                                        .firstWhereOrNull(
+                                          (row) =>
+                                              _textValue(
+                                                row['category_name'] ??
+                                                    row['name'],
+                                              ).toLowerCase() ==
+                                              compName.toLowerCase(),
+                                        );
                                     final categoryId = existing != null
                                         ? _textValue(existing['id'])
                                         : _textValue(
@@ -2368,8 +2372,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                       effectiveFrom: DateFormat(
                                         'yyyy-MM-dd',
                                       ).format(DateTime.now()),
-                                      installments:
-                                          _defaultInstallmentPayload(
+                                      installments: _defaultInstallmentPayload(
                                         method,
                                         amount,
                                         count: effectiveCount,
@@ -2459,7 +2462,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final perInstallment = (total / count).floorToDouble();
     return List.generate(count, (index) {
       final isLast = index == count - 1;
-      final amount = isLast ? total - perInstallment * (count - 1) : perInstallment;
+      final amount = isLast
+          ? total - perInstallment * (count - 1)
+          : perInstallment;
       final pct = isLast
           ? (100 - (100 ~/ count) * (count - 1))
           : (100 ~/ count);
@@ -2489,81 +2494,59 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            bool removePending = true;
-            return AlertDialog(
-              title: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Color(0xFFDC2626),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text('Delete Fee Structure?'),
-                ],
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFDC2626),
+                size: 22,
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'You are about to delete:',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    bundle.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Text(
-                    '${bundle.classLabel} · ${bundle.components.length} components',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  const SizedBox(height: 16),
-                  StatefulBuilder(
-                    builder: (context, setCheckState) => CheckboxListTile(
-                      value: removePending,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Remove from unpaid student invoices',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'Deducts this fee component from pending invoices so students aren\'t overcharged',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                      onChanged: (value) =>
-                          setCheckState(() => removePending = value ?? true),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 8),
+              const Text('Delete Fee Structure?'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You are about to delete:',
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Cancel'),
+              const SizedBox(height: 6),
+              Text(
+                bundle.title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
                 ),
-                FilledButton.icon(
-                  onPressed: () =>
-                      Navigator.pop(context, removePending ? true : false),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFDC2626),
-                  ),
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  label: const Text('Delete'),
-                ),
-              ],
-            );
-          },
+              ),
+              Text(
+                '${bundle.classLabel} · ${bundle.components.length} components',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Deleting this fee structure only removes the template; existing invoices and payments are not changed.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Delete'),
+            ),
+          ],
         );
       },
     );
@@ -2621,10 +2604,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
-        bundle.id,
-        removePending: true,
-      );
+      await BackendApiClient.instance.deleteFeeStructure(bundle.id);
       if (!mounted) return;
       _snack('Fee structure deleted.', success: true);
       // Go back to list view and refresh
@@ -2670,10 +2650,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final status = _textValue(invoice['status'], fallback: 'pending');
     final dueDate = _textValue(invoice['due_date']);
     final rawInstallments = invoice['installments'];
-    final installments =
-        rawInstallments is List
-            ? rawInstallments.whereType<Map>().toList()
-            : <Map>[];
+    final installments = rawInstallments is List
+        ? rawInstallments.whereType<Map>().toList()
+        : <Map>[];
 
     return _FeeCard(
       child: Column(
@@ -2803,10 +2782,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                     ),
                     const SizedBox(width: 8),
                     _FeeStatusPill(
-                      label: _textValue(
-                        inst['status'],
-                        fallback: 'pending',
-                      ).toLowerCase() == 'paid'
+                      label:
+                          _textValue(
+                                inst['status'],
+                                fallback: 'pending',
+                              ).toLowerCase() ==
+                              'paid'
                           ? 'Paid'
                           : 'Due',
                       color: _statusColor(
@@ -2844,10 +2825,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       text: _textValue(invoice['due_date']),
     );
     final amountController = TextEditingController(
-      text: _numValue(invoice['total'] ?? invoice['total_amount']).toStringAsFixed(0),
+      text: _numValue(
+        invoice['total'] ?? invoice['total_amount'],
+      ).toStringAsFixed(0),
     );
     final concessionController = TextEditingController(
-      text: _numValue(invoice['concession_amount'] ?? invoice['discount']).toStringAsFixed(0),
+      text: _numValue(
+        invoice['concession_amount'] ?? invoice['discount'],
+      ).toStringAsFixed(0),
     );
     final concessionReasonController = TextEditingController(
       text: _textValue(invoice['concession_reason']),
@@ -2855,8 +2840,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final notesController = TextEditingController(
       text: _textValue(invoice['notes']),
     );
-    String currentStatus = _textValue(invoice['status'], fallback: 'pending').toLowerCase();
-    if (!['pending', 'unpaid', 'partially_paid', 'paid', 'overdue', 'cancelled'].contains(currentStatus)) {
+    String currentStatus = _textValue(
+      invoice['status'],
+      fallback: 'pending',
+    ).toLowerCase();
+    if (![
+      'pending',
+      'unpaid',
+      'partially_paid',
+      'paid',
+      'overdue',
+      'cancelled',
+    ].contains(currentStatus)) {
       currentStatus = 'pending';
     }
 
@@ -2931,12 +2926,21 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   prefixIcon: Icon(Icons.info_outline_rounded),
                 ),
                 items: const [
-                  DropdownMenuItem(value: 'pending', child: Text('Pending (Unpaid)')),
+                  DropdownMenuItem(
+                    value: 'pending',
+                    child: Text('Pending (Unpaid)'),
+                  ),
                   DropdownMenuItem(value: 'unpaid', child: Text('Unpaid')),
-                  DropdownMenuItem(value: 'partially_paid', child: Text('Partially Paid')),
+                  DropdownMenuItem(
+                    value: 'partially_paid',
+                    child: Text('Partially Paid'),
+                  ),
                   DropdownMenuItem(value: 'paid', child: Text('Paid')),
                   DropdownMenuItem(value: 'overdue', child: Text('Overdue')),
-                  DropdownMenuItem(value: 'cancelled', child: Text('Cancelled')),
+                  DropdownMenuItem(
+                    value: 'cancelled',
+                    child: Text('Cancelled'),
+                  ),
                 ],
                 onChanged: (val) {
                   if (val != null) {
@@ -2961,8 +2965,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   final amount = double.tryParse(amountController.text.trim());
                   final concession =
                       double.tryParse(concessionController.text.trim()) ?? 0;
-                  final concessionReason =
-                      concessionReasonController.text.trim();
+                  final concessionReason = concessionReasonController.text
+                      .trim();
                   final notes = notesController.text.trim();
                   try {
                     await BackendApiClient.instance.updateInvoice(
@@ -3006,10 +3010,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         _snack('Invoice ID is missing.');
         return;
       }
-      
+
       List<Map<String, dynamic>> feeItems = [];
       try {
-        final detail = await BackendApiClient.instance.getInvoiceDetail(invoiceId);
+        final detail = await BackendApiClient.instance.getInvoiceDetail(
+          invoiceId,
+        );
         final rawItems = detail['items'];
         if (rawItems is List && rawItems.isNotEmpty) {
           feeItems = rawItems.whereType<Map>().map((item) {
@@ -3024,39 +3030,45 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           }).toList();
         }
       } catch (_) {}
-      
+
       if (feeItems.isEmpty) {
         feeItems = [
           {
             'description': 'Academic Fees',
             'amount': _numValue(invoice['total']),
             'status': 'Pending',
-          }
+          },
         ];
       }
-      
+
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: _textValue(invoice['invoice_number'], fallback: 'INV'),
-        studentName: _selectedAccount?.name ?? _textValue(invoice['name'], fallback: 'Student'),
-        className: _selectedAccount?.classLabel ?? _textValue(invoice['class'], fallback: 'Class'),
-        rollNo: _selectedAccount?.rollNumber ?? _textValue(invoice['roll'], fallback: '-'),
+        studentName:
+            _selectedAccount?.name ??
+            _textValue(invoice['name'], fallback: 'Student'),
+        className:
+            _selectedAccount?.classLabel ??
+            _textValue(invoice['class'], fallback: 'Class'),
+        rollNo:
+            _selectedAccount?.rollNumber ??
+            _textValue(invoice['roll'], fallback: '-'),
         parentName: _textValue(invoice['parent_name'], fallback: 'Parent'),
         feeItems: feeItems,
         totalAmount: _numValue(invoice['total']),
         paidAmount: _numValue(invoice['paid']),
         balance: _numValue(invoice['balance']),
         paymentMode: 'Invoice',
-        paymentDate: DateTime.tryParse(_textValue(invoice['due_date'])) ?? DateTime.now(),
+        paymentDate:
+            DateTime.tryParse(_textValue(invoice['due_date'])) ??
+            DateTime.now(),
       );
-      
+
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Invoice');
     } catch (error) {
       _snack('Unable to preview invoice: $error');
     }
   }
-
-
 
   void _openStudentsForCollection({_FeeStructureBundle? structure}) {
     setState(() {
@@ -3160,9 +3172,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                           account.name,
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(sheetContext)
-                                .colorScheme
-                                .onSurfaceVariant,
+                            color: Theme.of(
+                              sheetContext,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -3199,9 +3211,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       account.rollNumber,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Theme.of(sheetContext)
-                            .colorScheme
-                            .onSurfaceVariant,
+                        color: Theme.of(
+                          sheetContext,
+                        ).colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -3216,9 +3228,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   isDense: true,
                 ),
                 items: types
-                    .map(
-                      (t) => DropdownMenuItem(value: t, child: Text(t)),
-                    )
+                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                     .toList(),
                 onChanged: (v) =>
                     setSheetState(() => selectedType = v ?? selectedType),
@@ -3226,8 +3236,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: amountController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: const InputDecoration(
                   labelText: 'Concession Amount (₹)',
                   prefixText: '₹ ',
@@ -3265,8 +3276,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                 amountController.text.trim(),
                               );
                               if (amount == null || amount <= 0) {
-                                ScaffoldMessenger.of(sheetContext)
-                                    .showSnackBar(
+                                ScaffoldMessenger.of(sheetContext).showSnackBar(
                                   const SnackBar(
                                     content: Text(
                                       'Enter a valid concession amount.',
@@ -3287,13 +3297,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                     'amount': amount,
                                     'concession_amount': amount,
                                     'reason': reasonController.text.trim(),
-                                    'concession_reason':
-                                        reasonController.text.trim(),
+                                    'concession_reason': reasonController.text
+                                        .trim(),
                                     'status': 'pending',
-                                    'submitted_at':
-                                        DateTime.now().toIso8601String(),
-                                    'academic_year_id':
-                                        account.academicYearId,
+                                    'submitted_at': DateTime.now()
+                                        .toIso8601String(),
+                                    'academic_year_id': account.academicYearId,
                                   },
                                 );
                                 if (sheetContext.mounted) {
@@ -3302,8 +3311,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                               } catch (error) {
                                 setSheetState(() => saving = false);
                                 if (sheetContext.mounted) {
-                                  ScaffoldMessenger.of(sheetContext)
-                                      .showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    sheetContext,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         'Failed to submit concession: $error',
@@ -3543,8 +3553,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       final pdfService = PdfService.getInstance();
       final dueInvoice = _primaryDueInvoice(account) ?? account.invoices.first;
       final bytes = await pdfService.generateFeeReceipt(
-        receiptNo: _textValue(dueInvoice['invoice_number'],
-            fallback: 'INV-${account.studentId.substring(0, 6).toUpperCase()}'),
+        receiptNo: _textValue(
+          dueInvoice['invoice_number'],
+          fallback: 'INV-${account.studentId.substring(0, 6).toUpperCase()}',
+        ),
         studentName: account.name,
         className: account.classLabel,
         rollNo: account.rollNumber,
@@ -3553,19 +3565,20 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         totalAmount: account.total,
         paidAmount: account.paid,
         balance: account.balance,
-        paymentMode:
-            account.payments.isNotEmpty
+        paymentMode: account.payments.isNotEmpty
             ? _textValue(account.payments.last['mode'], fallback: 'N/A')
             : 'Pending',
-        paymentDate:
-            account.payments.isNotEmpty
-            ? (DateTime.tryParse(_textValue(account.payments.last['date']))
-                   ?? DateTime.now())
+        paymentDate: account.payments.isNotEmpty
+            ? (DateTime.tryParse(_textValue(account.payments.last['date'])) ??
+                  DateTime.now())
             : DateTime.now(),
       );
       if (!mounted) return;
       await pdfService.previewDocument(
-          context, bytes, 'Invoice — ${account.name}');
+        context,
+        bytes,
+        'Invoice — ${account.name}',
+      );
     } catch (error) {
       _snack('Unable to generate invoice PDF: $error');
     }
@@ -3585,11 +3598,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           );
           final amount = _numValue(item['amount']);
           final status = _textValue(item['status'], fallback: 'Pending');
-          items.add({
-            'description': desc,
-            'amount': amount,
-            'status': status,
-          });
+          items.add({'description': desc, 'amount': amount, 'status': status});
         }
       } else {
         // Fallback: create a single line item per invoice.
@@ -3620,8 +3629,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       // Build class-wise breakdown.
       final classMap = <String, Map<String, double>>{};
       for (final account in _studentAccounts) {
-        final classKey =
-            account.classLabel.isEmpty ? 'Unknown' : account.classLabel;
+        final classKey = account.classLabel.isEmpty
+            ? 'Unknown'
+            : account.classLabel;
         classMap.putIfAbsent(
           classKey,
           () => {'total': 0, 'paid': 0, 'balance': 0},
@@ -3655,7 +3665,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           {
             'description': entry.key,
             'amount': entry.value['paid'] ?? 0,
-            'status': 'Collected ₹${(entry.value['balance'] ?? 0).toStringAsFixed(0)} due',
+            'status':
+                'Collected ₹${(entry.value['balance'] ?? 0).toStringAsFixed(0)} due',
           },
       ];
 
@@ -3840,12 +3851,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         if (!sameGrade || !sameSection || !sameYear) return false;
       } else {
         if (_selectedGradeId.isNotEmpty) {
-          if (account.gradeId.isNotEmpty && account.gradeId != _selectedGradeId) {
+          if (account.gradeId.isNotEmpty &&
+              account.gradeId != _selectedGradeId) {
             return false;
           }
         }
         if (_selectedSectionId.isNotEmpty) {
-          if (account.sectionId.isNotEmpty && account.sectionId != _selectedSectionId) {
+          if (account.sectionId.isNotEmpty &&
+              account.sectionId != _selectedSectionId) {
             return false;
           }
         }
@@ -4731,10 +4744,7 @@ class _FeeStudentRow extends StatelessWidget {
               textAlign: TextAlign.end,
               maxLines: 1,
               overflow: TextOverflow.visible,
-              style: const TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
             ),
           ),
         ],
@@ -5130,8 +5140,8 @@ class _FeeAvatar extends StatelessWidget {
 
 class _FeeComponentEntry {
   _FeeComponentEntry({String name = ''})
-      : nameController = TextEditingController(text: name),
-        amountController = TextEditingController();
+    : nameController = TextEditingController(text: name),
+      amountController = TextEditingController();
   final TextEditingController nameController;
   final TextEditingController amountController;
   void dispose() {

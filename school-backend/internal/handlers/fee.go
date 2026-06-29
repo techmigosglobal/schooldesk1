@@ -475,75 +475,11 @@ func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID s
 func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	id := c.Param("id")
-	removePending := c.Query("remove_pending") == "true"
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		var structure models.FeeStructure
 		if err := tx.Where("id = ? AND school_id = ?", id, schoolID).First(&structure).Error; err != nil {
 			return err
-		}
-
-		if removePending {
-			query := tx.Model(&models.FeeInvoice{}).
-				Joins("JOIN students ON students.id = fee_invoices.student_id").
-				Joins("JOIN sections ON sections.id = students.current_section_id").
-				Where("students.school_id = ? AND fee_invoices.academic_year_id = ? AND fee_invoices.status = ?", schoolID, structure.AcademicYearID, "pending").
-				Where("sections.grade_id = ?", structure.GradeID)
-
-			if structure.SectionID != nil {
-				query = query.Where("students.current_section_id = ?", *structure.SectionID)
-			}
-
-			var invoices []models.FeeInvoice
-			if err := query.Preload("Items").Find(&invoices).Error; err != nil {
-				return err
-			}
-
-			for _, invoice := range invoices {
-				itemRemoved := false
-				amountToRemove := 0.0
-
-				for _, item := range invoice.Items {
-					if item.FeeCategoryID == structure.FeeCategoryID {
-						amountToRemove += item.Amount
-						itemRemoved = true
-						if err := tx.Where("id = ?", item.ID).Delete(&models.FeeInvoiceItem{}).Error; err != nil {
-							return err
-						}
-					}
-				}
-
-				if itemRemoved {
-					newTotal := roundMoney(invoice.TotalAmount - amountToRemove)
-					if newTotal < 0 {
-						newTotal = 0
-					}
-					newPayable := roundMoney(newTotal - invoice.DiscountAmount - invoice.ConcessionAmount + invoice.FineAmount)
-					if newPayable < 0 {
-						newPayable = 0
-					}
-					newBalance := roundMoney(newPayable - invoice.PaidAmount)
-					if newBalance < 0 {
-						newBalance = 0
-					}
-
-					nextStatus := invoice.Status
-					if newBalance == 0 && invoice.PaidAmount > 0 {
-						nextStatus = "paid"
-					} else if newTotal == 0 && newBalance == 0 {
-						nextStatus = "paid"
-					}
-
-					if err := tx.Model(&models.FeeInvoice{}).Where("id = ?", invoice.ID).Updates(map[string]interface{}{
-						"total_amount":   newTotal,
-						"payable_amount": newPayable,
-						"balance":        newBalance,
-						"status":         nextStatus,
-					}).Error; err != nil {
-						return err
-					}
-				}
-			}
 		}
 
 		if err := tx.Where("fee_structure_id = ?", id).Delete(&models.FeeInstallment{}).Error; err != nil {
@@ -779,6 +715,7 @@ func (h *FeeHandler) GetInvoices(c *gin.Context) {
 		})
 		return
 	}
+	enrichFeeInvoicesComputedFields(invoices)
 
 	c.JSON(http.StatusOK, paginationResult(page, pageSize, total, invoices))
 }
@@ -801,6 +738,7 @@ func (h *FeeHandler) GetInvoiceDetail(c *gin.Context) {
 		}
 		return
 	}
+	enrichFeeInvoiceComputedFields(&invoice)
 
 	success(c, http.StatusOK, invoice, "")
 }
@@ -875,7 +813,6 @@ func (h *FeeHandler) UpdateInvoice(c *gin.Context) {
 		payable = 0
 	}
 	updates["payable_amount"] = payable
-	updates["net_amount"] = payable
 	updates["balance"] = roundMoney(payable - invoice.PaidAmount)
 
 	if err := database.DB.Model(&invoice).Updates(updates).Error; err != nil {
@@ -889,10 +826,72 @@ func (h *FeeHandler) UpdateInvoice(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to load updated invoice details")
 		return
 	}
+	enrichFeeInvoiceComputedFields(&updatedInvoice)
 
 	success(c, http.StatusOK, updatedInvoice, "Invoice updated successfully")
 }
 
+func (h *FeeHandler) ApplyLateFineAdjustments(c *gin.Context) {
+	today := time.Now().UTC()
+	var invoices []models.FeeInvoice
+	query := preloadFeeInvoiceDetails(scopedFeeInvoiceQuery(c)).
+		Where("fee_invoices.due_date < ?", today).
+		Where("fee_invoices.balance > 0").
+		Where("fee_invoices.status NOT IN ?", []string{"paid", "cancelled"})
+	if err := query.Find(&invoices).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to load overdue invoices")
+		return
+	}
+	enrichFeeInvoicesComputedFields(invoices)
+
+	updated := make([]models.FeeInvoice, 0)
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		for i := range invoices {
+			invoice := invoices[i]
+			if invoice.LateFinePerDay <= 0 {
+				continue
+			}
+			overdueDays := int(today.Sub(invoice.DueDate).Hours() / 24)
+			if overdueDays <= 0 {
+				continue
+			}
+			expectedFine := roundMoney(invoice.LateFinePerDay * float64(overdueDays))
+			if math.Abs(expectedFine-invoice.FineAmount) < 0.5 && strings.ToLower(invoice.Status) == "overdue" {
+				continue
+			}
+			payable := roundMoney(invoice.TotalAmount - invoice.DiscountAmount - invoice.ConcessionAmount + expectedFine)
+			if payable < 0 {
+				payable = 0
+			}
+			balance := roundMoney(payable - invoice.PaidAmount)
+			status := "overdue"
+			if balance <= 0 {
+				balance = 0
+				status = "paid"
+			}
+			if err := tx.Model(&models.FeeInvoice{}).Where("id = ?", invoice.ID).Updates(map[string]interface{}{
+				"fine_amount":    expectedFine,
+				"payable_amount": payable,
+				"balance":        balance,
+				"status":         status,
+			}).Error; err != nil {
+				return err
+			}
+			invoice.FineAmount = expectedFine
+			invoice.PayableAmount = payable
+			invoice.NetAmount = payable
+			invoice.Balance = balance
+			invoice.Status = status
+			updated = append(updated, invoice)
+		}
+		return nil
+	}); err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to apply late fines")
+		return
+	}
+
+	success(c, http.StatusOK, gin.H{"updated": len(updated), "invoices": updated}, "")
+}
 
 func scopedFeeInvoiceQuery(c *gin.Context) *gorm.DB {
 	query := database.DB.Model(&models.FeeInvoice{}).
@@ -943,6 +942,114 @@ func preloadFeeInvoiceDetails(query *gorm.DB) *gorm.DB {
 		Preload("Items").
 		Preload("Items.FeeCategory").
 		Preload("Payments")
+}
+
+func enrichFeeInvoicesComputedFields(invoices []models.FeeInvoice) {
+	for i := range invoices {
+		enrichFeeInvoiceComputedFields(&invoices[i])
+	}
+}
+
+func enrichFeeInvoiceComputedFields(invoice *models.FeeInvoice) {
+	if invoice == nil {
+		return
+	}
+	if invoice.Student == nil {
+		var student models.Student
+		if err := database.DB.Preload("CurrentSection").Preload("CurrentSection.Grade").First(&student, "id = ?", invoice.StudentID).Error; err == nil {
+			invoice.Student = &student
+		}
+	}
+	if len(invoice.Items) == 0 {
+		var items []models.FeeInvoiceItem
+		if err := database.DB.Preload("FeeCategory").Find(&items, "invoice_id = ?", invoice.ID).Error; err == nil {
+			invoice.Items = items
+		}
+	}
+
+	sectionID := ""
+	gradeID := ""
+	schoolID := ""
+	if invoice.Student != nil {
+		schoolID = invoice.Student.SchoolID
+		if invoice.Student.CurrentSectionID != nil {
+			sectionID = strings.TrimSpace(*invoice.Student.CurrentSectionID)
+		}
+		if invoice.Student.CurrentSection != nil {
+			gradeID = strings.TrimSpace(invoice.Student.CurrentSection.GradeID)
+		}
+	}
+
+	bestInstallmentNumber := 0
+	bestInstallmentCount := 0
+	bestLateFine := 0.0
+	for _, item := range invoice.Items {
+		structure, ok := matchingFeeStructureForInvoiceItem(invoice.AcademicYearID, schoolID, gradeID, sectionID, item.FeeCategoryID)
+		if !ok {
+			continue
+		}
+		if structure.InstallmentCount > bestInstallmentCount {
+			bestInstallmentCount = structure.InstallmentCount
+		}
+		if structure.LateFinePerDay > bestLateFine {
+			bestLateFine = structure.LateFinePerDay
+		}
+		if bestInstallmentNumber == 0 {
+			bestInstallmentNumber = matchingInstallmentNumber(structure, item.Description, invoice.DueDate)
+		}
+	}
+	invoice.InstallmentNumber = bestInstallmentNumber
+	invoice.InstallmentCount = bestInstallmentCount
+	invoice.TotalInstallments = bestInstallmentCount
+	invoice.LateFinePerDay = bestLateFine
+}
+
+func matchingFeeStructureForInvoiceItem(academicYearID, schoolID, gradeID, sectionID, feeCategoryID string) (models.FeeStructure, bool) {
+	var structures []models.FeeStructure
+	query := database.DB.Preload("Installments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("installment_number ASC")
+	}).Where("academic_year_id = ? AND fee_category_id = ?", academicYearID, feeCategoryID)
+	if schoolID != "" {
+		query = query.Where("school_id = ?", schoolID)
+	}
+	if gradeID != "" {
+		query = query.Where("grade_id = ?", gradeID)
+	}
+	if sectionID != "" {
+		query = query.Where("(section_id = ? OR section_id IS NULL OR section_id = '')", sectionID)
+	}
+	if err := query.Order("created_at DESC").Find(&structures).Error; err != nil || len(structures) == 0 {
+		return models.FeeStructure{}, false
+	}
+	if sectionID != "" {
+		for _, structure := range structures {
+			if structure.SectionID != nil && *structure.SectionID == sectionID {
+				return structure, true
+			}
+		}
+	}
+	return structures[0], true
+}
+
+func matchingInstallmentNumber(structure models.FeeStructure, description string, dueDate time.Time) int {
+	description = strings.ToLower(strings.TrimSpace(description))
+	for _, installment := range structure.Installments {
+		if description != "" && strings.ToLower(strings.TrimSpace(installment.InstallmentName)) == description {
+			return installment.InstallmentNumber
+		}
+	}
+	for _, installment := range structure.Installments {
+		if sameDate(installment.DueDate, dueDate) {
+			return installment.InstallmentNumber
+		}
+	}
+	return 0
+}
+
+func sameDate(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
 }
 
 func (h *FeeHandler) CreateInvoice(c *gin.Context) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
@@ -8,6 +10,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
 class TeacherEventPostScreen extends StatefulWidget {
   const TeacherEventPostScreen({super.key});
@@ -17,7 +20,7 @@ class TeacherEventPostScreen extends StatefulWidget {
 }
 
 class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
@@ -29,40 +32,59 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   // Uploaded file URLs (returned by backend after upload)
   final List<String> _uploadedUrls = [];
+  final List<EventPostMediaItem> _uploadedMedia = [];
+  String? _editingPostId;
+  bool _editingRejectedPost = false;
   bool _uploading = false;
 
   bool _loading = false;
   String? _error;
   List<dynamic> _posts = [];
+  NotificationService? _notificationService;
+  Timer? _pollingTimer;
 
   void _onNotificationChanged() {
-    if (_tabController.index == 1) {
-      _loadPosts();
-    }
+    unawaited(_loadPosts(showSpinner: false));
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.index == 1) _loadPosts();
+      if (_tabController.index == 1) _loadPosts(showSpinner: false);
     });
     NotificationService.getInstance().then((s) {
-      if (mounted) s.addListener(_onNotificationChanged);
+      if (!mounted) return;
+      _notificationService = s;
+      s.addListener(_onNotificationChanged);
     });
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted && !_loading) {
+        unawaited(_loadPosts(showSpinner: false));
+      }
+    });
+    _loadPosts();
   }
 
   @override
   void dispose() {
-    NotificationService.getInstance().then((s) {
-      s.removeListener(_onNotificationChanged);
-    });
+    WidgetsBinding.instance.removeObserver(this);
+    _pollingTimer?.cancel();
+    _notificationService?.removeListener(_onNotificationChanged);
     _tabController.dispose();
     _titleController.dispose();
     _descController.dispose();
     _dateController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadPosts(showSpinner: false));
+    }
   }
 
   // ── Pick and upload a file ──────────────────────────────────────────────────
@@ -79,7 +101,19 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
   Future<void> _pickFile() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      allowedExtensions: [
+        'pdf',
+        'jpg',
+        'jpeg',
+        'png',
+        'webp',
+        'doc',
+        'docx',
+        'mp4',
+        'mov',
+        'm4v',
+        'webm',
+      ],
     );
     if (result == null || result.files.isEmpty) return;
     final path = result.files.single.path;
@@ -95,7 +129,13 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         filename: name,
       );
       if (url.isNotEmpty && mounted) {
-        setState(() => _uploadedUrls.add(url));
+        final item = EventPostMediaItem.fromUrl(url);
+        setState(() {
+          _uploadedUrls.add(url);
+          _uploadedMedia.add(
+            EventPostMediaItem(url: url, name: name, kind: item.kind),
+          );
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -110,8 +150,10 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   // ── Load + Submit ───────────────────────────────────────────────────────────
 
-  Future<void> _loadPosts() async {
-    setState(() => _loading = true);
+  Future<void> _loadPosts({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() => _loading = true);
+    }
     try {
       final response = await BackendApiClient.instance.getTeacherEventPosts();
       if (!mounted) return;
@@ -122,7 +164,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _loading = false;
+        if (showSpinner) _loading = false;
         _error = 'Failed to load posts: $e';
       });
     }
@@ -148,36 +190,129 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _error = null;
     });
     try {
-      await BackendApiClient.instance.createEventPost(
-        title: _titleController.text.trim(),
-        description: _descController.text.trim(),
-        eventDate: _dateController.text.trim().isEmpty
-            ? DateTime.now().toIso8601String()
-            : '${_dateController.text.trim()}T00:00:00Z',
-        mediaUrls: _uploadedUrls,
-        destinations: destinations,
-        isSubmit: isSubmit,
-      );
+      final eventDate = _dateController.text.trim().isEmpty
+          ? DateTime.now().toIso8601String()
+          : '${_dateController.text.trim()}T00:00:00Z';
+      if (_editingPostId == null) {
+        await BackendApiClient.instance.createEventPost(
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          eventDate: eventDate,
+          mediaUrls: _uploadedUrls,
+          media: _uploadedMedia,
+          destinations: destinations,
+          isSubmit: isSubmit,
+        );
+      } else {
+        await BackendApiClient.instance.updateEventPost(
+          id: _editingPostId!,
+          title: _titleController.text.trim(),
+          description: _descController.text.trim(),
+          eventDate: eventDate,
+          mediaUrls: _uploadedUrls,
+          media: _uploadedMedia,
+          destinations: destinations,
+          isSubmit: isSubmit,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(isSubmit ? 'Submitted for approval!' : 'Draft saved!'),
         ),
       );
-      _titleController.clear();
-      _descController.clear();
-      _dateController.clear();
-      _uploadedUrls.clear();
+      _clearForm();
+      await BackendApiClient.instance.invalidateCachedReads();
+      unawaited(
+        NotificationService.getInstance().then((service) => service.refresh()),
+      );
       setState(() {
         _loading = false;
         _tabController.animateTo(1);
       });
+      unawaited(_loadPosts(showSpinner: false));
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = 'Failed to submit: $e';
       });
+    }
+  }
+
+  void _clearForm() {
+    _titleController.clear();
+    _descController.clear();
+    _dateController.clear();
+    _uploadedUrls.clear();
+    _uploadedMedia.clear();
+    _editingPostId = null;
+    _editingRejectedPost = false;
+    _destParentHome = true;
+    _destSchoolGallery = false;
+    _destSchoolLanding = false;
+  }
+
+  void _startEditingPost(Map<String, dynamic> post) {
+    final destinations = _labels(post['destinations']);
+    final media = EventPostMediaItem.parseList(post['media_urls']);
+    setState(() {
+      _editingPostId = post['id']?.toString();
+      _editingRejectedPost =
+          (post['approval_status'] ?? '').toString() == 'rejected';
+      _titleController.text = (post['title'] ?? '').toString();
+      _descController.text = (post['description'] ?? '').toString();
+      final dateText = (post['event_date'] ?? '').toString();
+      _dateController.text = dateText.length >= 10
+          ? dateText.substring(0, 10)
+          : '';
+      _destParentHome = destinations.contains('PARENTS_HOME');
+      _destSchoolGallery = destinations.contains('SCHOOL_GALLERY');
+      _destSchoolLanding = destinations.contains('SCHOOL_LANDING');
+      _uploadedMedia
+        ..clear()
+        ..addAll(media);
+      _uploadedUrls
+        ..clear()
+        ..addAll(media.map((item) => item.url));
+      _tabController.animateTo(0);
+    });
+  }
+
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final id = (post['id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete event post?'),
+        content: const Text(
+          'This removes the draft/rejected post from your event post history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await BackendApiClient.instance.deleteEventPost(id);
+      await BackendApiClient.instance.invalidateCachedReads();
+      final service = await NotificationService.getInstance();
+      await service.refresh();
+      await _loadPosts(showSpinner: false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     }
   }
 
@@ -227,7 +362,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Create Event Post',
+                    _editingPostId == null
+                        ? 'Create Event Post'
+                        : _editingRejectedPost
+                        ? 'Edit Rejected Event Post'
+                        : 'Edit Draft Event Post',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -324,9 +463,12 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                             ),
                             IconButton(
                               icon: const Icon(Icons.close, size: 16),
-                              onPressed: () => setState(
-                                () => _uploadedUrls.removeAt(entry.key),
-                              ),
+                              onPressed: () => setState(() {
+                                _uploadedUrls.removeAt(entry.key);
+                                if (entry.key < _uploadedMedia.length) {
+                                  _uploadedMedia.removeAt(entry.key);
+                                }
+                              }),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
@@ -376,7 +518,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                       ),
                       FilledButton(
                         onPressed: _loading ? null : () => _submit(true),
-                        child: const Text('Submit for Approval'),
+                        child: Text(
+                          _editingRejectedPost
+                              ? 'Resubmit'
+                              : 'Submit for Approval',
+                        ),
                       ),
                     ],
                   ),
@@ -409,41 +555,119 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           _ => Colors.grey,
         };
         final media = _labels(post['media_urls']);
+        final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
+        final canEdit = status == 'draft' || status == 'rejected';
         return Card(
           margin: const EdgeInsets.only(bottom: 14),
-          child: ListTile(
-            title: Text(
-              post['title'] ?? 'No Title',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if ((post['description'] ?? '').isNotEmpty)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        post['title'] ?? 'No Title',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Chip(
+                      label: Text(
+                        status.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                      backgroundColor: statusColor,
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ],
+                ),
+                if ((post['description'] ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 8),
                   Text(post['description']),
-                if (media.isNotEmpty)
+                ],
+                if (mediaItems.isNotEmpty) ...[
+                  const SizedBox(height: 10),
                   Text(
                     '${media.length} attachment${media.length == 1 ? '' : 's'}',
                   ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 96,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: mediaItems.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) => SizedBox(
+                        width: 132,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: EventPostMediaPreview(
+                            item: mediaItems[index],
+                            height: 96,
+                            compact: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 if (status == 'rejected' && post['rejection_reason'] != null)
                   Text(
                     'Reason: ${post['rejection_reason']}',
                     style: const TextStyle(color: Colors.red),
                   ),
+                if (canEdit) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _startEditingPost(
+                          Map<String, dynamic>.from(post as Map),
+                        ),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('Edit'),
+                      ),
+                      if (status == 'draft')
+                        FilledButton.icon(
+                          onPressed: () {
+                            _startEditingPost(
+                              Map<String, dynamic>.from(post as Map),
+                            );
+                            _submit(true);
+                          },
+                          icon: const Icon(Icons.upload_rounded, size: 18),
+                          label: const Text('Submit'),
+                        ),
+                      if (status == 'rejected')
+                        FilledButton.icon(
+                          onPressed: () {
+                            _startEditingPost(
+                              Map<String, dynamic>.from(post as Map),
+                            );
+                            _submit(true);
+                          },
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Resubmit'),
+                        ),
+                      TextButton.icon(
+                        onPressed: () =>
+                            _deletePost(Map<String, dynamic>.from(post as Map)),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                ],
               ],
-            ),
-            trailing: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Chip(
-                label: Text(
-                  status.toUpperCase(),
-                  style: const TextStyle(fontSize: 10, color: Colors.white),
-                ),
-                backgroundColor: statusColor,
-                padding: EdgeInsets.zero,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
             ),
           ),
         );

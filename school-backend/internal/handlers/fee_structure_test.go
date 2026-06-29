@@ -196,6 +196,195 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	}
 }
 
+func TestDeleteFeeStructureKeepsAttachedStudentFinancialHistory(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	database.DB = db
+	if err := db.AutoMigrate(
+		&models.School{},
+		&models.AcademicYear{},
+		&models.Grade{},
+		&models.Section{},
+		&models.Student{},
+		&models.FeeCategory{},
+		&models.FeeStructure{},
+		&models.FeeInstallment{},
+		&models.FeeInvoice{},
+		&models.FeeInvoiceItem{},
+		&models.Payment{},
+		&models.ParentPaymentRequest{},
+		&models.AuditLog{},
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	school := models.School{BaseModel: models.BaseModel{ID: "school-delete-attached"}, Name: "Delete Attached", SchoolType: "cbse"}
+	otherSchool := models.School{BaseModel: models.BaseModel{ID: "school-delete-other"}, Name: "Other School", SchoolType: "cbse"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-delete-attached"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true}
+	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-delete-attached"}, SchoolID: school.ID, GradeName: "Class 7", GradeNumber: 7}
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-delete-attached"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
+	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-delete-attached"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "term"}
+	structure := models.FeeStructure{BaseModel: models.BaseModel{ID: "structure-delete-attached"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &section.ID, FeeCategoryID: category.ID, Amount: 40000, DueDay: 10, InstallmentCount: 4}
+	installment := models.FeeInstallment{BaseModel: models.BaseModel{ID: "installment-delete-attached"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &section.ID, FeeStructureID: &structure.ID, Method: "equal", InstallmentName: "Term 1", InstallmentNumber: 1, Amount: 10000, DueDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC), Status: "upcoming"}
+	student := models.Student{BaseModel: models.BaseModel{ID: "student-delete-attached"}, SchoolID: school.ID, StudentCode: "DA-001", AdmissionNumber: "DA-001", FirstName: "Attached", LastName: "Student", DateOfBirth: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC), AdmissionDate: time.Now(), CurrentSectionID: &section.ID, Status: "active"}
+	invoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-attached"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-ATTACHED", InvoiceDate: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC), TotalAmount: 10000, PayableAmount: 10000, NetAmount: 10000, PaidAmount: 4000, Balance: 6000, Status: "partial"}
+	item := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-attached"}, InvoiceID: invoice.ID, FeeCategoryID: category.ID, Amount: 10000, Description: "Tuition - Term 1"}
+	pendingInvoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-pending"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-PENDING", InvoiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), TotalAmount: 10000, PayableAmount: 10000, NetAmount: 10000, PaidAmount: 0, Balance: 10000, Status: "pending"}
+	pendingItem := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-pending"}, InvoiceID: pendingInvoice.ID, FeeCategoryID: category.ID, Amount: 10000, Description: "Tuition - Term 2"}
+	payment := models.Payment{BaseModel: models.BaseModel{ID: "payment-delete-attached"}, InvoiceID: invoice.ID, ReceiptNumber: "RCPT-DELETE-ATTACHED", AmountPaid: 4000, PaymentDate: time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC), PaymentMode: "upi", TransactionID: "UTR-DELETE", CreatedAt: time.Now()}
+	request := models.ParentPaymentRequest{BaseModel: models.BaseModel{ID: "request-delete-attached"}, SchoolID: school.ID, InvoiceID: invoice.ID, StudentID: student.ID, ParentUserID: "parent-delete-attached", RequestReference: "PPR-DELETE-ATTACHED", Amount: 4000, PaymentDate: payment.PaymentDate, PaymentMode: "upi", TransactionID: payment.TransactionID, Status: "approved"}
+	for _, seed := range []any{&school, &otherSchool, &year, &grade, &section, &category, &structure, &installment, &student, &invoice, &item, &pendingInvoice, &pendingItem, &payment, &request} {
+		if err := db.Create(seed).Error; err != nil {
+			t.Fatalf("seed %T: %v", seed, err)
+		}
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("school_id", school.ID)
+		c.Set("user_id", "principal-delete-attached")
+		c.Set("role", "Principal")
+		c.Next()
+	})
+	handler := NewFeeHandler()
+	router.DELETE("/fees/structures/:id", handler.DeleteFeeStructure)
+
+	wrongSchoolRouter := gin.New()
+	wrongSchoolRouter.Use(func(c *gin.Context) {
+		c.Set("school_id", otherSchool.ID)
+		c.Set("user_id", "principal-delete-other")
+		c.Set("role", "Principal")
+		c.Next()
+	})
+	wrongSchoolRouter.DELETE("/fees/structures/:id", handler.DeleteFeeStructure)
+	wrongSchool := httptest.NewRecorder()
+	wrongSchoolRouter.ServeHTTP(wrongSchool, httptest.NewRequest(http.MethodDelete, "/fees/structures/"+structure.ID, nil))
+	if wrongSchool.Code != http.StatusNotFound {
+		t.Fatalf("wrong-school delete status=%d body=%s", wrongSchool.Code, wrongSchool.Body.String())
+	}
+
+	deleteResp := httptest.NewRecorder()
+	router.ServeHTTP(deleteResp, httptest.NewRequest(http.MethodDelete, "/fees/structures/"+structure.ID+"?remove_pending=true", nil))
+	if deleteResp.Code != http.StatusOK {
+		t.Fatalf("delete attached structure status=%d body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+
+	var structureCount, installmentCount, invoiceCount, itemCount, paymentCount, requestCount int64
+	db.Model(&models.FeeStructure{}).Where("id = ?", structure.ID).Count(&structureCount)
+	db.Model(&models.FeeInstallment{}).Where("fee_structure_id = ?", structure.ID).Count(&installmentCount)
+	db.Model(&models.FeeInvoice{}).Where("id IN ?", []string{invoice.ID, pendingInvoice.ID}).Count(&invoiceCount)
+	db.Model(&models.FeeInvoiceItem{}).Where("id IN ?", []string{item.ID, pendingItem.ID}).Count(&itemCount)
+	db.Model(&models.Payment{}).Where("id = ?", payment.ID).Count(&paymentCount)
+	db.Model(&models.ParentPaymentRequest{}).Where("id = ?", request.ID).Count(&requestCount)
+	if structureCount != 0 || installmentCount != 0 {
+		t.Fatalf("structure/installments should be deleted, structures=%d installments=%d", structureCount, installmentCount)
+	}
+	if invoiceCount != 2 || itemCount != 2 || paymentCount != 1 || requestCount != 1 {
+		t.Fatalf("financial history should remain, invoices=%d items=%d payments=%d requests=%d", invoiceCount, itemCount, paymentCount, requestCount)
+	}
+
+	var keptInvoice models.FeeInvoice
+	if err := db.First(&keptInvoice, "id = ?", invoice.ID).Error; err != nil {
+		t.Fatalf("load preserved invoice: %v", err)
+	}
+	if keptInvoice.TotalAmount != 10000 || keptInvoice.PayableAmount != 10000 || keptInvoice.PaidAmount != 4000 || keptInvoice.Balance != 6000 || keptInvoice.Status != "partial" {
+		t.Fatalf("invoice should remain unchanged, got %+v", keptInvoice)
+	}
+	var keptPending models.FeeInvoice
+	if err := db.First(&keptPending, "id = ?", pendingInvoice.ID).Error; err != nil {
+		t.Fatalf("load preserved pending invoice: %v", err)
+	}
+	if keptPending.TotalAmount != 10000 || keptPending.PayableAmount != 10000 || keptPending.PaidAmount != 0 || keptPending.Balance != 10000 || keptPending.Status != "pending" {
+		t.Fatalf("pending invoice should remain unchanged, got %+v", keptPending)
+	}
+}
+
+func TestFeeInvoicesExposeInstallmentPositionAndBatchLateFineSync(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	database.DB = db
+	if err := db.AutoMigrate(
+		&models.School{},
+		&models.AcademicYear{},
+		&models.Grade{},
+		&models.Section{},
+		&models.Student{},
+		&models.FeeCategory{},
+		&models.FeeStructure{},
+		&models.FeeInstallment{},
+		&models.FeeInvoice{},
+		&models.FeeInvoiceItem{},
+		&models.Payment{},
+	); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	school := models.School{BaseModel: models.BaseModel{ID: "school-late"}, Name: "Late School", SchoolType: "cbse"}
+	year := models.AcademicYear{BaseModel: models.BaseModel{ID: "year-late"}, SchoolID: school.ID, YearLabel: "2026-2027", StartDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), EndDate: time.Date(2027, 3, 31, 0, 0, 0, 0, time.UTC), IsCurrent: true}
+	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-late"}, SchoolID: school.ID, GradeName: "Class 6", GradeNumber: 6}
+	section := models.Section{BaseModel: models.BaseModel{ID: "section-late"}, SchoolID: school.ID, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
+	sectionID := section.ID
+	student := models.Student{BaseModel: models.BaseModel{ID: "student-late"}, SchoolID: school.ID, StudentCode: "LATE-1", AdmissionNumber: "LATE-ADM-1", FirstName: "Late", LastName: "Student", DateOfBirth: time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC), Gender: "female", AdmissionDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), CurrentSectionID: &sectionID, Status: "active"}
+	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-late"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "term"}
+	structure := models.FeeStructure{BaseModel: models.BaseModel{ID: "structure-late"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &sectionID, FeeCategoryID: category.ID, Amount: 9000, DueDay: 10, LateFinePerDay: 20, InstallmentCount: 3, InstallmentMethod: "equal"}
+	installment := models.FeeInstallment{BaseModel: models.BaseModel{ID: "installment-late"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &sectionID, FeeStructureID: &structure.ID, Method: "equal", InstallmentName: "Term 2", InstallmentNumber: 2, Amount: 3000, DueDate: time.Now().UTC().AddDate(0, 0, -5), Status: "upcoming"}
+	invoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-late"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-LATE-1", InvoiceDate: time.Now().UTC().AddDate(0, 0, -8), DueDate: time.Now().UTC().AddDate(0, 0, -5), TotalAmount: 3000, PayableAmount: 3000, NetAmount: 3000, PaidAmount: 0, Balance: 3000, Status: "pending"}
+	item := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-late"}, InvoiceID: invoice.ID, FeeCategoryID: category.ID, Amount: 3000, Description: "Term 2"}
+	for _, seed := range []any{&school, &year, &grade, &section, &student, &category, &structure, &installment, &invoice, &item} {
+		if err := db.Create(seed).Error; err != nil {
+			t.Fatalf("seed %T: %v", seed, err)
+		}
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("school_id", school.ID)
+		c.Set("user_id", "principal-late")
+		c.Set("role", "Principal")
+		c.Next()
+	})
+	handler := NewFeeHandler()
+	router.POST("/fees/invoices/late-fines/apply", handler.ApplyLateFineAdjustments)
+	router.GET("/fees/invoices", handler.GetInvoices)
+
+	apply := httptest.NewRecorder()
+	router.ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/fees/invoices/late-fines/apply", nil))
+	if apply.Code != http.StatusOK {
+		t.Fatalf("apply late fines status=%d body=%s", apply.Code, apply.Body.String())
+	}
+	var refreshed models.FeeInvoice
+	if err := db.First(&refreshed, "id = ?", invoice.ID).Error; err != nil {
+		t.Fatalf("load invoice: %v", err)
+	}
+	if refreshed.FineAmount != 100 || refreshed.PayableAmount != 3100 || refreshed.Balance != 3100 || refreshed.Status != "overdue" {
+		t.Fatalf("late fine not applied atomically: %+v", refreshed)
+	}
+
+	list := httptest.NewRecorder()
+	router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/fees/invoices", nil))
+	if list.Code != http.StatusOK {
+		t.Fatalf("list invoices status=%d body=%s", list.Code, list.Body.String())
+	}
+	var body struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(body.Data) != 1 {
+		t.Fatalf("invoice count=%d want 1", len(body.Data))
+	}
+	if body.Data[0]["installment_number"] != float64(2) || body.Data[0]["installment_count"] != float64(3) {
+		t.Fatalf("installment fields missing: %+v", body.Data[0])
+	}
+}
+
 func TestGenerateInvoicesCreatesClassAndStudentScopedInvoices(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

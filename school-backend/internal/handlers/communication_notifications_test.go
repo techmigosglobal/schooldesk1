@@ -380,6 +380,9 @@ func TestEventPostSubmitNotifiesPrincipalForApproval(t *testing.T) {
 	if principalLog.PushStatus != "pending" {
 		t.Fatalf("principal event push_status=%q, want pending", principalLog.PushStatus)
 	}
+	if principalLog.ReferenceType != "event_post" || principalLog.ReferenceID == nil || *principalLog.ReferenceID != postID {
+		t.Fatalf("principal notification reference=%q/%v, want event_post/%s", principalLog.ReferenceType, principalLog.ReferenceID, postID)
+	}
 
 	var adminCount int64
 	if err := database.DB.Model(&models.NotificationLog{}).
@@ -389,6 +392,66 @@ func TestEventPostSubmitNotifiesPrincipalForApproval(t *testing.T) {
 	}
 	if adminCount != 0 {
 		t.Fatalf("admin event notifications=%d, want 0", adminCount)
+	}
+}
+
+func TestGetEventPostByIDScopesPrincipalAndTeacher(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	handler := NewEventPostHandler()
+	post := models.EventPost{
+		SchoolID:           f.schoolID,
+		Title:              "Target Post",
+		Description:        "Detail contract",
+		EventDate:          time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC),
+		CreatedByTeacherID: f.teacherStaffID,
+		MediaUrls:          "https://cdn.test/image.png,https://cdn.test/file.pdf",
+		Destinations:       string(models.DestinationParentsHome),
+		ApprovalStatus:     models.ApprovalStatusApproved,
+	}
+	if err := database.DB.Create(&post).Error; err != nil {
+		t.Fatalf("seed event post: %v", err)
+	}
+	externalPost := models.EventPost{
+		SchoolID:           "external-school",
+		Title:              "External Post",
+		EventDate:          time.Date(2026, 7, 4, 9, 0, 0, 0, time.UTC),
+		CreatedByTeacherID: "external-teacher",
+		Destinations:       string(models.DestinationParentsHome),
+		ApprovalStatus:     models.ApprovalStatusPending,
+	}
+	if err := database.DB.Create(&externalPost).Error; err != nil {
+		t.Fatalf("seed external event post: %v", err)
+	}
+
+	principalRouter := scopedPolicyRouter("Principal", "user-policy-principal", "", "", "principal@policy.test", f.schoolID)
+	principalRouter.GET("/event-posts/:id", handler.GetEventPost)
+	teacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher", "staff", f.teacherStaffID, "assigned.teacher@policy.test", f.schoolID)
+	teacherRouter.GET("/event-posts/:id", handler.GetEventPost)
+	otherTeacherRouter := scopedPolicyRouter("Teacher", "user-policy-teacher-other", "staff", f.otherStaffID, "other.teacher@policy.test", f.schoolID)
+	otherTeacherRouter.GET("/event-posts/:id", handler.GetEventPost)
+
+	principalGet := httptest.NewRecorder()
+	principalRouter.ServeHTTP(principalGet, httptest.NewRequest(http.MethodGet, "/event-posts/"+post.ID, nil))
+	if principalGet.Code != http.StatusOK {
+		t.Fatalf("principal detail status=%d body=%s", principalGet.Code, principalGet.Body.String())
+	}
+
+	teacherGet := httptest.NewRecorder()
+	teacherRouter.ServeHTTP(teacherGet, httptest.NewRequest(http.MethodGet, "/event-posts/"+post.ID, nil))
+	if teacherGet.Code != http.StatusOK {
+		t.Fatalf("teacher owner detail status=%d body=%s", teacherGet.Code, teacherGet.Body.String())
+	}
+
+	otherTeacherGet := httptest.NewRecorder()
+	otherTeacherRouter.ServeHTTP(otherTeacherGet, httptest.NewRequest(http.MethodGet, "/event-posts/"+post.ID, nil))
+	if otherTeacherGet.Code != http.StatusNotFound {
+		t.Fatalf("wrong teacher detail status=%d body=%s", otherTeacherGet.Code, otherTeacherGet.Body.String())
+	}
+
+	crossSchool := httptest.NewRecorder()
+	principalRouter.ServeHTTP(crossSchool, httptest.NewRequest(http.MethodGet, "/event-posts/"+externalPost.ID, nil))
+	if crossSchool.Code != http.StatusNotFound {
+		t.Fatalf("wrong school detail status=%d body=%s", crossSchool.Code, crossSchool.Body.String())
 	}
 }
 

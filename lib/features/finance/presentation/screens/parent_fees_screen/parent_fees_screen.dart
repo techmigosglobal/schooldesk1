@@ -625,8 +625,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     final hasInstallmentInfo = instNum != null && instTotal != null;
     final instProgress = hasInstallmentInfo
         ? (int.tryParse('$instNum') ?? 0) /
-              (int.tryParse('$instTotal') ?? 1)
-              .clamp(1, double.infinity)
+              (int.tryParse('$instTotal') ?? 1).clamp(1, double.infinity)
         : null;
 
     return Container(
@@ -778,8 +777,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     child: LinearProgressIndicator(
                       value: instProgress,
                       minHeight: 5,
-                      backgroundColor:
-                          context.appTheme.outlineVariant.withAlpha(80),
+                      backgroundColor: context.appTheme.outlineVariant
+                          .withAlpha(80),
                       valueColor: AlwaysStoppedAnimation<Color>(
                         isPaid ? context.appTheme.success : _headerColor,
                       ),
@@ -1103,8 +1102,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       if (items is! List || items.isEmpty) {
         final name = _text(fee['component'], fallback: 'Fee');
         totals[name] =
-            (totals[name] ?? 0) +
-            ((fee['totalAmount'] as num?)?.toDouble() ?? 0);
+            (totals[name] ?? 0) + ((fee['amount'] as num?)?.toDouble() ?? 0);
         continue;
       }
       for (final rawItem in items.whereType<Map>()) {
@@ -1200,7 +1198,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     }
     // Append installment number if available (e.g., "1 of 3")
     final instNum = invoice['installment_number'];
-    final instTotal = invoice['installment_count'] ?? invoice['total_installments'];
+    final instTotal =
+        invoice['installment_count'] ?? invoice['total_installments'];
     if (instNum != null && instTotal != null) {
       return '$base ($instNum of $instTotal)';
     } else if (instNum != null) {

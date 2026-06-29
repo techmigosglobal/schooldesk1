@@ -14,6 +14,7 @@ import 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 import 'package:schooldesk1/core/network/generated/schooldesk_api_models.dart';
 import 'package:schooldesk1/core/network/schooldesk_api.dart';
 import 'package:schooldesk1/core/services/token_storage_service.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 
 export 'package:schooldesk1/features/shared/data/models/backend_models.dart';
 

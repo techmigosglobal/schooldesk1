@@ -75,8 +75,8 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     try {
       final api = BackendApiClient.instance;
       final feeStructures = await api.getFeeStructures();
+      await api.applyLateFineAdjustments();
       final invoices = await api.getInvoices();
-      final invoicesWithFineSync = await _applyLateFineAdjustments(invoices);
       final feeCategories = await api.getRawList('/fees/categories');
       final concessions = await api.getRawList('/fees/concessions');
       final paymentConfig = await api.getPaymentConfig();
@@ -85,7 +85,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final grades = await api.getGrades();
       final sections = await api.getSections();
       final students = await api.getStudents(page: 1, pageSize: 500);
-      final normalizedInvoices = invoicesWithFineSync.map(_normalizeInvoice).toList();
+      final normalizedInvoices = invoices.map(_normalizeInvoice).toList();
       if (!mounted) return;
       setState(() {
         _feeStructures = feeStructures.map(_normalizeFeeStructure).toList();
@@ -103,7 +103,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _pendingDues = normalizedInvoices
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList();
-        _recentPayments = invoicesWithFineSync.expand(_normalizePayments).toList();
+        _recentPayments = invoices.expand(_normalizePayments).toList();
         _loading = false;
       });
     } catch (error) {
@@ -779,8 +779,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         : _concessions
               .where(
                 (c) =>
-                    _textValue(c['status'], fallback: 'pending')
-                        .toLowerCase() ==
+                    _textValue(
+                      c['status'],
+                      fallback: 'pending',
+                    ).toLowerCase() ==
                     _concessionStatusFilter.toLowerCase(),
               )
               .toList();
@@ -841,11 +843,13 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Widget _buildConcessionRow(Map<String, dynamic> concession) {
     final status = _textValue(concession['status'], fallback: 'pending');
     final id = _textValue(concession['id']);
-    final canDecide = id.isNotEmpty &&
+    final canDecide =
+        id.isNotEmpty &&
         status.toLowerCase() != 'approved' &&
         status.toLowerCase() != 'rejected';
     final saving = id.isNotEmpty && _updatingConcessionIds.contains(id);
-    final amount = double.tryParse(
+    final amount =
+        double.tryParse(
           _textValue(concession['amount'] ?? concession['concession_amount']),
         ) ??
         0;
@@ -864,20 +868,14 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          OpsStatusPill(
-            label: status,
-            color: _statusColor(status),
-          ),
+          OpsStatusPill(label: status, color: _statusColor(status)),
           if (canDecide) ...[
             const SizedBox(width: 8),
             IconButton(
               tooltip: 'Approve concession',
               onPressed: saving
                   ? null
-                  : () => _updateConcessionStatus(
-                        concession,
-                        approved: true,
-                      ),
+                  : () => _updateConcessionStatus(concession, approved: true),
               icon: saving
                   ? const SizedBox.square(
                       dimension: 14,
@@ -890,10 +888,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               tooltip: 'Reject concession',
               onPressed: saving
                   ? null
-                  : () => _updateConcessionStatus(
-                        concession,
-                        approved: false,
-                      ),
+                  : () => _updateConcessionStatus(concession, approved: false),
               icon: const Icon(Icons.cancel_outlined, size: 18),
               color: Colors.red,
             ),
@@ -982,7 +977,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Generates an instant fee collection summary PDF from live data. '  
+                    'Generates an instant fee collection summary PDF from live data. '
                     'Includes class-wise breakdown, totals, and outstanding dues.',
                     style: TextStyle(
                       fontSize: 12,
@@ -991,7 +986,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
-                    onPressed: _generatingInAppReport ? null : _generateAdminInAppReport,
+                    onPressed: _generatingInAppReport
+                        ? null
+                        : _generateAdminInAppReport,
                     icon: _generatingInAppReport
                         ? const SizedBox.square(
                             dimension: 16,
@@ -1043,7 +1040,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             children: [
               Text(
                 '$count',
-                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
@@ -1082,11 +1082,16 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                 tile('31-60 days', buckets.$2, const Color(0xFFEF4444)),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF7C3AED).withAlpha(22),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF7C3AED).withAlpha(50)),
+                      border: Border.all(
+                        color: const Color(0xFF7C3AED).withAlpha(50),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1103,7 +1108,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
                           '61+ days',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -1129,69 +1136,51 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       _snack('Fee structure ID is missing.');
       return;
     }
-    bool removePending = true;
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Delete fee component?',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}.',
-                ),
-                const SizedBox(height: 12),
-                CheckboxListTile(
-                  value: removePending,
-                  onChanged: (val) =>
-                      setSheetState(() => removePending = val == true),
-                  title: const Text('Remove from unpaid invoices'),
-                  subtitle: const Text(
-                    'Deducts this fee component from pending student invoices to avoid incorrect billing.',
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Delete fee component?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}; existing invoices and payments are not changed.',
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
                   ),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel'),
-                      ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Delete'),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => Navigator.pop(context, true),
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: const Text('Delete'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(
-        id,
-        removePending: removePending,
-      );
+      await BackendApiClient.instance.deleteFeeStructure(id);
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);
@@ -1330,8 +1319,9 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final invoiceId = _textValue(payment['invoice_id']);
       if (invoiceId.isNotEmpty) {
         try {
-          final detail = await BackendApiClient.instance
-              .getInvoiceDetail(invoiceId);
+          final detail = await BackendApiClient.instance.getInvoiceDetail(
+            invoiceId,
+          );
           final rawItems = detail['items'];
           if (rawItems is List && rawItems.isNotEmpty) {
             feeItems = rawItems.whereType<Map>().map((item) {
@@ -1349,20 +1339,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           }
         } catch (_) {
           feeItems = [
-            {
-              'description': 'Fee payment',
-              'amount': amount,
-              'status': 'Paid',
-            },
+            {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
           ];
         }
       } else {
         feeItems = [
-          {
-            'description': 'Fee payment',
-            'amount': amount,
-            'status': 'Paid',
-          },
+          {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
         ];
       }
       final bytes = await pdfService.generateFeeReceipt(
@@ -1394,10 +1376,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _snack('Invoice ID is missing.');
         return;
       }
-      
+
       List<Map<String, dynamic>> feeItems = [];
       try {
-        final detail = await BackendApiClient.instance.getInvoiceDetail(invoiceId);
+        final detail = await BackendApiClient.instance.getInvoiceDetail(
+          invoiceId,
+        );
         final rawItems = detail['items'];
         if (rawItems is List && rawItems.isNotEmpty) {
           feeItems = rawItems.whereType<Map>().map((item) {
@@ -1412,17 +1396,17 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           }).toList();
         }
       } catch (_) {}
-      
+
       if (feeItems.isEmpty) {
         feeItems = [
           {
             'description': 'Academic Fees',
             'amount': _numValue(invoice['total']),
             'status': 'Pending',
-          }
+          },
         ];
       }
-      
+
       final bytes = await pdfService.generateFeeReceipt(
         receiptNo: _textValue(invoice['invoice_number'], fallback: 'INV'),
         studentName: _textValue(invoice['name'], fallback: 'Student'),
@@ -1434,9 +1418,11 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         paidAmount: _numValue(invoice['paid']),
         balance: _numValue(invoice['balance']),
         paymentMode: 'Invoice',
-        paymentDate: DateTime.tryParse(_textValue(invoice['due_date'])) ?? DateTime.now(),
+        paymentDate:
+            DateTime.tryParse(_textValue(invoice['due_date'])) ??
+            DateTime.now(),
       );
-      
+
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Invoice');
     } catch (error) {
@@ -1462,7 +1448,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       }
       for (final inv in _pendingDues) {
         final classKey = _textValue(inv['class'], fallback: 'Unknown');
-        classMap.putIfAbsent(classKey, () => {'total': 0, 'paid': 0, 'balance': 0});
+        classMap.putIfAbsent(
+          classKey,
+          () => {'total': 0, 'paid': 0, 'balance': 0},
+        );
         classMap[classKey]!['balance'] =
             (classMap[classKey]!['balance'] ?? 0) + _numValue(inv['balance']);
       }
@@ -1510,7 +1499,8 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         paymentMode: 'Summary Report',
         paymentDate: DateTime.now(),
         schoolName: 'School Fee Summary',
-        schoolAddress: 'Generated: ${DateTime.now().toString().substring(0, 16)}',
+        schoolAddress:
+            'Generated: ${DateTime.now().toString().substring(0, 16)}',
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Collection Report');
@@ -1522,7 +1512,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   }
 
   Future<void> _savePaymentConfig() async {
-
     setState(() => _savingPaymentConfig = true);
     try {
       final config = await BackendApiClient.instance
@@ -1680,61 +1669,6 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       }
     }
     return (bucket0To30, bucket31To60, bucket61Plus);
-  }
-
-  Future<List<Map<String, dynamic>>> _applyLateFineAdjustments(
-    List<Map<String, dynamic>> invoices,
-  ) async {
-    final today = DateTime.now();
-    final updatedList = invoices.map(Map<String, dynamic>.from).toList();
-    for (var i = 0; i < updatedList.length; i++) {
-      final invoice = Map<String, dynamic>.from(updatedList[i]);
-      final invoiceId = _textValue(invoice['id']);
-      final status = _textValue(invoice['status']).toLowerCase();
-      final due = DateTime.tryParse(_textValue(invoice['due_date']));
-      final balance = _numValue(invoice['balance']);
-      if (invoiceId.isEmpty || due == null || balance <= 0) continue;
-      if (status == 'paid' || status == 'cancelled') continue;
-      final overdueDays = today.difference(due).inDays;
-      if (overdueDays <= 0) continue;
-
-      final structure = _mapValue(invoice['fee_structure']);
-      final perDayFine = _numValue(
-        invoice['late_fine_per_day'] ?? structure['late_fine_per_day'],
-      );
-      if (perDayFine <= 0) continue;
-
-      final expectedFine = perDayFine * overdueDays;
-      final currentFine = _numValue(invoice['fine_amount']);
-      if ((expectedFine - currentFine).abs() < 0.5) continue;
-      try {
-        final updated = await BackendApiClient.instance.updateInvoice(
-          invoiceId,
-          fineAmount: expectedFine,
-          status: 'overdue',
-        );
-        updatedList[i] = {
-          ...invoice,
-          ...updated,
-          'fine_amount':
-              updated.containsKey('fine_amount')
-              ? _numValue(updated['fine_amount'])
-              : expectedFine,
-          'status': _textValue(updated['status'], fallback: 'overdue'),
-          'balance':
-              updated.containsKey('balance')
-              ? _numValue(updated['balance'])
-              : balance,
-        };
-      } catch (_) {
-        updatedList[i] = {
-          ...invoice,
-          'fine_amount': expectedFine,
-          'status': 'overdue',
-        };
-      }
-    }
-    return updatedList;
   }
 
   Color _statusColor(String status) {

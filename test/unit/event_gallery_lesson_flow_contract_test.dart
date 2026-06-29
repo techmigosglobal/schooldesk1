@@ -64,6 +64,9 @@ void main() {
     final gallery = File(
       'lib/features/shared/presentation/screens/school_gallery_screen.dart',
     ).readAsStringSync();
+    final mediaPreview = File(
+      'lib/core/widgets/event_post_media_preview.dart',
+    ).readAsStringSync();
 
     expect(parentDashboard, contains('getHomeFeedEventPosts()'));
     expect(parentLessonPlanner, contains('getParentLessonPlanners()'));
@@ -79,6 +82,13 @@ void main() {
     expect(approval, contains('getPendingEventPosts()'));
     expect(gallery, contains('getGalleryEventPosts()'));
     expect(gallery, contains('GridView.builder'));
+    expect(parentDashboard, contains('EventPostMediaItem.parseList'));
+    expect(parentDashboard, isNot(contains('mediaUrls.first')));
+    expect(parentDashboard, contains('PageView.builder'));
+    expect(gallery, contains('EventPostMediaItem.parseList'));
+    expect(parentDashboard, contains('EventPostMediaPreview'));
+    expect(gallery, contains('EventPostMediaPreview'));
+    expect(mediaPreview, contains('VideoPlayerController.networkUrl'));
   });
 
   test(

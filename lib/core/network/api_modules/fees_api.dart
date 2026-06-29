@@ -189,14 +189,10 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
-  Future<void> deleteFeeStructure(
-    String structureId, {
-    bool removePending = false,
-  }) async {
+  Future<void> deleteFeeStructure(String structureId) async {
     try {
       final response = await _dio.delete(
         '/fees/structures/${structureId.trim()}',
-        queryParameters: {if (removePending) 'remove_pending': 'true'},
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) return;
@@ -272,6 +268,21 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> applyLateFineAdjustments() async {
+    try {
+      final response = await _dio.post('/fees/invoices/late-fines/apply');
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to apply late fine adjustments',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getInvoices({
     String? studentId,
     String? status,
@@ -338,9 +349,7 @@ extension BackendFeesApi on BackendApiClient {
 
   Future<Map<String, dynamic>> getInvoiceDetail(String invoiceId) async {
     try {
-      final response = await _dio.get(
-        '/fees/invoices/${invoiceId.trim()}',
-      );
+      final response = await _dio.get('/fees/invoices/${invoiceId.trim()}');
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return Map<String, dynamic>.from(data['data'] as Map? ?? {});

@@ -34,7 +34,10 @@ void main() {
           .first;
 
       expect(source, contains("title: 'Fees Overview'"));
-      expect(source, contains('Class-wise fee structures, payments, and parent QR'));
+      expect(
+        source,
+        contains('Class-wise fee structures, payments, and parent QR'),
+      );
       expect(source, contains('enum _FeeView'));
       expect(source, contains('_FeeView.home'));
       expect(source, contains('_FeeView.structures'));
@@ -82,8 +85,14 @@ void main() {
       expect(source, contains('_primaryDueInvoice'));
       expect(source, contains('_FeeStructureBundle'));
       expect(source, contains('_FeeStudentAccount'));
-      expect(source, contains("final sectionId = _textValue(row['section_id'])"));
-      expect(source, contains("structure.sectionId == _textValue(invoice['section_id'])"));
+      expect(
+        source,
+        contains("final sectionId = _textValue(row['section_id'])"),
+      );
+      expect(
+        source,
+        contains("structure.sectionId == _textValue(invoice['section_id'])"),
+      );
       expect(source, contains('_FeePaymentResult'));
       expect(source, contains('BackendApiClient.instance.recordPayment'));
       expect(source, contains("createRaw('/fees/reminders'"));
@@ -657,7 +666,7 @@ void main() {
     expect(events, contains('class _EventCalendarDayCell'));
     expect(events, contains('_eventsForDay('));
     expect(events, contains('DateUtils.getDaysInMonth'));
-    expect(events, contains('_selectedMonthCount'));
+    expect(events, contains('monthEventCount'));
     expect(events, contains('overlapsMonth'));
     expect(events, contains('overlapsDate'));
     expect(events, contains('Approve event'));
@@ -665,10 +674,12 @@ void main() {
     expect(events, contains('_setEventStatus'));
     expect(events, contains('End time must be after start time.'));
     expect(events, contains('Holiday rows are saved as all-day events'));
-    expect(events, contains("'event_name': _titleController.text.trim()"));
+    expect(events, contains("'event_title': _titleController.text.trim()"));
+    expect(events, contains("'start_datetime': _formatRfc3339(startDateTime)"));
+    expect(events, contains("'end_datetime': _formatRfc3339(endDateTime)"));
     expect(events, contains("'audience_type': _audience"));
     expect(events, contains("'is_holiday': _isHoliday"));
-    expect(events, contains("createRaw('/events'"));
+    expect(events, contains('createEventPayload(payload)'));
     expect(events, contains("updateRaw('/events/\$eventId'"));
     expect(events, contains("deleteRaw('/events/\${event.id}'"));
     expect(routes, isNot(contains('static const String principalInbox')));
@@ -695,7 +706,7 @@ void main() {
     expect(calendar, contains('_buildDisplayModeSelector'));
     expect(calendar, isNot(contains('_buildStatusFilterStrip')));
     expect(calendar, contains('_buildMonthStrip'));
-    expect(calendar, contains('_buildCompactCalendarMetrics'));
+    expect(calendar, contains('constraints.maxWidth < 430'));
     expect(calendar, contains('_resetCalendarFilters'));
     expect(calendar, contains('Reset filters'));
     expect(calendar, contains('No calendar entries match these filters'));

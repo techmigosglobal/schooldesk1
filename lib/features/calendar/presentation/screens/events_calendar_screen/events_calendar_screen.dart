@@ -475,19 +475,19 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       try {
         final payload = {
           'academic_year_id': _selectedAcademicYearId,
-          'event_name': entry.title,
+          'event_title': entry.title,
           'event_type': entry.eventType,
           'description': entry.description,
-          'start_date': entry.startDate,
-          'end_date': entry.endDate,
-          'start_time': '00:00:00',
-          'end_time': '23:59:00',
-          'venue': '',
-          'audience_type': entry.audienceType,
-          'status': 'approved',
+          'start_datetime': _formatRfc3339(
+            DateTime.parse('${entry.startDate}T00:00:00'),
+          ),
+          'end_datetime': _formatRfc3339(
+            DateTime.parse('${entry.endDate}T23:59:00'),
+          ),
+          'location': '',
           'is_holiday': entry.isHoliday,
         };
-        await BackendApiClient.instance.createRaw('/events', payload);
+        await BackendApiClient.instance.createEventPayload(payload);
         existing.add(key);
         done++;
       } catch (err) {
@@ -569,7 +569,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
             sliver: SliverToBoxAdapter(child: _buildWeekView()),
-          )
+          ),
       ],
     );
   }
@@ -623,7 +623,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
                   sliver: SliverToBoxAdapter(child: _buildWeekView()),
-                )
+                ),
             ],
           ],
         ),
@@ -705,8 +705,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       },
     );
   }
-
-
 
   Widget _buildCalendarEmptyState() {
     return Padding(
@@ -855,11 +853,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ),
     );
   }
-
-
 }
-
-
 
 class _EventCalendarMonth extends StatelessWidget {
   final int month;
@@ -937,13 +931,18 @@ class _EventCalendarMonth extends StatelessWidget {
                                   return ListTile(
                                     title: Text(
                                       ev.title,
-                                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                                      style: GoogleFonts.dmSans(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                     subtitle: Text(
                                       ev.typeLabel,
                                       style: GoogleFonts.dmSans(),
                                     ),
-                                    trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+                                    trailing: const Icon(
+                                      Icons.chevron_right_rounded,
+                                      size: 20,
+                                    ),
                                     onTap: () {
                                       Navigator.pop(sheetCtx);
                                       onEventTap(ev);
@@ -1408,7 +1407,8 @@ class _EventFormPageState extends State<_EventFormPage> {
     super.initState();
     final event = widget.event;
     final now = DateTime.now();
-    final fallbackDate = widget.initialDate ?? DateTime(now.year, widget.initialMonth, 1);
+    final fallbackDate =
+        widget.initialDate ?? DateTime(now.year, widget.initialMonth, 1);
     _academicYearId =
         event?.academicYearId ??
         (widget.selectedAcademicYearId.isNotEmpty
@@ -1470,13 +1470,16 @@ class _EventFormPageState extends State<_EventFormPage> {
     try {
       final payload = {
         'academic_year_id': _academicYearId,
-        'event_name': _titleController.text.trim(),
+        'event_title': _titleController.text.trim(),
         'event_type': _isHoliday ? 'holiday' : _type,
         'description': _descriptionController.text.trim(),
+        'start_datetime': _formatRfc3339(startDateTime),
+        'end_datetime': _formatRfc3339(endDateTime),
         'start_date': _formatDate(_startDate),
         'end_date': _formatDate(_endDate),
         'start_time': _formatTime(_effectiveStartTime),
         'end_time': _formatTime(_effectiveEndTime),
+        'location': _venueController.text.trim(),
         'venue': _venueController.text.trim(),
         'audience_type': _audience,
         'status': _status,
@@ -1484,7 +1487,7 @@ class _EventFormPageState extends State<_EventFormPage> {
       };
       final eventId = widget.event?.id ?? '';
       if (eventId.isEmpty) {
-        await BackendApiClient.instance.createRaw('/events', payload);
+        await BackendApiClient.instance.createEventPayload(payload);
       } else {
         await BackendApiClient.instance.updateRaw('/events/$eventId', payload);
       }
@@ -1807,7 +1810,7 @@ class _ResponsivePickerGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 360) {
+        if (constraints.maxWidth < 430) {
           return Column(
             children: [
               for (var i = 0; i < children.length; i++) ...[
@@ -1850,7 +1853,7 @@ class _PickerTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Container(
         constraints: const BoxConstraints(minHeight: 68),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: const Color(0xFFDCE8F5)),
@@ -1858,8 +1861,8 @@ class _PickerTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, color: principalDirectoryAccent, size: 20),
-            const SizedBox(width: 8),
+            Icon(icon, color: principalDirectoryAccent, size: 22),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1874,17 +1877,14 @@ class _PickerTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        color: principalDirectoryText,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      color: principalDirectoryText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
@@ -2092,7 +2092,21 @@ class _EventCalendarWeek extends StatelessWidget {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: events.isEmpty ? InkWell(onTap: () => onEmptyDayTap?.call(day), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text('No events', style: GoogleFonts.dmSans(color: principalDirectoryMuted, fontSize: 12, fontWeight: FontWeight.w700))))
+                    child: events.isEmpty
+                        ? InkWell(
+                            onTap: () => onEmptyDayTap?.call(day),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                'No events',
+                                style: GoogleFonts.dmSans(
+                                  color: principalDirectoryMuted,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          )
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: events.map((event) {
@@ -2323,7 +2337,9 @@ String _clean(Object? value, {String fallback = ''}) {
 DateTime? _parseDateTime(Object? value) {
   final text = _clean(value);
   if (text.isEmpty) return null;
-  return DateTime.tryParse(text);
+  final parsed = DateTime.tryParse(text);
+  if (parsed == null) return null;
+  return parsed.isUtc ? parsed.toLocal() : parsed;
 }
 
 DateTime? _parseDateAndTime(
@@ -2353,6 +2369,8 @@ String _formatTime(TimeOfDay time) {
   final minute = time.minute.toString().padLeft(2, '0');
   return '$hour:$minute:00';
 }
+
+String _formatRfc3339(DateTime date) => date.toUtc().toIso8601String();
 
 String _formatTimeOfDay(TimeOfDay time) {
   final hour = time.hour.toString().padLeft(2, '0');
@@ -2790,4 +2808,3 @@ abstract final class _SchoolCalendarData {
     ),
   ];
 }
-

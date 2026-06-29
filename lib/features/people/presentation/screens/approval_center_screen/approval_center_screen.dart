@@ -455,13 +455,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     }
   }
 
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
-  }
-
   List<ApprovalModel> _getTypeFilteredApprovals(int tabIndex) {
     if (tabIndex == 0) return _allApprovals;
     if (tabIndex == 2) {

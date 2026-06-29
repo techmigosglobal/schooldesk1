@@ -24,25 +24,25 @@ extension BackendEventsApi on BackendApiClient {
     String description = '',
     bool isHoliday = false,
   }) async {
+    await createEventPayload({
+      'academic_year_id': academicYearId,
+      'event_title': title,
+      'event_type': eventType,
+      'description': description,
+      'start_datetime': start.toUtc().toIso8601String(),
+      'end_datetime': end.toUtc().toIso8601String(),
+      'location': location,
+      'is_holiday': isHoliday,
+    });
+  }
+
+  Future<void> createEventPayload(Map<String, dynamic> payload) async {
     try {
-      final response = await SchoolDeskApi.instance.client.createEvent(
-        EventDto(
-          academicYearId: academicYearId,
-          eventName: title,
-          eventType: eventType,
-          description: description,
-          startDate: start.toUtc().toIso8601String().split('T').first,
-          endDate: end.toUtc().toIso8601String().split('T').first,
-          startTime: start.toUtc().toIso8601String().split('T').last,
-          endTime: end.toUtc().toIso8601String().split('T').last,
-          venue: location,
-          isHoliday: isHoliday,
-          status: 'scheduled',
-        ),
-      );
-      if (response.success != true) {
+      final response = await _dio.post('/events', data: payload);
+      final data = _asMap(response.data);
+      if (data['success'] == false) {
         throw ServerException(
-          message: response.error ?? 'Failed to create event',
+          message: data['error'] ?? 'Failed to create event',
         );
       }
     } on DioException catch (e) {
@@ -127,6 +127,14 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> getEventPost(String id) async {
+    final safeId = id.trim();
+    if (safeId.isEmpty) {
+      throw ServerException(message: 'Event post id is required');
+    }
+    return getRawMap('/event-posts/$safeId');
+  }
+
   Future<List<Map<String, dynamic>>> getGalleryEventPosts() async {
     try {
       final response = await _dio.get('/event-posts/gallery');
@@ -180,8 +188,10 @@ extension BackendEventsApi on BackendApiClient {
     required String description,
     required String eventDate,
     required List<String> mediaUrls,
+    List<EventPostMediaItem> media = const [],
     required List<String> destinations,
     required bool isSubmit,
+    String? sectionId,
   }) async {
     try {
       final response = await _dio.post(
@@ -190,15 +200,95 @@ extension BackendEventsApi on BackendApiClient {
           'title': title,
           'description': description,
           'event_date': eventDate,
-          'media_urls': mediaUrls.join(','),
+          if (media.isNotEmpty)
+            'media': media.map((item) => item.toJson()).toList()
+          else
+            'media_urls': mediaUrls,
           'destinations': destinations,
           'is_submit': isSubmit,
+          if (sectionId != null && sectionId.trim().isNotEmpty)
+            'section_id': sectionId.trim(),
         },
       );
       final data = _asMap(response.data);
       if (data['success'] == false) {
         throw ServerException(
           message: data['error'] ?? 'Failed to submit event post',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> updateEventPost({
+    required String id,
+    required String title,
+    required String description,
+    required String eventDate,
+    required List<String> mediaUrls,
+    List<EventPostMediaItem> media = const [],
+    required List<String> destinations,
+    required bool isSubmit,
+    String? sectionId,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/event-posts/${id.trim()}',
+        data: {
+          'title': title,
+          'description': description,
+          'event_date': eventDate,
+          if (media.isNotEmpty)
+            'media': media.map((item) => item.toJson()).toList()
+          else
+            'media_urls': mediaUrls,
+          'destinations': destinations,
+          'is_submit': isSubmit,
+          if (sectionId != null && sectionId.trim().isNotEmpty)
+            'section_id': sectionId.trim(),
+        },
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == false) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to update event post',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> submitEventPost(String id) async {
+    final post = await getEventPost(id);
+    final media = EventPostMediaItem.parseList(post['media_urls']);
+    await updateEventPost(
+      id: id,
+      title: (post['title'] ?? '').toString(),
+      description: (post['description'] ?? '').toString(),
+      eventDate: (post['event_date'] ?? DateTime.now().toIso8601String())
+          .toString(),
+      mediaUrls: media.map((item) => item.url).toList(),
+      media: media,
+      destinations: (post['destinations'] ?? '')
+          .toString()
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(),
+      isSubmit: true,
+      sectionId: post['section_id']?.toString(),
+    );
+  }
+
+  Future<void> deleteEventPost(String id) async {
+    try {
+      final response = await _dio.delete('/event-posts/${id.trim()}');
+      final data = _asMap(response.data);
+      if (data['success'] == false) {
+        throw ServerException(
+          message: data['error'] ?? 'Failed to delete event post',
         );
       }
     } on DioException catch (e) {

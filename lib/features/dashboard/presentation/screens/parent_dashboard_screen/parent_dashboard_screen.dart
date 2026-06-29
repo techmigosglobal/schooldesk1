@@ -1,15 +1,14 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/parent_child_selection_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
@@ -400,7 +399,11 @@ class _ParentWorkflowShortcuts extends StatelessWidget {
       children: [
         for (final action in actions)
           ActionChip(
-            avatar: Icon(action.icon, size: 18, color: theme.colorScheme.primary),
+            avatar: Icon(
+              action.icon,
+              size: 18,
+              color: theme.colorScheme.primary,
+            ),
             label: Text(
               action.label,
               style: theme.textTheme.labelLarge?.copyWith(
@@ -719,114 +722,90 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
-    final mediaUrls = _eventPostMediaUrls(post);
-    if (mediaUrls.isEmpty) return const SizedBox.shrink();
-
-    final url = mediaUrls.first;
-    final resolvedUrl = _resolveMediaUrl(url);
-    final mediaType = _eventPostMediaType(post);
-    final isImage = mediaType == 'Photo' || _isImagePath(url);
-
-    Widget preview;
-    if (isImage) {
-      preview = Image.network(
-        resolvedUrl,
-        height: 200,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return Container(
-            height: 200,
-            color: tokens.panel,
-            child: Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                    : null,
-                strokeWidth: 2,
-              ),
-            ),
-          );
-        },
-        errorBuilder: (context, error, stackTrace) =>
-            _MediaFallbackPreview(type: 'Image', url: url),
-      );
-    } else {
-      preview = _MediaFallbackPreview(
-        type: mediaType.isEmpty ? 'Media' : mediaType,
-        url: url,
-      );
-    }
+    final mediaItems = EventPostMediaItem.parseList(
+      post['media_urls'] ??
+          post['mediaUrls'] ??
+          post['media_url'] ??
+          post['mediaUrl'] ??
+          post['attachments'],
+    );
+    if (mediaItems.isEmpty) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radius.control),
-        child: SizedBox(width: double.infinity, child: preview),
+        child: SizedBox(
+          height: 210,
+          width: double.infinity,
+          child: PageView.builder(
+            itemCount: mediaItems.length,
+            itemBuilder: (context, index) {
+              final item = mediaItems[index];
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  EventPostMediaPreview(
+                    item: item,
+                    height: 210,
+                    onImageTap: item.isImage
+                        ? () => _showImagePreview(context, item)
+                        : null,
+                  ),
+                  if (mediaItems.length > 1)
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.58),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '${index + 1}/${mediaItems.length}',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
-}
 
-class _MediaFallbackPreview extends StatelessWidget {
-  final String type;
-  final String url;
-
-  const _MediaFallbackPreview({required this.type, required this.url});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final color = tokens.roleColor(SchoolDeskRole.parent);
-    final label = type.isEmpty ? 'Media' : type;
-    final fileName = _mediaFileName(url);
-
-    return Container(
-      height: 144,
-      width: double.infinity,
-      padding: EdgeInsets.all(tokens.spacing.md),
-      decoration: BoxDecoration(color: color.withAlpha(18)),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withAlpha(28),
-              shape: BoxShape.circle,
+  void _showImagePreview(BuildContext context, EventPostMediaItem item) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              child: Image.network(
+                resolveEventPostMediaUrl(item.url),
+                fit: BoxFit.contain,
+              ),
             ),
-            child: Icon(_eventPostMediaIcon(label), color: color, size: 28),
-          ),
-          SizedBox(width: tokens.spacing.md),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (fileName.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    fileName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: tokens.textMuted,
-                    ),
-                  ),
-                ],
-              ],
+            Positioned(
+              right: 8,
+              top: 8,
+              child: IconButton.filledTonal(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -925,55 +904,6 @@ String _firstText(Map<String, dynamic> row, List<String> keys) {
   return '';
 }
 
-List<String> _eventPostMediaUrls(Map<String, dynamic> post) {
-  final raw =
-      post['media_urls'] ??
-      post['mediaUrls'] ??
-      post['media_url'] ??
-      post['mediaUrl'] ??
-      post['attachments'];
-  if (raw is List) {
-    return raw.map(_text).where((url) => url.isNotEmpty).toList();
-  }
-  final text = _text(raw);
-  if (text.isEmpty) return const [];
-  if (text.startsWith('[')) {
-    try {
-      final decoded = jsonDecode(text);
-      if (decoded is List) {
-        return decoded.map(_text).where((url) => url.isNotEmpty).toList();
-      }
-    } catch (_) {
-      // Fall back to comma parsing for legacy rows.
-    }
-  }
-  return text
-      .split(',')
-      .map((url) => url.trim())
-      .where((url) => url.isNotEmpty)
-      .toList();
-}
-
-/// Resolves relative upload paths to absolute URLs using the API origin.
-String _resolveMediaUrl(String url) {
-  if (url.isEmpty) return url;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
-  final path = url.startsWith('/') ? url : '/$url';
-  return '$origin$path';
-}
-
-/// Returns true when the URL path clearly belongs to an image file.
-bool _isImagePath(String url) {
-  final path = (Uri.tryParse(url)?.path ?? url).toLowerCase();
-  return path.endsWith('.jpg') ||
-      path.endsWith('.jpeg') ||
-      path.endsWith('.png') ||
-      path.endsWith('.webp') ||
-      path.endsWith('.gif') ||
-      path.endsWith('.heic');
-}
-
 String _eventPostMediaType(Map<String, dynamic> post) {
   final explicit = _firstText(post, [
     'media_type',
@@ -986,19 +916,20 @@ String _eventPostMediaType(Map<String, dynamic> post) {
   if (explicit.contains('photo')) return 'Photo';
   if (explicit.contains('image')) return 'Photo';
 
-  final urls = _eventPostMediaUrls(post);
-  if (urls.isEmpty) return '';
-  final path = Uri.tryParse(urls.first)?.path.toLowerCase() ?? urls.first;
-  if (path.endsWith('.mp4') ||
-      path.endsWith('.mov') ||
-      path.endsWith('.m4v') ||
-      path.endsWith('.webm')) {
-    return 'Video';
-  }
-  if (_isImagePath(urls.first)) {
-    return 'Photo';
-  }
-  return urls.isNotEmpty ? 'Media' : '';
+  final media = EventPostMediaItem.parseList(
+    post['media_urls'] ??
+        post['mediaUrls'] ??
+        post['media_url'] ??
+        post['mediaUrl'] ??
+        post['attachments'],
+  );
+  if (media.isEmpty) return '';
+  return switch (media.first.kind) {
+    EventPostMediaKind.video => 'Video',
+    EventPostMediaKind.image => 'Photo',
+    EventPostMediaKind.pdf || EventPostMediaKind.document => 'Document',
+    EventPostMediaKind.media => 'Media',
+  };
 }
 
 IconData _eventPostMediaIcon(String type) {
@@ -1008,11 +939,4 @@ IconData _eventPostMediaIcon(String type) {
     return Icons.image_rounded;
   }
   return Icons.attach_file_rounded;
-}
-
-String _mediaFileName(String url) {
-  if (url.isEmpty) return '';
-  final uri = Uri.tryParse(url);
-  final segments = uri?.pathSegments ?? const <String>[];
-  return segments.isEmpty ? url : segments.last;
 }

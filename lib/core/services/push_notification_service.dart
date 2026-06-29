@@ -176,7 +176,7 @@ class PushNotificationService {
     await prefs.remove(_pendingPayloadKey);
     final payload = jsonDecode(raw);
     if (payload is Map<String, dynamic>) {
-      _openPayload(payload);
+      await _openPayload(payload);
     }
   }
 
@@ -330,7 +330,7 @@ class PushNotificationService {
       _openLogin();
       return;
     }
-    _openPayload(data);
+    await _openPayload(data);
   }
 
   void _openLogin() {
@@ -339,10 +339,18 @@ class PushNotificationService {
     navigator.pushNamedAndRemoveUntil(AppRoutes.landingPage, (_) => false);
   }
 
-  void _openPayload(Map<String, dynamic> data) {
+  Future<void> _openPayload(Map<String, dynamic> data) async {
+    try {
+      final service = await NotificationService.getInstance();
+      await service.refresh();
+    } catch (_) {
+      // Navigation should still proceed if notification refresh fails.
+    }
     final navigator = navigatorKey.currentState;
     if (navigator == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openPayload(data));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_openPayload(data));
+      });
       return;
     }
     final target = NotificationRouteResolver.resolve(

@@ -96,5 +96,24 @@ void main() {
       expect(eventForTeacher.route, AppRoutes.teacherEventPosts);
       expect(lessonPlannerDigest.route, AppRoutes.principalLessonPlanner);
     });
+
+    test('passes event post reference context into principal approvals', () {
+      final target = NotificationRouteResolver.resolve(
+        data: {
+          'route': AppRoutes.principalEventApprovals,
+          'reference_type': 'event_post',
+          'reference_id': 'post-123',
+          'role': 'principal',
+        },
+        currentRole: 'principal',
+      );
+
+      expect(target.route, AppRoutes.principalEventApprovals);
+      expect(target.arguments, isA<Map<String, dynamic>>());
+      final args = target.arguments! as Map<String, dynamic>;
+      expect(args['referenceType'], 'event_post');
+      expect(args['referenceId'], 'post-123');
+      expect(args['initialTab'], 'event_posts');
+    });
   });
 }

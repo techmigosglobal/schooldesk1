@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -124,7 +124,13 @@ class _GalleryPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final media = firstEventPostMediaUrl(post['media_urls']);
+    final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
+    final cover = mediaItems.firstWhere(
+      (item) => item.isImage || item.isVideo,
+      orElse: () => mediaItems.isEmpty
+          ? const EventPostMediaItem(url: '')
+          : mediaItems.first,
+    );
     final title = _text(post['title'], fallback: 'School event');
     final description = _text(post['description']);
     final eventDate = _text(post['event_date']);
@@ -142,7 +148,7 @@ class _GalleryPostCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: media.isEmpty
+              child: cover.url.isEmpty
                   ? Container(
                       color: context.appTheme.panelMuted,
                       child: Icon(
@@ -151,46 +157,10 @@ class _GalleryPostCard extends StatelessWidget {
                         color: context.appTheme.onSurfaceVariant,
                       ),
                     )
-                  : Image.network(
-                      _assetUrl(media),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: context.appTheme.panelMuted,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                  : null,
-                              strokeWidth: 2,
-                            ),
-                          ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) => Container(
-                        color: context.appTheme.panelMuted,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.broken_image_outlined,
-                              color: context.appTheme.onSurfaceVariant,
-                              size: 32,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Image unavailable',
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(
-                                    color: context.appTheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
+                  : EventPostMediaPreview(
+                      item: cover,
+                      height: double.infinity,
+                      compact: true,
                     ),
             ),
             Padding(
@@ -247,7 +217,7 @@ class _GalleryPostCard extends StatelessWidget {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (context) {
-        final media = parseEventPostMediaUrls(post['media_urls']);
+        final media = EventPostMediaItem.parseList(post['media_urls']);
         return DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.75,
@@ -268,45 +238,12 @@ class _GalleryPostCard extends StatelessWidget {
                 _text(post['description'], fallback: 'No description added.'),
               ),
               const SizedBox(height: 16),
-              for (final url in media)
+              for (final item in media)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: _isImageUrl(url)
-                        ? Image.network(
-                            _assetUrl(url),
-                            fit: BoxFit.cover,
-                            loadingBuilder: (context, child, progress) {
-                              if (progress == null) return child;
-                              return SizedBox(
-                                height: 200,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    value: progress.expectedTotalBytes != null
-                                        ? progress.cumulativeBytesLoaded /
-                                              progress.expectedTotalBytes!
-                                        : null,
-                                  ),
-                                ),
-                              );
-                            },
-                            errorBuilder: (_, __, ___) => const SizedBox(
-                              height: 120,
-                              child: Center(
-                                child: Icon(Icons.broken_image_outlined),
-                              ),
-                            ),
-                          )
-                        : ListTile(
-                            leading: const Icon(Icons.attach_file_rounded),
-                            title: Text(
-                              url.split('/').last,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                    child: EventPostMediaPreview(item: item, height: 220),
                   ),
                 ),
             ],
@@ -321,8 +258,18 @@ String _formatEventDate(String raw) {
   final parsed = DateTime.tryParse(raw);
   if (parsed == null) return raw;
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${parsed.day} ${months[parsed.month - 1]} ${parsed.year}';
 }
@@ -330,23 +277,4 @@ String _formatEventDate(String raw) {
 String _text(dynamic value, {String fallback = ''}) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;
-}
-
-String _assetUrl(String path) {
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path;
-  }
-  final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
-  final p = path.startsWith('/') ? path : '/$path';
-  return '$origin$p';
-}
-
-bool _isImageUrl(String url) {
-  final lower = url.toLowerCase().split('?').first;
-  return lower.endsWith('.jpg') ||
-      lower.endsWith('.jpeg') ||
-      lower.endsWith('.png') ||
-      lower.endsWith('.webp') ||
-      lower.endsWith('.gif') ||
-      lower.endsWith('.heic');
 }

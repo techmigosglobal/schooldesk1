@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -26,17 +27,29 @@ type publicEventPost struct {
 	PublishedAt *time.Time `json:"published_at,omitempty"`
 }
 
+type eventPostRequest struct {
+	GradeID      *string               `json:"grade_id"`
+	SectionID    *string               `json:"section_id"`
+	Title        string                `json:"title" binding:"required"`
+	Description  string                `json:"description"`
+	EventDate    string                `json:"event_date" binding:"required"`
+	MediaUrls    json.RawMessage       `json:"media_urls"`
+	Media        []eventPostMediaInput `json:"media"`
+	Destinations []string              `json:"destinations" binding:"required"`
+	IsSubmit     bool                  `json:"is_submit"`
+}
+
+type eventPostMediaInput struct {
+	URL      string `json:"url"`
+	Name     string `json:"name,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	Kind     string `json:"kind,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
 // Teacher Create
 func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
-	var req struct {
-		GradeID      *string  `json:"grade_id"`
-		Title        string   `json:"title" binding:"required"`
-		Description  string   `json:"description"`
-		EventDate    string   `json:"event_date" binding:"required"`
-		MediaUrls    string   `json:"media_urls"`
-		Destinations []string `json:"destinations" binding:"required"`
-		IsSubmit     bool     `json:"is_submit"`
-	}
+	var req eventPostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
@@ -69,11 +82,12 @@ func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
 	post := models.EventPost{
 		SchoolID:           schoolID,
 		GradeID:            req.GradeID,
+		SectionID:          req.SectionID,
 		Title:              req.Title,
 		Description:        req.Description,
 		EventDate:          eventDate,
 		CreatedByTeacherID: teacherID,
-		MediaUrls:          req.MediaUrls,
+		MediaUrls:          normalizeEventPostMedia(req.Media, req.MediaUrls),
 		Destinations:       destinationsStr,
 		ApprovalStatus:     status,
 	}
@@ -93,6 +107,98 @@ func (h *EventPostHandler) CreateEventPost(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
+}
+
+func (h *EventPostHandler) UpdateEventPost(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	schoolID := scopedSchoolID(c)
+	teacherID := strings.TrimSpace(c.GetString("linked_id"))
+	if teacherID == "" {
+		fail(c, http.StatusUnauthorized, "Teacher profile not linked")
+		return
+	}
+
+	var req eventPostRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	eventDate, err := time.Parse(time.RFC3339, req.EventDate)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "Invalid event date format. Use RFC3339")
+		return
+	}
+	destinations, ok := normalizeEventPostDestinations(req.Destinations)
+	if !ok {
+		fail(c, http.StatusBadRequest, "At least one valid destination is required")
+		return
+	}
+
+	var post models.EventPost
+	if err := database.DB.Where("id = ? AND school_id = ? AND created_by_teacher_id = ?", id, schoolID, teacherID).First(&post).Error; err != nil {
+		fail(c, http.StatusNotFound, "Event post not found")
+		return
+	}
+	if post.ApprovalStatus != models.ApprovalStatusDraft && post.ApprovalStatus != models.ApprovalStatusRejected {
+		fail(c, http.StatusBadRequest, "Only draft or rejected event posts can be edited")
+		return
+	}
+
+	post.GradeID = req.GradeID
+	post.SectionID = req.SectionID
+	post.Title = strings.TrimSpace(req.Title)
+	post.Description = req.Description
+	post.EventDate = eventDate
+	post.MediaUrls = normalizeEventPostMedia(req.Media, req.MediaUrls)
+	post.Destinations = strings.Join(destinations, ",")
+	post.RejectionReason = nil
+	post.ApprovedByPrincipalID = nil
+	post.ApprovedAt = nil
+	post.PublishedAt = nil
+	if req.IsSubmit {
+		post.ApprovalStatus = models.ApprovalStatusPending
+	} else {
+		post.ApprovalStatus = models.ApprovalStatusDraft
+	}
+
+	if err := database.DB.Save(&post).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to update event post")
+		return
+	}
+	database.DB.Preload("CreatedByTeacher").First(&post, "id = ?", post.ID)
+
+	if req.IsSubmit {
+		if logs, err := createEventPostApprovalRequestedNotificationsTx(database.DB, c, post.ID, post.Title); err == nil {
+			enqueuePushNotifications(logs)
+		}
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
+}
+
+func (h *EventPostHandler) DeleteEventPost(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	schoolID := scopedSchoolID(c)
+	teacherID := strings.TrimSpace(c.GetString("linked_id"))
+	if teacherID == "" {
+		fail(c, http.StatusUnauthorized, "Teacher profile not linked")
+		return
+	}
+
+	var post models.EventPost
+	if err := database.DB.Where("id = ? AND school_id = ? AND created_by_teacher_id = ?", id, schoolID, teacherID).First(&post).Error; err != nil {
+		fail(c, http.StatusNotFound, "Event post not found")
+		return
+	}
+	if post.ApprovalStatus != models.ApprovalStatusDraft && post.ApprovalStatus != models.ApprovalStatusRejected {
+		fail(c, http.StatusBadRequest, "Only draft or rejected event posts can be deleted")
+		return
+	}
+	if err := database.DB.Delete(&post).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to delete event post")
+		return
+	}
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}})
 }
 
 // Teacher List
@@ -136,6 +242,31 @@ func (h *EventPostHandler) ListPendingEventPosts(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: posts})
 }
 
+func (h *EventPostHandler) GetEventPost(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	schoolID := scopedSchoolID(c)
+	roleName := strings.ToLower(strings.TrimSpace(c.GetString("role_name")))
+	teacherID := strings.TrimSpace(c.GetString("linked_id"))
+
+	query := database.DB.Preload("CreatedByTeacher").
+		Where("id = ? AND school_id = ?", id, schoolID)
+	if roleName == "teacher" {
+		if teacherID == "" {
+			fail(c, http.StatusUnauthorized, "Teacher profile not linked")
+			return
+		}
+		query = query.Where("created_by_teacher_id = ?", teacherID)
+	}
+
+	var post models.EventPost
+	if err := query.First(&post).Error; err != nil {
+		fail(c, http.StatusNotFound, "Event post not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: post})
+}
+
 func normalizeEventPostDestinations(raw []string) ([]string, bool) {
 	allowed := map[string]bool{
 		string(models.DestinationParentsHome):   true,
@@ -153,6 +284,50 @@ func normalizeEventPostDestinations(raw []string) ([]string, bool) {
 		destinations = append(destinations, value)
 	}
 	return destinations, len(destinations) > 0
+}
+
+func normalizeEventPostMedia(media []eventPostMediaInput, raw json.RawMessage) string {
+	if len(media) > 0 {
+		normalized := make([]eventPostMediaInput, 0, len(media))
+		for _, item := range media {
+			item.URL = strings.TrimSpace(item.URL)
+			item.Name = strings.TrimSpace(item.Name)
+			item.MimeType = strings.TrimSpace(item.MimeType)
+			item.Kind = strings.ToLower(strings.TrimSpace(item.Kind))
+			if item.URL == "" {
+				continue
+			}
+			normalized = append(normalized, item)
+		}
+		if len(normalized) == 0 {
+			return ""
+		}
+		bytes, err := json.Marshal(normalized)
+		if err == nil {
+			return string(bytes)
+		}
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var urls []string
+	if err := json.Unmarshal(raw, &urls); err == nil {
+		cleaned := make([]string, 0, len(urls))
+		for _, url := range urls {
+			if trimmed := strings.TrimSpace(url); trimmed != "" {
+				cleaned = append(cleaned, trimmed)
+			}
+		}
+		bytes, err := json.Marshal(cleaned)
+		if err == nil {
+			return string(bytes)
+		}
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text)
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 // Principal Approve
@@ -284,5 +459,16 @@ func (h *EventPostHandler) ListLandingEvents(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: posts})
+	publicPosts := make([]publicEventPost, 0, len(posts))
+	for _, post := range posts {
+		publicPosts = append(publicPosts, publicEventPost{
+			Title:       post.Title,
+			Description: post.Description,
+			EventDate:   post.EventDate,
+			MediaUrls:   post.MediaUrls,
+			PublishedAt: post.PublishedAt,
+		})
+	}
+
+	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: publicPosts})
 }

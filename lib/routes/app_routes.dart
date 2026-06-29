@@ -210,7 +210,11 @@ class AppRoutes {
     principalParentChildAssignment: (context) => AccountChildAssignmentScreen(
       args: _childAssignmentArgs(context, 'principal'),
     ),
-    principalEventApprovals: (context) => const PrincipalEventApprovalScreen(),
+    principalEventApprovals: (context) => PrincipalEventApprovalScreen(
+      args: EventApprovalRouteArgs.fromRoute(
+        ModalRoute.of(context)?.settings.arguments,
+      ),
+    ),
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
     principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),

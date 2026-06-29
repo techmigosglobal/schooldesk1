@@ -30,9 +30,18 @@ func (h *UploadHandler) UploadFile(c *gin.Context) {
 	allowed := map[string]bool{
 		".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
 		".pdf": true, ".doc": true, ".docx": true,
+		".mp4": true, ".mov": true, ".m4v": true, ".webm": true,
 	}
 	if !allowed[ext] {
-		fail(c, http.StatusBadRequest, "Unsupported file type. Allowed: jpg, png, pdf, doc, docx")
+		fail(c, http.StatusBadRequest, "Unsupported file type. Allowed: jpg, png, webp, pdf, doc, docx, mp4, mov, m4v, webm")
+		return
+	}
+	maxSize := int64(15 * 1024 * 1024)
+	if ext == ".mp4" || ext == ".mov" || ext == ".m4v" || ext == ".webm" {
+		maxSize = 50 * 1024 * 1024
+	}
+	if file.Size > maxSize {
+		fail(c, http.StatusBadRequest, "Uploaded file is too large")
 		return
 	}
 
