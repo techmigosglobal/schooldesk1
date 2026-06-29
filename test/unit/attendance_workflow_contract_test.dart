@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:schooldesk1/features/attendance/presentation/screens/parent_attendance_screen/parent_attendance_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'backend_api_sources.dart';
@@ -143,6 +144,71 @@ void main() {
     expect(backend, contains('"daily_statuses"'));
     expect(backend, contains('"period_rows"'));
     expect(backend, contains('StudentLeaveApplication'));
+  });
+
+  test('parent attendance merges duplicate summary and record period rows', () {
+    final rows = buildParentAttendancePeriodRowsForTest(
+      summary: {
+        'period_rows': [
+          {
+            'date': '2026-06-29',
+            'period_number': 1,
+            'status': 'present',
+            'session_id': 'session-1',
+            'id': 'attendance-1',
+          },
+        ],
+      },
+      records: [
+        {
+          'id': 'attendance-1',
+          'status': 'present',
+          'session': {
+            'id': 'session-1',
+            'date': '2026-06-29T00:00:00Z',
+            'period_number': 1,
+            'staff': {'first_name': 'Class', 'last_name': 'Teacher'},
+          },
+        },
+      ],
+      leaveRequests: const [],
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single['date'], '2026-06-29');
+    expect(rows.single['period_number'], 1);
+    expect(rows.single['status'], 'Present');
+  });
+
+  test('parent attendance merges duplicate approved leave rows', () {
+    final rows = buildParentAttendancePeriodRowsForTest(
+      summary: {
+        'period_rows': [
+          {
+            'id': 'leave-1',
+            'date': '2026-06-19',
+            'period_number': 0,
+            'status': 'leave',
+            'marked_by': 'Approved leave',
+          },
+        ],
+      },
+      records: const [],
+      leaveRequests: [
+        {
+          'id': 'leave-1',
+          'from_date': '2026-06-19',
+          'to_date': '2026-06-19',
+          'status': 'approved',
+          'reason': 'Sick',
+          'half_day': false,
+        },
+      ],
+    );
+
+    expect(rows, hasLength(1));
+    expect(rows.single['date'], '2026-06-19');
+    expect(rows.single['status'], 'Leave');
   });
 
   test(

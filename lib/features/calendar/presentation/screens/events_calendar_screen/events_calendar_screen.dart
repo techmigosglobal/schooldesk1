@@ -46,6 +46,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   String _query = '';
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
   late DateTime _selectedWeekStart;
   _EventFilter _filter = _EventFilter.month;
   _EventsDisplayMode _displayMode = _EventsDisplayMode.calendar;
@@ -74,10 +75,22 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final events = rows.map(_PrincipalEvent.fromApi).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
+      // Derive the display year from the selected academic year's start date so
+      // the calendar grid always renders the correct year (e.g. 2026 for a
+      // 2026-2027 academic year), regardless of the current wall-clock year.
+      int derivedYear = _selectedYear;
+      for (final y in years) {
+        if (y.id == selectedYearId) {
+          final start = DateTime.tryParse(y.startDate);
+          if (start != null) derivedYear = start.year;
+          break;
+        }
+      }
       setState(() {
         _academicYears = years;
         _selectedAcademicYearId = selectedYearId;
         _events = events;
+        _selectedYear = derivedYear;
         _loading = false;
       });
     } catch (error) {
@@ -139,27 +152,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   int get _calendarYear {
-    final monthEvents = _events
-        .where((event) => event.overlapsMonth(_selectedMonth))
-        .toList();
-    if (monthEvents.isNotEmpty) return monthEvents.first.start.year;
-
-    AcademicYearModel? selectedYear;
-    for (final year in _academicYears) {
-      if (year.id == _selectedAcademicYearId) {
-        selectedYear = year;
-        break;
-      }
-    }
-    final academicStart = DateTime.tryParse(selectedYear?.startDate ?? '');
-    final academicEnd = DateTime.tryParse(selectedYear?.endDate ?? '');
-    if (academicStart != null && academicStart.month <= _selectedMonth) {
-      return academicStart.year;
-    }
-    if (academicEnd != null && academicEnd.month >= _selectedMonth) {
-      return academicEnd.year;
-    }
-    return DateTime.now().year;
+    // Prefer the explicitly tracked year (set from the academic year start date
+    // when data loads, or updated when the user navigates months).
+    return _selectedYear;
   }
 
   List<_PrincipalEvent> _eventsForDay(DateTime day) {
@@ -197,6 +192,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             ? _selectedAcademicYearId
             : saved.academicYearId;
         _selectedMonth = saved.startDate.month;
+        _selectedYear = saved.startDate.year;
         _filter = _EventFilter.month;
         _displayMode = _EventsDisplayMode.calendar;
       });
@@ -247,6 +243,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             ? _selectedAcademicYearId
             : saved.academicYearId;
         _selectedMonth = saved.startDate.month;
+        _selectedYear = saved.startDate.year;
         _filter = _EventFilter.month;
         _displayMode = _EventsDisplayMode.calendar;
       });
@@ -525,7 +522,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Widget _buildPrincipalCalendar() {
-    final visible = _visibleEvents;
     return PrincipalDirectoryScaffold(
       title: 'School Calendar',
       subtitle:
@@ -556,7 +552,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               ),
             ]
           : null,
-      isEmpty: !_loading && _error == null && visible.isEmpty,
+      isEmpty: !_loading && _error == null && _visibleEvents.isEmpty,
       emptyState: _buildCalendarEmptyState(),
       filters: _buildFilters(),
       slivers: [
@@ -575,7 +571,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   }
 
   Widget _buildReadOnlyCalendar() {
-    final visible = _visibleEvents;
     return SchoolDeskModuleScaffold(
       title: 'School Calendar',
       subtitle: 'Holidays, events, PTMs, and school milestones',
@@ -609,15 +604,10 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 ),
               )
             else ...[
-              if (visible.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: _buildCalendarEmptyState()),
-                )
-              else if (_displayMode == _EventsDisplayMode.calendar)
+              if (_displayMode == _EventsDisplayMode.calendar)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
-                  sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
+                  sliver: SliverToBoxAdapter(child: _buildCalendarMonthReadOnly()),
                 )
               else
                 SliverPadding(
@@ -648,17 +638,71 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     }
   }
 
-  Widget _buildCalendarMonth() {
+  Widget _buildCalendarMonthReadOnly() {
     return _EventCalendarMonth(
       month: _selectedMonth,
       year: _calendarYear,
       eventsForDay: _eventsForDay,
       onEventTap: _openDetails,
-      onEmptyDayTap: (day) => _openCreateEvent(initialDate: day),
+      onDayTap: (day, events) {
+        if (events.isEmpty) return; // read-only: no create on tap
+        if (events.length == 1) {
+          _openDetails(events.first);
+        } else {
+          showModalBottomSheet<void>(
+            context: context,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            builder: (sheetCtx) {
+              return SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        '${events.length} events on ${day.day} ${_monthName(day.month)}',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: events.length,
+                        itemBuilder: (ctx, i) {
+                          final ev = events[i];
+                          return ListTile(
+                            title: Text(ev.title,
+                                style: GoogleFonts.dmSans(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle:
+                                Text(ev.typeLabel, style: GoogleFonts.dmSans()),
+                            trailing: const Icon(Icons.chevron_right_rounded,
+                                size: 20),
+                            onTap: () {
+                              Navigator.pop(sheetCtx);
+                              _openDetails(ev);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        }
+      },
       onPrevMonth: () {
         setState(() {
           if (_selectedMonth == 1) {
             _selectedMonth = 12;
+            _selectedYear--;
           } else {
             _selectedMonth--;
           }
@@ -668,6 +712,91 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         setState(() {
           if (_selectedMonth == 12) {
             _selectedMonth = 1;
+            _selectedYear++;
+          } else {
+            _selectedMonth++;
+          }
+        });
+      },
+    );
+  }
+
+  Widget _buildCalendarMonth() {
+    return _EventCalendarMonth(
+      month: _selectedMonth,
+      year: _calendarYear,
+      eventsForDay: _eventsForDay,
+      onEventTap: _openDetails,
+      onDayTap: (day, events) {
+        if (events.isEmpty) {
+          _openCreateEvent(initialDate: day);
+        } else if (events.length == 1) {
+          _openDetails(events.first);
+        } else {
+          showModalBottomSheet<void>(
+            context: context,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            builder: (sheetCtx) {
+              return SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        '${events.length} events on ${day.day} ${_monthName(day.month)}',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: events.length,
+                        itemBuilder: (ctx, i) {
+                          final ev = events[i];
+                          return ListTile(
+                            title: Text(ev.title,
+                                style: GoogleFonts.dmSans(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle:
+                                Text(ev.typeLabel, style: GoogleFonts.dmSans()),
+                            trailing: const Icon(Icons.chevron_right_rounded,
+                                size: 20),
+                            onTap: () {
+                              Navigator.pop(sheetCtx);
+                              _openDetails(ev);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+        }
+      },
+      onPrevMonth: () {
+        setState(() {
+          if (_selectedMonth == 1) {
+            _selectedMonth = 12;
+            _selectedYear--;
+          } else {
+            _selectedMonth--;
+          }
+        });
+      },
+      onNextMonth: () {
+        setState(() {
+          if (_selectedMonth == 12) {
+            _selectedMonth = 1;
+            _selectedYear++;
           } else {
             _selectedMonth++;
           }
@@ -860,7 +989,7 @@ class _EventCalendarMonth extends StatelessWidget {
   final int year;
   final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
   final ValueChanged<_PrincipalEvent> onEventTap;
-  final ValueChanged<DateTime>? onEmptyDayTap;
+  final void Function(DateTime day, List<_PrincipalEvent> events)? onDayTap;
   final VoidCallback? onPrevMonth;
   final VoidCallback? onNextMonth;
 
@@ -869,7 +998,7 @@ class _EventCalendarMonth extends StatelessWidget {
     required this.year,
     required this.eventsForDay,
     required this.onEventTap,
-    this.onEmptyDayTap,
+    this.onDayTap,
     this.onPrevMonth,
     this.onNextMonth,
   });
@@ -893,71 +1022,7 @@ class _EventCalendarMonth extends StatelessWidget {
       return _EventCalendarDayCell(
         day: day,
         events: events,
-        onTap: events.isEmpty
-            ? () {
-                onEmptyDayTap?.call(day);
-              }
-            : () {
-                if (events.length == 1) {
-                  onEventTap(events.first);
-                } else {
-                  showModalBottomSheet<void>(
-                    context: context,
-                    backgroundColor: context.appTheme.surface,
-                    builder: (sheetCtx) {
-                      return SafeArea(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                '${events.length} events on ${day.day} ${_monthName(day.month)}',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: context.appTheme.onSurface,
-                                ),
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            Flexible(
-                              child: ListView.builder(
-                                shrinkWrap: true,
-                                itemCount: events.length,
-                                itemBuilder: (ctx, i) {
-                                  final ev = events[i];
-                                  return ListTile(
-                                    title: Text(
-                                      ev.title,
-                                      style: GoogleFonts.dmSans(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      ev.typeLabel,
-                                      style: GoogleFonts.dmSans(),
-                                    ),
-                                    trailing: const Icon(
-                                      Icons.chevron_right_rounded,
-                                      size: 20,
-                                    ),
-                                    onTap: () {
-                                      Navigator.pop(sheetCtx);
-                                      onEventTap(ev);
-                                    },
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                }
-              },
+        onTap: () => onDayTap?.call(day, events),
       );
     });
 

@@ -2483,7 +2483,18 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.deleteFeeStructure(bundle.id);
+      // A bundle groups multiple fee structure records by grade+year+section.
+      // We must delete each individual record using its real UUID, not the
+      // composite key that is used internally as the bundle id.
+      final idsToDelete = bundle.componentIds;
+      if (idsToDelete.isEmpty) {
+        _snack('Unable to delete: no fee structure IDs found in this bundle.');
+        return;
+      }
+      final api = BackendApiClient.instance;
+      for (final structureId in idsToDelete) {
+        await api.deleteFeeStructure(structureId);
+      }
       if (!mounted) return;
       _snack('Fee structure deleted.', success: true);
       // Go back to list view and refresh
@@ -3620,6 +3631,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       );
       return _FeeStructureBundle(
         id: entry.key,
+        componentIds: components
+            .map((c) => _textValue(c.source['id']))
+            .where((id) => id.isNotEmpty)
+            .toList(),
         gradeId: gradeId,
         sectionId: sectionId,
         academicYearId: yearId,
@@ -5136,6 +5151,7 @@ class _FeeSuccessCircle extends StatelessWidget {
 
 class _FeeStructureBundle {
   final String id;
+  final List<String> componentIds;
   final String gradeId;
   final String sectionId;
   final String academicYearId;
@@ -5148,6 +5164,7 @@ class _FeeStructureBundle {
 
   const _FeeStructureBundle({
     required this.id,
+    required this.componentIds,
     required this.gradeId,
     required this.sectionId,
     required this.academicYearId,

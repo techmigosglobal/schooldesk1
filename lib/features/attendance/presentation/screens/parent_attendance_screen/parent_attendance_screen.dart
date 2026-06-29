@@ -591,7 +591,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             ),
           ),
           Text(
-            rec['time'] ?? (rec['period_number'] != null ? 'Period ${rec['period_number']}' : '—'),
+            rec['time'] ??
+                (rec['period_number'] != null
+                    ? 'Period ${rec['period_number']}'
+                    : '—'),
             style: GoogleFonts.dmSans(
               fontSize: 12,
               color: context.appTheme.muted,
@@ -782,12 +785,79 @@ List<Map<String, dynamic>> _periodRowsFromSources({
   }
   rows.addAll(records.map(_periodRowFromAttendanceRecord));
   rows.addAll(_approvedLeavePeriodRows(leaveRequests));
-  rows.sort((a, b) {
+  final uniqueRows = _deduplicatePeriodRows(rows);
+  uniqueRows.sort((a, b) {
     final left = '${b['date'] ?? ''}${b['period_number'] ?? ''}';
     final right = '${a['date'] ?? ''}${a['period_number'] ?? ''}';
     return left.compareTo(right);
   });
-  return rows;
+  return uniqueRows;
+}
+
+List<Map<String, dynamic>> buildParentAttendancePeriodRowsForTest({
+  required Map<String, dynamic> summary,
+  required List<Map<String, dynamic>> records,
+  required List<Map<String, dynamic>> leaveRequests,
+}) {
+  return _periodRowsFromSources(
+    summary: summary,
+    records: records,
+    leaveRequests: leaveRequests,
+  );
+}
+
+List<Map<String, dynamic>> _deduplicatePeriodRows(
+  List<Map<String, dynamic>> rows,
+) {
+  final byKey = <String, Map<String, dynamic>>{};
+  for (final row in rows) {
+    final key = _periodRowIdentity(row);
+    final existing = byKey[key];
+    if (existing == null) {
+      byKey[key] = Map<String, dynamic>.from(row);
+      continue;
+    }
+    byKey[key] = _mergePeriodRow(existing, row);
+  }
+  return byKey.values.toList();
+}
+
+Map<String, dynamic> _mergePeriodRow(
+  Map<String, dynamic> existing,
+  Map<String, dynamic> incoming,
+) {
+  final merged = Map<String, dynamic>.from(existing);
+  for (final entry in incoming.entries) {
+    final current = merged[entry.key];
+    if (_isBlankPeriodValue(current)) {
+      merged[entry.key] = entry.value;
+    }
+  }
+  return merged;
+}
+
+bool _isBlankPeriodValue(dynamic value) {
+  final text = '${value ?? ''}'.trim();
+  return text.isEmpty || text == '—';
+}
+
+String _periodRowIdentity(Map<String, dynamic> row) {
+  final id = '${row['id'] ?? ''}'.trim();
+  if (id.isNotEmpty) return 'attendance:$id';
+  final sessionId = '${row['session_id'] ?? ''}'.trim();
+  if (sessionId.isNotEmpty) return 'session:$sessionId';
+  final date = '${row['date'] ?? ''}'.split('T').first;
+  final period = _normalPeriodKey(row['period_number']);
+  final status = _statusLabel(row['status']).toLowerCase();
+  return 'day:$date:$period:$status';
+}
+
+String _normalPeriodKey(dynamic period) {
+  final text = '${period ?? ''}'.trim().toLowerCase();
+  if (text.isEmpty || text == '—' || text == '0' || text == 'all day') {
+    return 'all_day';
+  }
+  return text.replaceAll(' ', '_');
 }
 
 Map<String, dynamic> _periodRowFromAttendanceRecord(Map<String, dynamic> row) {
@@ -802,11 +872,13 @@ Map<String, dynamic> _periodRowFromAttendanceRecord(Map<String, dynamic> row) {
     staff['last_name'],
   ].where((part) => '${part ?? ''}'.trim().isNotEmpty).join(' ');
   return {
+    'id': row['id'],
     'date': '${session['date'] ?? row['marked_at'] ?? ''}'.split('T').first,
     'period_number': session['period_number'] ?? '—',
     'status': _statusLabel(row['status']),
     'reason': row['reason'] ?? '',
     'marked_by': staffName.isEmpty ? 'Teacher' : staffName,
+    'session_id': session['id'] ?? row['session_id'],
   };
 }
 
@@ -827,6 +899,7 @@ List<Map<String, dynamic>> _approvedLeavePeriodRows(
     ) {
       if (day.month != now.month || day.year != now.year) continue;
       rows.add({
+        'id': request['id'],
         'date': DateFormat('yyyy-MM-dd').format(day),
         'period_number': request['half_day'] == true ? 'Half Day' : 'All Day',
         'status': request['half_day'] == true ? 'Half Day' : 'Leave',
