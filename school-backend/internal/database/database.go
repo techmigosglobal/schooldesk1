@@ -269,6 +269,7 @@ func autoMigrate() error {
 		&models.FeeReceipt{},
 		&models.PaymentOrderInvoiceMap{},
 		&models.PaymentWebhookEvent{},
+		&models.UploadedFile{},
 
 		&models.Announcement{},
 		&models.EventPost{},

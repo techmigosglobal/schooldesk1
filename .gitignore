@@ -79,6 +79,8 @@ android/.kotlin/
 *.sqlite
 /school-backend/school-backend
 /school-backend/.gocache/
+/school-backend/.go-build-cache/
+/school-backend/.go-mod-cache/
 /school-backend/school.db
 /school-backend/test-report/
 /school-backend/tmp/

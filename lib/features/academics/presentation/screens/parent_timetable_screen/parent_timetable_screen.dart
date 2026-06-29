@@ -66,7 +66,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
         return classLabel.isEmpty ? name : '$name ($classLabel)';
       }).toList();
       final childIds = childrenResponse
-          .map((c) => (c['id'] ?? '').toString())
+          .map((c) => (c['id'] ?? c['student_id'] ?? '').toString())
           .where((id) => id.isNotEmpty)
           .toList();
       final selectedIndex = await ParentChildSelectionService.indexFor(
@@ -121,16 +121,35 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   List<dynamic> get _daySlots {
     final filtered = _allSlots.where((slot) {
-      final dow = slot['day_of_week'] as int? ?? 0;
+      final dow = _intValue(slot['day_of_week']);
       return dow == _selectedDay;
     }).toList();
     // Sort slots by period number or start time
     filtered.sort((a, b) {
-      final pA = a['period_number'] as int? ?? 0;
-      final pB = b['period_number'] as int? ?? 0;
+      final pA = _intValue(a['period_number']);
+      final pB = _intValue(b['period_number']);
       return pA.compareTo(pB);
     });
     return filtered;
+  }
+
+  int _intValue(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse((value ?? '').toString()) ?? fallback;
+  }
+
+  String _stringValue(dynamic value, {String fallback = ''}) {
+    final text = (value ?? '').toString().trim();
+    return text.isEmpty ? fallback : text;
+  }
+
+  Map<String, dynamic> _mapValue(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, val) => MapEntry(key.toString(), val));
+    }
+    return const {};
   }
 
   @override
@@ -280,7 +299,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'No classes scheduled for today',
+            'No classes scheduled for ${_days[_selectedDay - 1]}',
             style: GoogleFonts.dmSans(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -305,15 +324,25 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       itemCount: _daySlots.length,
       itemBuilder: (context, index) {
         final slot = _daySlots[index];
-        final subject = slot['subject']?['subject_name'] ?? 'Regular Period';
-        final teacher = slot['staff'] != null
-            ? '${slot['staff']['first_name'] ?? ''} ${slot['staff']['last_name'] ?? ''}'
-                  .trim()
-            : 'Unassigned';
-        final room = slot['room']?['room_number'] ?? '—';
-        final startTime = slot['start_time'] ?? '—';
-        final endTime = slot['end_time'] ?? '—';
-        final periodNum = slot['period_number'] ?? (index + 1);
+        final subjectMap = _mapValue(slot['subject']);
+        final staffMap = _mapValue(slot['staff']);
+        final roomMap = _mapValue(slot['room']);
+        final subject = _stringValue(
+          slot['subject_name'] ?? subjectMap['subject_name'],
+          fallback: 'Regular Period',
+        );
+        final teacher = _stringValue(
+          slot['staff_name'] ??
+              '${staffMap['first_name'] ?? ''} ${staffMap['last_name'] ?? ''}',
+          fallback: 'Unassigned',
+        );
+        final room = _stringValue(
+          slot['room_number'] ?? roomMap['room_number'],
+          fallback: '-',
+        );
+        final startTime = _stringValue(slot['start_time'], fallback: '-');
+        final endTime = _stringValue(slot['end_time'], fallback: '-');
+        final periodNum = _intValue(slot['period_number'], fallback: index + 1);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),

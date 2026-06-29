@@ -153,9 +153,48 @@ void main() {
     expect(resolver, contains('resolveAttachmentUrl'));
     expect(resolver, contains('BackendApiClient.instance.baseUrl'));
     expect(resolver, contains('uri.hasScheme'));
+    expect(resolver, contains('_apiUploadUri(base, uri.path)'));
+    expect(resolver, contains("_apiUploadUri(base, raw)"));
     expect(principal, contains('resolveAttachmentUrl(attachment)'));
     expect(parent, contains('resolveAttachmentUrl(attachmentUrl)'));
     expect(teacher, contains('resolveAttachmentUrl('));
     expect(principal, contains('Attachment link is not available.'));
+  });
+
+  test('lesson planner upload files open through the api route', () {
+    final resolver = File(
+      'lib/core/utils/attachment_url_resolver.dart',
+    ).readAsStringSync();
+    final routes = File(
+      'school-backend/internal/routes/routes.go',
+    ).readAsStringSync();
+    final uploadHandler = File(
+      'school-backend/internal/handlers/upload.go',
+    ).readAsStringSync();
+    final database = File(
+      'school-backend/internal/database/database.go',
+    ).readAsStringSync();
+    final uploadModel = File(
+      'school-backend/internal/models/uploaded_file.go',
+    ).readAsStringSync();
+
+    expect(resolver, contains("uri.path.startsWith('/uploads/')"));
+    expect(resolver, contains("raw.startsWith('/uploads/')"));
+    expect(resolver, contains("raw.startsWith('uploads/')"));
+    expect(
+      resolver,
+      contains("path: '\$normalizedBase\$normalizedUploadPath'"),
+    );
+    expect(
+      routes,
+      contains('api.GET("/uploads/*filepath", uploadHandler.DownloadFile)'),
+    );
+    expect(uploadHandler, contains('func (h *UploadHandler) DownloadFile'));
+    expect(uploadHandler, contains('downloadFromDatabase'));
+    expect(uploadHandler, contains('strings.HasPrefix'));
+    expect(uploadHandler, contains('models.UploadedFile'));
+    expect(database, contains('&models.UploadedFile{}'));
+    expect(uploadModel, contains('type UploadedFile struct'));
+    expect(uploadModel, contains('Data         []byte'));
   });
 }

@@ -347,6 +347,8 @@ void main() {
 
       expect(parentLeave, contains('getStudentLeaveApplications'));
       expect(parentLeaveForm, contains('submitStudentLeaveApplication'));
+      expect(parentLeaveForm, contains('_defaultParentLeaveTypes()'));
+      expect(parentLeaveForm, contains('leaveType: selectedLeaveType'));
       expect(api, contains("'/student-leave/applications'"));
       expect(
         studentLeave,

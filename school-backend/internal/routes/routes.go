@@ -455,6 +455,7 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 		}
 
 		// Generic file upload — used by event posts and lesson planners
+		api.GET("/uploads/*filepath", uploadHandler.DownloadFile)
 		uploads := api.Group("/uploads")
 		uploads.Use(middleware.AuthMiddleware(), middleware.SchoolScopeMiddleware(), middleware.RBACMiddleware("Teacher", "Principal", "Parent"))
 		{

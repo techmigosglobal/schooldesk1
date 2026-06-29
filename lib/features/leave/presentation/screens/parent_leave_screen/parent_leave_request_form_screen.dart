@@ -40,7 +40,7 @@ class _ParentLeaveRequestFormScreenState
   String _selectedLeaveType = '';
   List<String> _leaveTypes = [];
   bool _loadingLeaveTypes = true;
-  String? _leaveTypeError;
+  String? _leaveTypeNotice;
   bool _halfDay = false;
   bool _submitting = false;
   int _selectedNavIndex = ParentNav.leave;
@@ -149,8 +149,7 @@ class _ParentLeaveRequestFormScreenState
               onPressed:
                   _submitting ||
                       _loadingLeaveTypes ||
-                      widget.args.children.isEmpty ||
-                      _leaveTypes.isEmpty
+                      widget.args.children.isEmpty
                   ? null
                   : _submit,
               icon: _submitting
@@ -233,35 +232,50 @@ class _ParentLeaveRequestFormScreenState
         ),
       );
     }
-    if (_leaveTypes.isEmpty) {
-      return Text(
-        _leaveTypeError ??
-            'No leave types are configured for this school account.',
-        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
-      );
-    }
-    return DropdownButtonFormField<String>(
-      initialValue: _selectedLeaveType.isEmpty ? null : _selectedLeaveType,
-      decoration: const InputDecoration(labelText: 'Leave type'),
-      items: _leaveTypes
-          .map(
-            (type) => DropdownMenuItem(
-              value: type,
-              child: Text(type, style: GoogleFonts.dmSans()),
+    final leaveTypes = _leaveTypes.isEmpty
+        ? _defaultParentLeaveTypes()
+        : _leaveTypes;
+    final selectedValue = leaveTypes.contains(_selectedLeaveType)
+        ? _selectedLeaveType
+        : leaveTypes.first;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: selectedValue,
+          decoration: const InputDecoration(labelText: 'Leave type'),
+          items: leaveTypes
+              .map(
+                (type) => DropdownMenuItem(
+                  value: type,
+                  child: Text(type, style: GoogleFonts.dmSans()),
+                ),
+              )
+              .toList(),
+          validator: (value) {
+            if ((value ?? '').trim().isEmpty) return 'Select a leave type';
+            return null;
+          },
+          onChanged: _submitting
+              ? null
+              : (value) {
+                  if (value != null) {
+                    setState(() => _selectedLeaveType = value);
+                  }
+                },
+        ),
+        if (_leaveTypeNotice != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _leaveTypeNotice!,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.onSurfaceVariant,
             ),
-          )
-          .toList(),
-      validator: (value) {
-        if ((value ?? '').trim().isEmpty) return 'Select a leave type';
-        return null;
-      },
-      onChanged: _submitting
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() => _selectedLeaveType = value);
-              }
-            },
+          ),
+        ],
+      ],
     );
   }
 
@@ -312,10 +326,9 @@ class _ParentLeaveRequestFormScreenState
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedLeaveType.trim().isEmpty) {
-      _showError('Select a leave type.');
-      return;
-    }
+    final selectedLeaveType = _selectedLeaveType.trim().isEmpty
+        ? _defaultParentLeaveTypes().first
+        : _selectedLeaveType.trim();
     final fromDate = _fromDateController.text.trim();
     final toDate = _toDateController.text.trim();
     final from = DateTime.tryParse(fromDate);
@@ -332,7 +345,7 @@ class _ParentLeaveRequestFormScreenState
     try {
       await BackendApiClient.instance.submitStudentLeaveApplication(
         studentId: _selectedStudentId,
-        leaveType: _selectedLeaveType,
+        leaveType: selectedLeaveType,
         fromDate: fromDate,
         toDate: toDate,
         halfDay: _halfDay,
@@ -366,33 +379,49 @@ class _ParentLeaveRequestFormScreenState
   Future<void> _loadLeaveTypes() async {
     try {
       final rows = await BackendApiClient.instance.getLeaveTypes();
-      final labels = rows
+      final configuredLabels = rows
           .map(_leaveTypeLabel)
           .where((label) {
             return label.trim().isNotEmpty;
           })
           .toSet()
           .toList();
+      final labels = configuredLabels.isEmpty
+          ? _defaultParentLeaveTypes()
+          : configuredLabels;
       final incomingType = widget.args.initialLeaveType?.trim();
       if (!mounted) return;
       setState(() {
         _leaveTypes = labels;
-        if (labels.isNotEmpty) {
-          _selectedLeaveType =
-              incomingType != null && labels.contains(incomingType)
-              ? incomingType
-              : labels.first;
-        }
+        _selectedLeaveType =
+            incomingType != null && labels.contains(incomingType)
+            ? incomingType
+            : labels.first;
         _loadingLeaveTypes = false;
-        _leaveTypeError = null;
+        _leaveTypeNotice = configuredLabels.isEmpty
+            ? 'Using default parent leave categories because school leave types are not configured yet.'
+            : null;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
+        final labels = _defaultParentLeaveTypes();
+        _leaveTypes = labels;
+        _selectedLeaveType = labels.first;
         _loadingLeaveTypes = false;
-        _leaveTypeError = 'Unable to load leave types from backend: $error';
+        _leaveTypeNotice =
+            'Unable to load configured leave types. Using default parent leave categories.';
       });
     }
+  }
+
+  List<String> _defaultParentLeaveTypes() {
+    return const [
+      'Sick Leave',
+      'Personal Leave',
+      'Early Pickup',
+      'Special Permission',
+    ];
   }
 
   String _leaveTypeLabel(Map<String, dynamic> row) {

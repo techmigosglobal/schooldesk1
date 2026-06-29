@@ -693,6 +693,68 @@ func TestParentHomeworkAndDiaryListsAreScopedToLinkedStudents(t *testing.T) {
 	}
 }
 
+func TestParentChildTimetableIsLinkedScopedAndStable(t *testing.T) {
+	f := setupRelationshipPolicyFixture(t)
+	router := scopedPolicyRouter("Parent", f.parentUserID, "", "", "parent@policy.test", f.schoolID)
+	router.GET("/me/timetable", NewParentSelfHandler().GetMyChildTimetable)
+
+	linked := httptest.NewRecorder()
+	router.ServeHTTP(linked, httptest.NewRequest(http.MethodGet, "/me/timetable?student_id="+f.studentID, nil))
+	if linked.Code != http.StatusOK {
+		t.Fatalf("linked timetable status=%d body=%s", linked.Code, linked.Body.String())
+	}
+	rows := decodePolicyList(t, linked.Body.String())
+	if len(rows) != 1 {
+		t.Fatalf("linked timetable rows=%v", rows)
+	}
+	if rows[0]["id"] != f.timetableSlotID ||
+		rows[0]["section_id"] != f.sectionID ||
+		rows[0]["subject_name"] != "Mathematics" ||
+		rows[0]["staff_name"] != "Assigned Teacher" {
+		t.Fatalf("unexpected linked timetable row: %#v", rows[0])
+	}
+
+	unlinked := httptest.NewRecorder()
+	router.ServeHTTP(unlinked, httptest.NewRequest(http.MethodGet, "/me/timetable?student_id="+f.otherStudentID, nil))
+	if unlinked.Code != http.StatusForbidden {
+		t.Fatalf("unlinked timetable status=%d body=%s", unlinked.Code, unlinked.Body.String())
+	}
+
+	noSectionStudentID := "student-policy-no-section"
+	if err := database.DB.Create(&models.Student{
+		BaseModel:       models.BaseModel{ID: noSectionStudentID},
+		SchoolID:        f.schoolID,
+		StudentCode:     "POL-ST-NO-SECTION",
+		AdmissionNumber: "POL-ADM-NO-SECTION",
+		FirstName:       "No",
+		LastName:        "Section",
+		DateOfBirth:     time.Date(2016, 1, 1, 0, 0, 0, 0, time.UTC),
+		AdmissionDate:   time.Date(2026, 5, 8, 9, 0, 0, 0, time.UTC),
+		Status:          "active",
+	}).Error; err != nil {
+		t.Fatalf("seed no-section student: %v", err)
+	}
+	if err := database.DB.Create(&models.ParentStudentLink{
+		BaseModel:              models.BaseModel{ID: "parent-link-policy-no-section"},
+		SchoolID:               f.schoolID,
+		ParentUserID:           f.parentUserID,
+		StudentID:              noSectionStudentID,
+		StudentAdmissionNumber: "POL-ADM-NO-SECTION",
+	}).Error; err != nil {
+		t.Fatalf("seed no-section parent link: %v", err)
+	}
+
+	noSection := httptest.NewRecorder()
+	router.ServeHTTP(noSection, httptest.NewRequest(http.MethodGet, "/me/timetable?student_id="+noSectionStudentID, nil))
+	if noSection.Code != http.StatusOK {
+		t.Fatalf("no-section timetable status=%d body=%s", noSection.Code, noSection.Body.String())
+	}
+	emptyRows := decodePolicyList(t, noSection.Body.String())
+	if len(emptyRows) != 0 {
+		t.Fatalf("no-section timetable rows=%v", emptyRows)
+	}
+}
+
 func TestParentHomeworkStudentFilterReturnsSelectedChildAssignments(t *testing.T) {
 	f := setupRelationshipPolicyFixture(t)
 	now := time.Date(2026, 5, 8, 9, 0, 0, 0, time.UTC)

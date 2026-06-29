@@ -144,7 +144,7 @@ func (h *ParentSelfHandler) PatchMyProfile(c *gin.Context) {
 func (h *ParentSelfHandler) GetMyChildTimetable(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	parentUserID := currentUserID(c)
-	studentID := c.Query("student_id")
+	studentID := strings.TrimSpace(c.Query("student_id"))
 	if studentID == "" {
 		fail(c, http.StatusBadRequest, "student_id is required")
 		return
@@ -162,21 +162,101 @@ func (h *ParentSelfHandler) GetMyChildTimetable(c *gin.Context) {
 		return
 	}
 
-	if student.CurrentSectionID == nil || *student.CurrentSectionID == "" {
+	sectionID := ""
+	if student.CurrentSectionID != nil {
+		sectionID = strings.TrimSpace(*student.CurrentSectionID)
+	}
+	if sectionID == "" {
+		var enrollment models.Enrollment
+		if err := database.DB.
+			Joins("JOIN academic_years ON academic_years.id = enrollments.academic_year_id").
+			Where("enrollments.student_id = ? AND academic_years.school_id = ?", studentID, schoolID).
+			Where("LOWER(enrollments.status) IN ?", []string{"enrolled", "active", "current"}).
+			Order("academic_years.is_current DESC, enrollments.created_at DESC").
+			First(&enrollment).Error; err == nil {
+			sectionID = strings.TrimSpace(enrollment.SectionID)
+		}
+	}
+	if sectionID == "" {
 		success(c, http.StatusOK, []gin.H{}, "No section assigned to student")
 		return
 	}
 
 	var slots []models.TimetableSlot
-	if err := database.DB.
+	if err := scopedTimetableSlotQuery(c).
+		Select("timetable_slots.*").
 		Preload("Subject").
 		Preload("Staff").
 		Preload("Room").
-		Where("school_id = ? AND section_id = ?", schoolID, *student.CurrentSectionID).
+		Where("timetable_slots.section_id = ?", sectionID).
+		Order("timetable_slots.day_of_week, timetable_slots.period_number").
 		Find(&slots).Error; err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to fetch student timetable")
 		return
 	}
 
-	success(c, http.StatusOK, slots, "")
+	rows := make([]gin.H, 0, len(slots))
+	for _, slot := range slots {
+		subjectName := "Regular Period"
+		if slot.Subject != nil && strings.TrimSpace(slot.Subject.SubjectName) != "" {
+			subjectName = strings.TrimSpace(slot.Subject.SubjectName)
+		}
+		staffName := "Unassigned"
+		if slot.Staff != nil {
+			staffName = strings.TrimSpace(strings.Join([]string{slot.Staff.FirstName, slot.Staff.LastName}, " "))
+			if staffName == "" {
+				staffName = firstNonEmpty(slot.Staff.Email, "Unassigned")
+			}
+		}
+		roomNumber := ""
+		if slot.Room != nil {
+			roomNumber = strings.TrimSpace(slot.Room.RoomNumber)
+		}
+		rows = append(rows, gin.H{
+			"id":               slot.ID,
+			"section_id":       slot.SectionID,
+			"academic_year_id": slot.AcademicYearID,
+			"term_id":          slot.TermID,
+			"day_of_week":      slot.DayOfWeek,
+			"period_number":    slot.PeriodNumber,
+			"start_time":       timetableTimeHHMM(slot.StartTime),
+			"end_time":         timetableTimeHHMM(slot.EndTime),
+			"subject_id":       slot.SubjectID,
+			"subject_name":     subjectName,
+			"staff_id":         slot.StaffID,
+			"staff_name":       staffName,
+			"room_id":          slot.RoomID,
+			"room_number":      roomNumber,
+			"slot_type":        slot.SlotType,
+			"subject": gin.H{
+				"id":           slot.SubjectID,
+				"subject_name": subjectName,
+			},
+			"staff": gin.H{
+				"id":         slot.StaffID,
+				"first_name": firstStaffName(slot.Staff),
+				"last_name":  lastStaffName(slot.Staff),
+			},
+			"room": gin.H{
+				"id":          slot.RoomID,
+				"room_number": roomNumber,
+			},
+		})
+	}
+
+	success(c, http.StatusOK, rows, "")
+}
+
+func firstStaffName(staff *models.Staff) string {
+	if staff == nil {
+		return ""
+	}
+	return staff.FirstName
+}
+
+func lastStaffName(staff *models.Staff) string {
+	if staff == nil {
+		return ""
+	}
+	return staff.LastName
 }
