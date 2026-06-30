@@ -525,7 +525,7 @@ func (h *ApprovalRequestHandler) applyApprovedOperation(c *gin.Context, tx *gorm
 		return h.applyFeeApproval(c, tx, schoolID, payload)
 	case "reports":
 		return fmt.Errorf("reports are view-only and cannot be applied")
-	case "staff", "attendance_operations", "timetable", "exams", "communication", "helpdesk", "documents", "user_access":
+	case "staff", "attendance_operations", "timetable", "exams", "communication", "documents", "user_access":
 		return fmt.Errorf("approval apply for %s is not implemented yet", module)
 	case "":
 		return fmt.Errorf("approval request is missing module")

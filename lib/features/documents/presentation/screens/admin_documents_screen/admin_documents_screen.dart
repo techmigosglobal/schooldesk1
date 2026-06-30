@@ -74,16 +74,12 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     try {
       final results = await Future.wait([
         BackendApiClient.instance.getRawList('/documents/requests'),
-        BackendApiClient.instance.getRawList('/certificates/transfer-requests'),
         BackendApiClient.instance.getRawList('/documents/templates'),
       ]);
       if (!mounted) return;
       setState(() {
-        _requests = [
-          ...results[0].map(_mapDocumentRequest),
-          ...results[1].map(_mapTransferRequest),
-        ];
-        _templates = results[2].map(_mapTemplate).toList();
+        _requests = results[0].map(_mapDocumentRequest).toList();
+        _templates = results[1].map(_mapTemplate).toList();
         _loading = false;
         _error = null;
       });
@@ -107,25 +103,6 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           'Student',
       'class': row['class_name'] ?? row['class'] ?? '',
       'type': row['type'] ?? row['document_type'] ?? 'Document',
-      'requestDate': '${row['created_at'] ?? row['requested_on'] ?? ''}'
-          .split('T')
-          .first,
-      'status': row['status'] ?? 'Pending',
-      'parent': row['parent_name'] ?? row['parent'] ?? '',
-    };
-  }
-
-  Map<String, dynamic> _mapTransferRequest(Map<String, dynamic> row) {
-    return {
-      'id': row['id'],
-      'resource': 'certificates/transfer-requests',
-      'student':
-          row['student_name'] ??
-          row['student'] ??
-          row['student_id'] ??
-          'Student',
-      'class': row['class_name'] ?? row['class'] ?? '',
-      'type': 'Transfer Certificate',
       'requestDate': '${row['created_at'] ?? row['requested_on'] ?? ''}'
           .split('T')
           .first,

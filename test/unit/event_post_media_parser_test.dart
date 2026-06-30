@@ -86,7 +86,9 @@ void main() {
       expect(source, contains('Navigator.of(context).push'));
       expect(source, contains('PdfPreview('));
       expect(source, contains('BackendApiClient.instance.dio.get<List<int>>'));
+      expect(source, contains('Image.memory'));
       expect(source, isNot(contains('LaunchMode.externalApplication')));
+      expect(source, isNot(contains('Image.network')));
     });
   });
 }

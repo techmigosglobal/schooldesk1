@@ -57,8 +57,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return context.appTheme.primary;
       case ApprovalType.communication:
         return context.appTheme.info;
-      case ApprovalType.helpdesk:
-        return context.appTheme.warning;
       case ApprovalType.academicInfo:
         return context.appTheme.primary;
     }
@@ -94,8 +92,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Icons.description_rounded;
       case ApprovalType.communication:
         return Icons.campaign_rounded;
-      case ApprovalType.helpdesk:
-        return Icons.support_agent_rounded;
       case ApprovalType.academicInfo:
         return Icons.auto_stories_rounded;
     }
@@ -131,8 +127,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return 'Document';
       case ApprovalType.communication:
         return 'Communication';
-      case ApprovalType.helpdesk:
-        return 'Helpdesk';
       case ApprovalType.academicInfo:
         return 'Academic Info';
     }
@@ -244,7 +238,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
           constraints: const BoxConstraints(maxWidth: 230),
           child: Text(
             text,
-            style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted),
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 11,
+              color: context.appTheme.muted,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -361,7 +358,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: isPending || isChangesRequested
-            ? Border.all(color: context.appTheme.warning.withAlpha(77), width: 1)
+            ? Border.all(
+                color: context.appTheme.warning.withAlpha(77),
+                width: 1,
+              )
             : Border.all(color: context.appTheme.outlineVariant, width: 1),
         boxShadow: [
           BoxShadow(
@@ -531,7 +531,10 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: context.appTheme.outlineVariant, width: 1),
+                  top: BorderSide(
+                    color: context.appTheme.outlineVariant,
+                    width: 1,
+                  ),
                 ),
               ),
               child: _buildActionButtons(isBusy),

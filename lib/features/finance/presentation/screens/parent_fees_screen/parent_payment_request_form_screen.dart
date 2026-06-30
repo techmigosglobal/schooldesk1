@@ -260,19 +260,31 @@ class _ParentPaymentRequestFormScreenState
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _paymentModes
-                .map(
-                  (mode) => ChoiceChip(
-                    label: Text(
-                      mode == 'upi' ? 'Pay by UPI' : _paymentModeLabel(mode),
-                    ),
-                    selected: _paymentMode == mode,
-                    onSelected: _submitting
-                        ? null
-                        : (_) => setState(() => _paymentMode = mode),
+            children: _paymentModes.map((mode) {
+              final selected = _paymentMode == mode;
+              return ChoiceChip(
+                label: Text(
+                  mode == 'upi' ? 'Pay by UPI' : _paymentModeLabel(mode),
+                  style: GoogleFonts.dmSans(
+                    color: selected ? Colors.white : context.appTheme.onSurface,
+                    fontWeight: FontWeight.w700,
                   ),
-                )
-                .toList(),
+                ),
+                selected: selected,
+                selectedColor: context.appTheme.primary,
+                backgroundColor: context.appTheme.surface,
+                disabledColor: context.appTheme.surfaceVariant,
+                checkmarkColor: Colors.white,
+                side: BorderSide(
+                  color: selected
+                      ? context.appTheme.primary
+                      : context.appTheme.outlineVariant,
+                ),
+                onSelected: _submitting
+                    ? null
+                    : (_) => setState(() => _paymentMode = mode),
+              );
+            }).toList(),
           ),
           if (_isCashMode) ...[
             const SizedBox(height: 10),
@@ -745,10 +757,11 @@ class _ParentPaymentRequestFormScreenState
   }
 
   Widget _buildProofThumbnail() {
-    final isImage = _proofPath != null &&
+    final isImage =
+        _proofPath != null &&
         (_proofPath!.toLowerCase().endsWith('.jpg') ||
-         _proofPath!.toLowerCase().endsWith('.jpeg') ||
-         _proofPath!.toLowerCase().endsWith('.png'));
+            _proofPath!.toLowerCase().endsWith('.jpeg') ||
+            _proofPath!.toLowerCase().endsWith('.png'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -824,7 +837,11 @@ class _ParentPaymentRequestFormScreenState
             ),
             child: Row(
               children: [
-                const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 24),
+                const Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: Colors.red,
+                  size: 24,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

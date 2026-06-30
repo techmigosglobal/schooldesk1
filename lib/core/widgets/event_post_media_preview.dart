@@ -34,13 +34,12 @@ class EventPostMediaPreview extends StatelessWidget {
     final url = resolveEventPostMediaUrl(item.url);
     if (item.isImage) {
       return InkWell(
-        onTap: onImageTap,
-        child: Image.network(
+        onTap: onImageTap ?? () => openEventPostMediaPreview(context, item),
+        child: EventPostImagePreview(
           url,
           height: height,
-          width: double.infinity,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallback(
+          fallbackBuilder: () => _fallback(
             context,
             Icons.broken_image_outlined,
             'Image unavailable',
@@ -133,10 +132,10 @@ class EventPostMediaPreviewScreen extends StatelessWidget {
     if (item.isImage) {
       return Center(
         child: InteractiveViewer(
-          child: Image.network(
+          child: EventPostImagePreview(
             url,
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => _message(
+            fallbackBuilder: () => _message(
               context,
               Icons.broken_image_outlined,
               'Image preview is not available.',
@@ -196,6 +195,49 @@ class EventPostMediaPreviewScreen extends StatelessWidget {
   }
 }
 
+class EventPostImagePreview extends StatelessWidget {
+  final String url;
+  final double? height;
+  final BoxFit fit;
+  final Widget Function()? fallbackBuilder;
+
+  const EventPostImagePreview(
+    this.url, {
+    super.key,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.fallbackBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _downloadMediaBytes(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return SizedBox(
+            height: height,
+            width: double.infinity,
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+          return fallbackBuilder?.call() ??
+              SizedBox(height: height, child: const Icon(Icons.broken_image));
+        }
+        return Image.memory(
+          snapshot.data!,
+          height: height,
+          width: double.infinity,
+          fit: fit,
+        );
+      },
+    );
+  }
+}
+
 class EventPostPdfPreview extends StatelessWidget {
   final String url;
   final String name;
@@ -237,12 +279,16 @@ class EventPostPdfPreview extends StatelessWidget {
   }
 
   Future<Uint8List> _downloadPdfBytes(String url) async {
-    final response = await BackendApiClient.instance.dio.get<List<int>>(
-      url,
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList(response.data ?? const []);
+    return _downloadMediaBytes(url);
   }
+}
+
+Future<Uint8List> _downloadMediaBytes(String url) async {
+  final response = await BackendApiClient.instance.dio.get<List<int>>(
+    url,
+    options: Options(responseType: ResponseType.bytes),
+  );
+  return Uint8List.fromList(response.data ?? const []);
 }
 
 class EventPostVideoPreview extends StatefulWidget {

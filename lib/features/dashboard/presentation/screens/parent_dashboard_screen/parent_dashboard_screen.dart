@@ -81,6 +81,10 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
           'category': ev['category'] ?? '',
           'author': ev['author'] ?? ev['posted_by'] ?? '',
           'media_urls': ev['media_urls'],
+          'media': ev['media'],
+          'media_url': ev['media_url'],
+          'mediaUrl': ev['mediaUrl'],
+          'attachments': ev['attachments'],
           // Keep raw event type for image detection
           'media_type': ev['media_type'] ?? ev['mediaType'] ?? '',
           'destinations': ev['destinations'] ?? '',
@@ -723,7 +727,8 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).schoolDesk;
     final mediaItems = EventPostMediaItem.parseList(
-      post['media_urls'] ??
+      post['media'] ??
+          post['media_urls'] ??
           post['mediaUrls'] ??
           post['media_url'] ??
           post['mediaUrl'] ??
@@ -748,9 +753,7 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
                   EventPostMediaPreview(
                     item: item,
                     height: 210,
-                    onImageTap: item.isImage
-                        ? () => _showImagePreview(context, item)
-                        : null,
+                    onImageTap: () => openEventPostMediaPreview(context, item),
                   ),
                   if (mediaItems.length > 1)
                     Positioned(
@@ -778,33 +781,6 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showImagePreview(BuildContext context, EventPostMediaItem item) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          children: [
-            InteractiveViewer(
-              child: Image.network(
-                resolveEventPostMediaUrl(item.url),
-                fit: BoxFit.contain,
-              ),
-            ),
-            Positioned(
-              right: 8,
-              top: 8,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.pop(context),
-                icon: const Icon(Icons.close_rounded),
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -917,7 +893,8 @@ String _eventPostMediaType(Map<String, dynamic> post) {
   if (explicit.contains('image')) return 'Photo';
 
   final media = EventPostMediaItem.parseList(
-    post['media_urls'] ??
+    post['media'] ??
+        post['media_urls'] ??
         post['mediaUrls'] ??
         post['media_url'] ??
         post['mediaUrl'] ??

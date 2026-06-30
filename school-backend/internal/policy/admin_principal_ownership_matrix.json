@@ -192,36 +192,6 @@
       }
     },
     {
-      "key": "helpdesk",
-      "label": "Helpdesk",
-      "frontend_route": "/complaint-management-screen",
-      "backend_resource": "approval-requests",
-      "entity_type": "helpdesk",
-      "risk_level": "medium",
-      "admin": {
-        "view": true,
-        "create_draft": true,
-        "submit_for_approval": true,
-        "edit_pending_request": true,
-        "cancel_own_pending_request": true,
-        "final_approve": false,
-        "final_reject": false,
-        "direct_publish": false,
-        "delete_active_record": false
-      },
-      "principal": {
-        "view": true,
-        "create_draft": false,
-        "submit_for_approval": false,
-        "edit_pending_request": false,
-        "cancel_own_pending_request": false,
-        "final_approve": true,
-        "final_reject": true,
-        "direct_publish": true,
-        "delete_active_record": true
-      }
-    },
-    {
       "key": "documents",
       "label": "Documents",
       "frontend_route": "/id-card-generation-screen",

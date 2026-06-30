@@ -27,7 +27,6 @@ void main() {
         'fees',
         'timetable',
         'communication',
-        'helpdesk',
         'documents',
         'user_access',
         'reports',

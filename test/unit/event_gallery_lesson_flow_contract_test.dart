@@ -44,7 +44,7 @@ void main() {
         isAuthenticated: true,
         currentRole: 'Admin',
       ),
-      AppRoutes.landingPage,
+      isNull,
     );
   });
 

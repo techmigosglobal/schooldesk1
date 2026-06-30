@@ -43,7 +43,9 @@ void main() {
       read('lib/routes/schooldesk_screen_registry.dart'),
       read('lib/core/widgets/parent_navigation.dart'),
       read('lib/core/widgets/teacher_navigation.dart'),
-      read('lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart'),
+      read(
+        'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+      ),
     ].join('\n');
 
     for (final retired in const [
@@ -116,6 +118,9 @@ void main() {
       'frontendResource("/admissions/applications"',
       'frontendResource("/discipline-incidents"',
       'frontendResource("/helpdesk-tickets"',
+      'frontendResource("/documents/access-requests"',
+      'frontendResource("/certificates/requests"',
+      'frontendResource("/certificates/transfer-requests"',
       'frontendResource("/syllabus"',
       'frontendResource("/complaints", "Principal", "Teacher")',
       'frontendResource("/curriculum", "Principal", "Teacher", "Parent")',
@@ -123,9 +128,18 @@ void main() {
       expect(backendRoutes, isNot(contains(retired)));
     }
 
-    expect(backendRoutes, contains('frontendResource("/documents/templates", "Principal")'));
-    expect(backendRoutes, contains('frontendResource("/complaints", "Principal")'));
-    expect(backendRoutes, contains('frontendResource("/curriculum", "Principal")'));
+    expect(
+      backendRoutes,
+      contains('frontendResource("/documents/templates", "Principal")'),
+    );
+    expect(
+      backendRoutes,
+      contains('frontendResource("/complaints", "Principal")'),
+    );
+    expect(
+      backendRoutes,
+      contains('frontendResource("/curriculum", "Principal")'),
+    );
   });
 
   test('chat screens do not perform five-second full reload polling', () {

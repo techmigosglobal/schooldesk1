@@ -18,10 +18,8 @@ class ParentDocumentsScreen extends StatefulWidget {
   State<ParentDocumentsScreen> createState() => _ParentDocumentsScreenState();
 }
 
-class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
-    with SingleTickerProviderStateMixin {
+class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
   int _selectedNavIndex = ParentNav.documents;
-  late TabController _tabController;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
   bool _generatingPdf = false;
@@ -29,7 +27,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
 
   List<Map<String, dynamic>> _children = [];
   final Map<String, List<Map<String, dynamic>>> _docsByStudent = {};
-  final List<Map<String, dynamic>> _certificateRequests = [];
   bool _loading = true;
   String? _error;
 
@@ -53,7 +50,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
   }
 
@@ -108,12 +104,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
         _loading = false;
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _downloadDocument(Map<String, dynamic> doc) async {
@@ -192,7 +182,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Documents',
-      subtitle: 'Access child documents and certificate request status',
+      subtitle: 'Access child documents and generated records',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -201,13 +191,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      bottom: TabBar(
-        controller: _tabController,
-        tabs: const [
-          Tab(text: 'Documents'),
-          Tab(text: 'Certificates'),
-        ],
-      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -221,18 +204,9 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
               children: [
                 _buildChildSelector(),
                 Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      RefreshIndicator(
-                        onRefresh: _loadData,
-                        child: _buildDocumentsTab(),
-                      ),
-                      RefreshIndicator(
-                        onRefresh: _loadData,
-                        child: _buildCertificatesTab(),
-                      ),
-                    ],
+                  child: RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: _buildDocumentsTab(),
                   ),
                 ),
               ],
@@ -415,426 +389,6 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _buildCertificatesTab() {
-    return SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Request a Certificate',
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _buildCertRequestCards(),
-          const SizedBox(height: 20),
-          Text(
-            'My Requests',
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (_certificateRequests.isEmpty)
-            Text(
-              'No certificate requests yet.',
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                color: context.appTheme.muted,
-              ),
-            )
-          else
-            ..._certificateRequests.map((r) => _certRequestCard(r)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCertRequestCards() {
-    final certTypes = [
-      {
-        'label': 'Bonafide Certificate',
-        'icon': Icons.workspace_premium_rounded,
-        'color': Color(0xFF6C3483),
-        'desc': 'For bank, passport, etc.',
-      },
-      {
-        'label': 'Transfer Certificate',
-        'icon': Icons.transfer_within_a_station_rounded,
-        'color': Color(0xFFC0392B),
-        'desc': 'For school transfer',
-      },
-      {
-        'label': 'Marks Memo',
-        'icon': Icons.grade_rounded,
-        'color': Color(0xFF1565C0),
-        'desc': 'Exam marks summary',
-      },
-      {
-        'label': 'Character Certificate',
-        'icon': Icons.verified_rounded,
-        'color': Color(0xFF1A6B4A),
-        'desc': 'For external purposes',
-      },
-    ];
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 2.0,
-      ),
-      itemCount: certTypes.length,
-      itemBuilder: (_, i) {
-        final ct = certTypes[i];
-        return GestureDetector(
-          onTap: () => _showCertRequestDialog(context, ct['label'] as String),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: (ct['color'] as Color).withAlpha(15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: (ct['color'] as Color).withAlpha(60)),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  ct['icon'] as IconData,
-                  color: ct['color'] as Color,
-                  size: 22,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        ct['label'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: ct['color'] as Color,
-                        ),
-                      ),
-                      Text(
-                        ct['desc'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: context.appTheme.muted,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _certRequestCard(Map<String, dynamic> r) {
-    final isReady = r['status'] == 'Ready';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: (r['color'] as Color).withAlpha(20),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              r['icon'] as IconData,
-              color: r['color'] as Color,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  r['type'],
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Purpose: ${r['purpose']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-                Text(
-                  'Requested: ${r['requestedOn']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          isReady
-              ? ElevatedButton(
-                  onPressed: () => _requestDocumentAccess(r),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _headerColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: Text(
-                    'Download',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                )
-              : Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: context.appTheme.warningContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Pending',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: context.appTheme.warning,
-                    ),
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showCertRequestDialog(
-    BuildContext context,
-    String certType,
-  ) async {
-    final studentId = _activeStudentId;
-    if (studentId == null || studentId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Select a backend-linked student before requesting a certificate.',
-          ),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-      return;
-    }
-    final request = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (_) => _CertificateRequestPage(
-          certType: certType,
-          studentId: studentId,
-          childName: _activeChildName.isEmpty ? 'Student' : _activeChildName,
-          headerColor: _headerColor,
-        ),
-      ),
-    );
-    if (!mounted || request == null) return;
-    setState(() {
-      _certificateRequests.insert(0, {
-        'id': request['id'],
-        'type': certType,
-        'purpose': request['purpose'],
-        'requestedOn': request['created_at'] ?? request['requested_on'] ?? '',
-        'status': request['status'] ?? 'Pending',
-        'icon': Icons.description_rounded,
-        'color': _headerColor,
-      });
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Certificate request submitted')),
-    );
-  }
-
-  Future<void> _requestDocumentAccess(Map<String, dynamic> document) async {
-    try {
-      await BackendApiClient.instance.createRaw('/documents/access-requests', {
-        'student_id': _activeStudentId,
-        'document_id': document['id'],
-        'document_type': document['docType'] ?? document['type'],
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Document access requested')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Document is not available from backend: $e'),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-    }
-  }
-}
-
-class _CertificateRequestPage extends StatefulWidget {
-  final String certType;
-  final String studentId;
-  final String childName;
-  final Color headerColor;
-
-  const _CertificateRequestPage({
-    required this.certType,
-    required this.studentId,
-    required this.childName,
-    required this.headerColor,
-  });
-
-  @override
-  State<_CertificateRequestPage> createState() =>
-      _CertificateRequestPageState();
-}
-
-class _CertificateRequestPageState extends State<_CertificateRequestPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _purposeCtrl = TextEditingController();
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _purposeCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _saving) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      final purpose = _purposeCtrl.text.trim().isEmpty
-          ? 'Not specified'
-          : _purposeCtrl.text.trim();
-      final response = await BackendApiClient.instance.createRaw(
-        '/certificates/requests',
-        {
-          'student_id': widget.studentId,
-          'type': widget.certType,
-          'purpose': purpose,
-        },
-      );
-      if (!mounted) return;
-      Navigator.pop(context, {...response, 'purpose': purpose});
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = 'Certificate request failed: $e';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Request ${widget.certType}')),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Text(
-                'For: ${widget.childName}',
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  color: context.appTheme.muted,
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_error != null) ...[
-                _InputErrorBanner(message: _error!),
-                const SizedBox(height: 16),
-              ],
-              TextFormField(
-                controller: _purposeCtrl,
-                enabled: !_saving,
-                decoration: const InputDecoration(
-                  labelText: 'Purpose',
-                  hintText: 'e.g., Bank account, Passport...',
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _saving ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: widget.headerColor,
-                ),
-                child: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Submit Request'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InputErrorBanner extends StatelessWidget {
-  final String message;
-
-  const _InputErrorBanner({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
-      ),
     );
   }
 }

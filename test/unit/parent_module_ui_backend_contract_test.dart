@@ -91,7 +91,10 @@ void main() {
     );
     expect(parentSelf, contains('scopedTimetableSlotQuery(c)'));
     expect(parentSelf, contains('timetable_slots.section_id'));
-    expect(parentSelf, isNot(contains('Where("school_id = ? AND section_id = ?"')));
+    expect(
+      parentSelf,
+      isNot(contains('Where("school_id = ? AND section_id = ?"')),
+    );
   });
 
   test('parent dashboard puts media-rich school feed before utility actions', () {
@@ -115,7 +118,10 @@ void main() {
     expect(feedIndex, lessThan(summaryIndex));
     expect(feedIndex, lessThan(shortcutsIndex));
     expect(dashboard, contains("'media_urls': ev['media_urls']"));
-    expect(dashboard, contains('_eventPostMediaUrls'));
+    expect(dashboard, contains("'media': ev['media']"));
+    expect(dashboard, contains("'attachments': ev['attachments']"));
+    expect(dashboard, contains('openEventPostMediaPreview(context, item)'));
+    expect(dashboard, contains('EventPostMediaItem.parseList'));
     expect(dashboard, contains('_eventPostMediaType'));
     expect(dashboard, contains('_SchoolFeedMediaPreview'));
   });
@@ -183,8 +189,8 @@ void main() {
 
     expect(frontendRecord, contains('parentOwnsRecords'));
     expect(frontendRecord, contains('"notice-acknowledgements"'));
-    expect(frontendRecord, contains('"documents/access-requests"'));
-    expect(frontendRecord, contains('"certificates/requests"'));
+    expect(frontendRecord, isNot(contains('"documents/access-requests"')));
+    expect(frontendRecord, isNot(contains('"certificates/requests"')));
     expect(frontendRecord, contains('created_by = ?'));
     expect(
       main,
@@ -192,11 +198,12 @@ void main() {
         'frontendResource("/notice-acknowledgements", "Principal", "Teacher", "Parent")',
       ),
     );
-    expect(
-      main,
-      contains(
-        'frontendResource("/documents/access-requests", "Principal", "Parent")',
-      ),
-    );
+    for (final retired in const [
+      'frontendResource("/documents/access-requests"',
+      'frontendResource("/certificates/requests"',
+      'frontendResource("/certificates/transfer-requests"',
+    ]) {
+      expect(main, isNot(contains(retired)));
+    }
   });
 }

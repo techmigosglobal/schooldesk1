@@ -26,7 +26,6 @@ enum ApprovalType {
   exam,
   document,
   communication,
-  helpdesk,
   academicInfo,
 }
 
@@ -92,8 +91,6 @@ class ApprovalModel {
         return ApprovalType.document;
       case 'communication':
         return ApprovalType.communication;
-      case 'helpdesk':
-        return ApprovalType.helpdesk;
       case 'academic_info':
         return ApprovalType.academicInfo;
       default:
@@ -223,13 +220,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           () => _loadGenericApprovals(
             path: '/fees/concessions',
             type: 'fee_concession',
-          ),
-        ),
-        _loadApprovalSource(
-          'Transfer certificates',
-          () => _loadGenericApprovals(
-            path: '/certificates/transfer-requests',
-            type: 'tc',
           ),
         ),
         _loadApprovalSource(
@@ -430,8 +420,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         return 'document';
       case 'communication':
         return 'communication';
-      case 'helpdesk':
-        return 'helpdesk';
       case 'academic_info':
       case 'attendance_operations':
         return 'class';

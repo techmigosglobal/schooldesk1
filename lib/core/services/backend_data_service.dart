@@ -44,9 +44,6 @@ class BackendDataService {
   static const String kParentLeaveRequests = 'parent_leave_requests';
   static const String kParentHomework = 'parent_homework';
   static const String kSharedLeaveRequests = 'shared_leave_requests';
-  static const String kSharedDisciplineIncidents =
-      'shared_discipline_incidents';
-  static const String kSharedHelpdeskTickets = 'shared_helpdesk_tickets';
   static const String kSharedSchoolNotices = 'shared_school_notices';
   static const String kSharedPtmMeetings = 'shared_ptm_meetings';
   static const String kSharedParentLeaveRequests =
@@ -257,10 +254,6 @@ class BackendDataService {
             .toList();
       case kComplaints:
         return await _api.getRawList('/complaints');
-      case kSharedDisciplineIncidents:
-        return await _api.getRawList('/discipline-incidents');
-      case kSharedHelpdeskTickets:
-        return await _api.getRawList('/helpdesk-tickets');
       default:
         return <Map<String, dynamic>>[];
     }
@@ -399,12 +392,6 @@ class BackendDataService {
         return;
       case kComplaints:
         await _saveMutableFrontendRecord('/complaints', latest);
-        return;
-      case kSharedDisciplineIncidents:
-        await _saveMutableFrontendRecord('/discipline-incidents', latest);
-        return;
-      case kSharedHelpdeskTickets:
-        await _saveMutableFrontendRecord('/helpdesk-tickets', latest);
         return;
       default:
         return;

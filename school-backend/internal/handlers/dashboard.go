@@ -621,7 +621,6 @@ var principalApprovalResources = []string{
 	"account-approvals",
 	"approval-requests",
 	"fees/concessions",
-	"certificates/transfer-requests",
 	"class-approvals",
 	"student-approvals",
 	"events/approvals",

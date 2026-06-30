@@ -35,7 +35,6 @@ void main() {
       'BackendDataService.kTeacherWeeklyPlan',
       'BackendDataService.kTeacherNotes',
       'BackendDataService.kSharedPtmMeetings',
-      'BackendDataService.kSharedDisciplineIncidents',
       'BackendDataService.kSharedSchoolNotices',
       "/ (cls['strength'] as int)",
     ];

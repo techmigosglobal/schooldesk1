@@ -101,7 +101,8 @@ void main() {
         calendar,
         contains('constraints: const BoxConstraints(minHeight: 68)'),
       );
-      expect(calendar, contains('FittedBox('));
+      expect(calendar, contains('Flexible('));
+      expect(calendar, contains('TextOverflow.ellipsis'));
     },
   );
 
@@ -152,6 +153,21 @@ void main() {
     expect(parentDashboard, contains("'Leave'"));
     expect(parentDashboard, isNot(contains("label: 'Academic\\nProgress'")));
     expect(parentDashboard, isNot(contains("label: 'Leave\\nRequest'")));
+
+    final parentPaymentForm = File(
+      'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
+    ).readAsStringSync();
+    expect(
+      parentPaymentForm,
+      contains('selectedColor: context.appTheme.primary'),
+    );
+    expect(
+      parentPaymentForm,
+      contains('backgroundColor: context.appTheme.surface'),
+    );
+    expect(parentPaymentForm, contains('side: BorderSide'));
+    expect(parentPaymentForm, contains('checkmarkColor: Colors.white'));
+    expect(parentPaymentForm, contains('context.appTheme.onSurface'));
 
     expect(receipt, contains('leading: IconButton('));
     expect(receipt, contains('Navigator.maybePop(context)'));

@@ -763,15 +763,12 @@ func RegisterV1Routes(r *gin.Engine, cfg *config.Config) {
 			registerTableCRUD(principalReports, "principal_reports", []string{"Principal"}, []string{"Principal"})
 		}
 
-		frontendResource("/certificates/transfer-requests", "Principal")
 		frontendResource("/events/approvals", "Principal")
 		frontendResource("/timetable/approvals", "Principal")
 		frontendResource("/principal/timetable-advice", "Principal")
 		frontendResource("/principal/exam-advice", "Principal")
 		frontendResource("/documents/requests", "Principal")
 		frontendResource("/documents/templates", "Principal")
-		frontendResource("/documents/access-requests", "Principal", "Parent")
-		frontendResource("/certificates/requests", "Principal", "Parent")
 		frontendResource("/student-notes", "Principal", "Teacher")
 		frontendResource("/student-alerts", "Principal", "Teacher")
 		frontendResource("/notice-acknowledgements", "Principal", "Teacher", "Parent")

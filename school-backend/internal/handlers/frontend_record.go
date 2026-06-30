@@ -143,7 +143,7 @@ func (h *FrontendRecordHandler) parentOwnsRecords(c *gin.Context) bool {
 		return false
 	}
 	switch h.resource {
-	case "certificates/requests", "documents/access-requests", "homework/attachment-requests", "notice-acknowledgements":
+	case "homework/attachment-requests", "notice-acknowledgements":
 		return true
 	default:
 		return false

@@ -11,7 +11,6 @@ func TestOwnershipMatrixCoversRequiredAdminModules(t *testing.T) {
 		"fees":                  false,
 		"timetable":             false,
 		"communication":         false,
-		"helpdesk":              false,
 		"documents":             false,
 		"user_access":           false,
 		"reports":               false,

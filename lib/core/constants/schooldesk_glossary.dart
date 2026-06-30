@@ -36,7 +36,6 @@ class SchoolDeskGlossary {
   static const communication = 'Communication';
   static const communicationCenter = 'Communication Center';
   static const complaints = 'Complaints';
-  static const helpdesk = 'Helpdesk';
   static const calendar = 'Calendar';
   static const reports = 'Reports';
   static const analytics = 'Analytics';
