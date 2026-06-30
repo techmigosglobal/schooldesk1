@@ -77,18 +77,19 @@ type Homework struct {
 
 type HomeworkSubmission struct {
 	BaseModel
-	SchoolID      string     `gorm:"type:text;not null;index" json:"school_id"`
-	HomeworkID    string     `gorm:"type:text;not null;uniqueIndex:idx_homework_submission_student" json:"homework_id"`
-	StudentID     string     `gorm:"type:text;not null;uniqueIndex:idx_homework_submission_student" json:"student_id"`
-	ParentUserID  string     `gorm:"type:text;not null" json:"parent_user_id"`
-	AnswerText    string     `gorm:"type:text" json:"answer_text"`
-	AttachmentURL string     `gorm:"type:text" json:"attachment_url"`
-	Status        string     `gorm:"type:text;default:'submitted'" json:"status"`
-	SubmittedAt   time.Time  `json:"submitted_at"`
-	ReviewedBy    string     `gorm:"type:text" json:"reviewed_by"`
-	ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
-	Grade         string     `gorm:"type:text" json:"grade"`
-	Remarks       string     `gorm:"type:text" json:"remarks"`
+	SchoolID       string      `gorm:"type:text;not null;index" json:"school_id"`
+	HomeworkID     string      `gorm:"type:text;not null;uniqueIndex:idx_homework_submission_student" json:"homework_id"`
+	StudentID      string      `gorm:"type:text;not null;uniqueIndex:idx_homework_submission_student" json:"student_id"`
+	ParentUserID   string      `gorm:"type:text;not null" json:"parent_user_id"`
+	AnswerText     string      `gorm:"type:text" json:"answer_text"`
+	AttachmentURL  string      `gorm:"type:text" json:"attachment_url"`
+	AttachmentURLs StringArray `gorm:"type:json" json:"attachment_urls"`
+	Status         string      `gorm:"type:text;default:'submitted'" json:"status"`
+	SubmittedAt    time.Time   `json:"submitted_at"`
+	ReviewedBy     string      `gorm:"type:text" json:"reviewed_by"`
+	ReviewedAt     *time.Time  `json:"reviewed_at,omitempty"`
+	Grade          string      `gorm:"type:text" json:"grade"`
+	Remarks        string      `gorm:"type:text" json:"remarks"`
 
 	Homework   *Homework `gorm:"foreignKey:HomeworkID" json:"homework,omitempty"`
 	Student    *Student  `gorm:"foreignKey:StudentID" json:"student,omitempty"`
@@ -97,9 +98,10 @@ type HomeworkSubmission struct {
 }
 
 type HomeworkSubmissionRequest struct {
-	StudentID     string `json:"student_id"`
-	AnswerText    string `json:"answer_text"`
-	AttachmentURL string `json:"attachment_url"`
+	StudentID      string   `json:"student_id"`
+	AnswerText     string   `json:"answer_text"`
+	AttachmentURL  string   `json:"attachment_url"`
+	AttachmentURLs []string `json:"attachment_urls"`
 }
 
 type HomeworkSubmissionReviewRequest struct {

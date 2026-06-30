@@ -188,6 +188,11 @@ func ensurePostgresSupplementalSchema() error {
 			FROM sections
 			WHERE attendance_sessions.section_id = sections.id
 				AND COALESCE(BTRIM(attendance_sessions.academic_year_id), '') = '';`,
+		`ALTER TABLE homework_submissions ADD COLUMN IF NOT EXISTS attachment_urls json;`,
+		`UPDATE homework_submissions
+			SET attachment_urls = json_build_array(attachment_url)
+			WHERE COALESCE(BTRIM(attachment_url), '') <> ''
+				AND attachment_urls IS NULL;`,
 		`CREATE TABLE IF NOT EXISTS teachers (
 			id text PRIMARY KEY,
 			user_id text,
@@ -290,6 +295,8 @@ func ensureSQLiteSupplementalSchema() error {
 		`UPDATE staff_subjects SET academic_year_id = (SELECT academic_years.id FROM academic_years WHERE academic_years.school_id = staff_subjects.school_id ORDER BY academic_years.is_current DESC, academic_years.created_at DESC LIMIT 1) WHERE COALESCE(TRIM(academic_year_id), '') = '';`,
 		`ALTER TABLE attendance_sessions ADD COLUMN academic_year_id text;`,
 		`UPDATE attendance_sessions SET academic_year_id = (SELECT sections.academic_year_id FROM sections WHERE sections.id = attendance_sessions.section_id) WHERE COALESCE(TRIM(academic_year_id), '') = '';`,
+		`ALTER TABLE homework_submissions ADD COLUMN attachment_urls text;`,
+		`UPDATE homework_submissions SET attachment_urls = json_array(attachment_url) WHERE COALESCE(TRIM(attachment_url), '') <> '' AND attachment_urls IS NULL;`,
 		`CREATE TABLE IF NOT EXISTS teachers (id text PRIMARY KEY, user_id text, employee_id text, qualification text, joining_date datetime, created_at datetime);`,
 		`CREATE TABLE IF NOT EXISTS classes (id text PRIMARY KEY, name text NOT NULL, section text, class_teacher_id text, academic_year_id text, created_at datetime);`,
 		`CREATE TABLE IF NOT EXISTS attendance (id text PRIMARY KEY, student_id text, class_id text, date datetime, status text, marked_by_id text, created_at datetime);`,

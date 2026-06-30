@@ -111,6 +111,17 @@ func scopedSchoolID(c *gin.Context) string {
 	return strings.TrimSpace(c.GetString("school_id"))
 }
 
+func trimStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func monthYearRange(month, year string) (time.Time, time.Time, bool) {
 	cleanMonth := strings.TrimSpace(month)
 	cleanYear := strings.TrimSpace(year)

@@ -70,6 +70,7 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 	req.StudentID = strings.TrimSpace(req.StudentID)
 	req.AnswerText = strings.TrimSpace(req.AnswerText)
 	req.AttachmentURL = strings.TrimSpace(req.AttachmentURL)
+	req.AttachmentURLs = trimStringSlice(req.AttachmentURLs)
 	if req.StudentID == "" && strings.TrimSpace(homework.StudentID) != "" {
 		req.StudentID = strings.TrimSpace(homework.StudentID)
 	}
@@ -81,8 +82,8 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 		fail(c, http.StatusForbidden, "Student access denied")
 		return
 	}
-	if req.AnswerText == "" && req.AttachmentURL == "" {
-		fail(c, http.StatusBadRequest, "answer_text or attachment_url is required")
+	if req.AnswerText == "" && req.AttachmentURL == "" && len(req.AttachmentURLs) == 0 {
+		fail(c, http.StatusBadRequest, "answer_text or attachment_url or attachment_urls is required")
 		return
 	}
 	var parentLink models.ParentStudentLink
@@ -126,6 +127,7 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 	}
 	row.AnswerText = req.AnswerText
 	row.AttachmentURL = req.AttachmentURL
+	row.AttachmentURLs = models.StringArray(req.AttachmentURLs)
 	row.Status = "submitted"
 	row.SubmittedAt = now
 	row.ReviewedBy = ""
