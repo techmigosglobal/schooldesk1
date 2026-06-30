@@ -1,0 +1,32 @@
+workflows:
+  android-debug-apk:
+    name: Android Debug APK
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "*"
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Show tool versions
+        script: |
+          flutter --version
+          java -version
+      - name: Install Flutter dependencies
+        script: flutter pub get
+      - name: Build debug APK
+        script: flutter build apk --debug
+    artifacts:
+      - build/app/outputs/flutter-apk/app-debug.apk
+      - build/app/outputs/apk/debug/*.apk
