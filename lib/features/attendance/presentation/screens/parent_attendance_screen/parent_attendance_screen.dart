@@ -842,14 +842,23 @@ bool _isBlankPeriodValue(dynamic value) {
 }
 
 String _periodRowIdentity(Map<String, dynamic> row) {
+  final date = _normalDateKey(row['date']);
+  if (date.isNotEmpty) {
+    final period = _normalPeriodKey(row['period_number']);
+    return 'day:$date:$period';
+  }
   final id = '${row['id'] ?? ''}'.trim();
   if (id.isNotEmpty) return 'attendance:$id';
   final sessionId = '${row['session_id'] ?? ''}'.trim();
   if (sessionId.isNotEmpty) return 'session:$sessionId';
-  final date = '${row['date'] ?? ''}'.split('T').first;
-  final period = _normalPeriodKey(row['period_number']);
   final status = _statusLabel(row['status']).toLowerCase();
-  return 'day:$date:$period:$status';
+  return 'status:$status';
+}
+
+String _normalDateKey(dynamic value) {
+  final text = '${value ?? ''}'.trim();
+  if (text.isEmpty) return '';
+  return text.split('T').first;
 }
 
 String _normalPeriodKey(dynamic period) {

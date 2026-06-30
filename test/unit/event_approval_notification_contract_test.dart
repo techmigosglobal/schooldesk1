@@ -23,10 +23,12 @@ void main() {
         expect(source, contains('NotificationService.getInstance'));
         expect(source, contains('_buildAttachmentSection'));
         expect(source, contains('_openAttachmentPreview'));
-        expect(source, contains('Printing.layoutPdf'));
+        expect(source, contains('openEventPostMediaPreview'));
+        expect(source, isNot(contains('launchUrl(Uri.parse')));
         expect(source, contains('EventPostMediaItem.parseList'));
         expect(source, contains('EventPostMediaPreview'));
         expect(mediaPreview, contains('VideoPlayerController.networkUrl'));
+        expect(mediaPreview, contains('PdfPreview('));
         expect(
           source.indexOf('_buildAttachmentSection'),
           lessThan(source.indexOf('_buildDecisionActions')),

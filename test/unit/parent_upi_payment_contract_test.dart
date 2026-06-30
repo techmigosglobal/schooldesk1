@@ -137,7 +137,7 @@ void main() {
         isNot(contains('Remove from unpaid student invoices')),
       );
       expect(adminFees, contains('deleteFeeStructure(id)'));
-      expect(monitoring, contains('deleteFeeStructure(bundle.id)'));
+      expect(monitoring, contains('_deleteFeeStructureBundle(bundle)'));
     });
 
     test('parent payment flow presents fee item intervals', () {

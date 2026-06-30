@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -710,37 +712,7 @@ class _ParentPaymentRequestFormScreenState
           ),
           if (_proofPath != null) ...[
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  Icons.check_circle_rounded,
-                  size: 18,
-                  color: context.appTheme.success,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _proofName ?? 'Payment proof selected',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Remove proof',
-                  onPressed: _submitting
-                      ? null
-                      : () => setState(() {
-                          _proofName = null;
-                          _proofPath = null;
-                        }),
-                  icon: const Icon(Icons.close_rounded, size: 18),
-                ),
-              ],
-            ),
+            _buildProofThumbnail(),
           ],
         ],
       ),
@@ -768,6 +740,138 @@ class _ParentPaymentRequestFormScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProofThumbnail() {
+    final isImage = _proofPath != null &&
+        (_proofPath!.toLowerCase().endsWith('.jpg') ||
+         _proofPath!.toLowerCase().endsWith('.jpeg') ||
+         _proofPath!.toLowerCase().endsWith('.png'));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.check_circle_rounded,
+              size: 18,
+              color: context.appTheme.success,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _proofName ?? 'Payment proof selected',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove proof',
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                      _proofName = null;
+                      _proofPath = null;
+                    }),
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+          ],
+        ),
+        if (isImage) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: GestureDetector(
+              onTap: () => _showFullImagePreview(_proofPath!),
+              child: Image.file(
+                File(_proofPath!),
+                height: 140,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 140,
+                  width: double.infinity,
+                  color: Colors.grey[200],
+                  child: const Center(
+                    child: Icon(Icons.broken_image_rounded, size: 32),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Tap image to preview full size',
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              color: context.appTheme.muted,
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.red.withAlpha(20),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.withAlpha(40)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _proofName ?? 'PDF document selected',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _showFullImagePreview(String path) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              InteractiveViewer(
+                child: Image.file(File(path), fit: BoxFit.contain),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: IconButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close_rounded),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black45,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

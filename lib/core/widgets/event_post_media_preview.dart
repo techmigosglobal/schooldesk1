@@ -1,17 +1,18 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:printing/printing.dart';
 import 'package:video_player/video_player.dart';
 
-import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 String resolveEventPostMediaUrl(String url) {
   if (url.isEmpty) return url;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  final origin = EnvConfig.apiOrigin.replaceAll(RegExp(r'/+$'), '');
-  final path = url.startsWith('/') ? url : '/$url';
-  return '$origin$path';
+  return resolveAttachmentUrl(url)?.toString() ?? url;
 }
 
 class EventPostMediaPreview extends StatelessWidget {
@@ -58,8 +59,7 @@ class EventPostMediaPreview extends StatelessWidget {
         ? Icons.picture_as_pdf_outlined
         : Icons.insert_drive_file_outlined;
     return InkWell(
-      onTap: () =>
-          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      onTap: () => openEventPostMediaPreview(context, item),
       child: Container(
         height: compact ? 96 : height,
         width: double.infinity,
@@ -77,7 +77,7 @@ class EventPostMediaPreview extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
-            const Icon(Icons.open_in_new_rounded, size: 18),
+            const Icon(Icons.visibility_rounded, size: 18),
           ],
         ),
       ),
@@ -98,6 +98,150 @@ class EventPostMediaPreview extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> openEventPostMediaPreview(
+  BuildContext context,
+  EventPostMediaItem item,
+) {
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => EventPostMediaPreviewScreen(item: item),
+    ),
+  );
+}
+
+class EventPostMediaPreviewScreen extends StatelessWidget {
+  final EventPostMediaItem item;
+
+  const EventPostMediaPreviewScreen({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final title = item.displayName.isEmpty ? 'Attachment' : item.displayName;
+    final url = resolveEventPostMediaUrl(item.url);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      body: SafeArea(child: _body(context, url)),
+    );
+  }
+
+  Widget _body(BuildContext context, String url) {
+    if (item.isImage) {
+      return Center(
+        child: InteractiveViewer(
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => _message(
+              context,
+              Icons.broken_image_outlined,
+              'Image preview is not available.',
+            ),
+          ),
+        ),
+      );
+    }
+    if (item.isVideo) {
+      return Center(child: EventPostVideoPreview(url: url, height: 320));
+    }
+    if (item.isPdf) {
+      return EventPostPdfPreview(url: url, name: item.displayName);
+    }
+    return _message(
+      context,
+      Icons.insert_drive_file_outlined,
+      'This attachment is available in the app.',
+      subtitle: item.displayName,
+    );
+  }
+
+  Widget _message(
+    BuildContext context,
+    IconData icon,
+    String message, {
+    String subtitle = '',
+  }) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 44, color: context.appTheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+            if (subtitle.trim().isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: context.appTheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EventPostPdfPreview extends StatelessWidget {
+  final String url;
+  final String name;
+
+  const EventPostPdfPreview({super.key, required this.url, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _downloadPdfBytes(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Unable to load PDF preview.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+          );
+        }
+        final bytes = snapshot.data!;
+        return PdfPreview(
+          build: (_) async => bytes,
+          pdfFileName: name.isEmpty ? 'event-post-attachment.pdf' : name,
+          canChangePageFormat: false,
+          canChangeOrientation: false,
+          canDebug: false,
+          allowPrinting: false,
+          allowSharing: false,
+        );
+      },
+    );
+  }
+
+  Future<Uint8List> _downloadPdfBytes(String url) async {
+    final response = await BackendApiClient.instance.dio.get<List<int>>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(response.data ?? const []);
   }
 }
 

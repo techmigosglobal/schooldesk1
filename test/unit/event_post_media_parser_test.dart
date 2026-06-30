@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
 void main() {
   group('parseEventPostMediaUrls', () {
@@ -63,6 +66,27 @@ void main() {
         EventPostMediaKind.video,
       ]);
       expect(media.last.isVideo, isTrue);
+    });
+
+    test('resolves backend uploads through the api uploads route', () {
+      final resolved = resolveEventPostMediaUrl(
+        '/uploads/shared/school/photo.jpg',
+      );
+
+      expect(resolved, endsWith('/api/v1/uploads/shared/school/photo.jpg'));
+      expect(resolved, isNot(contains('/api/v1/api/v1/')));
+    });
+
+    test('event post attachments open in app instead of external browser', () {
+      final source = File(
+        'lib/core/widgets/event_post_media_preview.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('openEventPostMediaPreview'));
+      expect(source, contains('Navigator.of(context).push'));
+      expect(source, contains('PdfPreview('));
+      expect(source, contains('BackendApiClient.instance.dio.get<List<int>>'));
+      expect(source, isNot(contains('LaunchMode.externalApplication')));
     });
   });
 }

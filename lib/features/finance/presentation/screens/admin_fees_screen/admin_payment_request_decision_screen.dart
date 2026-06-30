@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -410,15 +412,23 @@ class _AdminPaymentRequestDecisionScreenState
 
   Widget _buildProofPreview(String? url) {
     if (url == null || url.isEmpty) return const SizedBox.shrink();
+    final lower = url.toLowerCase();
     final isImage =
-        url.toLowerCase().endsWith('.jpg') ||
-        url.toLowerCase().endsWith('.jpeg') ||
-        url.toLowerCase().endsWith('.png');
+        lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png');
+    final isPdf = lower.endsWith('.pdf');
+    if (isPdf) {
+      return OutlinedButton.icon(
+        onPressed: () => _openProofInApp(url),
+        icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
+        label: Text(
+          'Open payment proof (PDF)',
+          style: GoogleFonts.dmSans(fontSize: 12),
+        ),
+      );
+    }
     if (!isImage) {
       return OutlinedButton.icon(
-        onPressed: () {
-          // Open PDF/link in browser
-        },
+        onPressed: () => _openProofInApp(url),
         icon: const Icon(Icons.open_in_new_rounded, size: 16),
         label: Text(
           'Open proof document',
@@ -436,7 +446,7 @@ class _AdminPaymentRequestDecisionScreenState
         ),
         clipBehavior: Clip.antiAlias,
         child: Image.network(
-          url,
+          _absoluteMediaUrl(url),
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => Container(
             color: context.appTheme.surfaceVariant,
@@ -447,6 +457,35 @@ class _AdminPaymentRequestDecisionScreenState
         ),
       ),
     );
+  }
+
+  Future<void> _openProofInApp(String url) async {
+    final fullUrl = _absoluteMediaUrl(url);
+    final uri = Uri.parse(fullUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.inAppWebView);
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No app available to open this file type.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to open proof: $e')),
+        );
+      }
+    }
+  }
+
+  String _absoluteMediaUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
+    return '${EnvConfig.apiOrigin}/$trimmed';
   }
 
   void _showFullImage(String url) {

@@ -180,6 +180,43 @@ void main() {
     expect(rows.single['status'], 'Present');
   });
 
+  test(
+    'parent attendance collapses same day period rows with different ids',
+    () {
+      final rows = buildParentAttendancePeriodRowsForTest(
+        summary: {
+          'period_rows': [
+            {
+              'date': '2026-06-29',
+              'period_number': 1,
+              'status': 'present',
+              'session_id': 'summary-session',
+            },
+          ],
+        },
+        records: [
+          {
+            'id': 'attendance-record-id',
+            'status': 'present',
+            'session': {
+              'id': 'record-session',
+              'date': '2026-06-29T00:00:00Z',
+              'period_number': 1,
+              'staff': {'first_name': 'Class', 'last_name': 'Teacher'},
+            },
+          },
+        ],
+        leaveRequests: const [],
+      );
+
+      expect(rows, hasLength(1));
+      expect(rows.single['date'], '2026-06-29');
+      expect(rows.single['period_number'], 1);
+      expect(rows.single['status'], 'Present');
+      expect(rows.single['marked_by'], 'Class Teacher');
+    },
+  );
+
   test('parent attendance merges duplicate approved leave rows', () {
     final rows = buildParentAttendancePeriodRowsForTest(
       summary: {

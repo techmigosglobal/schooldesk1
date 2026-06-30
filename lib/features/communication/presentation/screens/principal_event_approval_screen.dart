@@ -1,10 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:printing/printing.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
@@ -506,70 +502,7 @@ class _PrincipalEventApprovalScreenState
   }
 
   Future<void> _openAttachmentPreview(EventPostMediaItem attachment) async {
-    final url = resolveEventPostMediaUrl(attachment.url);
-    if (attachment.isImage) {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => Dialog(
-          insetPadding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.pop(dialogContext),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ),
-              Flexible(
-                child: InteractiveViewer(
-                  child: Image.network(
-                    url,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text('Unable to load image preview.'),
-                    ),
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => launchUrl(Uri.parse(url)),
-                icon: const Icon(Icons.open_in_new_rounded),
-                label: const Text('Open'),
-              ),
-            ],
-          ),
-        ),
-      );
-      return;
-    }
-    if (attachment.isPdf) {
-      try {
-        final bytes = await _downloadAttachmentBytes(url);
-        await Printing.layoutPdf(
-          name: attachment.displayName,
-          onLayout: (_) async => bytes,
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Unable to preview PDF: $e')));
-      }
-      return;
-    }
-    await launchUrl(Uri.parse(url));
-  }
-
-  Future<Uint8List> _downloadAttachmentBytes(String url) async {
-    final response = await BackendApiClient.instance.dio.get<List<int>>(
-      url,
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return Uint8List.fromList(response.data ?? const []);
+    await openEventPostMediaPreview(context, attachment);
   }
 
   Widget _statusChip(String status) {

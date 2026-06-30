@@ -37,7 +37,7 @@ Uri _apiUploadUri(Uri base, String uploadPath) {
       : '/$uploadPath';
   return base.replace(
     path: '$normalizedBase$normalizedUploadPath',
-    query: '',
-    fragment: '',
+    query: null,
+    fragment: null,
   );
 }
