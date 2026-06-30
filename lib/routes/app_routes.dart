@@ -266,6 +266,7 @@ class AppRoutes {
       return ParentPaymentSelectionScreen(
         fees: args.fees,
         student: args.student,
+        paymentRequest: args.paymentRequest,
       );
     },
     parentLeave: (context) => const ParentLeaveScreen(),
@@ -457,6 +458,9 @@ class AppRoutes {
                 .toList() ??
             [],
         student: args['student'] as Map<String, dynamic>?,
+        paymentRequest: args['payment_request'] is Map
+            ? Map<String, dynamic>.from(args['payment_request'] as Map)
+            : null,
       );
     }
     return const ParentPaymentSelectionArgs(fees: []);
@@ -477,5 +481,10 @@ class AppRoutes {
 class ParentPaymentSelectionArgs {
   final List<Map<String, dynamic>> fees;
   final Map<String, dynamic>? student;
-  const ParentPaymentSelectionArgs({required this.fees, this.student});
+  final Map<String, dynamic>? paymentRequest;
+  const ParentPaymentSelectionArgs({
+    required this.fees,
+    this.student,
+    this.paymentRequest,
+  });
 }

@@ -181,12 +181,15 @@ type ParentPaymentRequest struct {
 	StudentID         string      `gorm:"type:text;not null;index" json:"student_id"`
 	ParentUserID      string      `gorm:"type:text;not null;index" json:"parent_user_id"`
 	PaymentID         *string     `gorm:"type:text" json:"payment_id,omitempty"`
+	ReceiptID         *string     `gorm:"type:text" json:"receipt_id,omitempty"`
 	RequestReference  string      `gorm:"size:100;uniqueIndex" json:"request_reference"`
 	Amount            float64     `json:"amount"`
 	PaymentDate       time.Time   `json:"payment_date"`
 	PaymentMode       string      `gorm:"type:text;not null" json:"payment_mode"`
 	TransactionID     string      `gorm:"size:255" json:"transaction_id"`
 	ProofURL          *string     `gorm:"type:text" json:"proof_url,omitempty"`
+	SelectedMonths    int         `json:"selected_months"`
+	SelectedTerms     int         `json:"selected_terms"`
 	Status            string      `gorm:"type:text;default:'pending';index" json:"status"`
 	Remarks           string      `gorm:"type:text" json:"remarks"`
 	AdminRemarks      string      `gorm:"type:text" json:"admin_remarks"`

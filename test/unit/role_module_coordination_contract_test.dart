@@ -154,15 +154,33 @@ void main() {
         'school-backend/internal/handlers/fee.go',
       ).readAsStringSync();
 
-      expect(parentForm, contains('submitParentPaymentRequest('));
+      expect(parentForm, contains('createFeePaymentIntent('));
+      expect(parentForm, contains('submitFeePaymentProof('));
+      expect(parentForm, contains('resubmitFeePaymentProof('));
       expect(adminDecision, contains('decideParentPaymentRequest('));
+      expect(adminDecision, contains('Request Clarification'));
       expect(adminFeeForms, contains('recordPayment('));
+      expect(api, contains("'/fees/payments/intent'"));
+      expect(api, contains("'/fees/payments/submit'"));
+      expect(api, contains("'/fees/payments/\$id/resubmit'"));
       expect(api, contains("'/fees/payment-requests'"));
       expect(api, contains("'/fees/payment-requests/\$id/decision'"));
       expect(
         main,
         contains(
-          'fees.POST("/payment-requests", middleware.RBACMiddleware("Parent")',
+          'fees.POST("/payments/intent", middleware.RBACMiddleware("Parent")',
+        ),
+      );
+      expect(
+        main,
+        contains(
+          'fees.POST("/payments/submit", middleware.RBACMiddleware("Parent")',
+        ),
+      );
+      expect(
+        main,
+        contains(
+          'fees.PATCH("/payments/:id/resubmit", middleware.RBACMiddleware("Parent")',
         ),
       );
       expect(
@@ -171,7 +189,11 @@ void main() {
           'fees.PUT("/payment-requests/:id/decision", middleware.RBACMiddleware("Principal")',
         ),
       );
+      expect(feeHandler, contains('CreateFeePaymentIntent'));
       expect(feeHandler, contains('CreateParentPaymentRequest'));
+      expect(feeHandler, contains('SubmitFeePayment'));
+      expect(feeHandler, contains('ResubmitFeePayment'));
+      expect(feeHandler, contains('clarification_required'));
       expect(feeHandler, contains('DecideParentPaymentRequest'));
       expect(feeHandler, contains('currentUserID(c)'));
     },
@@ -237,8 +259,9 @@ void main() {
   test(
     'profile/avatar configuration is shared by all roles and guarded server-side',
     () {
-      final teacherDashboard = File(
-        'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final routeGuard = File(
+        'lib/routes/route_access_guard.dart',
       ).readAsStringSync();
       final profile = File(
         'lib/features/profile/presentation/screens/profile_management_screen/profile_management_screen.dart',
@@ -249,7 +272,9 @@ void main() {
       ).readAsStringSync();
       final main = readBackendRouteSources();
 
-      expect(teacherDashboard, contains('AppRoutes.profileScreen'));
+      expect(routes, contains('static const String profileScreen'));
+      expect(routes, contains('ProfileManagementScreen(role: role)'));
+      expect(routeGuard, contains('AppRoutes.profileScreen'));
       expect(profile, contains('uploadProfileAvatar('));
       expect(profile, contains('updateProfile('));
       expect(api, contains('Future<String> uploadProfileAvatar'));

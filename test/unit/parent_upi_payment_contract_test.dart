@@ -23,7 +23,13 @@ void main() {
       expect(form, contains('qr_flutter'));
       expect(form, contains('_proofPath'));
       expect(formAndApi, contains('submitFeePaymentProof'));
+      expect(formAndApi, contains('createFeePaymentIntent'));
+      expect(formAndApi, contains('/fees/payments/intent'));
       expect(formAndApi, contains('/fees/payments/submit'));
+      expect(formAndApi, contains('payment_request_id'));
+      expect(formAndApi, contains('request_reference'));
+      expect(formAndApi, contains('resubmitFeePaymentProof'));
+      expect(formAndApi, contains(r'/fees/payments/$id/resubmit'));
       expect(formAndApi, contains('selected_months'));
       expect(formAndApi, contains('selected_terms'));
       expect(form, contains('Monthly'));
@@ -32,6 +38,12 @@ void main() {
       expect(models, contains('proof_url'));
       expect(form, contains('Fees will be updated in 12-24 hrs'));
       expect(form, contains('UTR'));
+      expect(form, contains('Confirm Payment'));
+      expect(form, contains('Pay Now'));
+      expect(form, contains('Submit Payment for Verification'));
+      expect(form, contains('LaunchMode.externalApplication'));
+      expect(form, contains('_paymentIntent'));
+      expect(form, contains('_intentReference'));
       expect(feePaymentsApi, contains('screenshot'));
       expect(form, contains('getPaymentConfig'));
       expect(form, contains(r'Payee: $_payeeName'));
@@ -72,6 +84,27 @@ void main() {
         contains('RBACMiddleware("Teacher", "Principal", "Parent")'),
       );
       expect(routes, isNot(contains('razorpay')));
+    });
+
+    test('principal proof review supports clarification and in-app preview', () {
+      final decisionScreen = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart',
+      ).readAsStringSync();
+      final requestsScreen = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart',
+      ).readAsStringSync();
+
+      expect(decisionScreen, contains('Request Clarification'));
+      expect(decisionScreen, contains('clarification_required'));
+      expect(decisionScreen, contains('Enter a clarification note.'));
+      expect(decisionScreen, contains('_showProofDocumentPreview'));
+      expect(
+        decisionScreen,
+        isNot(contains("package:url_launcher/url_launcher.dart")),
+      );
+      expect(decisionScreen, isNot(contains('launchUrl(')));
+      expect(requestsScreen, contains('Clarification'));
+      expect(requestsScreen, contains('pending_verification'));
     });
 
     test(

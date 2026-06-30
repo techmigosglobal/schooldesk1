@@ -108,6 +108,15 @@ class _AdminPaymentRequestsScreenState
 
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
+    if (_statusFilter == 'pending') {
+      return _requests.where((request) {
+        final status = _text(
+          request['status'],
+          fallback: 'pending',
+        ).toLowerCase();
+        return status == 'pending' || status == 'pending_verification';
+      }).toList();
+    }
     return _requests
         .where(
           (request) =>
@@ -145,7 +154,9 @@ class _AdminPaymentRequestsScreenState
   }
 
   Widget _buildSummary() {
-    final pending = _countByStatus('pending');
+    final pending =
+        _countByStatus('pending') + _countByStatus('pending_verification');
+    final clarification = _countByStatus('clarification_required');
     final approved = _countByStatus('approved');
     final rejected = _countByStatus('rejected');
     return SchoolDeskResponsiveGrid(
@@ -158,6 +169,13 @@ class _AdminPaymentRequestsScreenState
           subtitle: 'Needs review',
           icon: Icons.pending_actions_rounded,
           color: context.appTheme.warning,
+        ),
+        SchoolDeskKpiCard(
+          title: 'Clarification',
+          value: '$clarification',
+          subtitle: 'Waiting parent',
+          icon: Icons.help_outline_rounded,
+          color: context.appTheme.info,
         ),
         SchoolDeskKpiCard(
           title: 'Approved',
@@ -180,6 +198,8 @@ class _AdminPaymentRequestsScreenState
   Widget _buildStatusFilters() {
     final filters = const [
       ('pending', 'Pending'),
+      ('pending_verification', 'Pending Verification'),
+      ('clarification_required', 'Clarification'),
       ('approved', 'Approved'),
       ('rejected', 'Rejected'),
       ('all', 'All'),
@@ -207,11 +227,13 @@ class _AdminPaymentRequestsScreenState
     final statusColor = switch (status) {
       'approved' => context.appTheme.success,
       'rejected' => context.appTheme.error,
+      'clarification_required' => context.appTheme.info,
       _ => context.appTheme.warning,
     };
     final statusBg = switch (status) {
       'approved' => context.appTheme.successContainer,
       'rejected' => context.appTheme.errorContainer,
+      'clarification_required' => context.appTheme.infoContainer,
       _ => context.appTheme.warningContainer,
     };
     final invoice = _map(request['invoice']);
@@ -266,9 +288,21 @@ class _AdminPaymentRequestsScreenState
             'Invoice',
             _text(invoice['invoice_number'], fallback: request['invoice_id']),
           ),
+          if (_text(request['request_reference']).isNotEmpty)
+            _detailRow('Reference', _text(request['request_reference'])),
           _detailRow('Amount', _money(_num(request['amount']))),
           _detailRow('Paid on', _date(request['payment_date'])),
           _detailRow('Mode', _text(request['payment_mode'], fallback: '-')),
+          if (_num(request['selected_months']) > 0)
+            _detailRow(
+              'Selected',
+              '${_num(request['selected_months']).toInt()} month(s)',
+            ),
+          if (_num(request['selected_terms']) > 0)
+            _detailRow(
+              'Selected',
+              '${_num(request['selected_terms']).toInt()} term(s)',
+            ),
           if (_text(request['transaction_id']).isNotEmpty)
             _detailRow('Transaction', _text(request['transaction_id'])),
           if (_text(request['proof_url']).isNotEmpty)
@@ -289,12 +323,19 @@ class _AdminPaymentRequestsScreenState
               Expanded(
                 flex: 2,
                 child: FilledButton.icon(
-                  onPressed: status == 'pending' && requestID.isNotEmpty
+                  onPressed:
+                      (status == 'pending' ||
+                              status == 'pending_verification') &&
+                          requestID.isNotEmpty
                       ? () => _openDecision(request)
                       : null,
                   icon: const Icon(Icons.rate_review_rounded, size: 16),
                   label: Text(
-                    status == 'pending' ? 'Review' : 'Resolved',
+                    (status == 'pending' || status == 'pending_verification')
+                        ? 'Review'
+                        : status == 'clarification_required'
+                        ? 'Waiting Parent'
+                        : 'Resolved',
                     style: GoogleFonts.dmSans(fontSize: 12),
                   ),
                 ),
@@ -374,8 +415,14 @@ class _AdminPaymentRequestsScreenState
     return name.isEmpty ? 'Student' : name;
   }
 
-  String _title(String value) =>
-      value.isEmpty ? value : value[0].toUpperCase() + value.substring(1);
+  String _title(String value) => switch (value) {
+    'pending_verification' => 'Pending Verification',
+    'clarification_required' => 'Clarification',
+    'approved' => 'Approved',
+    'rejected' => 'Rejected',
+    'pending' => 'Pending',
+    _ => value.isEmpty ? value : value[0].toUpperCase() + value.substring(1),
+  };
 
   String _money(double value) => '₹${value.toStringAsFixed(0)}';
 

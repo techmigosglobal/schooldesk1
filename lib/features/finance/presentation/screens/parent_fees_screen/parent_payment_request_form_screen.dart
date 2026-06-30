@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -18,8 +19,13 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 class ParentPaymentRequestFormArgs {
   final List<Map<String, dynamic>> fees;
   final Map<String, dynamic>? student;
+  final Map<String, dynamic>? paymentRequest;
 
-  const ParentPaymentRequestFormArgs({required this.fees, this.student});
+  const ParentPaymentRequestFormArgs({
+    required this.fees,
+    this.student,
+    this.paymentRequest,
+  });
 }
 
 @immutable
@@ -54,11 +60,14 @@ class _ParentPaymentRequestFormScreenState
 
   bool _loadingConfig = true;
   bool _uploadingProof = false;
+  bool _creatingIntent = false;
   bool _submitting = false;
+  bool _upiOpened = false;
   String? _proofName;
   String? _proofPath;
   String? _configError;
   Map<String, dynamic> _paymentConfig = const {};
+  Map<String, dynamic>? _paymentIntent;
   String _paymentMode = 'upi';
   String _intervalMode = 'full';
   int _selectedMonths = 1;
@@ -103,8 +112,20 @@ class _ParentPaymentRequestFormScreenState
       (_upiId.isNotEmpty || _qrImageUrl.isNotEmpty);
   bool get _isUpiMode => _paymentMode == 'upi';
   bool get _isCashMode => _paymentMode == 'cash';
-  bool get _requiresProof => _isUpiMode;
+  bool get _requiresProof => true;
   bool get _requiresReference => !_isCashMode;
+  Map<String, dynamic> get _resubmissionRequest =>
+      widget.args.paymentRequest == null
+      ? const <String, dynamic>{}
+      : Map<String, dynamic>.from(widget.args.paymentRequest!);
+  bool get _isClarificationResubmit =>
+      _text(_resubmissionRequest['status']).toLowerCase() ==
+      'clarification_required';
+  String get _intentId => _text(_paymentIntent?['id']);
+  String get _intentReference => _text(_paymentIntent?['request_reference']);
+  String get _intentUpiUri => _text(_paymentIntent?['upi_uri']);
+  String get _effectiveUpiUri =>
+      _intentUpiUri.isNotEmpty ? _intentUpiUri : _upiUri;
 
   String get _upiUri {
     final params = {
@@ -112,7 +133,9 @@ class _ParentPaymentRequestFormScreenState
       'pn': _payeeName,
       'am': _totalAmount.toStringAsFixed(2),
       'cu': 'INR',
-      'tn': _text(_paymentConfig['qr_note'], fallback: 'School fee payment'),
+      'tn': _intentReference.isNotEmpty
+          ? _intentReference
+          : _text(_paymentConfig['qr_note'], fallback: 'School fee payment'),
     };
     final query = params.entries
         .map((entry) => '${entry.key}=${Uri.encodeComponent(entry.value)}')
@@ -126,6 +149,13 @@ class _ParentPaymentRequestFormScreenState
     final now = DateTime.now();
     _utrController = TextEditingController();
     _paymentDateController = TextEditingController(text: _dateInput(now));
+    if (_isClarificationResubmit) {
+      _utrController.text = _text(_resubmissionRequest['transaction_id']);
+      _paymentMode = _text(
+        _resubmissionRequest['payment_mode'],
+        fallback: _paymentMode,
+      );
+    }
     _loadPaymentConfig();
   }
 
@@ -165,7 +195,9 @@ class _ParentPaymentRequestFormScreenState
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Fee Payment Request',
-      subtitle: 'Choose payment mode and submit request for verification',
+      subtitle: _isClarificationResubmit
+          ? 'Update proof requested by the school'
+          : 'Choose payment mode and submit request for verification',
       drawer: ParentDrawer(
         selectedIndex: ParentNav.fees,
         onDestinationSelected: (_) {},
@@ -219,7 +251,9 @@ class _ParentPaymentRequestFormScreenState
               label: Text(
                 _submitting
                     ? 'Submitting...'
-                    : 'Submit ${_paymentModeLabel(_paymentMode)} Request INR ${_totalAmount.toStringAsFixed(0)}',
+                    : _isClarificationResubmit
+                    ? 'Resubmit Payment for Verification'
+                    : 'Submit Payment for Verification INR ${_totalAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
             ),
@@ -240,9 +274,9 @@ class _ParentPaymentRequestFormScreenState
 
   bool get _canSubmit =>
       !_submitting &&
-      !_loadingConfig &&
+      (!_loadingConfig || _isClarificationResubmit) &&
       _fees.isNotEmpty &&
-      (!_isUpiMode || _upiEnabled) &&
+      (_isClarificationResubmit || !_isUpiMode || _upiEnabled) &&
       _isIsoDate(_paymentDateController.text.trim()) &&
       (!_requiresReference || _utrController.text.trim().length >= 6) &&
       (!_requiresProof || (_proofPath?.isNotEmpty ?? false));
@@ -282,7 +316,10 @@ class _ParentPaymentRequestFormScreenState
                 ),
                 onSelected: _submitting
                     ? null
-                    : (_) => setState(() => _paymentMode = mode),
+                    : (_) => setState(() {
+                        _paymentMode = mode;
+                        _resetPaymentIntent();
+                      }),
               );
             }).toList(),
           ),
@@ -461,7 +498,10 @@ class _ParentPaymentRequestFormScreenState
             selected: {_intervalMode == 'full' ? 'monthly' : _intervalMode},
             onSelectionChanged: _submitting
                 ? null
-                : (values) => setState(() => _intervalMode = values.first),
+                : (values) => setState(() {
+                    _intervalMode = values.first;
+                    _resetPaymentIntent();
+                  }),
           ),
           const SizedBox(height: 12),
           if ((_intervalMode == 'full' || _intervalMode == 'monthly')) ...[
@@ -477,7 +517,10 @@ class _ParentPaymentRequestFormScreenState
               label: '$_selectedMonths month(s)',
               onChanged: _submitting
                   ? null
-                  : (value) => setState(() => _selectedMonths = value.round()),
+                  : (value) => setState(() {
+                      _selectedMonths = value.round();
+                      _resetPaymentIntent();
+                    }),
             ),
             Text('Selected months: $_selectedMonths'),
           ] else ...[
@@ -496,7 +539,10 @@ class _ParentPaymentRequestFormScreenState
                 label: '$_selectedTerms term(s)',
                 onChanged: _submitting
                     ? null
-                    : (value) => setState(() => _selectedTerms = value.round()),
+                    : (value) => setState(() {
+                        _selectedTerms = value.round();
+                        _resetPaymentIntent();
+                      }),
               ),
               Text('Selected terms: $_selectedTerms'),
             ],
@@ -524,6 +570,40 @@ class _ParentPaymentRequestFormScreenState
   }
 
   Widget _buildUpiPanel() {
+    if (_isClarificationResubmit) {
+      return _panel(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.help_outline_rounded, color: context.appTheme.info),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Clarification Required',
+                    style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _text(
+                      _resubmissionRequest['admin_remarks'],
+                      fallback:
+                          'Upload a clearer payment proof or correct the UTR.',
+                    ),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: context.appTheme.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     if (!_isUpiMode) {
       return _panel(
         child: Text(
@@ -572,6 +652,71 @@ class _ParentPaymentRequestFormScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Confirm Payment',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _intentReference.isEmpty
+                  ? 'Generate a school reference before opening UPI.'
+                  : 'Reference: $_intentReference',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: _intentReference.isEmpty
+                    ? context.appTheme.muted
+                    : context.appTheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: (_creatingIntent || _submitting)
+                  ? null
+                  : _intentReference.isEmpty
+                  ? () => _createPaymentIntent()
+                  : _openUpiApp,
+              icon: _creatingIntent
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _intentReference.isEmpty
+                          ? Icons.fact_check_rounded
+                          : Icons.open_in_new_rounded,
+                      size: 18,
+                    ),
+              label: Text(
+                _creatingIntent
+                    ? 'Creating Reference...'
+                    : _intentReference.isEmpty
+                    ? 'Confirm Payment'
+                    : 'Pay Now',
+              ),
+            ),
+          ),
+          if (_upiOpened) ...[
+            const SizedBox(height: 8),
+            Text(
+              'After payment, enter the UTR and upload the success screenshot below.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
           Text(
             'Scan this QR in any UPI app',
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
@@ -586,14 +731,18 @@ class _ParentPaymentRequestFormScreenState
                 height: 210,
                 fit: BoxFit.contain,
                 errorBuilder: (_, __, ___) => QrImageView(
-                  data: _upiUri,
+                  data: _effectiveUpiUri,
                   version: QrVersions.auto,
                   size: 190,
                 ),
               ),
             )
           else
-            QrImageView(data: _upiUri, version: QrVersions.auto, size: 190),
+            QrImageView(
+              data: _effectiveUpiUri,
+              version: QrVersions.auto,
+              size: 190,
+            ),
           if (_upiId.isNotEmpty) ...[
             const SizedBox(height: 12),
             SelectableText(
@@ -921,6 +1070,94 @@ class _ParentPaymentRequestFormScreenState
     });
   }
 
+  void _resetPaymentIntent() {
+    _paymentIntent = null;
+    _upiOpened = false;
+  }
+
+  Future<Map<String, dynamic>?> _createPaymentIntent({
+    bool showSnack = true,
+  }) async {
+    if (_fees.isEmpty) return null;
+    setState(() => _creatingIntent = true);
+    try {
+      final intent = await BackendApiClient.instance.createFeePaymentIntent(
+        invoiceId: '${_selectedFee['id']}',
+        paymentMethod: _paymentMode,
+        selectedMonths: _isTuition && _intervalMode != 'term_wise'
+            ? _selectedMonths
+            : 0,
+        selectedTerms: _isTuition && _intervalMode == 'term_wise'
+            ? _selectedTerms
+            : 0,
+        remarks: _remarksController.text.trim(),
+      );
+      if (!mounted) return intent;
+      setState(() {
+        _paymentIntent = intent;
+        _creatingIntent = false;
+      });
+      if (showSnack) {
+        final reference = _text(intent['request_reference']);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              reference.isEmpty
+                  ? 'Payment reference created.'
+                  : 'Payment reference created: $reference',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return intent;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _creatingIntent = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString()),
+            backgroundColor: context.appTheme.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _openUpiApp() async {
+    var intent = _paymentIntent;
+    intent ??= await _createPaymentIntent(showSnack: false);
+    if (intent == null) return;
+    final uriText = _effectiveUpiUri;
+    if (uriText.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('UPI link is not available for this payment.'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final uri = Uri.parse(uriText);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!mounted) return;
+    setState(() => _upiOpened = opened);
+    if (!opened) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Unable to open a UPI app. You can scan the QR instead.',
+          ),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_requiresProof && (_proofPath == null || _proofPath!.isEmpty)) {
@@ -936,8 +1173,44 @@ class _ParentPaymentRequestFormScreenState
     setState(() => _submitting = true);
     final references = <String>[];
     try {
+      if (_isClarificationResubmit) {
+        final request = await BackendApiClient.instance.resubmitFeePaymentProof(
+          id: _text(_resubmissionRequest['id']),
+          transactionRef: _utrController.text.trim(),
+          screenshotPath: _proofPath!,
+          screenshotName: _proofName ?? 'payment-proof',
+          remarks: _remarksController.text.trim(),
+        );
+        final requestReference = '${request['request_reference'] ?? ''}'.trim();
+        if (requestReference.isNotEmpty) references.add(requestReference);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Payment proof resubmitted for verification.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.pop(
+          context,
+          ParentPaymentRequestFormResult(
+            submittedCount: 1,
+            references: references,
+          ),
+        );
+        return;
+      }
+      var intent = _paymentIntent;
+      if (intent == null) {
+        intent = await _createPaymentIntent(showSnack: false);
+        if (intent == null) {
+          if (mounted) setState(() => _submitting = false);
+          return;
+        }
+      }
       final reference = _utrController.text.trim();
       final request = await BackendApiClient.instance.submitFeePaymentProof(
+        paymentRequestId: _intentId,
+        requestReference: _intentReference,
         studentFeeId: '${_selectedFee['id']}',
         amount: _totalAmount,
         paymentMethod: _paymentMode,

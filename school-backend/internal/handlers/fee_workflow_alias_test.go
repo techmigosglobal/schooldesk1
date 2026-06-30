@@ -43,6 +43,10 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 		&models.FeeInvoiceItem{},
 		&models.Payment{},
 		&models.ParentPaymentRequest{},
+		&models.PaymentOrder{},
+		&models.PaymentTransaction{},
+		&models.FeeReceipt{},
+		&models.PaymentOrderInvoiceMap{},
 		&models.SchoolPaymentSetting{},
 		&models.ScopedPaymentSetting{},
 		&models.AuditLog{},
@@ -93,6 +97,7 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	principalRouter.GET("/fees/payments/pending", handler.GetPendingFeePayments)
 	principalRouter.POST("/fees/payments/:id/approve", handler.ApproveFeePayment)
 	principalRouter.POST("/fees/payments/:id/reject", handler.RejectFeePayment)
+	principalRouter.PUT("/fees/payment-requests/:id/decision", handler.DecideParentPaymentRequest)
 
 	for _, structureID := range []string{bookStructure.ID, tuitionStructure.ID} {
 		resp := httptest.NewRecorder()
@@ -127,7 +132,9 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 		c.Next()
 	})
 	parentRouter.GET("/parent/students/:studentId/fees", handler.GetParentStudentFees)
+	parentRouter.POST("/fees/payments/intent", handler.CreateFeePaymentIntent)
 	parentRouter.POST("/fees/payments/submit", handler.SubmitFeePayment)
+	parentRouter.PATCH("/fees/payments/:id/resubmit", handler.ResubmitFeePayment)
 	parentRouter.GET("/fees/payments/history", handler.GetFeePaymentHistory)
 
 	feesResp := httptest.NewRecorder()
@@ -166,12 +173,47 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 		t.Fatalf("book kit split should fail status=%d body=%s", invalidBookResp.Code, invalidBookResp.Body.String())
 	}
 
+	var tuitionInvoice models.FeeInvoice
+	intentResp := httptest.NewRecorder()
+	intentReq := httptest.NewRequest(
+		http.MethodPost,
+		"/fees/payments/intent",
+		strings.NewReader(`{"invoice_id":"`+tuitionInvoiceID+`","payment_method":"upi","selected_months":2}`),
+	)
+	intentReq.Header.Set("Content-Type", "application/json")
+	parentRouter.ServeHTTP(intentResp, intentReq)
+	if intentResp.Code != http.StatusCreated {
+		t.Fatalf("intent status=%d body=%s", intentResp.Code, intentResp.Body.String())
+	}
+	var intentBody struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(intentResp.Body.Bytes(), &intentBody); err != nil {
+		t.Fatalf("decode intent: %v", err)
+	}
+	intentID := intentBody.Data["id"].(string)
+	intentReference := intentBody.Data["request_reference"].(string)
+	if !strings.HasPrefix(intentReference, "FEE-") || intentBody.Data["status"] != "initiated" || intentBody.Data["amount"] != float64(2000) {
+		t.Fatalf("unexpected intent data: %+v", intentBody.Data)
+	}
+	if !strings.Contains(intentBody.Data["upi_uri"].(string), "upi://pay?") || !strings.Contains(intentBody.Data["upi_uri"].(string), intentReference) {
+		t.Fatalf("intent should return a UPI URI containing the backend reference: %+v", intentBody.Data)
+	}
+	if err := db.First(&tuitionInvoice, "id = ?", tuitionInvoiceID).Error; err != nil {
+		t.Fatalf("reload tuition invoice after intent: %v", err)
+	}
+	if tuitionInvoice.PaidAmount != 0 || tuitionInvoice.Balance != 12000 {
+		t.Fatalf("intent must not update invoice: %+v", tuitionInvoice)
+	}
+
 	monthlyReq := multipartPaymentRequest(t, map[string]string{
-		"student_fee_id":  tuitionInvoiceID,
-		"amount":          "2000",
-		"payment_method":  "upi",
-		"transaction_ref": "UTR-TUITION-M2",
-		"selected_months": "2",
+		"payment_request_id": intentID,
+		"request_reference":  intentReference,
+		"student_fee_id":     tuitionInvoiceID,
+		"amount":             "2000",
+		"payment_method":     "upi",
+		"transaction_ref":    "UTR-TUITION-M2",
+		"selected_months":    "2",
 	}, "proof.png", []byte("png-data"))
 	monthlyResp := httptest.NewRecorder()
 	parentRouter.ServeHTTP(monthlyResp, monthlyReq)
@@ -184,10 +226,12 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	if err := json.Unmarshal(monthlyResp.Body.Bytes(), &submitBody); err != nil {
 		t.Fatalf("decode submit: %v", err)
 	}
-	if submitBody.Data.Amount != 2000 || submitBody.Data.Status != "pending" || submitBody.Data.ProofURL == nil || !strings.Contains(*submitBody.Data.ProofURL, "/uploads/payment_proofs/") {
+	if submitBody.Data.Amount != 2000 || submitBody.Data.Status != "pending_verification" || submitBody.Data.ProofURL == nil || !strings.Contains(*submitBody.Data.ProofURL, "/uploads/payment_proofs/") {
 		t.Fatalf("unexpected submit data: %+v", submitBody.Data)
 	}
-	var tuitionInvoice models.FeeInvoice
+	if submitBody.Data.ID != intentID || submitBody.Data.RequestReference != intentReference {
+		t.Fatalf("proof submit should update the existing intent, got %+v", submitBody.Data)
+	}
 	if err := db.First(&tuitionInvoice, "id = ?", tuitionInvoiceID).Error; err != nil {
 		t.Fatalf("reload tuition invoice: %v", err)
 	}
@@ -212,13 +256,49 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	if tuitionInvoice.PaidAmount != 2000 || tuitionInvoice.Balance != 10000 || tuitionInvoice.Status != "partial" {
 		t.Fatalf("approval should update tuition invoice, got %+v", tuitionInvoice)
 	}
+	var receiptCount int64
+	db.Model(&models.FeeReceipt{}).Where("student_id = ? AND parent_id = ?", student.ID, parent.ID).Count(&receiptCount)
+	if receiptCount != 1 {
+		t.Fatalf("approval should generate one parent receipt, got %d", receiptCount)
+	}
 
-	termReq := multipartPaymentRequest(t, map[string]string{
+	duplicateUTRReq := multipartPaymentRequest(t, map[string]string{
 		"student_fee_id":  tuitionInvoiceID,
-		"amount":          "6000",
+		"amount":          "1000",
 		"payment_method":  "upi",
-		"transaction_ref": "UTR-TUITION-T2",
-		"selected_terms":  "2",
+		"transaction_ref": "UTR-TUITION-M2",
+		"selected_months": "1",
+	}, "proof.png", []byte("png-data"))
+	duplicateUTRResp := httptest.NewRecorder()
+	parentRouter.ServeHTTP(duplicateUTRResp, duplicateUTRReq)
+	if duplicateUTRResp.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate UTR should fail status=%d body=%s", duplicateUTRResp.Code, duplicateUTRResp.Body.String())
+	}
+
+	termIntentResp := httptest.NewRecorder()
+	termIntentReq := httptest.NewRequest(
+		http.MethodPost,
+		"/fees/payments/intent",
+		strings.NewReader(`{"invoice_id":"`+tuitionInvoiceID+`","payment_method":"upi","selected_terms":2}`),
+	)
+	termIntentReq.Header.Set("Content-Type", "application/json")
+	parentRouter.ServeHTTP(termIntentResp, termIntentReq)
+	if termIntentResp.Code != http.StatusCreated {
+		t.Fatalf("term intent status=%d body=%s", termIntentResp.Code, termIntentResp.Body.String())
+	}
+	if err := json.Unmarshal(termIntentResp.Body.Bytes(), &intentBody); err != nil {
+		t.Fatalf("decode term intent: %v", err)
+	}
+	termIntentID := intentBody.Data["id"].(string)
+	termIntentReference := intentBody.Data["request_reference"].(string)
+	termReq := multipartPaymentRequest(t, map[string]string{
+		"payment_request_id": termIntentID,
+		"request_reference":  termIntentReference,
+		"student_fee_id":     tuitionInvoiceID,
+		"amount":             "6000",
+		"payment_method":     "upi",
+		"transaction_ref":    "UTR-TUITION-T2",
+		"selected_terms":     "2",
 	}, "proof.pdf", []byte("%PDF-1.4"))
 	termResp := httptest.NewRecorder()
 	parentRouter.ServeHTTP(termResp, termReq)
@@ -227,6 +307,34 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	}
 	if err := json.Unmarshal(termResp.Body.Bytes(), &submitBody); err != nil {
 		t.Fatalf("decode term submit: %v", err)
+	}
+	clarifyResp := httptest.NewRecorder()
+	clarifyReq := httptest.NewRequest(http.MethodPut, "/fees/payment-requests/"+submitBody.Data.ID+"/decision", strings.NewReader(`{"status":"clarification_required","admin_remarks":"upload a clearer screenshot"}`))
+	clarifyReq.Header.Set("Content-Type", "application/json")
+	principalRouter.ServeHTTP(clarifyResp, clarifyReq)
+	if clarifyResp.Code != http.StatusOK {
+		t.Fatalf("clarification status=%d body=%s", clarifyResp.Code, clarifyResp.Body.String())
+	}
+	if err := db.First(&tuitionInvoice, "id = ?", tuitionInvoiceID).Error; err != nil {
+		t.Fatalf("reload clarified invoice: %v", err)
+	}
+	if tuitionInvoice.PaidAmount != 2000 || tuitionInvoice.Balance != 10000 {
+		t.Fatalf("clarification should not change invoice balance: %+v", tuitionInvoice)
+	}
+	resubmitReq := multipartPaymentResubmitRequest(t, "/fees/payments/"+submitBody.Data.ID+"/resubmit", map[string]string{
+		"transaction_ref": "UTR-TUITION-T2-FIXED",
+		"remarks":         "clearer proof attached",
+	}, "proof-fixed.pdf", []byte("%PDF-1.4-fixed"))
+	resubmitResp := httptest.NewRecorder()
+	parentRouter.ServeHTTP(resubmitResp, resubmitReq)
+	if resubmitResp.Code != http.StatusOK {
+		t.Fatalf("resubmit status=%d body=%s", resubmitResp.Code, resubmitResp.Body.String())
+	}
+	if err := json.Unmarshal(resubmitResp.Body.Bytes(), &submitBody); err != nil {
+		t.Fatalf("decode resubmit: %v", err)
+	}
+	if submitBody.Data.Status != "pending_verification" || submitBody.Data.TransactionID != "UTR-TUITION-T2-FIXED" {
+		t.Fatalf("resubmit should return request to pending verification, got %+v", submitBody.Data)
 	}
 	rejectResp := httptest.NewRecorder()
 	principalRouter.ServeHTTP(rejectResp, httptest.NewRequest(http.MethodPost, "/fees/payments/"+submitBody.Data.ID+"/reject", strings.NewReader(`{"rejection_reason":"wrong proof"}`)))
@@ -282,6 +390,30 @@ func multipartPaymentRequest(t *testing.T, fields map[string]string, filename st
 		t.Fatalf("close multipart: %v", err)
 	}
 	req := httptest.NewRequest(http.MethodPost, "/fees/payments/submit", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req
+}
+
+func multipartPaymentResubmitRequest(t *testing.T, path string, fields map[string]string, filename string, content []byte) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatalf("write field: %v", err)
+		}
+	}
+	part, err := writer.CreateFormFile("screenshot", filename)
+	if err != nil {
+		t.Fatalf("create form file: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPatch, path, &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }

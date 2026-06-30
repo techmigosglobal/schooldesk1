@@ -156,6 +156,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 );
           historyList.add({
             'id': request['id'] ?? '',
+            'invoiceId': request['invoice_id'] ?? '',
             'component':
                 'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
             'amount': (request['amount'] as num?)?.toDouble() ?? 0,
@@ -168,6 +169,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             'rollNo': _studentRoll(child),
             'parentName': '',
             'status': _paymentStatusLabel(request['status']),
+            'rawStatus': '${request['status'] ?? ''}'.toLowerCase(),
+            'paymentRequest': Map<String, dynamic>.from(request),
           });
         }
         historyList.sort(
@@ -624,12 +627,19 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   Widget _feeItemCard(Map<String, dynamic> fee, bool showPayBtn) {
     final status = _text(fee['status'], fallback: 'Pending');
     final isPending = status == 'Pending' || status == 'Due';
+    final isLiveRequest =
+        status == 'Payment Submitted' ||
+        status == 'Pending Verification' ||
+        status == 'Clarification Required' ||
+        status == 'Pending Approval';
     final isPaid = status == 'Paid';
     final meta = <String>[
       if (_text(fee['dueDate']).isNotEmpty) 'Due: ${_text(fee['dueDate'])}',
     ].where((part) => part.isNotEmpty).join(' \u2022 ');
     final statusColor = isPaid
         ? context.appTheme.success
+        : isLiveRequest
+        ? context.appTheme.info
         : isPending
         ? context.appTheme.warning
         : context.appTheme.muted;
@@ -740,7 +750,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       color: statusColor,
                     ),
                   ),
-                  if (showPayBtn && isPending)
+                  if (showPayBtn && isPending && !isLiveRequest)
                     TextButton(
                       onPressed: () => _openPaymentRequestForm(singleFee: fee),
                       style: TextButton.styleFrom(
@@ -846,6 +856,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       itemBuilder: (_, i) {
         final p = _paymentHistory[i];
         final isPaid = p['status'] == 'Paid';
+        final needsClarification = p['rawStatus'] == 'clarification_required';
         final meta = <String>[
           _text(p['date']),
           _text(p['method']),
@@ -934,7 +945,35 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                           : context.appTheme.warning,
                     ),
                   ),
-                  if (isPaid)
+                  if (needsClarification)
+                    TextButton(
+                      onPressed: () => _openClarificationResubmit(p),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.upload_file_rounded,
+                            size: 14,
+                            color: Color(0xFF1A6B4A),
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Resubmit Proof',
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 11,
+                              color: _headerColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (isPaid)
                     TextButton(
                       onPressed: () => _downloadReceipt(p),
                       style: TextButton.styleFrom(
@@ -1140,12 +1179,11 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   Future<void> _openPaymentRequestForm({
     Map<String, dynamic>? singleFee,
+    Map<String, dynamic>? paymentRequest,
   }) async {
     final pendingFees = singleFee != null
         ? [singleFee]
-        : [
-            if (_nextPendingFee != null) _nextPendingFee!,
-          ];
+        : [if (_nextPendingFee != null) _nextPendingFee!];
     if (pendingFees.isEmpty) return;
     final student = _childrenData.isEmpty
         ? null
@@ -1156,12 +1194,32 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       arguments: ParentPaymentSelectionArgs(
         fees: pendingFees.map((fee) => Map<String, dynamic>.from(fee)).toList(),
         student: student,
+        paymentRequest: paymentRequest,
       ),
     );
     if (!mounted) return;
     if (result != null) {
       await _loadData();
     }
+  }
+
+  Future<void> _openClarificationResubmit(Map<String, dynamic> payment) async {
+    final invoiceId = _text(payment['invoiceId']);
+    final fee = _feeStructure.firstWhere(
+      (row) => _text(row['id']) == invoiceId,
+      orElse: () => <String, dynamic>{
+        'id': invoiceId,
+        'component': payment['component'],
+        'amount': payment['amount'],
+      },
+    );
+    final request = payment['paymentRequest'] is Map
+        ? Map<String, dynamic>.from(payment['paymentRequest'] as Map)
+        : <String, dynamic>{};
+    await _openPaymentRequestForm(
+      singleFee: Map<String, dynamic>.from(fee),
+      paymentRequest: request,
+    );
   }
 
   String _studentName(Map<String, dynamic> student) {
@@ -1189,7 +1247,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       case 'partial':
         return 'Partial';
       case 'pending_approval':
-        return 'Pending Approval';
+      case 'payment_pending':
+      case 'pending_verification':
+      case 'submitted':
+      case 'initiated':
+      case 'payment_app_opened':
+      case 'proof_pending':
+        return 'Pending Verification';
+      case 'clarification_required':
+        return 'Clarification Required';
       case 'rejected':
         return 'Rejected';
       case 'overdue':
@@ -1230,7 +1296,13 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         return 'Rejected';
       case 'pending':
       case 'submitted':
+      case 'pending_verification':
+      case 'initiated':
+      case 'payment_app_opened':
+      case 'proof_pending':
         return 'Pending Principal Approval';
+      case 'clarification_required':
+        return 'Clarification Required';
       default:
         return 'Pending Verification';
     }

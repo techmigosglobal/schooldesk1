@@ -59,7 +59,39 @@ extension BackendFeePaymentsApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> createFeePaymentIntent({
+    required String invoiceId,
+    required String paymentMethod,
+    int selectedMonths = 0,
+    int selectedTerms = 0,
+    String remarks = '',
+  }) async {
+    try {
+      final response = await _dio.post(
+        '/fees/payments/intent',
+        data: {
+          'invoice_id': invoiceId.trim(),
+          'payment_method': paymentMethod.trim(),
+          if (selectedMonths > 0) 'selected_months': selectedMonths,
+          if (selectedTerms > 0) 'selected_terms': selectedTerms,
+          if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+        },
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to create payment intent',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> submitFeePaymentProof({
+    String paymentRequestId = '',
+    String requestReference = '',
     required String studentFeeId,
     required double amount,
     required String paymentMethod,
@@ -75,6 +107,10 @@ extension BackendFeePaymentsApi on BackendApiClient {
         '/fees/payments/submit',
         data: FormData.fromMap({
           'student_fee_id': studentFeeId.trim(),
+          if (paymentRequestId.trim().isNotEmpty)
+            'payment_request_id': paymentRequestId.trim(),
+          if (requestReference.trim().isNotEmpty)
+            'request_reference': requestReference.trim(),
           'amount': amount.toStringAsFixed(2),
           'payment_method': paymentMethod.trim(),
           'transaction_ref': transactionRef.trim(),
@@ -93,6 +129,37 @@ extension BackendFeePaymentsApi on BackendApiClient {
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to submit payment proof',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> resubmitFeePaymentProof({
+    required String id,
+    required String transactionRef,
+    required String screenshotPath,
+    required String screenshotName,
+    String remarks = '',
+  }) async {
+    try {
+      final response = await _dio.patch(
+        '/fees/payments/$id/resubmit',
+        data: FormData.fromMap({
+          'transaction_ref': transactionRef.trim(),
+          if (remarks.trim().isNotEmpty) 'remarks': remarks.trim(),
+          'screenshot': await MultipartFile.fromFile(
+            screenshotPath,
+            filename: screenshotName,
+          ),
+        }),
+      );
+      final data = response.data as Map<String, dynamic>;
+      if (data['success'] == true) {
+        return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to resubmit payment proof',
       );
     } on DioException catch (e) {
       throw _handleError(e);

@@ -11,11 +11,13 @@ import 'package:schooldesk1/routes/app_routes.dart';
 class ParentPaymentSelectionScreen extends StatefulWidget {
   final List<Map<String, dynamic>> fees;
   final Map<String, dynamic>? student;
+  final Map<String, dynamic>? paymentRequest;
 
   const ParentPaymentSelectionScreen({
     super.key,
     required this.fees,
     this.student,
+    this.paymentRequest,
   });
 
   @override
@@ -199,12 +201,10 @@ class _ParentPaymentSelectionScreenState
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color:
-                                    context.appTheme.primary.withAlpha(15),
+                                color: context.appTheme.primary.withAlpha(15),
                                 borderRadius: BorderRadius.circular(6),
                                 border: Border.all(
-                                  color:
-                                      context.appTheme.primary.withAlpha(40),
+                                  color: context.appTheme.primary.withAlpha(40),
                                 ),
                               ),
                               child: Text(
@@ -343,6 +343,7 @@ class _ParentPaymentSelectionScreenState
       arguments: ParentPaymentRequestFormArgs(
         fees: selectedFees,
         student: widget.student,
+        paymentRequest: widget.paymentRequest,
       ),
     );
     if (!mounted) return;

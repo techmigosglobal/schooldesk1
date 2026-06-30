@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,6 +23,45 @@ type FeeHandler struct{}
 
 func NewFeeHandler() *FeeHandler {
 	return &FeeHandler{}
+}
+
+const (
+	parentPaymentStatusInitiated             = "initiated"
+	parentPaymentStatusPaymentAppOpened      = "payment_app_opened"
+	parentPaymentStatusProofPending          = "proof_pending"
+	parentPaymentStatusSubmitted             = "submitted"
+	parentPaymentStatusPending               = "pending"
+	parentPaymentStatusPendingVerification   = "pending_verification"
+	parentPaymentStatusClarificationRequired = "clarification_required"
+	parentPaymentStatusApproved              = "approved"
+	parentPaymentStatusRejected              = "rejected"
+	parentPaymentStatusCancelled             = "cancelled"
+	parentPaymentStatusExpired               = "expired"
+)
+
+var parentPaymentReservedStatuses = []string{
+	parentPaymentStatusInitiated,
+	parentPaymentStatusPaymentAppOpened,
+	parentPaymentStatusProofPending,
+	parentPaymentStatusSubmitted,
+	parentPaymentStatusPending,
+	parentPaymentStatusPendingVerification,
+	parentPaymentStatusClarificationRequired,
+}
+
+func isParentPaymentReviewableStatus(status string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	return status == parentPaymentStatusPending || status == parentPaymentStatusPendingVerification
+}
+
+func isParentPaymentReservableStatus(status string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	for _, candidate := range parentPaymentReservedStatuses {
+		if status == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *FeeHandler) GetFeeCategories(c *gin.Context) {
@@ -1822,7 +1862,12 @@ func (h *FeeHandler) GetPaymentRequests(c *gin.Context) {
 	page, pageSize := parsePagination(c)
 	query := scopedPaymentRequestQuery(c)
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
-		query = query.Where("parent_payment_requests.status = ?", strings.ToLower(status))
+		status = strings.ToLower(status)
+		if status == parentPaymentStatusPending {
+			query = query.Where("parent_payment_requests.status IN ?", []string{parentPaymentStatusPending, parentPaymentStatusPendingVerification})
+		} else {
+			query = query.Where("parent_payment_requests.status = ?", status)
+		}
 	}
 	if studentID := strings.TrimSpace(c.Query("student_id")); studentID != "" {
 		query = query.Where("parent_payment_requests.student_id = ?", studentID)
@@ -1891,7 +1936,7 @@ func (h *FeeHandler) GetFeesDashboard(c *gin.Context) {
 	pendingQuery := database.DB.Model(&models.ParentPaymentRequest{}).
 		Joins("JOIN students ON students.id = parent_payment_requests.student_id").
 		Joins("JOIN sections ON sections.id = students.current_section_id").
-		Where("parent_payment_requests.school_id = ? AND parent_payment_requests.status = ?", schoolID, "pending")
+		Where("parent_payment_requests.school_id = ? AND parent_payment_requests.status IN ?", schoolID, []string{parentPaymentStatusPending, parentPaymentStatusPendingVerification})
 	if classID != "" {
 		pendingQuery = pendingQuery.Where("sections.grade_id = ?", classID)
 	}
@@ -1909,6 +1954,98 @@ func (h *FeeHandler) GetFeesDashboard(c *gin.Context) {
 		"overdue_students_count":         len(overdueStudents),
 		"pending_payment_approval_count": pendingApprovalCount,
 	}, "Fees dashboard loaded")
+}
+
+func (h *FeeHandler) CreateFeePaymentIntent(c *gin.Context) {
+	var req struct {
+		InvoiceID      string `json:"invoice_id"`
+		StudentFeeID   string `json:"student_fee_id"`
+		PaymentMethod  string `json:"payment_method"`
+		PaymentMode    string `json:"payment_mode"`
+		SelectedMonths int    `json:"selected_months"`
+		SelectedTerms  int    `json:"selected_terms"`
+		Remarks        string `json:"remarks"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	invoiceID := strings.TrimSpace(firstNonEmpty(req.InvoiceID, req.StudentFeeID))
+	if invoiceID == "" {
+		fail(c, http.StatusBadRequest, "invoice_id is required")
+		return
+	}
+	paymentMode := strings.ToLower(strings.TrimSpace(firstNonEmpty(req.PaymentMethod, req.PaymentMode)))
+	if paymentMode == "" {
+		paymentMode = "upi"
+	}
+
+	var invoice models.FeeInvoice
+	if err := preloadFeeInvoiceDetails(scopedFeeInvoiceQuery(c)).First(&invoice, "fee_invoices.id = ?", invoiceID).Error; err != nil {
+		fail(c, http.StatusNotFound, "Invoice not found")
+		return
+	}
+	if err := ensureParentOwnsStudent(c, invoice.StudentID); err != nil {
+		fail(c, http.StatusForbidden, "Invoice does not belong to a linked child")
+		return
+	}
+	expectedAmount, err := expectedParentPayableAmount(invoice, req.SelectedMonths, req.SelectedTerms)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pendingAmount, err := pendingParentPaymentAmountExcept(invoice.ID, "")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to verify pending payment requests")
+		return
+	}
+	if expectedAmount > roundMoney(invoice.Balance-pendingAmount) {
+		fail(c, http.StatusBadRequest, "payment request amount exceeds outstanding balance after pending requests")
+		return
+	}
+
+	paymentSetting := resolvePaymentSettingForInvoice(scopedSchoolID(c), invoice.ID)
+	if paymentMode == "upi" && !paymentSetting.UPIEnabled && strings.TrimSpace(paymentSetting.UPIID) == "" && strings.TrimSpace(paymentSetting.QRImageURL) == "" {
+		fail(c, http.StatusBadRequest, "UPI payment is not configured")
+		return
+	}
+	paymentConfigID := (*string)(nil)
+	if strings.TrimSpace(paymentSetting.ID) != "" {
+		value := paymentSetting.ID
+		paymentConfigID = &value
+	}
+	reference := generateFeePaymentReference(invoice.Student)
+	now := time.Now().UTC()
+	request := models.ParentPaymentRequest{
+		SchoolID:          scopedSchoolID(c),
+		InvoiceID:         invoice.ID,
+		StudentID:         invoice.StudentID,
+		ParentUserID:      currentUserID(c),
+		RequestReference:  reference,
+		Amount:            expectedAmount,
+		PaymentDate:       now,
+		PaymentMode:       paymentMode,
+		Status:            parentPaymentStatusInitiated,
+		Remarks:           strings.TrimSpace(req.Remarks),
+		SelectedMonths:    req.SelectedMonths,
+		SelectedTerms:     req.SelectedTerms,
+		PaymentConfigID:   paymentConfigID,
+		PaymentUPIID:      paymentSetting.UPIID,
+		PaymentPayeeName:  paymentSetting.PayeeName,
+		PaymentQRImageURL: paymentSetting.QRImageURL,
+		PaymentQRNote:     paymentSetting.QRNote,
+	}
+	if err := database.DB.Create(&request).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to create payment intent")
+		return
+	}
+	id := request.ID
+	auditAction(c, "fees", "create_payment_intent", "parent_payment_requests", &id)
+	if err := preloadPaymentRequestDetails(database.DB).First(&request, "id = ?", request.ID).Error; err != nil {
+		success(c, http.StatusCreated, parentPaymentRequestPayload(request), "Payment intent created")
+		return
+	}
+	success(c, http.StatusCreated, parentPaymentRequestPayload(request), "Payment intent created")
 }
 
 func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
@@ -2020,10 +2157,6 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 
 func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 	invoiceID := strings.TrimSpace(firstNonEmpty(c.PostForm("student_fee_id"), c.PostForm("invoice_id")))
-	if invoiceID == "" {
-		fail(c, http.StatusBadRequest, "student_fee_id is required")
-		return
-	}
 	amount, err := parseRequiredMoney(c.PostForm("amount"), "amount")
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
@@ -2034,11 +2167,48 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		paymentMethod = "upi"
 	}
 	transactionRef := strings.TrimSpace(firstNonEmpty(c.PostForm("transaction_ref"), c.PostForm("transaction_id")))
+	if paymentMethod != "cash" && len(transactionRef) < 6 {
+		fail(c, http.StatusBadRequest, "transaction_ref is required")
+		return
+	}
 	selectedMonths := parsePositiveInt(c.PostForm("selected_months"))
 	selectedTerms := parsePositiveInt(c.PostForm("selected_terms"))
+	requestID := strings.TrimSpace(firstNonEmpty(c.PostForm("payment_request_id"), c.PostForm("request_id")))
+	requestReference := strings.TrimSpace(c.PostForm("request_reference"))
+
+	var existing models.ParentPaymentRequest
+	hasExistingRequest := false
+	if requestID != "" || requestReference != "" {
+		query := database.DB.Where("school_id = ? AND parent_user_id = ?", scopedSchoolID(c), currentUserID(c))
+		if requestID != "" {
+			query = query.Where("id = ?", requestID)
+		} else {
+			query = query.Where("request_reference = ?", requestReference)
+		}
+		if err := query.First(&existing).Error; err != nil {
+			fail(c, http.StatusNotFound, "Payment intent not found")
+			return
+		}
+		hasExistingRequest = true
+		invoiceID = existing.InvoiceID
+		if selectedMonths == 0 {
+			selectedMonths = existing.SelectedMonths
+		}
+		if selectedTerms == 0 {
+			selectedTerms = existing.SelectedTerms
+		}
+	}
+	if invoiceID == "" {
+		fail(c, http.StatusBadRequest, "student_fee_id is required")
+		return
+	}
 	var invoice models.FeeInvoice
 	if err := preloadFeeInvoiceDetails(scopedFeeInvoiceQuery(c)).First(&invoice, "fee_invoices.id = ?", invoiceID).Error; err != nil {
 		fail(c, http.StatusNotFound, "Invoice not found")
+		return
+	}
+	if err := ensureParentOwnsStudent(c, invoice.StudentID); err != nil {
+		fail(c, http.StatusForbidden, "Invoice does not belong to a linked child")
 		return
 	}
 	expectedAmount, err := expectedParentPayableAmount(invoice, selectedMonths, selectedTerms)
@@ -2050,7 +2220,23 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		fail(c, http.StatusBadRequest, fmt.Sprintf("payment amount must be %.2f for selected fee interval", expectedAmount))
 		return
 	}
-	pendingAmount, err := pendingParentPaymentAmount(invoice.ID)
+	excludeID := ""
+	if hasExistingRequest {
+		excludeID = existing.ID
+		if !isParentPaymentReservableStatus(existing.Status) {
+			fail(c, http.StatusBadRequest, "Payment request cannot be updated in its current status")
+			return
+		}
+		if roundMoney(existing.Amount) != expectedAmount {
+			fail(c, http.StatusBadRequest, "payment amount does not match the existing payment intent")
+			return
+		}
+	}
+	if err := ensureUniqueTransactionRef(scopedSchoolID(c), transactionRef, excludeID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	pendingAmount, err := pendingParentPaymentAmountExcept(invoice.ID, excludeID)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "Failed to verify pending payment requests")
 		return
@@ -2071,6 +2257,36 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		paymentConfigID = &value
 	}
 	now := time.Now().UTC()
+	if hasExistingRequest {
+		existing.Amount = amount
+		existing.PaymentDate = now
+		existing.PaymentMode = paymentMethod
+		existing.TransactionID = transactionRef
+		existing.ProofURL = &proofURL
+		existing.Status = parentPaymentStatusPendingVerification
+		existing.Remarks = strings.TrimSpace(c.PostForm("remarks"))
+		existing.SelectedMonths = selectedMonths
+		existing.SelectedTerms = selectedTerms
+		existing.PaymentConfigID = paymentConfigID
+		existing.PaymentUPIID = paymentSetting.UPIID
+		existing.PaymentPayeeName = paymentSetting.PayeeName
+		existing.PaymentQRImageURL = paymentSetting.QRImageURL
+		existing.PaymentQRNote = paymentSetting.QRNote
+		existing.DecidedBy = nil
+		existing.DecidedAt = nil
+		if err := database.DB.Save(&existing).Error; err != nil {
+			fail(c, http.StatusInternalServerError, "Failed to update payment request")
+			return
+		}
+		id := existing.ID
+		auditAction(c, "fees", "submit_payment_proof", "parent_payment_requests", &id)
+		if err := preloadPaymentRequestDetails(database.DB).First(&existing, "id = ?", existing.ID).Error; err != nil {
+			success(c, http.StatusCreated, existing, "Payment proof submitted for approval")
+			return
+		}
+		success(c, http.StatusCreated, existing, "Payment proof submitted for approval")
+		return
+	}
 	request := models.ParentPaymentRequest{
 		SchoolID:          scopedSchoolID(c),
 		InvoiceID:         invoice.ID,
@@ -2082,8 +2298,10 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		PaymentMode:       paymentMethod,
 		TransactionID:     transactionRef,
 		ProofURL:          &proofURL,
-		Status:            "pending",
+		Status:            parentPaymentStatusPendingVerification,
 		Remarks:           strings.TrimSpace(c.PostForm("remarks")),
+		SelectedMonths:    selectedMonths,
+		SelectedTerms:     selectedTerms,
 		PaymentConfigID:   paymentConfigID,
 		PaymentUPIID:      paymentSetting.UPIID,
 		PaymentPayeeName:  paymentSetting.PayeeName,
@@ -2103,6 +2321,53 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 	success(c, http.StatusCreated, request, "Payment proof submitted for approval")
 }
 
+func (h *FeeHandler) ResubmitFeePayment(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		fail(c, http.StatusBadRequest, "payment request ID is required")
+		return
+	}
+	var paymentRequest models.ParentPaymentRequest
+	if err := database.DB.First(&paymentRequest, "id = ? AND school_id = ? AND parent_user_id = ?", id, scopedSchoolID(c), currentUserID(c)).Error; err != nil {
+		fail(c, http.StatusNotFound, "Payment request not found")
+		return
+	}
+	if paymentRequest.Status != parentPaymentStatusClarificationRequired {
+		fail(c, http.StatusBadRequest, "Payment request is not waiting for clarification")
+		return
+	}
+	transactionRef := strings.TrimSpace(firstNonEmpty(c.PostForm("transaction_ref"), c.PostForm("transaction_id"), paymentRequest.TransactionID))
+	if paymentRequest.PaymentMode != "cash" && len(transactionRef) < 6 {
+		fail(c, http.StatusBadRequest, "transaction_ref is required")
+		return
+	}
+	if err := ensureUniqueTransactionRef(scopedSchoolID(c), transactionRef, paymentRequest.ID); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	proofURL, err := h.savePaymentProof(c)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	paymentRequest.TransactionID = transactionRef
+	paymentRequest.ProofURL = &proofURL
+	paymentRequest.Status = parentPaymentStatusPendingVerification
+	paymentRequest.Remarks = strings.TrimSpace(firstNonEmpty(c.PostForm("remarks"), paymentRequest.Remarks))
+	paymentRequest.DecidedBy = nil
+	paymentRequest.DecidedAt = nil
+	if err := database.DB.Save(&paymentRequest).Error; err != nil {
+		fail(c, http.StatusInternalServerError, "Failed to resubmit payment proof")
+		return
+	}
+	auditAction(c, "fees", "resubmit_payment_proof", "parent_payment_requests", &id)
+	if err := preloadPaymentRequestDetails(database.DB).First(&paymentRequest, "id = ?", paymentRequest.ID).Error; err != nil {
+		success(c, http.StatusOK, paymentRequest, "Payment proof resubmitted for approval")
+		return
+	}
+	success(c, http.StatusOK, paymentRequest, "Payment proof resubmitted for approval")
+}
+
 func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 	var req struct {
 		Status       string `json:"status" binding:"required"`
@@ -2113,8 +2378,12 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 		return
 	}
 	status := strings.ToLower(strings.TrimSpace(req.Status))
-	if status != "approved" && status != "rejected" {
-		fail(c, http.StatusBadRequest, "status must be approved or rejected")
+	if status != parentPaymentStatusApproved && status != parentPaymentStatusRejected && status != parentPaymentStatusClarificationRequired {
+		fail(c, http.StatusBadRequest, "status must be approved, rejected, or clarification_required")
+		return
+	}
+	if (status == parentPaymentStatusRejected || status == parentPaymentStatusClarificationRequired) && strings.TrimSpace(req.AdminRemarks) == "" {
+		fail(c, http.StatusBadRequest, "admin_remarks is required")
 		return
 	}
 	var paymentRequest models.ParentPaymentRequest
@@ -2122,7 +2391,7 @@ func (h *FeeHandler) DecideParentPaymentRequest(c *gin.Context) {
 		fail(c, http.StatusNotFound, "Payment request not found")
 		return
 	}
-	if !strings.EqualFold(paymentRequest.Status, "pending") {
+	if !isParentPaymentReviewableStatus(paymentRequest.Status) {
 		fail(c, http.StatusBadRequest, "Payment request has already been actioned")
 		return
 	}
@@ -2160,7 +2429,7 @@ func (h *FeeHandler) decideFeePaymentAlias(c *gin.Context, status string) {
 	}
 	_ = c.ShouldBindJSON(&req)
 	remarks := strings.TrimSpace(firstNonEmpty(req.AdminRemarks, req.RejectionReason))
-	if status == "rejected" && remarks == "" {
+	if status == parentPaymentStatusRejected && remarks == "" {
 		fail(c, http.StatusBadRequest, "rejection_reason is required")
 		return
 	}
@@ -2183,14 +2452,14 @@ func (h *FeeHandler) decideFeePaymentAlias(c *gin.Context, status string) {
 
 func applyParentPaymentRequestDecisionTx(tx *gorm.DB, schoolID, decider, requestID, status, remarks string) (models.ParentPaymentRequest, error) {
 	status = strings.ToLower(strings.TrimSpace(status))
-	if status != "approved" && status != "rejected" {
-		return models.ParentPaymentRequest{}, fmt.Errorf("status must be approved or rejected")
+	if status != parentPaymentStatusApproved && status != parentPaymentStatusRejected && status != parentPaymentStatusClarificationRequired {
+		return models.ParentPaymentRequest{}, fmt.Errorf("status must be approved, rejected, or clarification_required")
 	}
 	var paymentRequest models.ParentPaymentRequest
 	if err := tx.First(&paymentRequest, "id = ? AND school_id = ?", requestID, schoolID).Error; err != nil {
 		return models.ParentPaymentRequest{}, fmt.Errorf("payment request not found")
 	}
-	if !strings.EqualFold(paymentRequest.Status, "pending") {
+	if !isParentPaymentReviewableStatus(paymentRequest.Status) {
 		return models.ParentPaymentRequest{}, fmt.Errorf("Payment request has already been actioned")
 	}
 	now := time.Now().UTC()
@@ -2198,7 +2467,7 @@ func applyParentPaymentRequestDecisionTx(tx *gorm.DB, schoolID, decider, request
 	paymentRequest.AdminRemarks = strings.TrimSpace(remarks)
 	paymentRequest.DecidedBy = &decider
 	paymentRequest.DecidedAt = &now
-	if status == "rejected" {
+	if status == parentPaymentStatusRejected || status == parentPaymentStatusClarificationRequired {
 		if err := tx.Save(&paymentRequest).Error; err != nil {
 			return models.ParentPaymentRequest{}, err
 		}
@@ -2234,6 +2503,10 @@ func applyParentPaymentRequestDecisionTx(tx *gorm.DB, schoolID, decider, request
 	if err := tx.Create(&payment).Error; err != nil {
 		return models.ParentPaymentRequest{}, err
 	}
+	receiptID, err := createApprovedParentPaymentArtifactsTx(tx, paymentRequest, payment, now)
+	if err != nil {
+		return models.ParentPaymentRequest{}, err
+	}
 	invoice.PaidAmount += paymentRequest.Amount
 	invoice.Balance -= paymentRequest.Amount
 	if invoice.Balance <= 0 {
@@ -2246,10 +2519,98 @@ func applyParentPaymentRequestDecisionTx(tx *gorm.DB, schoolID, decider, request
 		return models.ParentPaymentRequest{}, err
 	}
 	paymentRequest.PaymentID = &payment.ID
+	if receiptID != "" {
+		paymentRequest.ReceiptID = &receiptID
+	}
 	if err := tx.Save(&paymentRequest).Error; err != nil {
 		return models.ParentPaymentRequest{}, err
 	}
 	return paymentRequest, nil
+}
+
+func createApprovedParentPaymentArtifactsTx(tx *gorm.DB, paymentRequest models.ParentPaymentRequest, payment models.Payment, approvedAt time.Time) (string, error) {
+	if !tx.Migrator().HasTable(&models.PaymentOrder{}) ||
+		!tx.Migrator().HasTable(&models.PaymentTransaction{}) ||
+		!tx.Migrator().HasTable(&models.FeeReceipt{}) ||
+		!tx.Migrator().HasTable(&models.PaymentOrderInvoiceMap{}) {
+		return "", nil
+	}
+	order := models.PaymentOrder{
+		ParentID:        paymentRequest.ParentUserID,
+		StudentID:       paymentRequest.StudentID,
+		Amount:          paymentRequest.Amount,
+		Currency:        "INR",
+		Gateway:         paymentRequest.PaymentMode,
+		ExternalOrderID: paymentRequest.RequestReference,
+		ReceiptNo:       paymentRequest.RequestReference,
+		Status:          "paid",
+		CreatedAt:       approvedAt,
+		UpdatedAt:       approvedAt,
+	}
+	if err := order.SetInvoiceIDs([]string{paymentRequest.InvoiceID}); err != nil {
+		return "", err
+	}
+	if err := order.SetNotes(map[string]interface{}{
+		"parent_payment_request_id": paymentRequest.ID,
+		"legacy_payment_id":         payment.ID,
+		"transaction_id":            paymentRequest.TransactionID,
+		"selected_months":           paymentRequest.SelectedMonths,
+		"selected_terms":            paymentRequest.SelectedTerms,
+	}); err != nil {
+		return "", err
+	}
+	if err := tx.Create(&order).Error; err != nil {
+		return "", err
+	}
+	allocation := models.PaymentOrderInvoiceMap{
+		PaymentOrderID:  order.ID,
+		FeeInvoiceID:    paymentRequest.InvoiceID,
+		AmountAllocated: paymentRequest.Amount,
+		CreatedAt:       approvedAt,
+	}
+	if err := tx.Create(&allocation).Error; err != nil {
+		return "", err
+	}
+	method := paymentRequest.PaymentMode
+	transaction := models.PaymentTransaction{
+		PaymentOrderID:    order.ID,
+		ParentID:          paymentRequest.ParentUserID,
+		StudentID:         paymentRequest.StudentID,
+		ExternalOrderID:   paymentRequest.RequestReference,
+		ExternalPaymentID: paymentRequest.TransactionID,
+		Amount:            paymentRequest.Amount,
+		Currency:          "INR",
+		PaymentMethod:     &method,
+		Status:            "success",
+		VerifiedAt:        &approvedAt,
+		CreatedAt:         approvedAt,
+		UpdatedAt:         approvedAt,
+	}
+	if err := transaction.SetGatewayResponse(map[string]interface{}{
+		"source":                    "principal_verification",
+		"parent_payment_request_id": paymentRequest.ID,
+		"proof_url":                 paymentRequest.ProofURL,
+	}); err != nil {
+		return "", err
+	}
+	if err := tx.Create(&transaction).Error; err != nil {
+		return "", err
+	}
+	receipt := models.FeeReceipt{
+		ReceiptNo:            paymentRequest.RequestReference,
+		StudentID:            paymentRequest.StudentID,
+		ParentID:             paymentRequest.ParentUserID,
+		PaymentTransactionID: transaction.ID,
+		Amount:               paymentRequest.Amount,
+		PaymentMode:          paymentRequest.PaymentMode,
+		PaidAt:               approvedAt,
+		CreatedAt:            approvedAt,
+		UpdatedAt:            approvedAt,
+	}
+	if err := tx.Create(&receipt).Error; err != nil {
+		return "", err
+	}
+	return receipt.ID, nil
 }
 
 func isUUIDLike(value string) bool {
@@ -2325,11 +2686,15 @@ func parentFeeRow(invoice models.FeeInvoice) gin.H {
 		Where("invoice_id = ?", invoice.ID).
 		Order("created_at DESC").
 		First(&latestRequest).Error; err == nil {
-		if latestRequest.Status == "pending" {
-			requestStatus = "pending_approval"
-			status = "pending_approval"
+		if isParentPaymentReservableStatus(latestRequest.Status) {
+			requestStatus = latestRequest.Status
+			status = "payment_pending"
+			if latestRequest.Status == parentPaymentStatusClarificationRequired {
+				status = parentPaymentStatusClarificationRequired
+				rejectionReason = latestRequest.AdminRemarks
+			}
 		}
-		if latestRequest.Status == "rejected" {
+		if latestRequest.Status == parentPaymentStatusRejected {
 			requestStatus = "rejected"
 			status = "rejected"
 			rejectionReason = latestRequest.AdminRemarks
@@ -2457,6 +2822,99 @@ func academicTermCount(academicYearID string) (int, error) {
 	return int(count), nil
 }
 
+func ensureParentOwnsStudent(c *gin.Context, studentID string) error {
+	var parentLink models.ParentStudentLink
+	return database.DB.Where("school_id = ? AND parent_user_id = ? AND student_id = ?", scopedSchoolID(c), currentUserID(c), studentID).First(&parentLink).Error
+}
+
+func parentPaymentRequestPayload(request models.ParentPaymentRequest) gin.H {
+	payload := gin.H{
+		"id":                   request.ID,
+		"school_id":            request.SchoolID,
+		"invoice_id":           request.InvoiceID,
+		"student_id":           request.StudentID,
+		"parent_user_id":       request.ParentUserID,
+		"payment_id":           request.PaymentID,
+		"receipt_id":           request.ReceiptID,
+		"request_reference":    request.RequestReference,
+		"payment_reference":    request.RequestReference,
+		"amount":               roundMoney(request.Amount),
+		"payment_date":         request.PaymentDate,
+		"payment_mode":         request.PaymentMode,
+		"transaction_id":       request.TransactionID,
+		"proof_url":            request.ProofURL,
+		"selected_months":      request.SelectedMonths,
+		"selected_terms":       request.SelectedTerms,
+		"status":               request.Status,
+		"remarks":              request.Remarks,
+		"admin_remarks":        request.AdminRemarks,
+		"payment_config_id":    request.PaymentConfigID,
+		"payment_upi_id":       request.PaymentUPIID,
+		"payment_payee_name":   request.PaymentPayeeName,
+		"payment_qr_image_url": request.PaymentQRImageURL,
+		"payment_qr_note":      request.PaymentQRNote,
+		"decided_by":           request.DecidedBy,
+		"decided_at":           request.DecidedAt,
+		"created_at":           request.CreatedAt,
+		"updated_at":           request.UpdatedAt,
+		"upi_uri":              buildParentPaymentUPIURI(request),
+	}
+	if request.Invoice != nil {
+		payload["invoice"] = request.Invoice
+	}
+	if request.Student != nil {
+		payload["student"] = request.Student
+	}
+	if request.ParentUser != nil {
+		payload["parent_user"] = request.ParentUser
+	}
+	if request.Payment != nil {
+		payload["payment"] = request.Payment
+	}
+	return payload
+}
+
+func buildParentPaymentUPIURI(request models.ParentPaymentRequest) string {
+	if strings.TrimSpace(request.PaymentUPIID) == "" {
+		return ""
+	}
+	params := url.Values{}
+	params.Set("pa", strings.TrimSpace(request.PaymentUPIID))
+	params.Set("pn", strings.TrimSpace(firstNonEmpty(request.PaymentPayeeName, "School")))
+	params.Set("am", fmt.Sprintf("%.2f", roundMoney(request.Amount)))
+	params.Set("cu", "INR")
+	params.Set("tn", strings.TrimSpace(firstNonEmpty(request.RequestReference, request.PaymentQRNote, "School fee payment")))
+	return "upi://pay?" + params.Encode()
+}
+
+func generateFeePaymentReference(student *models.Student) string {
+	code := "STUDENT"
+	if student != nil {
+		code = firstNonEmpty(student.AdmissionNumber, student.StudentCode, student.ID)
+	}
+	code = sanitizePaymentReferencePart(code)
+	now := time.Now().UTC()
+	return fmt.Sprintf("FEE-%s-%s-%06d", code, now.Format("20060102"), now.UnixNano()%1000000)
+}
+
+func sanitizePaymentReferencePart(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	var builder strings.Builder
+	for _, char := range value {
+		if (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') {
+			builder.WriteRune(char)
+		}
+	}
+	clean := builder.String()
+	if clean == "" {
+		return "STUDENT"
+	}
+	if len(clean) > 16 {
+		return clean[:16]
+	}
+	return clean
+}
+
 func (h *FeeHandler) savePaymentProof(c *gin.Context) (string, error) {
 	file, err := c.FormFile("screenshot")
 	if err != nil {
@@ -2545,12 +3003,44 @@ func preloadPaymentRequestDetails(query *gorm.DB) *gorm.DB {
 }
 
 func pendingParentPaymentAmount(invoiceID string) (float64, error) {
+	return pendingParentPaymentAmountExcept(invoiceID, "")
+}
+
+func pendingParentPaymentAmountExcept(invoiceID, excludeRequestID string) (float64, error) {
 	var amount float64
-	err := database.DB.Model(&models.ParentPaymentRequest{}).
-		Where("invoice_id = ? AND status = ?", invoiceID, "pending").
+	query := database.DB.Model(&models.ParentPaymentRequest{}).
+		Where("invoice_id = ? AND status IN ?", invoiceID, parentPaymentReservedStatuses)
+	if strings.TrimSpace(excludeRequestID) != "" {
+		query = query.Where("id <> ?", excludeRequestID)
+	}
+	err := query.
 		Select("COALESCE(SUM(amount), 0)").
 		Scan(&amount).Error
 	return amount, err
+}
+
+func ensureUniqueTransactionRef(schoolID, transactionRef, excludeRequestID string) error {
+	transactionRef = strings.TrimSpace(transactionRef)
+	if transactionRef == "" {
+		return nil
+	}
+	query := database.DB.Model(&models.ParentPaymentRequest{}).
+		Where("school_id = ? AND transaction_id = ? AND status NOT IN ?", schoolID, transactionRef, []string{
+			parentPaymentStatusRejected,
+			parentPaymentStatusCancelled,
+			parentPaymentStatusExpired,
+		})
+	if strings.TrimSpace(excludeRequestID) != "" {
+		query = query.Where("id <> ?", excludeRequestID)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to verify transaction reference")
+	}
+	if count > 0 {
+		return fmt.Errorf("transaction reference is already used for another payment request")
+	}
+	return nil
 }
 
 func generateParentPaymentReference() string {

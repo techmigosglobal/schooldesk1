@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -46,7 +45,7 @@ class _AdminPaymentRequestDecisionScreenState
     final request = widget.args.request;
     return SchoolDeskModuleScaffold(
       title: 'Payment Decision',
-      subtitle: 'Approve or reject parent-submitted fee payments',
+      subtitle: 'Approve, reject, or request payment clarification',
       drawer: PrincipalDrawer(
         selectedIndex: PrincipalNav.fees,
         onDestinationSelected: (_) {},
@@ -71,6 +70,8 @@ class _AdminPaymentRequestDecisionScreenState
               decoration: InputDecoration(
                 labelText: _decision == 'approved'
                     ? 'Payment approval note'
+                    : _decision == 'clarification_required'
+                    ? 'Clarification note'
                     : 'Rejection reason',
                 alignLabelWithHint: true,
               ),
@@ -108,6 +109,8 @@ class _AdminPaymentRequestDecisionScreenState
                   : Icon(
                       _decision == 'approved'
                           ? Icons.check_circle_rounded
+                          : _decision == 'clarification_required'
+                          ? Icons.help_outline_rounded
                           : Icons.cancel_rounded,
                       size: 18,
                     ),
@@ -116,6 +119,8 @@ class _AdminPaymentRequestDecisionScreenState
                     ? 'Submitting...'
                     : _decision == 'approved'
                     ? 'Approve Payment'
+                    : _decision == 'clarification_required'
+                    ? 'Request Clarification'
                     : 'Reject Payment',
                 style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
               ),
@@ -183,9 +188,12 @@ class _AdminPaymentRequestDecisionScreenState
   }
 
   Widget _buildDecisionSelector() {
-    return Row(
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
       children: [
-        Expanded(
+        SizedBox(
+          width: 170,
           child: ChoiceChip(
             selected: _decision == 'approved',
             label: const Text('Approve Payment'),
@@ -195,8 +203,19 @@ class _AdminPaymentRequestDecisionScreenState
                 : (_) => setState(() => _decision = 'approved'),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
+        SizedBox(
+          width: 170,
+          child: ChoiceChip(
+            selected: _decision == 'clarification_required',
+            label: const Text('Request Clarification'),
+            avatar: const Icon(Icons.help_outline_rounded, size: 16),
+            onSelected: _submitting
+                ? null
+                : (_) => setState(() => _decision = 'clarification_required'),
+          ),
+        ),
+        SizedBox(
+          width: 170,
           child: ChoiceChip(
             selected: _decision == 'rejected',
             label: const Text('Reject Payment'),
@@ -251,6 +270,10 @@ class _AdminPaymentRequestDecisionScreenState
       _showError('Enter a rejection reason.');
       return;
     }
+    if (_decision == 'clarification_required' && remarks.length < 3) {
+      _showError('Enter a clarification note.');
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await BackendApiClient.instance.decideParentPaymentRequest(
@@ -262,7 +285,11 @@ class _AdminPaymentRequestDecisionScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Payment request ${_decision == 'approved' ? 'approved' : 'rejected'}.',
+            _decision == 'approved'
+                ? 'Payment request approved.'
+                : _decision == 'clarification_required'
+                ? 'Clarification requested from parent.'
+                : 'Payment request rejected.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -414,24 +441,26 @@ class _AdminPaymentRequestDecisionScreenState
     if (url == null || url.isEmpty) return const SizedBox.shrink();
     final lower = url.toLowerCase();
     final isImage =
-        lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png');
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png');
     final isPdf = lower.endsWith('.pdf');
     if (isPdf) {
       return OutlinedButton.icon(
-        onPressed: () => _openProofInApp(url),
+        onPressed: () => _showProofDocumentPreview(url),
         icon: const Icon(Icons.picture_as_pdf_rounded, size: 16),
         label: Text(
-          'Open payment proof (PDF)',
+          'Open proof inside app',
           style: GoogleFonts.dmSans(fontSize: 12),
         ),
       );
     }
     if (!isImage) {
       return OutlinedButton.icon(
-        onPressed: () => _openProofInApp(url),
-        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+        onPressed: () => _showProofDocumentPreview(url),
+        icon: const Icon(Icons.description_rounded, size: 16),
         label: Text(
-          'Open proof document',
+          'Open proof inside app',
           style: GoogleFonts.dmSans(fontSize: 12),
         ),
       );
@@ -459,24 +488,34 @@ class _AdminPaymentRequestDecisionScreenState
     );
   }
 
-  Future<void> _openProofInApp(String url) async {
+  void _showProofDocumentPreview(String url) {
     final fullUrl = _absoluteMediaUrl(url);
-    final uri = Uri.parse(fullUrl);
-    try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.inAppWebView);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No app available to open this file type.')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to open proof: $e')),
-        );
-      }
-    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Payment Proof'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(Icons.description_rounded, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              'Preview this proof inside the application.',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            SelectableText(fullUrl, style: GoogleFonts.dmSans(fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _absoluteMediaUrl(String value) {
@@ -497,7 +536,12 @@ class _AdminPaymentRequestDecisionScreenState
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
-              InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
+              InteractiveViewer(
+                child: Image.network(
+                  _absoluteMediaUrl(url),
+                  fit: BoxFit.contain,
+                ),
+              ),
               Positioned(
                 top: 8,
                 right: 8,
