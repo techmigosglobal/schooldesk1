@@ -57,6 +57,21 @@ void main() {
     expect(() => EnvConfig.validate(isRelease: true), returnsNormally);
   });
 
+  test('Codemagic debug APK is explicitly attached to Railway backend', () {
+    final codemagic = File('codemagic.yaml').readAsStringSync();
+
+    expect(codemagic, contains('flutter build apk --debug'));
+    expect(
+      codemagic,
+      contains(
+        '--dart-define=API_BASE_URL=https://schooldesk1-production.up.railway.app/api',
+      ),
+    );
+    expect(codemagic, contains('--dart-define=APP_ENV=production'));
+    expect(codemagic, contains('--dart-define=ENABLE_LOGGING=false'));
+    expect(codemagic, isNot(contains('env.railway.json')));
+  });
+
   test('release Android helper always builds artifacts against Hostinger', () {
     final script = File('scripts/build-android-vps.sh');
     final readme = File('README.md').readAsStringSync();
