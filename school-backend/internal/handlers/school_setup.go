@@ -210,7 +210,7 @@ func createSetupRolePermissions(tx *gorm.DB, roles map[string]models.Role) error
 			return err
 		}
 		parentRead := inSetupList(module, "dashboard", "guardians", "medical_records", "student_documents", "parent_teacher_meetings", "homework", "diary_entries", "message_conversations", "messages")
-		parentCreate := inSetupList(module, "parent_teacher_meetings", "message_conversations", "messages")
+		parentCreate := inSetupList(module, "parent_teacher_meetings", "message_conversations", "messages", "medical_records")
 		parentUpdate := inSetupList(module, "message_conversations", "messages")
 		if err := createSetupPermission(tx, roles["Parent"].ID, module, parentRead, parentCreate, parentUpdate, false, false); err != nil {
 			return err

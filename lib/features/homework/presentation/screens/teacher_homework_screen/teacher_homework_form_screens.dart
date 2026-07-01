@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -717,18 +718,37 @@ class _TeacherHomeworkSubmissionsScreenState
                       fallback: 'submitted',
                     ),
                   ),
-                  body: TeacherFlowActionWrap(
-                    actions: [
-                      TeacherFlowAction(
-                        label: 'Approve',
-                        icon: Icons.check_rounded,
-                        filled: true,
-                        onTap: () => _review(submission, 'approved'),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Needs Revision',
-                        icon: Icons.replay_rounded,
-                        onTap: () => _review(submission, 'revision_requested'),
+                  body: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if ('${submission['attachment_url'] ?? submission['attachmentUrl'] ?? ''}'.isNotEmpty) ...[
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final rawUrl = '${submission['attachment_url'] ?? submission['attachmentUrl']}';
+                            final uri = Uri.tryParse(rawUrl);
+                            if (uri != null) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.attach_file_rounded, size: 14),
+                          label: const Text('View Attachment'),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      TeacherFlowActionWrap(
+                        actions: [
+                          TeacherFlowAction(
+                            label: 'Approve',
+                            icon: Icons.check_rounded,
+                            filled: true,
+                            onTap: () => _review(submission, 'approved'),
+                          ),
+                          TeacherFlowAction(
+                            label: 'Needs Revision',
+                            icon: Icons.replay_rounded,
+                            onTap: () => _review(submission, 'revision_requested'),
+                          ),
+                        ],
                       ),
                     ],
                   ),

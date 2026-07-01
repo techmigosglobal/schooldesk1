@@ -313,11 +313,24 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                 final name =
                     '${c['first_name'] ?? ''} ${c['last_name'] ?? ''}'.trim();
                 final isActive = i == _activeChildIndex;
+                final theme = Theme.of(context);
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
                     label: Text(name.isEmpty ? 'Student' : name),
                     selected: isActive,
+                    selectedColor: theme.colorScheme.primary,
+                    backgroundColor: theme.colorScheme.surface,
+                    labelStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? Colors.white : theme.colorScheme.onSurface,
+                    ),
+                    side: BorderSide(
+                      color: isActive
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outlineVariant,
+                    ),
                     onSelected: (_) {
                       setState(() => _activeChildIndex = i);
                       _loadHealthRecords(c['id'].toString());

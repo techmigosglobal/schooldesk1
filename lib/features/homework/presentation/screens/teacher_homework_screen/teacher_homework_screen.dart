@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/homework/homework.dart';
 
 class TeacherHomeworkScreen extends StatefulWidget {
   const TeacherHomeworkScreen({super.key});
@@ -109,7 +110,18 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
   }
 
   Future<void> _openForm({Map<String, dynamic>? homework}) async {
-    final result = await Navigator.pushNamed(context, AppRoutes.teacherDiary);
+    final result = await Navigator.pushNamed(
+      context,
+      AppRoutes.teacherHomeworkForm,
+      arguments: TeacherHomeworkFormArgs(
+        teacherStaffId: RoleAccessService.teacherStaffId,
+        defaultClassName: RoleAccessService.teacherClassName,
+        defaultSubject: RoleAccessService.teacherSubject,
+        assignedClasses: RoleAccessService.teacherAssignedClasses,
+        students: RoleAccessService.teacherClassStudents,
+        homework: homework,
+      ),
+    );
     if (result != null) await _loadHomework(forceRefresh: true);
   }
 
@@ -165,11 +177,6 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
       loading: _loading,
       error: _error,
       onRefresh: _loadHomework,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Homework'),
-      ),
       child: TeacherFlowScrollView(
         children: [
           TeacherCurrentClassCard(

@@ -430,6 +430,29 @@ class AppRoutes {
   ) {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ParentHomeworkSubmissionArgs) return args;
+    if (args is Map<String, dynamic>) {
+      final homeworkData = args['homework'] is Map
+          ? Map<String, dynamic>.from(args['homework'] as Map)
+          : (args.containsKey('id') || args.containsKey('reference_id')
+              ? {'id': args['reference_id'] ?? args['id'], ...args}
+              : <String, dynamic>{});
+      return ParentHomeworkSubmissionArgs(
+        homework: homeworkData,
+        studentId: (args['student_id'] ?? args['studentId'] ?? '').toString(),
+        studentName: (args['student_name'] ?? args['studentName'] ?? 'Student').toString(),
+      );
+    }
+    try {
+      final dynamic dArgs = args;
+      if (dArgs != null) {
+        return ParentHomeworkSubmissionArgs(
+          homework: Map<String, dynamic>.from(dArgs.homework as Map),
+          studentId: dArgs.studentId.toString(),
+          studentName: dArgs.studentName.toString(),
+        );
+      }
+    } catch (_) {}
+
     return const ParentHomeworkSubmissionArgs(
       homework: {},
       studentId: '',
