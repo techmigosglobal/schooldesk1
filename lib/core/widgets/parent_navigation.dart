@@ -211,13 +211,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
               route: AppRoutes.parentFees,
             ),
             SchoolDeskNavigationItem(
-              index: ParentNav.receipts,
-              icon: Icons.receipt_long_outlined,
-              activeIcon: Icons.receipt_long_rounded,
-              label: 'Pay & Receipts',
-              route: AppRoutes.feePaymentReceipt,
-            ),
-            SchoolDeskNavigationItem(
               index: ParentNav.leave,
               icon: Icons.event_busy_outlined,
               activeIcon: Icons.event_busy_rounded,

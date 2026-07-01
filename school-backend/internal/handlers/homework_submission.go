@@ -139,6 +139,7 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "Failed to save homework submission")
 		return
 	}
+	notifyHomeworkSubmittedForReview(homework, row)
 	id := row.ID
 	auditAction(c, "homework_submissions", action, "homework_submissions", &id)
 	if err := preloadHomeworkSubmissionDetails(database.DB).First(&row, "id = ?", row.ID).Error; err != nil {

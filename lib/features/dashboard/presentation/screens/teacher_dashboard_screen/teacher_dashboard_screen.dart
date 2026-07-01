@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -298,6 +299,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 14),
+          const TodaysHighlightsCard(role: 'teacher'),
           const SizedBox(height: 18),
           const TeacherFlowSectionHeader(title: 'Quick Actions'),
           const SizedBox(height: 10),

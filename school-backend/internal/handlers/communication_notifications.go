@@ -188,6 +188,53 @@ func notifyHomeworkCreatedFromRecord(row HomeworkRecord) {
 	}
 }
 
+func notifyHomeworkSubmittedForReview(homework HomeworkRecord, submission models.HomeworkSubmission) {
+	schoolID := strings.TrimSpace(homework.SchoolID)
+	homeworkID := strings.TrimSpace(homework.ID)
+	if schoolID == "" || homeworkID == "" {
+		return
+	}
+	var users []models.User
+	if teacherUserID := staffUserIDForNotification(schoolID, homework.TeacherID); teacherUserID != "" {
+		direct, err := usersByIDsForNotificationTx(database.DB, schoolID, []string{teacherUserID})
+		if err == nil {
+			users = append(users, direct...)
+		}
+	}
+	if len(users) == 0 {
+		sectionUsers, err := teacherUsersForSectionSubjectTx(database.DB, schoolID, homework.SectionID, homework.SubjectID)
+		if err == nil {
+			users = append(users, sectionUsers...)
+		}
+	}
+	users = mergeNotificationUsers(users)
+	if len(users) == 0 {
+		return
+	}
+	title := "Homework submitted"
+	if strings.TrimSpace(homework.Title) != "" {
+		title = "Homework submitted: " + strings.TrimSpace(homework.Title)
+	}
+	body := "A parent submitted homework for teacher review."
+	if strings.TrimSpace(submission.StudentID) != "" {
+		body = "A parent submitted homework for student " + strings.TrimSpace(submission.StudentID) + "."
+	}
+	logs, err := createNotificationLogsForUsersTx(
+		database.DB,
+		schoolID,
+		users,
+		title,
+		body,
+		"homework",
+		"high",
+		"homework",
+		homeworkID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}
+
 func notifyCommunicationCreatedFromRecord(row map[string]interface{}) {
 	schoolID := communicationRecordString(row, "school_id")
 	messageID := communicationRecordString(row, "message_id")
@@ -411,6 +458,18 @@ func createNotificationLogsForUserIDsTx(
 		return nil, err
 	}
 	return createNotificationLogsForUsersTx(tx, schoolID, users, title, body, category, priority, referenceType, referenceID)
+}
+
+func usersByIDsForNotificationTx(tx *gorm.DB, schoolID string, userIDs []string) ([]models.User, error) {
+	ids := uniqueTrimmedStrings(userIDs)
+	if len(ids) == 0 || strings.TrimSpace(schoolID) == "" {
+		return nil, nil
+	}
+	var users []models.User
+	err := tx.Preload("Role").
+		Where("school_id = ? AND is_active = ? AND id IN ?", strings.TrimSpace(schoolID), true, ids).
+		Find(&users).Error
+	return users, err
 }
 
 func createNotificationLogsForUsersTx(
@@ -930,6 +989,26 @@ func notificationRoute(referenceType, role string) string {
 		return "/approval-center-screen"
 	case "lesson_planner_weekly_digest":
 		return "/principal-lesson-planner-screen"
+	case "birthday_wish_student_for_teachers", "birthday_wish_student":
+		if role == "parent" {
+			return "/parent-home-screen"
+		}
+		if role == "teacher" {
+			return "/teacher-dashboard-screen"
+		}
+		return "/principal-dashboard-screen"
+	case "birthday_wish_student_for_principal":
+		return "/principal-dashboard-screen"
+	case "birthday_wish_staff":
+		if role == "principal" {
+			return "/principal-dashboard-screen"
+		}
+		return "/teacher-dashboard-screen"
+	case "health_reminder":
+		if role == "teacher" {
+			return "/teacher-dashboard-screen"
+		}
+		return "/principal-dashboard-screen"
 	}
 	return "/notification-center-screen"
 }

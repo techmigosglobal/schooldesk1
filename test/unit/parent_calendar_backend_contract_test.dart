@@ -27,4 +27,23 @@ void main() {
       isNot(contains("setState(() => _events[i]['rsvp'] = true)")),
     );
   });
+
+  test('principal event calendar preserves selected local event dates', () {
+    final source = File(
+      'lib/features/calendar/presentation/screens/events_calendar_screen/events_calendar_screen.dart',
+    ).readAsStringSync();
+    final api = File(
+      'lib/core/network/api_modules/events_api.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('final start = _eventDateTime(row, true)'));
+    expect(source, contains('final end ='));
+    expect(source, contains('_eventDateTime(row, false)'));
+    expect(source, contains('final date = DateTime.tryParse(dateText)'));
+    expect(source, contains('DateTime.tryParse(_clean(row[dateTimeKey]))'));
+    expect(source, contains('String _formatRfc3339(DateTime date)'));
+    expect(source, isNot(contains('date.toUtc().toIso8601String()')));
+    expect(api, contains("'start_datetime': start.toIso8601String()"));
+    expect(api, contains("'end_datetime': end.toIso8601String()"));
+  });
 }

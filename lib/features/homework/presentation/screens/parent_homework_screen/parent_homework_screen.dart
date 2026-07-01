@@ -104,7 +104,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     // Backend integration: subject and teacher labels should come from the
     // homework API. Keep them empty here when absent; do not invent defaults.
     return {
-      'id': h['id'],
+      'id': _homeworkId(h),
+      'homework_id': h['homework_id'],
       'title': h['title'] ?? '',
       'subject': h['subject'] ?? h['subject_name'] ?? '',
       'class': h['class'] ?? h['class_name'] ?? '',
@@ -121,6 +122,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       'submission_id': h['submission_id'] ?? '',
       'submission_status': h['submission_status'] ?? '',
       'submission_remarks': h['submission_remarks'] ?? '',
+      'submission_attachment_url': h['submission_attachment_url'] ?? '',
+      'submission_attachment_urls': h['submission_attachment_urls'] ?? const [],
       'urgent':
           dueDate != null && dueDate.difference(DateTime.now()).inDays <= 1,
       'attachmentUrl': h['attachment_url'] ?? h['attachmentUrl'],
@@ -561,7 +564,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Future<Map<String, dynamic>> _attachSubmissionState(
     Map<String, dynamic> row,
   ) async {
-    final homeworkId = _text(row['id']);
+    final homeworkId = _homeworkId(row);
     final studentId = _text(row['student_id']);
     if (homeworkId.isEmpty || studentId.isEmpty) return row;
     try {
@@ -581,6 +584,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         'submission_id': _text(submission['id']),
         'submission_status': submissionStatus,
         'submission_remarks': _text(submission['remarks']),
+        'submission_attachment_url': _text(submission['attachment_url']),
+        'submission_attachment_urls': submission['attachment_urls'] ?? const [],
         'status': submissionStatus == 'needs_revision'
             ? 'pending'
             : 'submitted',
@@ -650,4 +655,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     final text = value?.toString().trim() ?? '';
     return text.isEmpty ? fallback : text;
   }
+
+  String _homeworkId(Map<String, dynamic> row) =>
+      _text(row['homework_id'] ?? row['id']);
 }

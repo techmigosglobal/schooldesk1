@@ -41,6 +41,12 @@ class AppRoutes {
       '/principal-fees-screen/payment-requests';
   static const String principalPaymentRequestDecision =
       '/principal-fees-screen/payment-request-decision';
+  static const String principalFeeStructureForm =
+      '/principal-fees-screen/fee-structure';
+  static const String principalInvoiceGenerationForm =
+      '/principal-fees-screen/invoice-generation';
+  static const String principalPaymentRecordForm =
+      '/principal-fees-screen/payment-record';
   static const String communicationCenter = '/communication-center-screen';
   static const String principalChatCommunications =
       '/principal-chat-communications-screen';
@@ -104,6 +110,10 @@ class AppRoutes {
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
   static const String teacherDiary = '/teacher-diary-screen';
+  static const String teacherHomework = '/teacher-homework-screen';
+  static const String teacherHomeworkForm = '/teacher-homework-screen/form';
+  static const String teacherHomeworkSubmissions =
+      '/teacher-homework-screen/submissions';
   static const String teacherEventPosts = '/teacher-event-posts-screen';
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
@@ -140,7 +150,6 @@ class AppRoutes {
   static const String profileScreen = '/profile-screen';
   static const String globalSearch = '/global-search-screen';
   static const String homeworkMessaging = '/homework-messaging-screen';
-  static const String feePaymentReceipt = '/fee-payment-receipt-screen';
 
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
@@ -161,6 +170,16 @@ class AppRoutes {
         AdminPaymentRequestDecisionScreen(
           args: _principalPaymentRequestDecisionArgs(context),
         ),
+    principalFeeStructureForm: (context) => AdminFeeStructureFormScreen(
+      args: _principalFeeStructureFormArgs(context),
+    ),
+    principalInvoiceGenerationForm: (context) =>
+        AdminInvoiceGenerationFormScreen(
+          args: _principalInvoiceGenerationFormArgs(context),
+        ),
+    principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
+      args: _principalPaymentRecordFormArgs(context),
+    ),
     communicationCenter: (context) => const CommunicationCenterScreen(),
     principalChatCommunications: (context) =>
         const PrincipalChatCommunicationsScreen(),
@@ -239,6 +258,12 @@ class AppRoutes {
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
     teacherDiary: (context) => const TeacherDiaryScreen(),
+    teacherHomework: (context) => const TeacherHomeworkScreen(),
+    teacherHomeworkForm: (context) =>
+        TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
+    teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
+      args: _teacherHomeworkSubmissionsArgs(context),
+    ),
     teacherEventPosts: (context) => const TeacherEventPostScreen(),
     teacherLessonPlanner: (context) => const TeacherLessonPlannerScreen(),
     teacherStudentNotes: (context) => const TeacherStudentNotesScreen(),
@@ -308,7 +333,6 @@ class AppRoutes {
         userName: args['userName'] as String? ?? 'Teacher',
       );
     },
-    feePaymentReceipt: (context) => FeePaymentReceiptScreen(),
   };
 
   static Widget buildRoutePage(
@@ -424,6 +448,31 @@ class AppRoutes {
     );
   }
 
+  static TeacherHomeworkFormArgs _teacherHomeworkFormArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is TeacherHomeworkFormArgs) return args;
+    return const TeacherHomeworkFormArgs(
+      teacherStaffId: '',
+      defaultClassName: '',
+      defaultSubject: '',
+      assignedClasses: [],
+      students: [],
+    );
+  }
+
+  static TeacherHomeworkSubmissionsArgs _teacherHomeworkSubmissionsArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is TeacherHomeworkSubmissionsArgs) return args;
+    if (args is Map<String, dynamic>) {
+      return TeacherHomeworkSubmissionsArgs(homework: args);
+    }
+    return const TeacherHomeworkSubmissionsArgs(homework: {});
+  }
+
   static TeacherLeaveRequestFormArgs _teacherLeaveFormArgs(
     BuildContext context,
   ) {
@@ -475,6 +524,46 @@ class AppRoutes {
       return AdminPaymentRequestDecisionArgs(request: args);
     }
     return const AdminPaymentRequestDecisionArgs(request: <String, dynamic>{});
+  }
+
+  static AdminFeeStructureFormArgs _principalFeeStructureFormArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is AdminFeeStructureFormArgs) return args;
+    return const AdminFeeStructureFormArgs(
+      academicYears: [],
+      grades: [],
+      sections: [],
+      feeCategories: [],
+      ownerRole: 'principal',
+    );
+  }
+
+  static AdminInvoiceGenerationFormArgs _principalInvoiceGenerationFormArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is AdminInvoiceGenerationFormArgs) return args;
+    return const AdminInvoiceGenerationFormArgs(
+      academicYears: [],
+      grades: [],
+      sections: [],
+      students: [],
+      feeStructures: [],
+      ownerRole: 'principal',
+    );
+  }
+
+  static AdminPaymentRecordFormArgs _principalPaymentRecordFormArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is AdminPaymentRecordFormArgs) return args;
+    return const AdminPaymentRecordFormArgs(
+      pendingDues: [],
+      ownerRole: 'principal',
+    );
   }
 }
 

@@ -206,6 +206,27 @@ class SchoolDeskScreenRegistry {
       feature: SchoolDeskFeature.adminFees,
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-fees-screen/fee-structure',
+      title: 'Fee Structure Form',
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-fees-screen/invoice-generation',
+      title: 'Generate Invoices',
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/principal-fees-screen/payment-record',
+      title: 'Record Payment',
+      module: 'Finance',
+      portal: 'principal',
+      feature: SchoolDeskFeature.adminFees,
+    ),
+    SchoolDeskScreenMetadata(
       route: '/communication-center-screen',
       title: SchoolDeskGlossary.communicationCenter,
       module: 'Communication',
@@ -401,6 +422,24 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
+      route: '/teacher-homework-screen',
+      title: 'Homework',
+      module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/teacher-homework-screen/form',
+      title: 'Post Homework',
+      module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/teacher-homework-screen/submissions',
+      title: 'Homework Feedback',
+      module: 'Classroom',
+      portal: 'teacher',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/parent-dashboard-screen',
       title: 'Parent Dashboard',
       module: 'Overview',
@@ -473,13 +512,6 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/parent-fees-screen/payment-processing',
       title: 'Payment Processing',
-      module: 'Finance',
-      portal: 'parent',
-      feature: SchoolDeskFeature.adminFees,
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/fee-payment-receipt-screen',
-      title: 'Payments & Receipts',
       module: 'Finance',
       portal: 'parent',
       feature: SchoolDeskFeature.adminFees,

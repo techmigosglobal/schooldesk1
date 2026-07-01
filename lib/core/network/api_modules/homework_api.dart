@@ -190,6 +190,7 @@ extension BackendHomeworkApi on BackendApiClient {
     required String studentId,
     required String answerText,
     String attachmentUrl = '',
+    List<String> attachmentUrls = const [],
   }) async {
     try {
       final response = await SchoolDeskApi.instance.client
@@ -197,6 +198,10 @@ extension BackendHomeworkApi on BackendApiClient {
             'student_id': studentId,
             'answer_text': answerText,
             'attachment_url': attachmentUrl,
+            'attachment_urls': attachmentUrls
+                .map((url) => url.trim())
+                .where((url) => url.isNotEmpty)
+                .toList(),
           });
       if (response.success == true) return _asMap(response.data);
       throw ServerException(

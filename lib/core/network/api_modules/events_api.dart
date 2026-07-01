@@ -29,8 +29,8 @@ extension BackendEventsApi on BackendApiClient {
       'event_title': title,
       'event_type': eventType,
       'description': description,
-      'start_datetime': start.toUtc().toIso8601String(),
-      'end_datetime': end.toUtc().toIso8601String(),
+      'start_datetime': start.toIso8601String(),
+      'end_datetime': end.toIso8601String(),
       'location': location,
       'is_holiday': isHoliday,
     });

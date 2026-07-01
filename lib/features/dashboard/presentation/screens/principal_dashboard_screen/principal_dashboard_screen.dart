@@ -14,6 +14,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 
 class PrincipalDashboardScreen extends StatefulWidget {
   const PrincipalDashboardScreen({super.key});
@@ -409,6 +410,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                 ],
                 onTap: (item) => _open(item.route),
               ),
+              const SizedBox(height: 18),
+              const TodaysHighlightsCard(role: 'principal'),
               const SizedBox(height: 22),
               _SectionTitle('Today'),
               const SizedBox(height: 10),

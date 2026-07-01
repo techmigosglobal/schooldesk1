@@ -5,7 +5,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 @immutable
@@ -613,10 +615,14 @@ class _TeacherHomeworkSubmissionsScreenState
   String? _error;
   List<Map<String, dynamic>> _submissions = const [];
 
+  String get _homeworkId => teacherFlowText(
+    widget.args.homework['homework_id'] ?? widget.args.homework['id'],
+  );
+
   @override
   void initState() {
     super.initState();
-    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+    if (_homeworkId.isEmpty) {
       _loading = false;
       _error = 'Please open this screen from the related Teacher module.';
     } else {
@@ -630,9 +636,8 @@ class _TeacherHomeworkSubmissionsScreenState
       _error = null;
     });
     try {
-      final homeworkId = teacherFlowText(widget.args.homework['id']);
       final payload = await BackendApiClient.instance.getHomeworkSubmissions(
-        homeworkId,
+        _homeworkId,
       );
       if (!mounted) return;
       setState(() {
@@ -651,20 +656,19 @@ class _TeacherHomeworkSubmissionsScreenState
   }
 
   Future<void> _review(Map<String, dynamic> submission, String status) async {
-    final homeworkId = teacherFlowText(widget.args.homework['id']);
     final submissionId = teacherFlowText(submission['id']);
     await BackendApiClient.instance.reviewHomeworkSubmission(
-      homeworkId,
+      _homeworkId,
       submissionId,
       status: status,
-      remarks: status == 'approved' ? 'Reviewed by teacher' : 'Needs revision',
+      remarks: status == 'reviewed' ? 'Reviewed by teacher' : 'Needs revision',
     );
     await _loadSubmissions();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+    if (_homeworkId.isEmpty) {
       return const _TeacherModuleEntryError(
         title: 'Submissions',
         selectedIndex: TeacherNav.diary,
@@ -698,46 +702,85 @@ class _TeacherHomeworkSubmissionsScreenState
               subtitle: 'Student submissions will appear here.',
             )
           else
-            ..._submissions.map(
-              (submission) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TeacherFlowCard(
-                  icon: Icons.file_present_rounded,
-                  title: teacherFlowText(
-                    submission['student_name'] ?? submission['student_id'],
-                    fallback: 'Student',
-                  ),
-                  subtitle: teacherFlowText(
-                    submission['answer_text'] ?? submission['remarks'],
-                    fallback: 'No answer text',
-                  ),
-                  status: teacherFlowTitleCase(
-                    teacherFlowText(
-                      submission['status'],
-                      fallback: 'submitted',
-                    ),
-                  ),
-                  body: TeacherFlowActionWrap(
-                    actions: [
-                      TeacherFlowAction(
-                        label: 'Approve',
-                        icon: Icons.check_rounded,
-                        filled: true,
-                        onTap: () => _review(submission, 'approved'),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Needs Revision',
-                        icon: Icons.replay_rounded,
-                        onTap: () => _review(submission, 'revision_requested'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            ..._submissions.map((submission) => _submissionCard(submission)),
         ],
       ),
     );
+  }
+
+  Widget _submissionCard(Map<String, dynamic> submission) {
+    final attachments = _submissionAttachmentUrls(submission);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TeacherFlowCard(
+        icon: Icons.file_present_rounded,
+        title: teacherFlowText(
+          submission['student_name'] ?? submission['student_id'],
+          fallback: 'Student',
+        ),
+        subtitle: teacherFlowText(
+          submission['answer_text'] ?? submission['remarks'],
+          fallback: 'No answer text',
+        ),
+        status: teacherFlowTitleCase(
+          teacherFlowText(submission['status'], fallback: 'submitted'),
+        ),
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (attachments.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ...attachments.map((url) {
+                final item = EventPostMediaItem.fromUrl(url);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: () => openEventPostMediaPreview(context, item),
+                    icon: Icon(
+                      item.isPdf
+                          ? Icons.picture_as_pdf_rounded
+                          : Icons.image_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      item.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                );
+              }),
+            ],
+            TeacherFlowActionWrap(
+              actions: [
+                TeacherFlowAction(
+                  label: 'Approve',
+                  icon: Icons.check_rounded,
+                  filled: true,
+                  onTap: () => _review(submission, 'reviewed'),
+                ),
+                TeacherFlowAction(
+                  label: 'Needs Revision',
+                  icon: Icons.replay_rounded,
+                  onTap: () => _review(submission, 'needs_revision'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<String> _submissionAttachmentUrls(Map<String, dynamic> submission) {
+    final urls = <String>[];
+    final single = teacherFlowText(submission['attachment_url']);
+    if (single.isNotEmpty) urls.add(single);
+    final multi = submission['attachment_urls'];
+    if (multi is List) {
+      urls.addAll(multi.map(teacherFlowText).where((url) => url.isNotEmpty));
+    }
+    return urls;
   }
 }
 

@@ -2717,7 +2717,7 @@ func parentFeeRow(invoice models.FeeInvoice) gin.H {
 		"request_status":   requestStatus,
 		"rejection_reason": rejectionReason,
 	}
-	if meta.feeType == "tuition" && invoice.Balance > 0 {
+	if meta.feeType == "tuition" {
 		baseAmount := invoiceIntervalBaseAmount(invoice)
 		row["monthly_amount"] = roundMoney(baseAmount / 12)
 		termCount, err := academicTermCount(invoice.AcademicYearID)

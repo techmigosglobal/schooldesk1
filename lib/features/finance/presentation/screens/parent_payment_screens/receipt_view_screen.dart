@@ -90,6 +90,7 @@ class _ReceiptBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final receiptNo = _text(receipt['receipt_no'], fallback: transactionId);
+    final schoolName = _text(receipt['school_name'], fallback: 'School');
     final amount = _amount(receipt['amount']);
     final mode = _text(receipt['payment_mode'], fallback: 'UPI');
     final paidAt = _formatDateTime(_text(receipt['paid_at']));
@@ -127,7 +128,7 @@ class _ReceiptBody extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Arish Ville',
+                          schoolName,
                           style: GoogleFonts.ibmPlexSans(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,

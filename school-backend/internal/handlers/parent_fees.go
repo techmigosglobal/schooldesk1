@@ -95,10 +95,11 @@ func (h *ParentFeeHandler) GetStudentFeeSummary(c *gin.Context) {
 		return
 	}
 
-	// Fetch unpaid/partially paid invoices for this student
+	// Fetch open invoices for this student. FeeInvoice.Status uses the
+	// canonical pending/partial/overdue lifecycle elsewhere in the fees module.
 	var invoices []models.FeeInvoice
 	if err := database.DB.
-		Where("student_id = ? AND (status = 'unpaid' OR status = 'partially_paid')", studentID).
+		Where("student_id = ? AND status IN ?", studentID, []string{"pending", "partial", "overdue"}).
 		Find(&invoices).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch invoices"})
 		return
@@ -149,7 +150,6 @@ func (h *ParentFeeHandler) GetStudentFeeSummary(c *gin.Context) {
 	})
 }
 
-
 // GetPaymentHistory fetches payment history for parent
 // GET /api/v1/parents/fees/payments
 func (h *ParentFeeHandler) GetPaymentHistory(c *gin.Context) {
@@ -177,7 +177,7 @@ func (h *ParentFeeHandler) GetPaymentHistory(c *gin.Context) {
 
 	var receipts []models.FeeReceipt
 	if err := database.DB.
-		Where("parent_id IN (SELECT student_id FROM parent_student_links WHERE parent_user_id = ?)", userID).
+		Where("parent_id = ?", userID).
 		Order("paid_at DESC").
 		Offset((page - 1) * pageSize).
 		Limit(pageSize).
@@ -230,7 +230,7 @@ func (h *ParentFeeHandler) GetReceipt(c *gin.Context) {
 
 	var receipt models.FeeReceipt
 	if err := database.DB.
-		Preload("Student").
+		Preload("Student.School").
 		Where("id = ? AND parent_id = ?", receiptID, userID).
 		First(&receipt).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -240,11 +240,16 @@ func (h *ParentFeeHandler) GetReceipt(c *gin.Context) {
 		}
 		return
 	}
+	schoolName := ""
+	if receipt.Student != nil && receipt.Student.School != nil {
+		schoolName = receipt.Student.School.Name
+	}
 
 	c.JSON(http.StatusOK, models.APIResponse{
 		Success: true,
 		Data: gin.H{
 			"receipt_no":   receipt.ReceiptNo,
+			"school_name":  schoolName,
 			"amount":       receipt.Amount,
 			"payment_mode": receipt.PaymentMode,
 			"paid_at":      receipt.PaidAt.Format("2006-01-02T15:04:05Z"),

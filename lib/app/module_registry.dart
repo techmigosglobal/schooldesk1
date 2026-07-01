@@ -134,8 +134,12 @@ class SchoolDeskModuleRegistry {
       },
       ownerRoutes: {
         '/fee-monitoring-screen',
+        '/principal-fees-screen/fee-structure',
+        '/principal-fees-screen/invoice-generation',
+        '/principal-fees-screen/payment-record',
+        '/principal-fees-screen/payment-requests',
+        '/principal-fees-screen/payment-request-decision',
         '/parent-fees-screen',
-        '/fee-payment-receipt-screen',
       },
     ),
     SchoolDeskModuleDefinition(
@@ -203,10 +207,7 @@ class SchoolDeskModuleRegistry {
         SchoolDeskModuleLayer.domain,
         SchoolDeskModuleLayer.presentation,
       },
-      ownerRoutes: {
-        '/reports-analytics-screen',
-        '/principal-analytics-screen',
-      },
+      ownerRoutes: {'/reports-analytics-screen', '/principal-analytics-screen'},
     ),
     SchoolDeskModuleDefinition(
       name: 'Profile',

@@ -375,7 +375,7 @@ class _AdminPaymentRequestDecisionScreenState
 
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.academicYearFeesExport,
+      AppRoutes.principalInvoiceGenerationForm,
       arguments: AdminInvoiceGenerationFormArgs(
         academicYears: academicYears,
         grades: grades,

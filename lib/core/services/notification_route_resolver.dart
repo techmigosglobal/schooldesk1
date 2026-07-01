@@ -134,7 +134,7 @@ class NotificationRouteResolver {
   static String _homeworkRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentHomework,
-      'teacher' => AppRoutes.teacherDiary,
+      'teacher' => AppRoutes.teacherHomework,
       _ => AppRoutes.notificationCenter,
     };
   }

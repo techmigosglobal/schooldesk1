@@ -51,5 +51,51 @@ void main() {
         expect(breakdown, isNot(contains("fee['totalAmount']")));
       },
     );
+
+    test('fees audit bugs stay resolved across backend and active routes', () {
+      final parentFeesHandler = File(
+        'school-backend/internal/handlers/parent_fees.go',
+      ).readAsStringSync();
+      final feeHandler = File(
+        'school-backend/internal/handlers/fee.go',
+      ).readAsStringSync();
+      final receiptView = File(
+        'lib/features/finance/presentation/screens/parent_payment_screens/receipt_view_screen.dart',
+      ).readAsStringSync();
+      final routes = File('lib/routes/app_routes.dart').readAsStringSync();
+      final guard = File(
+        'lib/routes/route_access_guard.dart',
+      ).readAsStringSync();
+      final registry = File(
+        'lib/routes/schooldesk_screen_registry.dart',
+      ).readAsStringSync();
+      final financeBarrel = File(
+        'lib/features/finance/finance.dart',
+      ).readAsStringSync();
+      final adminFees = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
+      ).readAsStringSync();
+
+      expect(parentFeesHandler, contains('"pending", "partial", "overdue"'));
+      expect(parentFeesHandler, contains('Where("parent_id = ?", userID)'));
+      expect(parentFeesHandler, contains('"school_name"'));
+      expect(receiptView, contains("_text(receipt['school_name']"));
+      expect(receiptView, isNot(contains("'Arish Ville'")));
+      expect(feeHandler, contains('if meta.feeType == "tuition" {'));
+      expect(
+        feeHandler,
+        isNot(contains('meta.feeType == "tuition" && invoice.Balance > 0')),
+      );
+
+      expect(routes, isNot(contains('feePaymentReceipt')));
+      expect(guard, isNot(contains('feePaymentReceipt')));
+      expect(registry, isNot(contains('/fee-payment-receipt-screen')));
+      expect(financeBarrel, isNot(contains('fee_payment_receipt_screen')));
+
+      expect(adminFees, contains('AppRoutes.principalFeeStructureForm'));
+      expect(adminFees, contains('AppRoutes.principalInvoiceGenerationForm'));
+      expect(adminFees, contains('AppRoutes.principalPaymentRecordForm'));
+      expect(adminFees, isNot(contains('AppRoutes.feePaymentReceipt')));
+    });
   });
 }

@@ -75,8 +75,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   int _tabCountForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => 2,
-      'principal' => 4,
+      'teacher' => 4,
+      'principal' => 6,
       _ => 5,
     };
   }
@@ -135,6 +135,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           mutedColor,
                         ),
                         _buildList(
+                          NotificationCategory.birthday,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.healthAlert,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
                           NotificationCategory.general,
                           bgColor,
                           surfaceColor,
@@ -153,6 +167,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         ),
                         _buildList(
                           NotificationCategory.pendingApproval,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.birthday,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.healthAlert,
                           bgColor,
                           surfaceColor,
                           onSurfaceColor,
@@ -217,10 +245,17 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   List<Tab> _tabsForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => const [Tab(text: 'All'), Tab(text: 'Circulars')],
+      'teacher' => const [
+        Tab(text: 'All'),
+        Tab(text: 'Birthdays'),
+        Tab(text: 'Health'),
+        Tab(text: 'Circulars'),
+      ],
       'principal' => const [
         Tab(text: 'All'),
         Tab(text: 'Approvals'),
+        Tab(text: 'Birthdays'),
+        Tab(text: 'Health'),
         Tab(text: 'Fees'),
         Tab(text: 'Events'),
       ],
@@ -419,6 +454,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.feeDue || text.contains('fee')) {
       return Icons.account_balance_wallet_rounded;
     }
+    if (item.category == NotificationCategory.birthday) return Icons.cake_rounded;
+    if (item.category == NotificationCategory.healthAlert) return Icons.medical_services_rounded;
     if (text.contains('homework')) return Icons.assignment_rounded;
     if (text.contains('leave')) return Icons.verified_user_rounded;
     if (text.contains('attendance')) return Icons.bar_chart_rounded;
@@ -430,6 +467,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.feeDue || text.contains('fee')) {
       return const Color(0xFFEA580C);
     }
+    if (item.category == NotificationCategory.birthday) return const Color(0xFFE91E63);
+    if (item.category == NotificationCategory.healthAlert) return const Color(0xFFFF9800);
     if (text.contains('homework')) return const Color(0xFF2563EB);
     if (text.contains('leave')) return const Color(0xFF16A34A);
     if (text.contains('attendance')) return const Color(0xFF16A34A);
@@ -559,6 +598,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Events';
       case NotificationCategory.general:
         return 'Circulars';
+      case NotificationCategory.birthday:
+        return 'Birthdays';
+      case NotificationCategory.healthAlert:
+        return 'Health';
       default:
         return 'All';
     }
@@ -751,6 +794,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.quiz_rounded;
       case NotificationCategory.event:
         return Icons.event_available_rounded;
+      case NotificationCategory.birthday:
+        return Icons.cake_rounded;
+      case NotificationCategory.healthAlert:
+        return Icons.medical_services_rounded;
       default:
         return Icons.notifications_rounded;
     }
@@ -766,6 +813,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.primary;
       case NotificationCategory.event:
         return context.appTheme.success;
+      case NotificationCategory.birthday:
+        return const Color(0xFFE91E63);
+      case NotificationCategory.healthAlert:
+        return const Color(0xFFFF9800);
       default:
         return context.appTheme.muted;
     }

@@ -19,7 +19,7 @@ void main() {
       'parentTeacherChat',
       'parentFees',
       'parentPaymentRequestForm',
-      'feePaymentReceipt',
+      'parentPaymentSelection',
       'parentLeave',
       'parentLeaveRequestForm',
       'parentCalendar',

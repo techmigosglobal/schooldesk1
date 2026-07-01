@@ -607,7 +607,9 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               if (_displayMode == _EventsDisplayMode.calendar)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
-                  sliver: SliverToBoxAdapter(child: _buildCalendarMonthReadOnly()),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildCalendarMonthReadOnly(),
+                  ),
                 )
               else
                 SliverPadding(
@@ -676,13 +678,20 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                         itemBuilder: (ctx, i) {
                           final ev = events[i];
                           return ListTile(
-                            title: Text(ev.title,
-                                style: GoogleFonts.dmSans(
-                                    fontWeight: FontWeight.w600)),
-                            subtitle:
-                                Text(ev.typeLabel, style: GoogleFonts.dmSans()),
-                            trailing: const Icon(Icons.chevron_right_rounded,
-                                size: 20),
+                            title: Text(
+                              ev.title,
+                              style: GoogleFonts.dmSans(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              ev.typeLabel,
+                              style: GoogleFonts.dmSans(),
+                            ),
+                            trailing: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                            ),
                             onTap: () {
                               Navigator.pop(sheetCtx);
                               _openDetails(ev);
@@ -760,13 +769,20 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                         itemBuilder: (ctx, i) {
                           final ev = events[i];
                           return ListTile(
-                            title: Text(ev.title,
-                                style: GoogleFonts.dmSans(
-                                    fontWeight: FontWeight.w600)),
-                            subtitle:
-                                Text(ev.typeLabel, style: GoogleFonts.dmSans()),
-                            trailing: const Icon(Icons.chevron_right_rounded,
-                                size: 20),
+                            title: Text(
+                              ev.title,
+                              style: GoogleFonts.dmSans(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              ev.typeLabel,
+                              style: GoogleFonts.dmSans(),
+                            ),
+                            trailing: const Icon(
+                              Icons.chevron_right_rounded,
+                              size: 20,
+                            ),
                             onTap: () {
                               Navigator.pop(sheetCtx);
                               _openDetails(ev);
@@ -2265,18 +2281,9 @@ class _PrincipalEvent {
   });
 
   factory _PrincipalEvent.fromApi(Map<String, dynamic> row) {
-    final start =
-        _parseDateTime(row['start_datetime']) ??
-        _parseDateAndTime(row['start_date'], row['start_time']) ??
-        DateTime.now();
+    final start = _eventDateTime(row, true) ?? DateTime.now();
     final end =
-        _parseDateTime(row['end_datetime']) ??
-        _parseDateAndTime(
-          row['end_date'] ?? row['start_date'],
-          row['end_time'],
-          endOfDay: true,
-        ) ??
-        start.add(const Duration(hours: 1));
+        _eventDateTime(row, false) ?? start.add(const Duration(hours: 1));
     final type = _clean(row['event_type'], fallback: 'event').toLowerCase();
     final status = _clean(row['status'], fallback: 'scheduled').toLowerCase();
     return _PrincipalEvent(
@@ -2407,20 +2414,48 @@ DateTime? _parseDateTime(Object? value) {
   return parsed.isUtc ? parsed.toLocal() : parsed;
 }
 
-DateTime? _parseDateAndTime(
-  Object? date,
-  Object? time, {
-  bool endOfDay = false,
-}) {
-  final dateText = _clean(date);
-  if (dateText.isEmpty) return null;
-  final timeText = _clean(time, fallback: endOfDay ? '23:59:59' : '00:00:00');
-  return DateTime.tryParse('${dateText.split('T').first}T$timeText');
+DateTime? _eventDateTime(Map<String, dynamic> row, bool start) {
+  final dateKey = start ? 'start_date' : 'end_date';
+  final timeKey = start ? 'start_time' : 'end_time';
+  final dateTimeKey = start ? 'start_datetime' : 'end_datetime';
+  final dateText = _clean(row[dateKey]).isEmpty
+      ? _clean(row['start_date'])
+      : _clean(row[dateKey]);
+  final date = DateTime.tryParse(dateText);
+  final time = _timeFromText(_clean(row[timeKey]));
+  if (date != null) {
+    if (time != null) {
+      return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    }
+    final parsed = DateTime.tryParse(_clean(row[dateTimeKey]));
+    if (parsed != null) {
+      final local = parsed.isUtc ? parsed.toLocal() : parsed;
+      return DateTime(
+        date.year,
+        date.month,
+        date.day,
+        local.hour,
+        local.minute,
+      );
+    }
+    return start ? date : DateTime(date.year, date.month, date.day, 23, 59);
+  }
+  return _parseDateTime(row[dateTimeKey]);
 }
 
 TimeOfDay? _timeFromDate(DateTime? date) {
   if (date == null) return null;
   return TimeOfDay(hour: date.hour, minute: date.minute);
+}
+
+TimeOfDay? _timeFromText(String raw) {
+  final parts = raw.split(':');
+  if (parts.length < 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null || hour < 0 || hour > 23) return null;
+  if (minute < 0 || minute > 59) return null;
+  return TimeOfDay(hour: hour, minute: minute);
 }
 
 String _formatDate(DateTime date) {
@@ -2435,7 +2470,7 @@ String _formatTime(TimeOfDay time) {
   return '$hour:$minute:00';
 }
 
-String _formatRfc3339(DateTime date) => date.toUtc().toIso8601String();
+String _formatRfc3339(DateTime date) => date.toIso8601String();
 
 String _formatTimeOfDay(TimeOfDay time) {
   final hour = time.hour.toString().padLeft(2, '0');

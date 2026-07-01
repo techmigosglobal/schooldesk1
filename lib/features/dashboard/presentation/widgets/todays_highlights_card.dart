@@ -1,0 +1,517 @@
+import 'package:flutter/material.dart';
+
+import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
+
+/// A unified "Today's Highlights" card that surfaces birthday wishes and
+/// health alerts for the current role. Placed at the top of each dashboard.
+class TodaysHighlightsCard extends StatefulWidget {
+  final String role;
+
+  const TodaysHighlightsCard({super.key, required this.role});
+
+  @override
+  State<TodaysHighlightsCard> createState() => _TodaysHighlightsCardState();
+}
+
+class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
+  NotificationService? _service;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final svc = await NotificationService.getInstance();
+    await svc.refresh();
+    if (mounted) setState(() => _service = svc);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+
+    final allNotifs = _service?.getNotificationsForRole(widget.role) ?? [];
+    final today = DateTime.now();
+
+    final birthdayNotifs = allNotifs.where((n) {
+      return n.category == NotificationCategory.birthday &&
+          _isSameDay(n.timestamp, today);
+    }).toList();
+
+    final healthNotifs = allNotifs.where((n) {
+      return n.category == NotificationCategory.healthAlert &&
+          _isSameDay(n.timestamp, today);
+    }).toList();
+
+    // Also check reference_type for birthday notifications from the backend
+    final birthdayByRef = allNotifs.where((n) {
+      return (n.referenceType.contains('birthday') ||
+              n.referenceType.contains('birthday_wish')) &&
+          _isSameDay(n.timestamp, today);
+    }).toList();
+
+    // Also check reference_type for health reminders
+    final healthByRef = allNotifs.where((n) {
+      return n.referenceType.contains('health') &&
+          _isSameDay(n.timestamp, today);
+    }).toList();
+
+    final combinedBirthdays = _mergeUnique([...birthdayNotifs, ...birthdayByRef]);
+    final combinedHealth = _mergeUnique([...healthNotifs, ...healthByRef]);
+
+    if (combinedBirthdays.isEmpty && combinedHealth.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(tokens.radius.card),
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primaryContainer.withAlpha(60),
+            theme.colorScheme.secondaryContainer.withAlpha(40),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: theme.colorScheme.primary.withAlpha(40),
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(tokens.spacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.auto_awesome_rounded,
+                    color: theme.colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                SizedBox(width: tokens.spacing.sm),
+                Expanded(
+                  child: Text(
+                    "Today's Highlights",
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  _formatDate(today),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: tokens.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            if (combinedBirthdays.isNotEmpty) ...[
+              SizedBox(height: tokens.spacing.md),
+              _HighlightSection(
+                icon: '🎂',
+                label: 'Birthdays',
+                count: combinedBirthdays.length,
+                color: const Color(0xFFE91E63),
+                items: combinedBirthdays
+                    .take(5)
+                    .map((n) => _HighlightItem(
+                          title: n.title,
+                          subtitle: n.body,
+                          icon: Icons.cake_rounded,
+                          color: const Color(0xFFE91E63),
+                        ))
+                    .toList(),
+              ),
+            ],
+            if (combinedHealth.isNotEmpty) ...[
+              if (combinedBirthdays.isNotEmpty)
+                SizedBox(height: tokens.spacing.sm),
+              _HealthAlertSection(
+                notifications: combinedHealth.take(5).toList(),
+                onAcknowledge: (notifId) async {
+                  await _service?.markAsRead(notifId);
+                  if (mounted) setState(() {});
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<AppNotification> _mergeUnique(List<AppNotification> items) {
+    final seen = <String>{};
+    final result = <AppNotification>[];
+    for (final item in items) {
+      if (seen.add(item.id)) {
+        result.add(item);
+      }
+    }
+    return result;
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}';
+  }
+}
+
+class _HighlightSection extends StatelessWidget {
+  final String icon;
+  final String label;
+  final int count;
+  final Color color;
+  final List<_HighlightItem> items;
+
+  const _HighlightSection({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.items,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(
+              '$label ($count)',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ...items.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _HighlightTile(item: item),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HighlightTile extends StatelessWidget {
+  final _HighlightItem item;
+
+  const _HighlightTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withAlpha(180),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(item.icon, size: 16, color: item.color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (item.subtitle.isNotEmpty)
+                  Text(
+                    item.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthAlertSection extends StatelessWidget {
+  final List<AppNotification> notifications;
+  final Future<void> Function(String notifId) onAcknowledge;
+
+  const _HealthAlertSection({
+    required this.notifications,
+    required this.onAcknowledge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('🏥', style: TextStyle(fontSize: 16)),
+            const SizedBox(width: 6),
+            Text(
+              'Health Alerts (${notifications.length})',
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFFFF9800),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ...notifications.map(
+          (n) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _HealthAlertTile(
+              notification: n,
+              onAcknowledge: onAcknowledge,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HealthAlertTile extends StatelessWidget {
+  final AppNotification notification;
+  final Future<void> Function(String notifId) onAcknowledge;
+
+  const _HealthAlertTile({
+    required this.notification,
+    required this.onAcknowledge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final acknowledged = notification.isRead;
+    final orange = const Color(0xFFFF9800);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: acknowledged
+            ? theme.colorScheme.surface.withAlpha(100)
+            : theme.colorScheme.surface.withAlpha(180),
+        borderRadius: BorderRadius.circular(8),
+        border: acknowledged
+            ? null
+            : Border.all(color: orange.withAlpha(50), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            acknowledged ? Icons.check_circle_rounded : Icons.medical_services_rounded,
+            size: 16,
+            color: acknowledged ? Colors.green : orange,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notification.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    decoration: acknowledged ? TextDecoration.lineThrough : null,
+                    color: acknowledged ? theme.colorScheme.onSurfaceVariant : null,
+                  ),
+                ),
+                if (notification.body.isNotEmpty)
+                  Text(
+                    notification.body,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (!acknowledged)
+            _AcknowledgeButton(
+              onPressed: () => onAcknowledge(notification.id),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                'Seen',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AcknowledgeButton extends StatefulWidget {
+  final Future<void> Function() onPressed;
+
+  const _AcknowledgeButton({required this.onPressed});
+
+  @override
+  State<_AcknowledgeButton> createState() => _AcknowledgeButtonState();
+}
+
+class _AcknowledgeButtonState extends State<_AcknowledgeButton>
+    with SingleTickerProviderStateMixin {
+  bool _loading = false;
+  late AnimationController _controller;
+  late Animation<double> _scaleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnim = Tween<double>(begin: 1.0, end: 0.9).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _scaleAnim,
+      builder: (context, child) => Transform.scale(
+        scale: _scaleAnim.value,
+        child: child,
+      ),
+      child: InkWell(
+        onTap: _loading ? null : _handleTap,
+        onTapDown: (_) => _controller.forward(),
+        onTapUp: (_) => _controller.reverse(),
+        onTapCancel: () => _controller.reverse(),
+        borderRadius: BorderRadius.circular(6),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: _loading
+                ? const Color(0xFFFF9800).withAlpha(60)
+                : const Color(0xFFFF9800).withAlpha(25),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: _loading
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Color(0xFFFF9800),
+                  ),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.check_rounded,
+                      size: 12,
+                      color: Color(0xFFFF9800),
+                    ),
+                    SizedBox(width: 3),
+                    Text(
+                      'Acknowledge',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFFF9800),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleTap() async {
+    if (_loading) return;
+    setState(() => _loading = true);
+    try {
+      await widget.onPressed();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
+class _HighlightItem {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+
+  const _HighlightItem({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+}

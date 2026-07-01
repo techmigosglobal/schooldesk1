@@ -230,6 +230,8 @@ class NotificationCategory {
   static const String examReminder = 'exam_reminder';
   static const String event = 'event';
   static const String general = 'general';
+  static const String birthday = 'birthday';
+  static const String healthAlert = 'health_alert';
 }
 
 enum NotificationPriority { low, medium, high }

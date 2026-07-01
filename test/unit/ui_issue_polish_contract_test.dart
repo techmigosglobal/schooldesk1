@@ -13,9 +13,6 @@ void main() {
     final fees = File(
       'lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart',
     ).readAsStringSync();
-    final receipt = File(
-      'lib/features/finance/presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
-    ).readAsStringSync();
     final parentFees = File(
       'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
     ).readAsStringSync();
@@ -30,7 +27,7 @@ void main() {
     expect(complaints, contains('FloatingActionButtonLocation.endFloat'));
     expect(complaints, isNot(contains('DashboardFabWidget')));
 
-    for (final source in [students, fees, receipt]) {
+    for (final source in [students, fees]) {
       expect(source, contains('FloatingActionButtonLocation.endFloat'));
     }
 
@@ -50,7 +47,7 @@ void main() {
       contains('selectedColor: context.appTheme.primary'),
     );
 
-    for (final source in [fees, receipt, parentFees]) {
+    for (final source in [fees, parentFees]) {
       expect(source, contains('previewDocument('));
       expect(source, isNot(contains('Printing.layoutPdf')));
     }
@@ -142,9 +139,6 @@ void main() {
     final parentDashboard = File(
       'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
     ).readAsStringSync();
-    final receipt = File(
-      'lib/features/finance/presentation/screens/fee_payment_receipt_screen/fee_payment_receipt_screen.dart',
-    ).readAsStringSync();
 
     expect(parentDashboard, contains("class _ParentWorkflowShortcuts"));
     expect(parentDashboard, contains('Wrap('));
@@ -169,20 +163,10 @@ void main() {
     expect(parentPaymentForm, contains('checkmarkColor: Colors.white'));
     expect(parentPaymentForm, contains('context.appTheme.onSurface'));
 
-    expect(receipt, contains('leading: IconButton('));
-    expect(receipt, contains('Navigator.maybePop(context)'));
-    expect(receipt, contains('Tab(text: \'Make Payment\')'));
-    expect(receipt, contains('Tab(text: \'Receipt History\')'));
-    expect(receipt, contains('final chipBackground'));
-    expect(receipt, contains('final chipTextColor'));
-    expect(
-      receipt,
-      isNot(
-        contains(
-          'color: isSelected\n                                  ? Colors.white\n                                  : context.appTheme.muted',
-        ),
-      ),
-    );
+    expect(parentPaymentForm, contains('Selected fee breakdown'));
+    expect(parentPaymentForm, contains('Submit Payment for Verification INR'));
+    expect(parentPaymentForm, contains('Pay Now'));
+    expect(parentPaymentForm, contains('Confirm Payment'));
   });
 
   test('source-only documentation contract is enforced', () {

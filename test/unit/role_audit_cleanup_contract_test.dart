@@ -49,13 +49,9 @@ void main() {
     ].join('\n');
 
     for (final retired in const [
-      'teacherHomework',
-      'teacherHomeworkForm',
-      'teacherHomeworkSubmissions',
       'teacherDiscipline',
       'parentAcademicInfo',
       'parentHealthUpdate',
-      '/teacher-homework-screen',
       '/teacher-discipline-screen',
       '/parent-academic-info-screen',
       '/parent-health-update-screen',

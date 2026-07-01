@@ -17,11 +17,14 @@ import (
 const (
 	reportTimezone = "Asia/Kolkata"
 
-	refStaffAttendanceDailyReport   = "staff_attendance_daily_report"
-	refStaffAttendanceMonthlyReport = "staff_attendance_monthly_report"
-	refLessonPlannerWeeklyDigest    = "lesson_planner_weekly_digest"
-	refBirthdayWishStaff            = "birthday_wish_staff"
-	refBirthdayWishStudent          = "birthday_wish_student"
+	refStaffAttendanceDailyReport      = "staff_attendance_daily_report"
+	refStaffAttendanceMonthlyReport    = "staff_attendance_monthly_report"
+	refLessonPlannerWeeklyDigest       = "lesson_planner_weekly_digest"
+	refBirthdayWishStaff               = "birthday_wish_staff"
+	refBirthdayWishStudent             = "birthday_wish_student"
+	refBirthdayWishStudentForTeachers  = "birthday_wish_student_for_teachers"
+	refBirthdayWishStudentForPrincipal = "birthday_wish_student_for_principal"
+	refHealthReminder                  = "health_reminder"
 
 	routePrincipalAttendance    = "/principal-attendance-screen"
 	routePrincipalLessonPlanner = "/principal-lesson-planner-screen"
@@ -69,6 +72,12 @@ func runScheduledPrincipalReports(now time.Time) error {
 			return err
 		}
 	}
+	// Run health reminder notifications at 7:30 AM
+	if local.Hour() == 7 && local.Minute() == 30 {
+		if err := createHealthReminderNotifications(local); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -82,6 +91,12 @@ func createBirthdayWishNotifications(local time.Time) error {
 			return err
 		}
 		if err := createStudentBirthdayWishNotifications(school.ID, month, day, dateText); err != nil {
+			return err
+		}
+		if err := createStudentBirthdayForTeachersNotifications(school.ID, month, day, dateText, local); err != nil {
+			return err
+		}
+		if err := createStudentBirthdayForPrincipalNotifications(school.ID, month, day, dateText); err != nil {
 			return err
 		}
 		return nil
@@ -210,6 +225,273 @@ func createStudentBirthdayWishNotifications(schoolID string, month, day int, dat
 		}
 	}
 	return nil
+}
+
+func createStudentBirthdayForTeachersNotifications(schoolID string, month, day int, dateText string, local time.Time) error {
+	var rows []struct {
+		StudentID     string
+		StudentName   string
+		SectionID     string
+		DateOfBirth   time.Time
+	}
+	err := database.DB.Table("students").
+		Select("students.id as student_id, TRIM(COALESCE(students.first_name, '') || ' ' || COALESCE(students.last_name, '')) as student_name, students.current_section_id as section_id, students.date_of_birth as date_of_birth").
+		Where("students.school_id = ? AND LOWER(COALESCE(students.status, 'active')) != ?", schoolID, "inactive").
+		Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	seen := map[string]bool{}
+	for _, row := range rows {
+		if row.DateOfBirth.IsZero() || int(row.DateOfBirth.Month()) != month || row.DateOfBirth.Day() != day {
+			continue
+		}
+		sectionID := strings.TrimSpace(row.SectionID)
+		if sectionID == "" {
+			continue
+		}
+		studentName := strings.TrimSpace(row.StudentName)
+		if studentName == "" {
+			studentName = "a student"
+		}
+		// Find all teacher users assigned to this section
+		var teacherUsers []models.User
+		err := database.DB.Model(&models.User{}).
+			Joins("LEFT JOIN roles ON roles.id = users.role_id").
+			Joins("LEFT JOIN timetable_slots ON timetable_slots.staff_id = users.linked_id AND timetable_slots.section_id = ?", sectionID).
+			Joins("LEFT JOIN sections ON sections.class_teacher_id = users.linked_id AND sections.id = ?", sectionID).
+			Where("users.school_id = ? AND users.is_active = ? AND users.linked_type = ?", schoolID, true, "staff").
+			Where("(LOWER(users.role) = ? OR LOWER(roles.role_name) = ?)", "teacher", "teacher").
+			Where("(timetable_slots.id IS NOT NULL OR sections.id IS NOT NULL)").
+			Find(&teacherUsers).Error
+		if err != nil {
+			continue
+		}
+		age := 0
+		if !row.DateOfBirth.IsZero() {
+			age = local.Year() - row.DateOfBirth.Year()
+		}
+		ageText := ""
+		if age > 0 {
+			ageText = fmt.Sprintf(" turning %d", age)
+		}
+		for _, teacher := range teacherUsers {
+			if strings.TrimSpace(teacher.ID) == "" {
+				continue
+			}
+			key := teacher.ID + ":" + row.StudentID + ":" + dateText
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			title := "🎂 Student Birthday Today"
+			body := fmt.Sprintf("Today is %s's birthday%s! Send your wishes and make their day special.", studentName, ageText)
+			refID := schoolID + ":" + teacher.ID + ":" + row.StudentID + ":" + dateText
+			nlog, created, err := createIdempotentNotificationLog(database.DB, models.NotificationLog{
+				SchoolID:        schoolID,
+				RecipientUserID: teacher.ID,
+				Channel:         "in_app",
+				Title:           title,
+				Body:            body,
+				Category:        "birthday",
+				Priority:        "medium",
+				Route:           routeTeacherDashboard,
+				ReferenceType:   refBirthdayWishStudentForTeachers,
+				ReferenceID:     &refID,
+				IsRead:          false,
+				SentAt:          now,
+				DeliveryStatus:  "delivered",
+				PushStatus:      "pending",
+			})
+			if err != nil {
+				continue
+			}
+			if created {
+				enqueueScheduledPushNotification(nlog)
+			}
+		}
+	}
+	return nil
+}
+
+func createStudentBirthdayForPrincipalNotifications(schoolID string, month, day int, dateText string) error {
+	var rows []struct {
+		StudentID    string
+		StudentName  string
+		ClassName    string
+		DateOfBirth  time.Time
+	}
+	err := database.DB.Table("students").
+		Select("students.id as student_id, TRIM(COALESCE(students.first_name, '') || ' ' || COALESCE(students.last_name, '')) as student_name, COALESCE(grades.grade_name || ' ' || sections.section_name, '') as class_name, students.date_of_birth as date_of_birth").
+		Joins("LEFT JOIN sections ON sections.id = students.current_section_id").
+		Joins("LEFT JOIN grades ON grades.id = sections.grade_id").
+		Where("students.school_id = ? AND LOWER(COALESCE(students.status, 'active')) != ?", schoolID, "inactive").
+		Scan(&rows).Error
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	birthdayStudents := make([]struct {
+		Name      string
+		ClassName string
+	}, 0)
+	for _, row := range rows {
+		if row.DateOfBirth.IsZero() || int(row.DateOfBirth.Month()) != month || row.DateOfBirth.Day() != day {
+			continue
+		}
+		name := strings.TrimSpace(row.StudentName)
+		if name == "" {
+			continue
+		}
+		birthdayStudents = append(birthdayStudents, struct {
+			Name      string
+			ClassName string
+		}{Name: name, ClassName: strings.TrimSpace(row.ClassName)})
+	}
+	if len(birthdayStudents) == 0 {
+		return nil
+	}
+	var summary string
+	if len(birthdayStudents) == 1 {
+		cls := birthdayStudents[0].ClassName
+		if cls != "" {
+			summary = fmt.Sprintf("Today is %s's birthday (%s).", birthdayStudents[0].Name, cls)
+		} else {
+			summary = fmt.Sprintf("Today is %s's birthday.", birthdayStudents[0].Name)
+		}
+	} else {
+		names := make([]string, 0, len(birthdayStudents))
+		for _, s := range birthdayStudents {
+			if len(names) >= 5 {
+				names = append(names, fmt.Sprintf("and %d more", len(birthdayStudents)-5))
+				break
+			}
+			names = append(names, s.Name)
+		}
+		summary = fmt.Sprintf("🎂 %d students have birthdays today: %s.", len(birthdayStudents), strings.Join(names, ", "))
+	}
+	principalUsers, err := principalUsers(schoolID)
+	if err != nil {
+		return err
+	}
+	for _, user := range principalUsers {
+		if strings.TrimSpace(user.ID) == "" {
+			continue
+		}
+		refID := schoolID + ":" + user.ID + ":" + dateText
+		title := "🎂 Student Birthdays Today"
+		nlog, created, err := createIdempotentNotificationLog(database.DB, models.NotificationLog{
+			SchoolID:        schoolID,
+			RecipientUserID: user.ID,
+			Channel:         "in_app",
+			Title:           title,
+			Body:            summary,
+			Category:        "birthday",
+			Priority:        "medium",
+			Route:           routePrincipalDashboard,
+			ReferenceType:   refBirthdayWishStudentForPrincipal,
+			ReferenceID:     &refID,
+			IsRead:          false,
+			SentAt:          now,
+			DeliveryStatus:  "delivered",
+			PushStatus:      "pending",
+		})
+		if err != nil {
+			continue
+		}
+		if created {
+			enqueueScheduledPushNotification(nlog)
+		}
+	}
+	return nil
+}
+
+func createHealthReminderNotifications(local time.Time) error {
+	return forEachSchool(func(school models.School) error {
+		var records []models.MedicalRecord
+		if err := database.DB.Joins("JOIN students ON students.id = medical_records.student_id").Where("students.school_id = ?", school.ID).Find(&records).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		seen := map[string]bool{}
+		for _, record := range records {
+			if strings.TrimSpace(record.StudentID) == "" {
+				continue
+			}
+			conditions := strings.TrimSpace(record.Conditions)
+			if conditions == "" {
+				continue
+			}
+			// Find the student info
+			var student models.Student
+			if err := database.DB.Where("id = ? AND school_id = ?", record.StudentID, school.ID).First(&student).Error; err != nil {
+				continue
+			}
+			studentName := strings.TrimSpace(student.FirstName + " " + student.LastName)
+			if studentName == "" {
+				continue
+			}
+			sectionID := ""
+			if student.CurrentSectionID != nil {
+				sectionID = strings.TrimSpace(*student.CurrentSectionID)
+			}
+			// Find teachers for this section
+			var teacherUsers []models.User
+			if sectionID != "" {
+				err := database.DB.Model(&models.User{}).
+					Joins("LEFT JOIN roles ON roles.id = users.role_id").
+					Joins("LEFT JOIN timetable_slots ON timetable_slots.staff_id = users.linked_id AND timetable_slots.section_id = ?", sectionID).
+					Joins("LEFT JOIN sections ON sections.class_teacher_id = users.linked_id AND sections.id = ?", sectionID).
+					Where("users.school_id = ? AND users.is_active = ? AND users.linked_type = ?", school.ID, true, "staff").
+					Where("(LOWER(users.role) = ? OR LOWER(roles.role_name) = ?)", "teacher", "teacher").
+					Where("(timetable_slots.id IS NOT NULL OR sections.id IS NOT NULL)").
+					Find(&teacherUsers).Error
+				if err != nil {
+					continue
+				}
+			}
+			for _, teacher := range teacherUsers {
+				if strings.TrimSpace(teacher.ID) == "" {
+					continue
+				}
+				key := teacher.ID + ":health:" + record.StudentID + ":" + now.Format("2006-01-02")
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				title := "🏥 Health Alert: " + studentName
+				body := fmt.Sprintf("Health condition reported for %s: %s", studentName, conditions)
+				if strings.TrimSpace(record.Medications) != "" {
+					body += fmt.Sprintf(". Medications: %s", strings.TrimSpace(record.Medications))
+				}
+				refID := school.ID + ":" + teacher.ID + ":health:" + record.StudentID + ":" + now.Format("2006-01-02")
+				nlog, created, err := createIdempotentNotificationLog(database.DB, models.NotificationLog{
+					SchoolID:        school.ID,
+					RecipientUserID: teacher.ID,
+					Channel:         "in_app",
+					Title:           title,
+					Body:            body,
+					Category:        "health_alert",
+					Priority:        "high",
+					Route:           routeTeacherDashboard,
+					ReferenceType:   refHealthReminder,
+					ReferenceID:     &refID,
+					IsRead:          false,
+					SentAt:          now,
+					DeliveryStatus:  "delivered",
+					PushStatus:      "pending",
+				})
+				if err != nil {
+					continue
+				}
+				if created {
+					enqueueScheduledPushNotification(nlog)
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func createDailyStaffAttendanceReportNotifications(local time.Time) error {

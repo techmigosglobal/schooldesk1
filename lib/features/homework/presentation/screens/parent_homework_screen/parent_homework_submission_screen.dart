@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -43,7 +44,13 @@ class _ParentHomeworkSubmissionScreenState
   final _formKey = GlobalKey<FormState>();
   final _answerController = TextEditingController();
   final _attachmentController = TextEditingController();
+  final List<String> _attachmentUrls = [];
+  final List<String> _attachmentNames = [];
   bool _saving = false;
+  bool _uploading = false;
+
+  String get _homeworkId =>
+      _text(widget.args.homework['homework_id'] ?? widget.args.homework['id']);
 
   @override
   void dispose() {
@@ -55,8 +62,7 @@ class _ParentHomeworkSubmissionScreenState
   @override
   Widget build(BuildContext context) {
     final ready =
-        _text(widget.args.homework['id']).isNotEmpty &&
-        widget.args.studentId.trim().isNotEmpty;
+        _homeworkId.isNotEmpty && widget.args.studentId.trim().isNotEmpty;
     return SchoolDeskModuleScaffold(
       title: 'Submit Homework',
       subtitle: _text(widget.args.homework['title'], fallback: 'Homework'),
@@ -91,21 +97,16 @@ class _ParentHomeworkSubmissionScreenState
                     validator: (value) {
                       final answer = (value ?? '').trim();
                       final attachment = _attachmentController.text.trim();
-                      if (answer.isEmpty && attachment.isEmpty) {
-                        return 'Enter an answer or attachment URL.';
+                      if (answer.isEmpty &&
+                          attachment.isEmpty &&
+                          _attachmentUrls.isEmpty) {
+                        return 'Enter an answer or add an attachment.';
                       }
                       return null;
                     },
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _attachmentController,
-                    enabled: !_saving,
-                    keyboardType: TextInputType.url,
-                    decoration: const InputDecoration(
-                      labelText: 'Attachment URL',
-                    ),
-                  ),
+                  _attachmentsBlock(),
                   const SizedBox(height: 20),
                   FilledButton.icon(
                     onPressed: _saving ? null : _submit,
@@ -137,6 +138,128 @@ class _ParentHomeworkSubmissionScreenState
         ],
       ),
     );
+  }
+
+  Widget _attachmentsBlock() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.attach_file_rounded,
+                color: context.appTheme.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Attachments',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: _saving || _uploading ? null : _pickAttachments,
+                icon: _uploading
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file_rounded, size: 16),
+                label: Text(_uploading ? 'Uploading' : 'Add'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: _attachmentController,
+            enabled: !_saving,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+              labelText: 'Attachment URL',
+              prefixIcon: Icon(Icons.link_rounded),
+            ),
+          ),
+          if (_attachmentUrls.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            ..._attachmentUrls.asMap().entries.map((entry) {
+              final index = entry.key;
+              final name = index < _attachmentNames.length
+                  ? _attachmentNames[index]
+                  : entry.value.split('/').last;
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  _isPdf(name) ? Icons.picture_as_pdf_rounded : Icons.image,
+                  color: context.appTheme.primary,
+                ),
+                title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  tooltip: 'Remove attachment',
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() {
+                            _attachmentUrls.removeAt(index);
+                            if (index < _attachmentNames.length) {
+                              _attachmentNames.removeAt(index);
+                            }
+                          });
+                        },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickAttachments() async {
+    final result = await FilePicker.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    setState(() => _uploading = true);
+    try {
+      for (final file in result.files) {
+        final path = file.path;
+        if (path == null || path.trim().isEmpty) continue;
+        final url = await BackendApiClient.instance.uploadFile(
+          path,
+          filename: file.name,
+        );
+        if (url.trim().isEmpty) continue;
+        if (!mounted) return;
+        setState(() {
+          _attachmentUrls.add(url);
+          _attachmentNames.add(file.name);
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Attachment upload failed: ${_cleanError(error)}'),
+          backgroundColor: context.appTheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
   }
 
   Widget _homeworkContext() {
@@ -177,10 +300,11 @@ class _ParentHomeworkSubmissionScreenState
     setState(() => _saving = true);
     try {
       await BackendApiClient.instance.submitHomework(
-        _text(widget.args.homework['id']),
+        _homeworkId,
         studentId: widget.args.studentId,
         answerText: _answerController.text.trim(),
         attachmentUrl: _attachmentController.text.trim(),
+        attachmentUrls: _attachmentUrls,
       );
       if (!mounted) return;
       Navigator.pop(
@@ -201,6 +325,8 @@ class _ParentHomeworkSubmissionScreenState
     }
   }
 }
+
+bool _isPdf(String name) => name.toLowerCase().endsWith('.pdf');
 
 String _text(dynamic value, {String fallback = ''}) {
   final text = value?.toString().trim() ?? '';

@@ -1199,7 +1199,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openFeeStructureForm({Map<String, dynamic>? structure}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.academicYearFeesExport,
+      AppRoutes.principalFeeStructureForm,
       arguments: AdminFeeStructureFormArgs(
         academicYears: _academicYears,
         grades: _grades,
@@ -1216,7 +1216,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openGenerateInvoiceForm({Map<String, dynamic>? seed}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.academicYearFeesExport,
+      AppRoutes.principalInvoiceGenerationForm,
       arguments: AdminInvoiceGenerationFormArgs(
         academicYears: _academicYears,
         grades: _grades,
@@ -1237,7 +1237,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
   Future<void> _openRecordPaymentForm({Map<String, dynamic>? invoice}) async {
     final result = await Navigator.pushNamed(
       context,
-      AppRoutes.feePaymentReceipt,
+      AppRoutes.principalPaymentRecordForm,
       arguments: AdminPaymentRecordFormArgs(
         pendingDues: _pendingDues,
         initialInvoice: invoice,

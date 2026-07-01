@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -216,6 +217,8 @@ class _ParentFeedView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const TodaysHighlightsCard(role: 'parent'),
+        SizedBox(height: tokens.spacing.lg),
         Text(
           'School Feed',
           style: Theme.of(

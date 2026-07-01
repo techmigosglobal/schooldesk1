@@ -112,7 +112,9 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(adminFees, contains('AppRoutes.academicYearFeesExport'));
+    expect(adminFees, contains('AppRoutes.principalFeeStructureForm'));
+    expect(adminFees, contains('AppRoutes.principalInvoiceGenerationForm'));
+    expect(adminFees, contains('AppRoutes.principalPaymentRecordForm'));
     expect(adminFees, contains('AdminFeeStructureFormArgs'));
     expect(adminFees, contains('AdminInvoiceGenerationFormArgs'));
     expect(adminFees, contains('AdminPaymentRecordFormArgs'));
@@ -128,13 +130,19 @@ void main() {
     expect(feeForms, contains("createRaw('/fees/invoices/generate'"));
     expect(feeForms, contains('recordPayment('));
     expect(feeForms, isNot(contains('showDialog(')));
-    expect(routes, contains('academicYearFeesExport'));
-    expect(routes, contains('AcademicYearFeesExportScreen'));
+    expect(routes, contains('principalFeeStructureForm'));
+    expect(routes, contains('AdminFeeStructureFormScreen'));
+    expect(routes, contains('principalInvoiceGenerationForm'));
+    expect(routes, contains('AdminInvoiceGenerationFormScreen'));
+    expect(routes, contains('principalPaymentRecordForm'));
+    expect(routes, contains('AdminPaymentRecordFormScreen'));
     expect(
       guard,
-      contains('AppRoutes.academicYearFeesExport: {\'principal\'}'),
+      contains('AppRoutes.principalFeeStructureForm: {\'principal\'}'),
     );
-    expect(registry, contains('/academic-management-screen/year/fees-export'));
+    expect(registry, contains('/principal-fees-screen/fee-structure'));
+    expect(registry, contains('/principal-fees-screen/invoice-generation'));
+    expect(registry, contains('/principal-fees-screen/payment-record'));
   });
 
   test('parent payment requests use routed input screen without popup form', () {
