@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -617,7 +619,7 @@ class _TeacherHomeworkSubmissionsScreenState
   @override
   void initState() {
     super.initState();
-    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+    if (_homeworkId.isEmpty) {
       _loading = false;
       _error = 'Please open this screen from the related Teacher module.';
     } else {
@@ -631,7 +633,7 @@ class _TeacherHomeworkSubmissionsScreenState
       _error = null;
     });
     try {
-      final homeworkId = teacherFlowText(widget.args.homework['id']);
+      final homeworkId = _homeworkId;
       final payload = await BackendApiClient.instance.getHomeworkSubmissions(
         homeworkId,
       );
@@ -652,20 +654,74 @@ class _TeacherHomeworkSubmissionsScreenState
   }
 
   Future<void> _review(Map<String, dynamic> submission, String status) async {
-    final homeworkId = teacherFlowText(widget.args.homework['id']);
-    final submissionId = teacherFlowText(submission['id']);
+    final comment = await _askForFeedback(
+      defaultComment: status == 'approved'
+          ? 'Reviewed by teacher'
+          : 'Needs revision',
+    );
+    if (comment == null) return;
+    final homeworkId = _homeworkId;
+    final submissionId = teacherFlowText(
+      submission['id'] ?? submission['submission_id'],
+    );
     await BackendApiClient.instance.reviewHomeworkSubmission(
       homeworkId,
       submissionId,
       status: status,
-      remarks: status == 'approved' ? 'Reviewed by teacher' : 'Needs revision',
+      remarks: comment,
+    );
+    final notificationService = await NotificationService.getInstance();
+    await notificationService.triggerHomeworkFeedbackAlert(
+      homeworkId: homeworkId,
+      homeworkTitle: teacherFlowText(
+        widget.args.homework['title'],
+        fallback: 'Homework',
+      ),
+      comment: comment,
+      studentId: teacherFlowText(submission['student_id']),
     );
     await _loadSubmissions();
   }
 
+  Future<String?> _askForFeedback({required String defaultComment}) {
+    final controller = TextEditingController(text: defaultComment);
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Homework Feedback'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Comment for parent',
+            alignLabelWithHint: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              Navigator.pop(
+                context,
+                value.isEmpty ? defaultComment : value,
+              );
+            },
+            child: const Text('Send Feedback'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (teacherFlowText(widget.args.homework['id']).isEmpty) {
+    if (_homeworkId.isEmpty) {
       return const _TeacherModuleEntryError(
         title: 'Submissions',
         selectedIndex: TeacherNav.diary,
@@ -721,17 +777,14 @@ class _TeacherHomeworkSubmissionsScreenState
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if ('${submission['attachment_url'] ?? submission['attachmentUrl'] ?? ''}'.isNotEmpty) ...[
+                      if ('${submission['attachment_url'] ?? submission['attachmentUrl'] ?? ''}'
+                          .isNotEmpty) ...[
                         OutlinedButton.icon(
-                          onPressed: () async {
-                            final rawUrl = '${submission['attachment_url'] ?? submission['attachmentUrl']}';
-                            final uri = Uri.tryParse(rawUrl);
-                            if (uri != null) {
-                              await launchUrl(uri, mode: LaunchMode.externalApplication);
-                            }
-                          },
+                          onPressed: () => _openSubmissionAttachment(
+                            '${submission['attachment_url'] ?? submission['attachmentUrl']}',
+                          ),
                           icon: const Icon(Icons.attach_file_rounded, size: 14),
-                          label: const Text('View Attachment'),
+                          label: const Text('View Submitted Attachment'),
                         ),
                         const SizedBox(height: 10),
                       ],
@@ -746,7 +799,8 @@ class _TeacherHomeworkSubmissionsScreenState
                           TeacherFlowAction(
                             label: 'Needs Revision',
                             icon: Icons.replay_rounded,
-                            onTap: () => _review(submission, 'revision_requested'),
+                            onTap: () =>
+                                _review(submission, 'revision_requested'),
                           ),
                         ],
                       ),
@@ -757,6 +811,28 @@ class _TeacherHomeworkSubmissionsScreenState
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openSubmissionAttachment(String attachment) async {
+    final uri = resolveAttachmentUrl(attachment);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attachment is not available.')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open attachment.')),
+      );
+    }
+  }
+
+  String get _homeworkId {
+    return teacherFlowText(
+      widget.args.homework['id'] ?? widget.args.homework['homework_id'],
     );
   }
 }

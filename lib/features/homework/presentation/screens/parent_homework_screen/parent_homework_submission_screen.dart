@@ -4,11 +4,14 @@ import 'package:dio/dio.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 @immutable
 class ParentHomeworkSubmissionArgs {
@@ -45,7 +48,7 @@ class _ParentHomeworkSubmissionScreenState
   final _formKey = GlobalKey<FormState>();
   final _answerController = TextEditingController();
   final _attachmentController = TextEditingController();
-  
+
   bool _saving = false;
   bool _loading = false;
   Map<String, dynamic> _homework = {};
@@ -63,7 +66,9 @@ class _ParentHomeworkSubmissionScreenState
     _studentName = widget.args.studentName;
 
     // Check if we need to load homework details dynamically
-    final hwId = _text(_homework['id'] ?? _homework['reference_id'] ?? _homework['homework_id']);
+    final hwId = _text(
+      _homework['id'] ?? _homework['reference_id'] ?? _homework['homework_id'],
+    );
     if (hwId.isNotEmpty && (_studentId.isEmpty || _homework.length <= 1)) {
       _fetchHomeworkAndStudent(hwId);
     }
@@ -78,31 +83,74 @@ class _ParentHomeworkSubmissionScreenState
         if (sId.isEmpty) continue;
         final list = await BackendApiClient.instance.getHomework(studentId: sId);
         final found = list.firstWhere(
-          (h) => h['id']?.toString() == homeworkId,
+          (h) =>
+              (h['id'] ?? h['homework_id'] ?? '').toString() == homeworkId,
           orElse: () => <String, dynamic>{},
         );
         if (found.isNotEmpty) {
           setState(() {
             _homework = {
-              'id': found['id'],
+              'id': found['id'] ?? found['homework_id'],
               'title': found['title'] ?? '',
               'subject': found['subject'] ?? found['subject_name'] ?? '',
               'class': found['class'] ?? found['class_name'] ?? '',
-              'deadline': found['deadline'] ?? '',
-              'instructions': found['description'] ?? found['instructions'] ?? '',
-              'teacher': found['teacher_name'] ?? found['created_by_name'] ?? found['created_by'] ?? '',
+              'deadline':
+                  found['deadline'] ??
+                  found['due_date'] ??
+                  found['submission_date'] ??
+                  '',
+              'instructions':
+                  found['description'] ?? found['instructions'] ?? '',
+              'teacher':
+                  found['teacher_name'] ??
+                  found['created_by_name'] ??
+                  found['created_by'] ??
+                  '',
+              'attachmentUrl':
+                  found['attachment_url'] ?? found['attachmentUrl'] ?? '',
+              'submission_remarks': found['submission_remarks'] ?? '',
+              'submission_status': found['submission_status'] ?? '',
               'student_id': sId,
             };
             _studentId = sId;
-            _studentName = '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'.trim();
+            _studentName =
+                '${child['first_name'] ?? ''} ${child['last_name'] ?? ''}'
+                    .trim();
             _loading = false;
           });
+          await _loadSubmissionFeedback(homeworkId, sId);
           return;
         }
       }
       setState(() => _loading = false);
     } catch (_) {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadSubmissionFeedback(String homeworkId, String studentId) async {
+    if (homeworkId.trim().isEmpty || studentId.trim().isEmpty) return;
+    try {
+      final response = await BackendApiClient.instance.getHomeworkSubmissions(
+        homeworkId,
+        studentId: studentId,
+      );
+      final submissions = response['submissions'] ?? response['data'];
+      if (submissions is! List || submissions.isEmpty || !mounted) return;
+      final submission = Map<String, dynamic>.from(submissions.first as Map);
+      setState(() {
+        _homework = {
+          ..._homework,
+          'submission_id': _text(submission['id']),
+          'submission_status': _text(submission['status']),
+          'submission_remarks': _text(submission['remarks']),
+          'submitted_attachment_url': _text(
+            submission['attachment_url'] ?? submission['attachmentUrl'],
+          ),
+        };
+      });
+    } catch (_) {
+      // Feedback is optional context; the form can still load without it.
     }
   }
 
@@ -164,8 +212,9 @@ class _ParentHomeworkSubmissionScreenState
 
   @override
   Widget build(BuildContext context) {
-    final ready = _text(_homework['id']).isNotEmpty && _studentId.trim().isNotEmpty;
-    
+    final ready =
+        _text(_homework['id']).isNotEmpty && _studentId.trim().isNotEmpty;
+
     return SchoolDeskModuleScaffold(
       title: 'Submit Homework',
       subtitle: _text(_homework['title'], fallback: 'Homework'),
@@ -190,6 +239,10 @@ class _ParentHomeworkSubmissionScreenState
                       children: [
                         _homeworkContext(),
                         const SizedBox(height: 14),
+                        _teacherAttachmentBlock(),
+                        const SizedBox(height: 14),
+                        _feedbackBlock(),
+                        const SizedBox(height: 14),
                         TextFormField(
                           controller: _answerController,
                           enabled: !_saving,
@@ -210,7 +263,7 @@ class _ParentHomeworkSubmissionScreenState
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'Attachment (PDF or Image)',
+                          'Add Attachment',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -254,9 +307,11 @@ class _ParentHomeworkSubmissionScreenState
                               ),
                               const SizedBox(width: 8),
                               OutlinedButton.icon(
-                                onPressed: _saving || _uploadingAttachment ? null : _pickAttachment,
+                                onPressed: _saving || _uploadingAttachment
+                                    ? null
+                                    : _pickAttachment,
                                 icon: const Icon(Icons.attach_file_rounded, size: 16),
-                                label: const Text('Choose File'),
+                                label: const Text('Image / PDF'),
                               ),
                             ],
                           ),
@@ -325,15 +380,127 @@ class _ParentHomeworkSubmissionScreenState
     );
   }
 
+  Widget _teacherAttachmentBlock() {
+    final attachment = _text(
+      _homework['attachment_url'] ?? _homework['attachmentUrl'],
+    );
+    if (attachment.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.primaryContainer.withAlpha(45),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.appTheme.primary.withAlpha(60)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.attach_file_rounded, color: context.appTheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Teacher attachment available',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: context.appTheme.onSurface,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => _openAttachment(attachment),
+            child: const Text('Open'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _feedbackBlock() {
+    final feedback = _text(_homework['submission_remarks']);
+    final status = _text(_homework['submission_status']);
+    if (feedback.isEmpty && status.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.feedback_rounded, color: context.appTheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'Homework Feedback',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: context.appTheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          if (status.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Status: ${status.replaceAll('_', ' ')}'),
+          ],
+          if (feedback.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(feedback),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openAttachment(String attachment) async {
+    final uri = resolveAttachmentUrl(attachment);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attachment is not available.')),
+      );
+      return;
+    }
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to open attachment.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to open attachment: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
+      final homeworkId = _text(_homework['id']);
       await BackendApiClient.instance.submitHomework(
-        _text(_homework['id']),
+        homeworkId,
         studentId: _studentId,
         answerText: _answerController.text.trim(),
         attachmentUrl: _attachmentController.text.trim(),
+      );
+      final notificationService = await NotificationService.getInstance();
+      await notificationService.triggerHomeworkSubmittedAlert(
+        homeworkId: homeworkId,
+        homeworkTitle: _text(_homework['title'], fallback: 'Homework'),
+        studentName: _studentName,
+        hasAttachment: _attachmentController.text.trim().isNotEmpty,
       );
       if (!mounted) return;
       Navigator.pop(

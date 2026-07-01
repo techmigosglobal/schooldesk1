@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 
@@ -193,10 +194,31 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                           'is_active': active,
                         };
                         try {
-                          await BackendApiClient.instance.dio.post(
+                          final response =
+                              await BackendApiClient.instance.dio.post(
                             '/medical-records',
                             data: payload,
                           );
+                          final savedRecord =
+                              _extractSavedRecord(response.data);
+                          final referenceId =
+                              '${savedRecord['id'] ?? savedRecord['medical_record_id'] ?? ''}';
+                          final studentName =
+                              '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+                                  .trim();
+                          final notificationService =
+                              await NotificationService.getInstance();
+                          for (final role in const ['teacher', 'principal']) {
+                            await notificationService
+                                .triggerHealthReminderAlert(
+                              studentName: studentName,
+                              condition: conditionCtrl.text.trim(),
+                              medication: medicationCtrl.text.trim(),
+                              reminderTime: reminderTime,
+                              role: role,
+                              referenceId: referenceId,
+                            );
+                          }
                           if (mounted) {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -212,7 +234,8 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('Failed to save: $e'),
-                                backgroundColor: Theme.of(context).colorScheme.error,
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.error,
                               ),
                             );
                           }
@@ -373,6 +396,17 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
       ],
     );
   }
+}
+
+Map<String, dynamic> _extractSavedRecord(dynamic data) {
+  if (data is Map<String, dynamic>) {
+    final nested = data['data'];
+    if (nested is Map<String, dynamic>) return nested;
+    if (nested is Map) return Map<String, dynamic>.from(nested);
+    return data;
+  }
+  if (data is Map) return Map<String, dynamic>.from(data);
+  return const {};
 }
 
 class _HealthRecordCard extends StatelessWidget {

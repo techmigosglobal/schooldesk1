@@ -6,9 +6,11 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ParentHomeworkScreen extends StatefulWidget {
   const ParentHomeworkScreen({super.key});
@@ -99,22 +101,29 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   }
 
   Map<String, dynamic> _mapHomeworkFromApi(Map<String, dynamic> h) {
-    final dueDate = DateTime.tryParse('${h['due_date'] ?? ''}');
+    final dueDate = DateTime.tryParse(
+      '${h['due_date'] ?? h['submission_date'] ?? ''}',
+    );
     final status = '${h['status'] ?? 'pending'}'.toLowerCase();
+    final submissionStatus = _text(h['submission_status']).toLowerCase();
     // Backend integration: subject and teacher labels should come from the
     // homework API. Keep them empty here when absent; do not invent defaults.
     return {
-      'id': h['id'],
+      'id': h['id'] ?? h['homework_id'],
       'title': h['title'] ?? '',
       'subject': h['subject'] ?? h['subject_name'] ?? '',
       'class': h['class'] ?? h['class_name'] ?? '',
       'deadline': dueDate == null
-          ? '${h['deadline'] ?? ''}'
+          ? '${h['deadline'] ?? h['submission_date'] ?? ''}'
           : '${dueDate.day}/${dueDate.month}/${dueDate.year}',
       'instructions': h['description'] ?? h['instructions'] ?? '',
       'teacher':
           h['teacher_name'] ?? h['created_by_name'] ?? h['created_by'] ?? '',
-      'status': status == 'submitted' || status == 'completed'
+      'status': status == 'submitted' ||
+              status == 'completed' ||
+              submissionStatus == 'submitted' ||
+              submissionStatus == 'approved' ||
+              submissionStatus == 'reviewed'
           ? 'submitted'
           : 'pending',
       'student_id': h['student_id'] ?? '',
@@ -496,10 +505,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
           if (hw['hasAttachment'] == true) ...[
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: () => _requestAttachment(hw),
+              onPressed: () => _openAttachment(hw),
               icon: const Icon(Icons.attach_file_rounded, size: 14),
               label: Text(
-                'Download Worksheet',
+                'Open Attachment',
                 style: GoogleFonts.dmSans(fontSize: 12),
               ),
               style: OutlinedButton.styleFrom(
@@ -575,13 +584,14 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       final submissionStatus = _text(
         submission['status'],
         fallback: 'submitted',
-      );
+      ).toLowerCase();
       return {
         ...row,
         'submission_id': _text(submission['id']),
         'submission_status': submissionStatus,
         'submission_remarks': _text(submission['remarks']),
-        'status': submissionStatus == 'needs_revision'
+        'status': submissionStatus == 'needs_revision' ||
+                submissionStatus == 'revision_requested'
             ? 'pending'
             : 'submitted',
       };
@@ -617,21 +627,32 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     }
   }
 
-  Future<void> _requestAttachment(Map<String, dynamic> homework) async {
-    try {
-      await BackendApiClient.instance.createRaw(
-        '/homework/${homework['id']}/attachment-requests',
-        {'student_id': _activeStudentId},
-      );
-      if (!mounted) return;
+  Future<void> _openAttachment(Map<String, dynamic> homework) async {
+    final attachment = _text(
+      homework['attachment_url'] ?? homework['attachmentUrl'],
+    );
+    final uri = resolveAttachmentUrl(attachment);
+    if (uri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Attachment request sent to backend')),
+        const SnackBar(content: Text('Attachment is not available.')),
       );
+      return;
+    }
+    try {
+      final opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to open attachment.')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Attachment is not available: $e'),
+          content: Text('Unable to open attachment: $e'),
           backgroundColor: context.appTheme.error,
         ),
       );

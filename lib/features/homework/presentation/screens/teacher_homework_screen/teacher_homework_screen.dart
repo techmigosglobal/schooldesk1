@@ -304,7 +304,10 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
                         icon: Icons.rate_review_rounded,
                         onTap: () => Navigator.pushNamed(
                           context,
-                          AppRoutes.teacherDiary,
+                          AppRoutes.teacherHomeworkSubmissions,
+                          arguments: TeacherHomeworkSubmissionsArgs(
+                            homework: row,
+                          ),
                         ).then((_) => _loadHomework(forceRefresh: true)),
                       ),
                       TeacherFlowAction(

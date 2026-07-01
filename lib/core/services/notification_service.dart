@@ -190,6 +190,141 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
+  Future<void> triggerHealthReminderAlert({
+    required String studentName,
+    required String condition,
+    required String medication,
+    required String reminderTime,
+    required String role,
+    String referenceId = '',
+  }) async {
+    final title = 'Health Reminder';
+    final bodyParts = <String>[
+      if (studentName.trim().isNotEmpty) studentName.trim(),
+      if (condition.trim().isNotEmpty) condition.trim(),
+      if (medication.trim().isNotEmpty) medication.trim(),
+      if (reminderTime.trim().isNotEmpty) reminderTime.trim(),
+    ];
+    final body = bodyParts.isEmpty
+        ? 'A parent added a health reminder.'
+        : bodyParts.join(' - ');
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.health,
+        role: role,
+        priority: NotificationPriority.high,
+        referenceType: 'health',
+        referenceId: referenceId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.health,
+        'notification_type': NotificationCategory.health,
+        'target_role': role,
+        'priority': 'high',
+        'reference_type': 'health',
+        if (referenceId.trim().isNotEmpty) 'reference_id': referenceId.trim(),
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
+  }
+
+  Future<void> triggerHomeworkSubmittedAlert({
+    required String homeworkId,
+    required String homeworkTitle,
+    required String studentName,
+    bool hasAttachment = false,
+  }) async {
+    final title = 'Homework Submitted';
+    final body = [
+      if (studentName.trim().isNotEmpty) studentName.trim(),
+      if (homeworkTitle.trim().isNotEmpty) homeworkTitle.trim(),
+      if (hasAttachment) 'Attachment included',
+    ].join(' - ');
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body.isEmpty ? 'A parent submitted homework.' : body,
+        category: NotificationCategory.homework,
+        role: 'teacher',
+        priority: NotificationPriority.high,
+        route: '/teacher-homework-screen/submissions',
+        referenceType: 'homework',
+        referenceId: homeworkId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body.isEmpty ? 'A parent submitted homework.' : body,
+        'category': NotificationCategory.homework,
+        'notification_type': NotificationCategory.homework,
+        'target_role': 'teacher',
+        'priority': 'high',
+        'route': '/teacher-homework-screen/submissions',
+        'reference_type': 'homework',
+        'reference_id': homeworkId,
+        'action': 'submission',
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
+  }
+
+  Future<void> triggerHomeworkFeedbackAlert({
+    required String homeworkId,
+    required String homeworkTitle,
+    required String comment,
+    required String studentId,
+  }) async {
+    final title = 'Homework Feedback';
+    final cleanComment = comment.trim();
+    final body = cleanComment.isEmpty
+        ? 'Teacher added feedback for ${homeworkTitle.trim().isEmpty ? 'homework' : homeworkTitle.trim()}.'
+        : cleanComment;
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.homework,
+        role: 'parent',
+        priority: NotificationPriority.high,
+        route: '/parent-homework-screen/submit',
+        referenceType: 'homework',
+        referenceId: homeworkId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.homework,
+        'notification_type': NotificationCategory.homework,
+        'target_role': 'parent',
+        'priority': 'high',
+        'route': '/parent-homework-screen/submit',
+        'reference_type': 'homework',
+        'reference_id': homeworkId,
+        'action': 'feedback',
+        if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
+  }
+
   Future<void> triggerInvoiceGeneratedAlert({
     required int invoiceCount,
     required String classLabel,
@@ -229,6 +364,8 @@ class NotificationCategory {
   static const String feeDue = 'fee_due';
   static const String examReminder = 'exam_reminder';
   static const String event = 'event';
+  static const String health = 'health';
+  static const String homework = 'homework';
   static const String general = 'general';
 }
 
@@ -312,7 +449,9 @@ class AppNotification {
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     final priorityRaw = '${json['priority'] ?? ''}'.toLowerCase();
-    final categoryRaw = '${json['category'] ?? ''}'.toLowerCase();
+    final categoryRaw =
+        '${json['category'] ?? json['type'] ?? json['notification_type'] ?? ''}'
+            .toLowerCase();
     return AppNotification(
       id: '${json['id']}',
       title: '${json['title'] ?? 'Notification'}',

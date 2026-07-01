@@ -49,7 +49,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     });
     try {
       _service = await NotificationService.getInstance();
-      if (forceRefresh || widget.role.trim().toLowerCase() == 'principal') {
+      final role = widget.role.trim().toLowerCase();
+      if (forceRefresh || role == 'principal' || role == 'teacher') {
         await _service?.refresh();
       }
     } catch (error) {
@@ -75,8 +76,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   int _tabCountForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => 2,
-      'principal' => 4,
+      'teacher' => 3,
+      'principal' => 5,
       _ => 5,
     };
   }
@@ -135,6 +136,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           mutedColor,
                         ),
                         _buildList(
+                          NotificationCategory.health,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
                           NotificationCategory.general,
                           bgColor,
                           surfaceColor,
@@ -160,6 +168,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         ),
                         _buildList(
                           NotificationCategory.feeDue,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.health,
                           bgColor,
                           surfaceColor,
                           onSurfaceColor,
@@ -217,11 +232,16 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   List<Tab> _tabsForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => const [Tab(text: 'All'), Tab(text: 'Circulars')],
+      'teacher' => const [
+        Tab(text: 'All'),
+        Tab(text: 'Health'),
+        Tab(text: 'Circulars'),
+      ],
       'principal' => const [
         Tab(text: 'All'),
         Tab(text: 'Approvals'),
         Tab(text: 'Fees'),
+        Tab(text: 'Health'),
         Tab(text: 'Events'),
       ],
       _ => const [
@@ -248,6 +268,18 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         text.contains('fee') ||
         text.contains('payment')) {
       return NotificationCategory.feeDue;
+    }
+    if (notification.category == NotificationCategory.health ||
+        text.contains('health') ||
+        text.contains('medical') ||
+        text.contains('medication')) {
+      return NotificationCategory.health;
+    }
+    if (notification.category == NotificationCategory.homework ||
+        text.contains('homework') ||
+        text.contains('assignment') ||
+        notification.referenceType == 'homework') {
+      return NotificationCategory.homework;
     }
     if (notification.category == NotificationCategory.event ||
         text.contains('event') ||
@@ -557,6 +589,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Exams';
       case NotificationCategory.event:
         return 'Events';
+      case NotificationCategory.health:
+        return 'Health';
+      case NotificationCategory.homework:
+        return 'Homework';
       case NotificationCategory.general:
         return 'Circulars';
       default:
@@ -751,6 +787,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.quiz_rounded;
       case NotificationCategory.event:
         return Icons.event_available_rounded;
+      case NotificationCategory.health:
+        return Icons.health_and_safety_rounded;
+      case NotificationCategory.homework:
+        return Icons.assignment_turned_in_rounded;
       default:
         return Icons.notifications_rounded;
     }
@@ -766,6 +806,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.primary;
       case NotificationCategory.event:
         return context.appTheme.success;
+      case NotificationCategory.health:
+        return context.appTheme.info;
+      case NotificationCategory.homework:
+        return context.appTheme.primary;
       default:
         return context.appTheme.muted;
     }
