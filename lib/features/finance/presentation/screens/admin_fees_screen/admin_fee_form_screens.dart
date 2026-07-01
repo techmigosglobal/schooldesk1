@@ -447,7 +447,7 @@ class _AdminFeeStructureFormScreenState
     if (_replaceExisting && !await _confirmReplaceExisting()) return;
     setState(() => _saving = true);
     try {
-      final id = '${widget.args.feeStructure?['id'] ?? ''}'.trim();
+      final id = _feeStructureId;
       if (widget.args.isEditing) {
         if (id.isEmpty) throw Exception('Backend fee structure ID is missing');
         await BackendApiClient.instance.updateFeeStructure(
@@ -459,6 +459,10 @@ class _AdminFeeStructureFormScreenState
           amount: double.parse(_amountController.text),
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
+        );
+        await BackendApiClient.instance.applyFeeInvoiceSync(
+          id,
+          includePartiallyPaid: true,
         );
       } else {
         await BackendApiClient.instance.createFeeStructure(
@@ -477,7 +481,7 @@ class _AdminFeeStructureFormScreenState
         context,
         AdminFeeStructureFormResult(
           widget.args.isEditing
-              ? 'Fee structure saved'
+              ? 'Fee structure updated and dues refreshed'
               : _replaceExisting
               ? 'Existing class fee structure replaced with the new setup'
               : 'Fee structure created',
@@ -488,6 +492,13 @@ class _AdminFeeStructureFormScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String get _feeStructureId {
+    final fee = widget.args.feeStructure ?? const <String, dynamic>{};
+    return _textValue(
+      fee['id'] ?? fee['structure_id'] ?? fee['fee_structure_id'],
+    );
   }
 
   Future<bool> _confirmReplaceExisting() async {

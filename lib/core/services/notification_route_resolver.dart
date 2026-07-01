@@ -108,6 +108,11 @@ class NotificationRouteResolver {
         route == AppRoutes.parentHomework ||
         route == AppRoutes.teacherHomework) {
       return {
+        'homework': {
+          'id': referenceId,
+          'homework_id': referenceId,
+          'reference_id': referenceId,
+        },
         'reference_id': referenceId,
         'id': referenceId,
       };

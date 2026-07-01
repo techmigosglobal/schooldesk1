@@ -472,16 +472,16 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       try {
         final payload = {
           'academic_year_id': _selectedAcademicYearId,
-          'event_title': entry.title,
+          'event_name': entry.title,
           'event_type': entry.eventType,
           'description': entry.description,
-          'start_datetime': _formatRfc3339(
-            DateTime.parse('${entry.startDate}T00:00:00'),
-          ),
-          'end_datetime': _formatRfc3339(
-            DateTime.parse('${entry.endDate}T23:59:00'),
-          ),
-          'location': '',
+          'start_date': entry.startDate,
+          'end_date': entry.endDate,
+          'start_time': '00:00:00',
+          'end_time': '23:59:59',
+          'venue': '',
+          'audience_type': 'all',
+          'status': 'scheduled',
           'is_holiday': entry.isHoliday,
         };
         await BackendApiClient.instance.createEventPayload(payload);
@@ -1535,16 +1535,13 @@ class _EventFormPageState extends State<_EventFormPage> {
     try {
       final payload = {
         'academic_year_id': _academicYearId,
-        'event_title': _titleController.text.trim(),
+        'event_name': _titleController.text.trim(),
         'event_type': _isHoliday ? 'holiday' : _type,
         'description': _descriptionController.text.trim(),
-        'start_datetime': _formatRfc3339(startDateTime),
-        'end_datetime': _formatRfc3339(endDateTime),
         'start_date': _formatDate(_startDate),
         'end_date': _formatDate(_endDate),
         'start_time': _formatTime(_effectiveStartTime),
         'end_time': _formatTime(_effectiveEndTime),
-        'location': _venueController.text.trim(),
         'venue': _venueController.text.trim(),
         'audience_type': _audience,
         'status': _status,
@@ -2434,8 +2431,6 @@ String _formatTime(TimeOfDay time) {
   final minute = time.minute.toString().padLeft(2, '0');
   return '$hour:$minute:00';
 }
-
-String _formatRfc3339(DateTime date) => date.toUtc().toIso8601String();
 
 String _formatTimeOfDay(TimeOfDay time) {
   final hour = time.hour.toString().padLeft(2, '0');
