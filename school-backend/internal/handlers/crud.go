@@ -700,6 +700,10 @@ func (h *CRUDHandler[T]) afterCreate(_ *gin.Context, row *T) {
 		if homework, ok := any(row).(*models.Homework); ok {
 			notifyHomeworkCreated(*homework)
 		}
+	case "medical_records":
+		if record, ok := any(row).(*models.MedicalRecord); ok {
+			notifyMedicalRecordCreated(*record)
+		}
 	}
 }
 
