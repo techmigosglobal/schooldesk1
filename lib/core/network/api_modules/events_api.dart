@@ -52,15 +52,22 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getEvents({String? academicYearId}) async {
     try {
-      final queryParams = <String, dynamic>{};
-      if (academicYearId != null) {
-        queryParams['academic_year_id'] = academicYearId;
+      final filters = <String, dynamic>{'page_size': 200};
+      if (academicYearId != null && academicYearId.trim().isNotEmpty) {
+        filters['academic_year_id'] = academicYearId.trim();
       }
-      final response = await SchoolDeskApi.instance.client.events(
-        queryParams.isEmpty ? null : queryParams,
-      );
-      if (response.success == true) {
-        return _asListMap(response.data).map((event) {
+      final rows = <Map<String, dynamic>>[];
+      var page = 1;
+      var totalPages = 1;
+      do {
+        final response = await SchoolDeskApi.instance.client.events({
+          ...filters,
+          'page': page,
+        });
+        if (response.success != true) {
+          throw ServerException(message: 'Failed to get events');
+        }
+        final pageRows = _asListMap(response.data).map((event) {
           final normalized = Map<String, dynamic>.from(event);
           normalized['id'] ??= normalized['event_id'];
           normalized['event_title'] ??= normalized['event_name'];
@@ -71,8 +78,11 @@ extension BackendEventsApi on BackendApiClient {
               '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
           return normalized;
         }).toList();
-      }
-      throw ServerException(message: 'Failed to get events');
+        rows.addAll(pageRows);
+        totalPages = response.totalPages;
+        page++;
+      } while (page <= totalPages && totalPages > 0);
+      return rows;
     } on DioException catch (e) {
       throw _handleError(e);
     }

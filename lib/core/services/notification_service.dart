@@ -205,28 +205,33 @@ class NotificationService extends ChangeNotifier {
           .map((n) => '${n.referenceId}|${n.role}')
           .toSet();
 
-      final students = await _api.getStudents(page: 1, pageSize: 1000);
+      final students = await _api.getRawList(
+        '/students',
+        queryParameters: const {'page': 1, 'page_size': 1000},
+      );
       final sections = await _api.getSections();
       final sectionById = {
         for (final section in sections) section.id: section,
       };
 
-      for (final student in students.data) {
+      for (final student in students) {
         final dob = _dateOfBirth(student);
         if (dob == null ||
             dob.month != today.month ||
             dob.day != today.day) {
           continue;
         }
-        final studentId = student.id.trim();
+        final studentId = _studentId(student).trim();
         if (studentId.isEmpty) continue;
 
-        final section = sectionById[student.currentSectionId ?? ''];
-        final teacherId = (section?.classTeacherId ?? '').trim();
-        final sectionId = (section?.id ?? '').trim();
-        final studentName = student.fullName.trim().isEmpty
-            ? 'Student'
-            : student.fullName.trim();
+        final studentSectionId = _studentSectionId(student).trim();
+        final section = sectionById[studentSectionId];
+        final sectionTeacherId = _teacherIdFromSection(section).trim();
+        final teacherId = sectionTeacherId.isNotEmpty
+            ? sectionTeacherId
+            : _teacherIdFromStudent(student).trim();
+        final sectionId = _sectionIdFromSection(section, fallback: studentSectionId);
+        final studentName = _studentName(student);
         final studentKey = '$studentId|$dayKey';
 
         if (!existingKeys.contains('$studentKey|principal')) {
@@ -274,13 +279,67 @@ class NotificationService extends ChangeNotifier {
   }
 
   DateTime? _dateOfBirth(dynamic student) {
-    final raw = student?.dateOfBirth?.toString() ?? '';
+    final raw = _studentText(student, const ['date_of_birth', 'dateOfBirth']);
     if (raw.isEmpty) return null;
     return DateTime.tryParse(raw);
   }
 
   String _birthdayKey(int year, int month, int day) =>
       '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+
+  String _studentText(dynamic row, List<String> keys) {
+    for (final key in keys) {
+      final value = _rowValue(row, key);
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return '';
+  }
+
+  String _studentId(dynamic student) => _studentText(student, const ['id', 'student_id']);
+
+  String _studentSectionId(dynamic student) =>
+      _studentText(student, const ['current_section_id', 'section_id']);
+
+  String _studentName(dynamic student) {
+    final first = _studentText(student, const ['first_name', 'firstName']);
+    final last = _studentText(student, const ['last_name', 'lastName']);
+    final full = _studentText(student, const ['full_name', 'fullName', 'name']);
+    if (full.isNotEmpty) return full;
+    final joined = [first, last].where((part) => part.isNotEmpty).join(' ').trim();
+    return joined.isEmpty ? 'Student' : joined;
+  }
+
+  String _teacherIdFromStudent(dynamic student) =>
+      _studentText(student, const ['class_teacher_id', 'teacher_id']);
+
+  String _teacherIdFromSection(dynamic section) {
+    if (section == null) return '';
+    try {
+      final text = '${section.classTeacherId ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    } catch (_) {}
+    if (section is Map) {
+      final text = '${section['class_teacher_id'] ?? section['teacher_id'] ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _sectionIdFromSection(dynamic section, {required String fallback}) {
+    if (section == null) return fallback;
+    try {
+      final text = '${section.id ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    } catch (_) {}
+    return fallback;
+  }
+
+  dynamic _rowValue(dynamic row, String key) {
+    if (row is Map<String, dynamic>) return row[key];
+    if (row is Map) return row[key];
+    return null;
+  }
 
   Future<void> triggerLeaveStatusAlert({
     required String status,
