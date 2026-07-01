@@ -205,33 +205,32 @@ class NotificationService extends ChangeNotifier {
           .map((n) => '${n.referenceId}|${n.role}')
           .toSet();
 
-      final students = await _api.getRawList(
-        '/students',
-        queryParameters: const {'page': 1, 'page_size': 1000},
-      );
+      final students = await _api.getStudents(page: 1, pageSize: 1000);
       final sections = await _api.getSections();
       final sectionById = {
         for (final section in sections) section.id: section,
       };
 
-      for (final student in students) {
-        final dob = _dateOfBirth(student);
-        if (dob == null ||
-            dob.month != today.month ||
-            dob.day != today.day) {
+      for (final student in students.data) {
+        final dob = DateTime.tryParse(student.dateOfBirth ?? '');
+        if (dob == null || dob.month != today.month || dob.day != today.day) {
           continue;
         }
-        final studentId = _studentId(student).trim();
+        final studentId = student.id.trim();
         if (studentId.isEmpty) continue;
 
-        final studentSectionId = _studentSectionId(student).trim();
+        final studentSectionId = (student.currentSectionId ?? '').trim();
         final section = sectionById[studentSectionId];
         final sectionTeacherId = _teacherIdFromSection(section).trim();
         final teacherId = sectionTeacherId.isNotEmpty
             ? sectionTeacherId
-            : _teacherIdFromStudent(student).trim();
+            : '';
         final sectionId = _sectionIdFromSection(section, fallback: studentSectionId);
-        final studentName = _studentName(student);
+        final studentName = [
+          student.firstName.trim(),
+          student.lastName.trim(),
+        ].where((part) => part.isNotEmpty).join(' ').trim();
+        final displayName = studentName.isEmpty ? 'Student' : studentName;
         final studentKey = '$studentId|$dayKey';
 
         if (!existingKeys.contains('$studentKey|principal')) {
@@ -239,7 +238,7 @@ class NotificationService extends ChangeNotifier {
             0,
             AppNotification.transient(
               title: 'Birthday Today',
-              body: '$studentName has a birthday today.',
+              body: '$displayName has a birthday today.',
               category: NotificationCategory.birthday,
               role: 'principal',
               priority: NotificationPriority.high,
@@ -259,7 +258,7 @@ class NotificationService extends ChangeNotifier {
             0,
             AppNotification.transient(
               title: 'Birthday Today',
-              body: '$studentName in your class has a birthday today.',
+              body: '$displayName in your class has a birthday today.',
               category: NotificationCategory.birthday,
               role: 'teacher',
               priority: NotificationPriority.high,
@@ -278,40 +277,8 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
-  DateTime? _dateOfBirth(dynamic student) {
-    final raw = _studentText(student, const ['date_of_birth', 'dateOfBirth']);
-    if (raw.isEmpty) return null;
-    return DateTime.tryParse(raw);
-  }
-
   String _birthdayKey(int year, int month, int day) =>
       '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-
-  String _studentText(dynamic row, List<String> keys) {
-    for (final key in keys) {
-      final value = _rowValue(row, key);
-      final text = value?.toString().trim() ?? '';
-      if (text.isNotEmpty && text != 'null') return text;
-    }
-    return '';
-  }
-
-  String _studentId(dynamic student) => _studentText(student, const ['id', 'student_id']);
-
-  String _studentSectionId(dynamic student) =>
-      _studentText(student, const ['current_section_id', 'section_id']);
-
-  String _studentName(dynamic student) {
-    final first = _studentText(student, const ['first_name', 'firstName']);
-    final last = _studentText(student, const ['last_name', 'lastName']);
-    final full = _studentText(student, const ['full_name', 'fullName', 'name']);
-    if (full.isNotEmpty) return full;
-    final joined = [first, last].where((part) => part.isNotEmpty).join(' ').trim();
-    return joined.isEmpty ? 'Student' : joined;
-  }
-
-  String _teacherIdFromStudent(dynamic student) =>
-      _studentText(student, const ['class_teacher_id', 'teacher_id']);
 
   String _teacherIdFromSection(dynamic section) {
     if (section == null) return '';
@@ -333,12 +300,6 @@ class NotificationService extends ChangeNotifier {
       if (text.isNotEmpty) return text;
     } catch (_) {}
     return fallback;
-  }
-
-  dynamic _rowValue(dynamic row, String key) {
-    if (row is Map<String, dynamic>) return row[key];
-    if (row is Map) return row[key];
-    return null;
   }
 
   Future<void> triggerLeaveStatusAlert({
@@ -484,7 +445,7 @@ class NotificationService extends ChangeNotifier {
         'route': '/parent-homework-screen/submit',
         'reference_type': 'homework',
         'reference_id': homeworkId,
-        'action': 'feedback',
+        'action': 'needs_revision',
         if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
       });
     } catch (_) {

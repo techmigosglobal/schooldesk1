@@ -27,11 +27,16 @@ extension BackendEventsApi on BackendApiClient {
     await createEventPayload({
       'academic_year_id': academicYearId,
       'event_title': title,
+      'event_name': title,
       'event_type': eventType,
       'description': description,
+      'start_date': start.toIso8601String().split('T').first,
+      'end_date': end.toIso8601String().split('T').first,
+      'event_date': start.toUtc().toIso8601String(),
       'start_datetime': start.toUtc().toIso8601String(),
       'end_datetime': end.toUtc().toIso8601String(),
       'location': location,
+      'venue': location,
       'is_holiday': isHoliday,
     });
   }
@@ -72,6 +77,8 @@ extension BackendEventsApi on BackendApiClient {
           normalized['id'] ??= normalized['event_id'];
           normalized['event_title'] ??= normalized['event_name'];
           normalized['location'] ??= normalized['venue'];
+          normalized['start_date'] ??= normalized['event_date'];
+          normalized['end_date'] ??= normalized['event_date'];
           normalized['start_datetime'] ??=
               '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
           normalized['end_datetime'] ??=

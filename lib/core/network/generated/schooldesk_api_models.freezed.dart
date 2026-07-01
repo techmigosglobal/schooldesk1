@@ -5962,7 +5962,7 @@ as String?,
 /// @nodoc
 mixin _$StudentDto {
 
- String? get id;@JsonKey(name: 'school_id') String? get schoolId;@JsonKey(name: 'student_code') String? get studentCode;@JsonKey(name: 'admission_number') String? get admissionNumber;@JsonKey(name: 'first_name') String? get firstName;@JsonKey(name: 'last_name') String? get lastName;@JsonKey(name: 'current_section_id') String? get currentSectionId; String? get status;
+  String? get id;@JsonKey(name: 'school_id') String? get schoolId;@JsonKey(name: 'student_code') String? get studentCode;@JsonKey(name: 'admission_number') String? get admissionNumber;@JsonKey(name: 'first_name') String? get firstName;@JsonKey(name: 'last_name') String? get lastName;@JsonKey(name: 'date_of_birth') DateTime? get dateOfBirth;@JsonKey(name: 'current_section_id') String? get currentSectionId; String? get status;
 /// Create a copy of StudentDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -5975,16 +5975,16 @@ $StudentDtoCopyWith<StudentDto> get copyWith => _$StudentDtoCopyWithImpl<Student
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.dateOfBirth, dateOfBirth) || other.dateOfBirth == dateOfBirth)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,currentSectionId,status);
+int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,dateOfBirth,currentSectionId,status);
 
 @override
 String toString() {
-  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, currentSectionId: $currentSectionId, status: $status)';
+  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, currentSectionId: $currentSectionId, status: $status)';
 }
 
 
@@ -5995,7 +5995,7 @@ abstract mixin class $StudentDtoCopyWith<$Res>  {
   factory $StudentDtoCopyWith(StudentDto value, $Res Function(StudentDto) _then) = _$StudentDtoCopyWithImpl;
 @useResult
 $Res call({
- String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
 });
 
 
@@ -6012,7 +6012,7 @@ class _$StudentDtoCopyWithImpl<$Res>
 
 /// Create a copy of StudentDto
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? studentCode = freezed,Object? admissionNumber = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? currentSectionId = freezed,Object? status = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? schoolId = freezed,Object? studentCode = freezed,Object? admissionNumber = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? dateOfBirth = freezed,Object? currentSectionId = freezed,Object? status = freezed,}) {
   return _then(_self.copyWith(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -6020,10 +6020,11 @@ as String?,studentCode: freezed == studentCode ? _self.studentCode : studentCode
 as String?,admissionNumber: freezed == admissionNumber ? _self.admissionNumber : admissionNumber // ignore: cast_nullable_to_non_nullable
 as String?,firstName: freezed == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
-as String?,currentSectionId: freezed == currentSectionId ? _self.currentSectionId : currentSectionId // ignore: cast_nullable_to_non_nullable
+as String?,dateOfBirth: freezed == dateOfBirth ? _self.dateOfBirth : dateOfBirth // ignore: cast_nullable_to_non_nullable
+as DateTime?,currentSectionId: freezed == currentSectionId ? _self.currentSectionId : currentSectionId // ignore: cast_nullable_to_non_nullable
 as String?,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String?,
-  ));
+   ));
 }
 
 }
@@ -6107,10 +6108,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _StudentDto() when $default != null:
-return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.currentSectionId,_that.status);case _:
+return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
   return orElse();
 
 }
@@ -6128,10 +6129,10 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)  $default,) {final _that = this;
 switch (_that) {
 case _StudentDto():
-return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.currentSectionId,_that.status);case _:
+return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -6148,10 +6149,10 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,) {final _that = this;
 switch (_that) {
 case _StudentDto() when $default != null:
-return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.currentSectionId,_that.status);case _:
+return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
   return null;
 
 }
@@ -6163,7 +6164,7 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 @JsonSerializable()
 
 class _StudentDto implements StudentDto {
-  const _StudentDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'student_code') this.studentCode, @JsonKey(name: 'admission_number') this.admissionNumber, @JsonKey(name: 'first_name') this.firstName, @JsonKey(name: 'last_name') this.lastName, @JsonKey(name: 'current_section_id') this.currentSectionId, this.status});
+  const _StudentDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'student_code') this.studentCode, @JsonKey(name: 'admission_number') this.admissionNumber, @JsonKey(name: 'first_name') this.firstName, @JsonKey(name: 'last_name') this.lastName, @JsonKey(name: 'date_of_birth') this.dateOfBirth, @JsonKey(name: 'current_section_id') this.currentSectionId, this.status});
   factory _StudentDto.fromJson(Map<String, dynamic> json) => _$StudentDtoFromJson(json);
 
 @override final  String? id;
@@ -6172,6 +6173,7 @@ class _StudentDto implements StudentDto {
 @override@JsonKey(name: 'admission_number') final  String? admissionNumber;
 @override@JsonKey(name: 'first_name') final  String? firstName;
 @override@JsonKey(name: 'last_name') final  String? lastName;
+@override@JsonKey(name: 'date_of_birth') final  DateTime? dateOfBirth;
 @override@JsonKey(name: 'current_section_id') final  String? currentSectionId;
 @override final  String? status;
 
@@ -6188,16 +6190,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _StudentDto&&(identical(other.id, id) || other.id == id)&&(identical(other.schoolId, schoolId) || other.schoolId == schoolId)&&(identical(other.studentCode, studentCode) || other.studentCode == studentCode)&&(identical(other.admissionNumber, admissionNumber) || other.admissionNumber == admissionNumber)&&(identical(other.firstName, firstName) || other.firstName == firstName)&&(identical(other.lastName, lastName) || other.lastName == lastName)&&(identical(other.dateOfBirth, dateOfBirth) || other.dateOfBirth == dateOfBirth)&&(identical(other.currentSectionId, currentSectionId) || other.currentSectionId == currentSectionId)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,currentSectionId,status);
+int get hashCode => Object.hash(runtimeType,id,schoolId,studentCode,admissionNumber,firstName,lastName,dateOfBirth,currentSectionId,status);
 
 @override
 String toString() {
-  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, currentSectionId: $currentSectionId, status: $status)';
+  return 'StudentDto(id: $id, schoolId: $schoolId, studentCode: $studentCode, admissionNumber: $admissionNumber, firstName: $firstName, lastName: $lastName, dateOfBirth: $dateOfBirth, currentSectionId: $currentSectionId, status: $status)';
 }
 
 
@@ -6208,7 +6210,7 @@ abstract mixin class _$StudentDtoCopyWith<$Res> implements $StudentDtoCopyWith<$
   factory _$StudentDtoCopyWith(_StudentDto value, $Res Function(_StudentDto) _then) = __$StudentDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
 });
 
 
@@ -6225,7 +6227,7 @@ class __$StudentDtoCopyWithImpl<$Res>
 
 /// Create a copy of StudentDto
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? schoolId = freezed,Object? studentCode = freezed,Object? admissionNumber = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? currentSectionId = freezed,Object? status = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? schoolId = freezed,Object? studentCode = freezed,Object? admissionNumber = freezed,Object? firstName = freezed,Object? lastName = freezed,Object? dateOfBirth = freezed,Object? currentSectionId = freezed,Object? status = freezed,}) {
   return _then(_StudentDto(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,schoolId: freezed == schoolId ? _self.schoolId : schoolId // ignore: cast_nullable_to_non_nullable
@@ -6233,7 +6235,8 @@ as String?,studentCode: freezed == studentCode ? _self.studentCode : studentCode
 as String?,admissionNumber: freezed == admissionNumber ? _self.admissionNumber : admissionNumber // ignore: cast_nullable_to_non_nullable
 as String?,firstName: freezed == firstName ? _self.firstName : firstName // ignore: cast_nullable_to_non_nullable
 as String?,lastName: freezed == lastName ? _self.lastName : lastName // ignore: cast_nullable_to_non_nullable
-as String?,currentSectionId: freezed == currentSectionId ? _self.currentSectionId : currentSectionId // ignore: cast_nullable_to_non_nullable
+as String?,dateOfBirth: freezed == dateOfBirth ? _self.dateOfBirth : dateOfBirth // ignore: cast_nullable_to_non_nullable
+as DateTime?,currentSectionId: freezed == currentSectionId ? _self.currentSectionId : currentSectionId // ignore: cast_nullable_to_non_nullable
 as String?,status: freezed == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String?,
   ));

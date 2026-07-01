@@ -425,6 +425,7 @@ abstract class StudentDto with _$StudentDto {
     @JsonKey(name: 'admission_number') String? admissionNumber,
     @JsonKey(name: 'first_name') String? firstName,
     @JsonKey(name: 'last_name') String? lastName,
+    @JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,
     @JsonKey(name: 'current_section_id') String? currentSectionId,
     String? status,
   }) = _StudentDto;

@@ -69,9 +69,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final selectedYearId = _selectedAcademicYearId.isNotEmpty
           ? _selectedAcademicYearId
           : _currentAcademicYearId(years);
-      final rows = await BackendApiClient.instance.getEvents(
-        academicYearId: selectedYearId.isEmpty ? null : selectedYearId,
-      );
+      final rows = await BackendApiClient.instance.getEvents();
       final events = rows.map(_PrincipalEvent.fromApi).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
@@ -1530,6 +1528,7 @@ class _EventFormPageState extends State<_EventFormPage> {
         'description': _descriptionController.text.trim(),
         'start_date': _formatDate(_startDate),
         'end_date': _formatDate(_endDate),
+        'event_date': startDateTime.toUtc().toIso8601String(),
         'start_time': _formatTime(_effectiveStartTime),
         'end_time': _formatTime(_effectiveEndTime),
         'start_datetime': startDateTime.toUtc().toIso8601String(),
@@ -2258,6 +2257,7 @@ class _PrincipalEvent {
     final start =
         _parseDateTime(row['start_datetime']) ??
         _parseDateAndTime(row['start_date'], row['start_time']) ??
+        _parseDateTime(row['event_date']) ??
         DateTime.now();
     final end =
         _parseDateTime(row['end_datetime']) ??
@@ -2266,6 +2266,7 @@ class _PrincipalEvent {
           row['end_time'],
           endOfDay: true,
         ) ??
+        _parseDateTime(row['event_date']) ??
         start.add(const Duration(hours: 1));
     final type = _clean(row['event_type'], fallback: 'event').toLowerCase();
     final status = _clean(row['status'], fallback: 'scheduled').toLowerCase();
