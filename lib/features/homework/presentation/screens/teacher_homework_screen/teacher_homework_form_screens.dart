@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
@@ -656,14 +657,100 @@ class _TeacherHomeworkSubmissionsScreenState
   }
 
   Future<void> _review(Map<String, dynamic> submission, String status) async {
-    final submissionId = teacherFlowText(submission['id']);
-    await BackendApiClient.instance.reviewHomeworkSubmission(
-      _homeworkId,
-      submissionId,
-      status: status,
-      remarks: status == 'reviewed' ? 'Reviewed by teacher' : 'Needs revision',
+    final normalizedStatus = _normalizeReviewStatus(status);
+    final comment = await _askForFeedback(
+      defaultComment: normalizedStatus == 'reviewed'
+          ? 'Reviewed by teacher'
+          : 'Please revise and resubmit',
     );
-    await _loadSubmissions();
+    if (comment == null) return;
+    final submissionId = teacherFlowText(
+      submission['id'] ?? submission['submission_id'],
+    );
+    try {
+      await BackendApiClient.instance.reviewHomeworkSubmission(
+        _homeworkId,
+        submissionId,
+        status: normalizedStatus,
+        remarks: comment,
+      );
+      final notificationService = await NotificationService.getInstance();
+      await notificationService.triggerHomeworkFeedbackAlert(
+        homeworkId: _homeworkId,
+        homeworkTitle: teacherFlowText(
+          widget.args.homework['title'],
+          fallback: 'Homework',
+        ),
+        comment: comment,
+        studentId: teacherFlowText(submission['student_id']),
+      );
+      await _loadSubmissions();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              normalizedStatus == 'needs_revision'
+                  ? 'Revision sent to parent'
+                  : 'Homework approved',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not send review: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _normalizeReviewStatus(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'approved':
+      case 'reviewed':
+        return 'reviewed';
+      case 'needs_revision':
+      case 'revision_requested':
+      default:
+        return 'needs_revision';
+    }
+  }
+
+  Future<String?> _askForFeedback({required String defaultComment}) {
+    final controller = TextEditingController(text: defaultComment);
+    return showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Homework Feedback'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Comment for parent',
+            alignLabelWithHint: true,
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              Navigator.pop(context, value.isEmpty ? defaultComment : value);
+            },
+            child: const Text('Send Feedback'),
+          ),
+        ],
+      ),
+    ).whenComplete(controller.dispose);
   }
 
   @override

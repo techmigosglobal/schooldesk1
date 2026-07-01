@@ -628,6 +628,9 @@ _StudentDto _$StudentDtoFromJson(Map<String, dynamic> json) => _StudentDto(
   admissionNumber: json['admission_number'] as String?,
   firstName: json['first_name'] as String?,
   lastName: json['last_name'] as String?,
+  dateOfBirth: json['date_of_birth'] == null
+      ? null
+      : DateTime.parse(json['date_of_birth'] as String),
   currentSectionId: json['current_section_id'] as String?,
   status: json['status'] as String?,
 );
@@ -640,6 +643,7 @@ Map<String, dynamic> _$StudentDtoToJson(_StudentDto instance) =>
       'admission_number': instance.admissionNumber,
       'first_name': instance.firstName,
       'last_name': instance.lastName,
+      'date_of_birth': instance.dateOfBirth?.toIso8601String(),
       'current_section_id': instance.currentSectionId,
       'status': instance.status,
     };

@@ -142,6 +142,7 @@ func (h *HomeworkSubmissionHandler) Submit(c *gin.Context) {
 	notifyHomeworkSubmittedForReview(homework, row)
 	id := row.ID
 	auditAction(c, "homework_submissions", action, "homework_submissions", &id)
+	notifyHomeworkSubmitted(row, homework)
 	if err := preloadHomeworkSubmissionDetails(database.DB).First(&row, "id = ?", row.ID).Error; err != nil {
 		success(c, http.StatusCreated, row, "Homework submitted")
 		return
@@ -195,6 +196,7 @@ func (h *HomeworkSubmissionHandler) Review(c *gin.Context) {
 	}
 	id := row.ID
 	auditAction(c, "homework_submissions", status, "homework_submissions", &id)
+	notifyHomeworkReviewed(row, homework)
 	if err := preloadHomeworkSubmissionDetails(database.DB).First(&row, "id = ?", row.ID).Error; err != nil {
 		success(c, http.StatusOK, row, "Homework submission reviewed")
 		return

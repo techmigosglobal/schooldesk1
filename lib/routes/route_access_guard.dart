@@ -93,6 +93,9 @@ class RouteAccessGuard {
     AppRoutes.teacherLessonPlanner: {'teacher'},
     AppRoutes.teacherStudentNotes: {'teacher'},
     AppRoutes.teacherDocuments: {'teacher'},
+    AppRoutes.teacherHomework: {'teacher'},
+    AppRoutes.teacherHomeworkForm: {'teacher'},
+    AppRoutes.teacherHomeworkSubmissions: {'teacher'},
     // Shared routes
     AppRoutes.schoolGallery: {'principal', 'teacher', 'parent'},
     AppRoutes.kioskQrAttendance: {'kiosk'},
@@ -114,6 +117,7 @@ class RouteAccessGuard {
     AppRoutes.parentDiary: {'parent'},
     AppRoutes.parentLessonPlanner: {'parent'},
     AppRoutes.parentPaymentSelection: {'parent'},
+    AppRoutes.parentHealth: {'parent'},
   };
 
   static String? redirectFor({

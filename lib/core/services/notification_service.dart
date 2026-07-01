@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/role_access_service.dart';
 
 class NotificationService extends ChangeNotifier {
   static NotificationService? _instance;
@@ -33,6 +34,7 @@ class NotificationService extends ChangeNotifier {
     _loaded = true;
     final rows = await _api.getNotifications();
     _notifications = rows.map(AppNotification.fromJson).toList();
+    await _loadBirthdayAlerts();
   }
 
   /// Force a fresh reload of notifications from the backend.
@@ -64,7 +66,7 @@ class NotificationService extends ChangeNotifier {
 
   Future<void> markAllAsRead(String role) async {
     final targets = _notifications.where(
-      (n) => (n.role == role || n.role == 'all') && !n.isRead,
+      (n) => _isVisibleToRole(n, role) && !n.isRead,
     );
     for (final notification in targets) {
       if (!notification.id.startsWith('transient_')) {
@@ -76,10 +78,7 @@ class NotificationService extends ChangeNotifier {
       }
     }
     _notifications = _notifications
-        .map(
-          (n) =>
-              n.role == role || n.role == 'all' ? n.copyWith(isRead: true) : n,
-        )
+        .map((n) => _isVisibleToRole(n, role) ? n.copyWith(isRead: true) : n)
         .toList();
     notifyListeners();
   }
@@ -95,15 +94,33 @@ class NotificationService extends ChangeNotifier {
   }
 
   List<AppNotification> getNotificationsForRole(String role) {
-    return _notifications
-        .where((n) => n.role == role || n.role == 'all')
-        .toList();
+    return _notifications.where((n) => _isVisibleToRole(n, role)).toList();
   }
 
   int getUnreadCountForRole(String role) {
     return _notifications
-        .where((n) => (n.role == role || n.role == 'all') && !n.isRead)
+        .where((n) => _isVisibleToRole(n, role) && !n.isRead)
         .length;
+  }
+
+  bool _isVisibleToRole(AppNotification notification, String role) {
+    final normalizedRole = role.trim().toLowerCase();
+    final notificationRole = notification.role.trim().toLowerCase();
+    if (notificationRole != 'all' && notificationRole != normalizedRole) {
+      return false;
+    }
+    if (normalizedRole == 'teacher' &&
+        notification.category == NotificationCategory.birthday) {
+      final teacherId = RoleAccessService.teacherStaffId.trim();
+      final sectionIds = RoleAccessService.teacherSectionIds;
+      final matchesTeacher =
+          teacherId.isNotEmpty && notification.teacherId == teacherId;
+      final matchesSection =
+          notification.sectionId.isNotEmpty &&
+          sectionIds.contains(notification.sectionId);
+      return matchesTeacher || matchesSection;
+    }
+    return true;
   }
 
   Future<void> triggerPendingApprovalAlert({
@@ -174,6 +191,113 @@ class NotificationService extends ChangeNotifier {
     );
   }
 
+  Future<void> _loadBirthdayAlerts() async {
+    try {
+      final today = DateTime.now();
+      final dayKey = _birthdayKey(today.year, today.month, today.day);
+      final existingKeys = _notifications
+          .where((n) => n.category == NotificationCategory.birthday)
+          .map((n) => '${n.referenceId}|${n.role}')
+          .toSet();
+
+      final students = await _api.getStudents(page: 1, pageSize: 1000);
+      final sections = await _api.getSections();
+      final sectionById = {for (final section in sections) section.id: section};
+
+      for (final student in students.data) {
+        final dob = DateTime.tryParse(student.dateOfBirth ?? '');
+        if (dob == null || dob.month != today.month || dob.day != today.day) {
+          continue;
+        }
+        final studentId = student.id.trim();
+        if (studentId.isEmpty) continue;
+
+        final studentSectionId = (student.currentSectionId ?? '').trim();
+        final section = sectionById[studentSectionId];
+        final sectionTeacherId = _teacherIdFromSection(section).trim();
+        final teacherId = sectionTeacherId.isNotEmpty ? sectionTeacherId : '';
+        final sectionId = _sectionIdFromSection(
+          section,
+          fallback: studentSectionId,
+        );
+        final studentName = [
+          student.firstName.trim(),
+          student.lastName.trim(),
+        ].where((part) => part.isNotEmpty).join(' ').trim();
+        final displayName = studentName.isEmpty ? 'Student' : studentName;
+        final studentKey = '$studentId|$dayKey';
+
+        if (!existingKeys.contains('$studentKey|principal')) {
+          _notifications.insert(
+            0,
+            AppNotification.transient(
+              title: 'Birthday Today',
+              body: '$displayName has a birthday today.',
+              category: NotificationCategory.birthday,
+              role: 'principal',
+              priority: NotificationPriority.high,
+              referenceType: 'birthday',
+              referenceId: studentKey,
+              studentId: studentId,
+              sectionId: sectionId,
+              teacherId: teacherId,
+            ),
+          );
+          existingKeys.add('$studentKey|principal');
+        }
+
+        if (teacherId.isNotEmpty &&
+            !existingKeys.contains('$studentKey|teacher')) {
+          _notifications.insert(
+            0,
+            AppNotification.transient(
+              title: 'Birthday Today',
+              body: '$displayName in your class has a birthday today.',
+              category: NotificationCategory.birthday,
+              role: 'teacher',
+              priority: NotificationPriority.high,
+              referenceType: 'birthday',
+              referenceId: studentKey,
+              studentId: studentId,
+              sectionId: sectionId,
+              teacherId: teacherId,
+            ),
+          );
+          existingKeys.add('$studentKey|teacher');
+        }
+      }
+    } catch (_) {
+      // Birthday alerts are best-effort.
+    }
+  }
+
+  String _birthdayKey(int year, int month, int day) =>
+      '$year-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+
+  String _teacherIdFromSection(dynamic section) {
+    if (section == null) return '';
+    try {
+      final text = '${section.classTeacherId ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    } catch (_) {}
+    if (section is Map) {
+      final text =
+          '${section['class_teacher_id'] ?? section['teacher_id'] ?? ''}'
+              .trim();
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
+
+  String _sectionIdFromSection(dynamic section, {required String fallback}) {
+    if (section == null) return fallback;
+    try {
+      final text = '${section.id ?? ''}'.trim();
+      if (text.isNotEmpty) return text;
+    } catch (_) {}
+    return fallback;
+  }
+
   Future<void> triggerLeaveStatusAlert({
     required String status,
     required String dates,
@@ -188,6 +312,141 @@ class NotificationService extends ChangeNotifier {
         priority: NotificationPriority.high,
       ),
     );
+  }
+
+  Future<void> triggerHealthReminderAlert({
+    required String studentName,
+    required String condition,
+    required String medication,
+    required String reminderTime,
+    required String role,
+    String referenceId = '',
+  }) async {
+    final title = 'Health Reminder';
+    final bodyParts = <String>[
+      if (studentName.trim().isNotEmpty) studentName.trim(),
+      if (condition.trim().isNotEmpty) condition.trim(),
+      if (medication.trim().isNotEmpty) medication.trim(),
+      if (reminderTime.trim().isNotEmpty) reminderTime.trim(),
+    ];
+    final body = bodyParts.isEmpty
+        ? 'A parent added a health reminder.'
+        : bodyParts.join(' - ');
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.health,
+        role: role,
+        priority: NotificationPriority.high,
+        referenceType: 'health',
+        referenceId: referenceId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.health,
+        'notification_type': NotificationCategory.health,
+        'target_role': role,
+        'priority': 'high',
+        'reference_type': 'health',
+        if (referenceId.trim().isNotEmpty) 'reference_id': referenceId.trim(),
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
+  }
+
+  Future<void> triggerHomeworkSubmittedAlert({
+    required String homeworkId,
+    required String homeworkTitle,
+    required String studentName,
+    bool hasAttachment = false,
+  }) async {
+    final title = 'Homework Submitted';
+    final body = [
+      if (studentName.trim().isNotEmpty) studentName.trim(),
+      if (homeworkTitle.trim().isNotEmpty) homeworkTitle.trim(),
+      if (hasAttachment) 'Attachment included',
+    ].join(' - ');
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body.isEmpty ? 'A parent submitted homework.' : body,
+        category: NotificationCategory.homework,
+        role: 'teacher',
+        priority: NotificationPriority.high,
+        route: '/teacher-homework-screen/submissions',
+        referenceType: 'homework',
+        referenceId: homeworkId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body.isEmpty ? 'A parent submitted homework.' : body,
+        'category': NotificationCategory.homework,
+        'notification_type': NotificationCategory.homework,
+        'target_role': 'teacher',
+        'priority': 'high',
+        'route': '/teacher-homework-screen/submissions',
+        'reference_type': 'homework',
+        'reference_id': homeworkId,
+        'action': 'submission',
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
+  }
+
+  Future<void> triggerHomeworkFeedbackAlert({
+    required String homeworkId,
+    required String homeworkTitle,
+    required String comment,
+    required String studentId,
+  }) async {
+    final title = 'Homework Feedback';
+    final cleanComment = comment.trim();
+    final body = cleanComment.isEmpty
+        ? 'Teacher added feedback for ${homeworkTitle.trim().isEmpty ? 'homework' : homeworkTitle.trim()}.'
+        : cleanComment;
+
+    await addNotification(
+      AppNotification.transient(
+        title: title,
+        body: body,
+        category: NotificationCategory.homework,
+        role: 'parent',
+        priority: NotificationPriority.high,
+        route: '/parent-homework-screen/submit',
+        referenceType: 'homework',
+        referenceId: homeworkId,
+      ),
+    );
+
+    try {
+      await _api.createRaw('/notifications', {
+        'title': title,
+        'body': body,
+        'category': NotificationCategory.homework,
+        'notification_type': NotificationCategory.homework,
+        'target_role': 'parent',
+        'priority': 'high',
+        'route': '/parent-homework-screen/submit',
+        'reference_type': 'homework',
+        'reference_id': homeworkId,
+        'action': 'needs_revision',
+        if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+      });
+    } catch (_) {
+      // Notification delivery is best-effort.
+    }
   }
 
   Future<void> triggerInvoiceGeneratedAlert({
@@ -229,8 +488,10 @@ class NotificationCategory {
   static const String feeDue = 'fee_due';
   static const String examReminder = 'exam_reminder';
   static const String event = 'event';
-  static const String general = 'general';
+  static const String health = 'health';
+  static const String homework = 'homework';
   static const String birthday = 'birthday';
+  static const String general = 'general';
   static const String healthAlert = 'health_alert';
 }
 
@@ -248,6 +509,9 @@ class AppNotification {
   final String route;
   final String referenceType;
   final String referenceId;
+  final String studentId;
+  final String sectionId;
+  final String teacherId;
 
   const AppNotification({
     required this.id,
@@ -261,6 +525,9 @@ class AppNotification {
     this.route = '',
     this.referenceType = '',
     this.referenceId = '',
+    this.studentId = '',
+    this.sectionId = '',
+    this.teacherId = '',
   });
 
   factory AppNotification.transient({
@@ -272,6 +539,9 @@ class AppNotification {
     String route = '',
     String referenceType = '',
     String referenceId = '',
+    String studentId = '',
+    String sectionId = '',
+    String teacherId = '',
   }) {
     return AppNotification(
       id: 'transient_${DateTime.now().microsecondsSinceEpoch}',
@@ -285,6 +555,9 @@ class AppNotification {
       route: route,
       referenceType: referenceType,
       referenceId: referenceId,
+      studentId: studentId,
+      sectionId: sectionId,
+      teacherId: teacherId,
     );
   }
 
@@ -301,6 +574,9 @@ class AppNotification {
       route: route,
       referenceType: referenceType,
       referenceId: referenceId,
+      studentId: studentId,
+      sectionId: sectionId,
+      teacherId: teacherId,
     );
   }
 
@@ -310,11 +586,22 @@ class AppNotification {
     'reference_id': referenceId,
     'role': role,
     'category': category,
+    'student_id': studentId,
+    'section_id': sectionId,
+    'teacher_id': teacherId,
   };
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     final priorityRaw = '${json['priority'] ?? ''}'.toLowerCase();
-    final categoryRaw = '${json['category'] ?? ''}'.toLowerCase();
+    final categoryRaw =
+        '${json['category'] ?? json['type'] ?? json['notification_type'] ?? ''}'
+            .toLowerCase();
+    final referenceType =
+        '${json['reference_type'] ?? json['referenceType'] ?? ''}';
+    final referenceId = '${json['reference_id'] ?? json['referenceId'] ?? ''}';
+    final studentId = '${json['student_id'] ?? json['studentId'] ?? ''}';
+    final sectionId = '${json['section_id'] ?? json['sectionId'] ?? ''}';
+    final teacherId = '${json['teacher_id'] ?? json['teacherId'] ?? ''}';
     return AppNotification(
       id: '${json['id']}',
       title: '${json['title'] ?? 'Notification'}',
@@ -333,8 +620,11 @@ class AppNotification {
           ? NotificationPriority.low
           : NotificationPriority.medium,
       route: '${json['route'] ?? ''}',
-      referenceType: '${json['reference_type'] ?? ''}',
-      referenceId: '${json['reference_id'] ?? ''}',
+      referenceType: referenceType,
+      referenceId: referenceId,
+      studentId: studentId,
+      sectionId: sectionId,
+      teacherId: teacherId,
     );
   }
 }

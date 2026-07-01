@@ -1072,3 +1072,160 @@ func enqueuePushNotification(log models.NotificationLog) {
 		"recipient_user_id": log.RecipientUserID,
 	})
 }
+
+func notifyMedicalRecordCreated(record models.MedicalRecord) {
+	tx := database.DB
+	studentID := record.StudentID
+	if studentID == "" {
+		return
+	}
+
+	var student models.Student
+	if err := tx.Preload("CurrentSection").First(&student, "id = ?", studentID).Error; err != nil {
+		return
+	}
+
+	schoolID := student.SchoolID
+	if schoolID == "" {
+		return
+	}
+
+	studentName := strings.TrimSpace(student.FirstName + " " + student.LastName)
+	if studentName == "" {
+		studentName = "Student"
+	}
+
+	title := fmt.Sprintf("Health Update: %s", studentName)
+	body := strings.TrimSpace(record.Conditions)
+	if body == "" {
+		body = "A new health reminder has been submitted."
+	} else {
+		body = fmt.Sprintf("Issue: %s", body)
+	}
+
+	var recipientUsers []models.User
+
+	// 1. Fetch principal(s)
+	var principals []models.User
+	if err := tx.Joins("LEFT JOIN roles ON roles.id = users.role_id").
+		Where("users.school_id = ? AND users.is_active = ? AND (LOWER(roles.role_name) = ? OR LOWER(users.role) = ?)", schoolID, true, "principal", "principal").
+		Find(&principals).Error; err == nil {
+		recipientUsers = append(recipientUsers, principals...)
+	}
+
+	// 2. Fetch class teacher
+	if student.CurrentSection != nil && student.CurrentSection.ClassTeacherID != nil && *student.CurrentSection.ClassTeacherID != "" {
+		var teacherUser models.User
+		if err := tx.Where("school_id = ? AND is_active = ? AND linked_type = ? AND linked_id = ?", schoolID, true, "staff", *student.CurrentSection.ClassTeacherID).
+			First(&teacherUser).Error; err == nil {
+			recipientUsers = append(recipientUsers, teacherUser)
+		}
+	}
+
+	if len(recipientUsers) == 0 {
+		return
+	}
+
+	logs, err := createNotificationLogsForUsersTx(
+		tx,
+		schoolID,
+		recipientUsers,
+		title,
+		body,
+		"health",
+		"medium",
+		"health",
+		record.ID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}
+
+func notifyHomeworkSubmitted(row models.HomeworkSubmission, homework HomeworkRecord) {
+	tx := database.DB
+	schoolID := strings.TrimSpace(row.SchoolID)
+	if schoolID == "" || homework.StaffID == "" {
+		return
+	}
+
+	var student models.Student
+	if err := tx.First(&student, "id = ?", row.StudentID).Error; err != nil {
+		return
+	}
+	studentName := strings.TrimSpace(student.FirstName + " " + student.LastName)
+	if studentName == "" {
+		studentName = "Student"
+	}
+
+	title := "Homework Submitted: " + studentName
+	body := fmt.Sprintf("%s has submitted homework for \"%s\".", studentName, homework.Title)
+
+	var teacherUser models.User
+	if err := tx.Where("school_id = ? AND is_active = ? AND linked_type = ? AND linked_id = ?", schoolID, true, "staff", homework.StaffID).First(&teacherUser).Error; err != nil {
+		return
+	}
+
+	logs, err := createNotificationLogsForUsersTx(
+		tx,
+		schoolID,
+		[]models.User{teacherUser},
+		title,
+		body,
+		"homework",
+		"medium",
+		"submission",
+		homework.ID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}
+
+func notifyHomeworkReviewed(row models.HomeworkSubmission, homework HomeworkRecord) {
+	tx := database.DB
+	schoolID := strings.TrimSpace(row.SchoolID)
+	if schoolID == "" || row.StudentID == "" {
+		return
+	}
+
+	title := "Homework Reviewed: " + homework.Title
+	statusText := "approved"
+	if row.Status == "needs_revision" {
+		statusText = "needs revision"
+	}
+	body := fmt.Sprintf("Feedback: Status is %s.", statusText)
+	if row.Remarks != "" {
+		body += fmt.Sprintf(" Remarks: %s", row.Remarks)
+	}
+
+	var links []models.ParentStudentLink
+	if err := tx.Where("school_id = ? AND student_id = ?", schoolID, row.StudentID).Find(&links).Error; err != nil || len(links) == 0 {
+		return
+	}
+
+	var parentUserIDs []string
+	for _, link := range links {
+		parentUserIDs = append(parentUserIDs, link.ParentUserID)
+	}
+
+	var parents []models.User
+	if err := tx.Preload("Role").Where("school_id = ? AND is_active = ? AND id IN ?", schoolID, true, parentUserIDs).Find(&parents).Error; err != nil || len(parents) == 0 {
+		return
+	}
+
+	logs, err := createNotificationLogsForUsersTx(
+		tx,
+		schoolID,
+		parents,
+		title,
+		body,
+		"homework",
+		"medium",
+		"feedback",
+		homework.ID,
+	)
+	if err == nil {
+		enqueuePushNotifications(logs)
+	}
+}

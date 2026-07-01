@@ -75,7 +75,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   int _tabCountForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => 4,
+      'teacher' => 5,
       'principal' => 6,
       _ => 5,
     };
@@ -129,6 +129,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                     ? [
                         _buildList(
                           null,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.homework,
                           bgColor,
                           surfaceColor,
                           onSurfaceColor,
@@ -247,6 +254,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return switch (role.trim().toLowerCase()) {
       'teacher' => const [
         Tab(text: 'All'),
+        Tab(text: 'Homework'),
         Tab(text: 'Birthdays'),
         Tab(text: 'Health'),
         Tab(text: 'Circulars'),
@@ -454,8 +462,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.feeDue || text.contains('fee')) {
       return Icons.account_balance_wallet_rounded;
     }
-    if (item.category == NotificationCategory.birthday) return Icons.cake_rounded;
-    if (item.category == NotificationCategory.healthAlert) return Icons.medical_services_rounded;
+    if (item.category == NotificationCategory.birthday) {
+      return Icons.cake_rounded;
+    }
+    if (item.category == NotificationCategory.healthAlert) {
+      return Icons.medical_services_rounded;
+    }
     if (text.contains('homework')) return Icons.assignment_rounded;
     if (text.contains('leave')) return Icons.verified_user_rounded;
     if (text.contains('attendance')) return Icons.bar_chart_rounded;
@@ -467,8 +479,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     if (item.category == NotificationCategory.feeDue || text.contains('fee')) {
       return const Color(0xFFEA580C);
     }
-    if (item.category == NotificationCategory.birthday) return const Color(0xFFE91E63);
-    if (item.category == NotificationCategory.healthAlert) return const Color(0xFFFF9800);
+    if (item.category == NotificationCategory.birthday) {
+      return const Color(0xFFE91E63);
+    }
+    if (item.category == NotificationCategory.healthAlert) {
+      return const Color(0xFFFF9800);
+    }
     if (text.contains('homework')) return const Color(0xFF2563EB);
     if (text.contains('leave')) return const Color(0xFF16A34A);
     if (text.contains('attendance')) return const Color(0xFF16A34A);
@@ -794,6 +810,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.quiz_rounded;
       case NotificationCategory.event:
         return Icons.event_available_rounded;
+      case NotificationCategory.health:
+        return Icons.health_and_safety_rounded;
+      case NotificationCategory.homework:
+        return Icons.assignment_turned_in_rounded;
       case NotificationCategory.birthday:
         return Icons.cake_rounded;
       case NotificationCategory.healthAlert:
@@ -813,6 +833,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.primary;
       case NotificationCategory.event:
         return context.appTheme.success;
+      case NotificationCategory.health:
+        return context.appTheme.info;
+      case NotificationCategory.homework:
+        return context.appTheme.primary;
       case NotificationCategory.birthday:
         return const Color(0xFFE91E63);
       case NotificationCategory.healthAlert:
@@ -1086,9 +1110,6 @@ class _ParentFilterPill extends StatelessWidget {
     );
   }
 }
-
-
-
 
 class _ParentNotificationEmptyCard extends StatelessWidget {
   final String filter;

@@ -27,11 +27,16 @@ extension BackendEventsApi on BackendApiClient {
     await createEventPayload({
       'academic_year_id': academicYearId,
       'event_title': title,
+      'event_name': title,
       'event_type': eventType,
       'description': description,
+      'start_date': start.toIso8601String().split('T').first,
+      'end_date': end.toIso8601String().split('T').first,
+      'event_date': start.toUtc().toIso8601String(),
       'start_datetime': start.toIso8601String(),
       'end_datetime': end.toIso8601String(),
       'location': location,
+      'venue': location,
       'is_holiday': isHoliday,
     });
   }
@@ -52,27 +57,40 @@ extension BackendEventsApi on BackendApiClient {
 
   Future<List<Map<String, dynamic>>> getEvents({String? academicYearId}) async {
     try {
-      final queryParams = <String, dynamic>{};
-      if (academicYearId != null) {
-        queryParams['academic_year_id'] = academicYearId;
+      final filters = <String, dynamic>{'page_size': 200};
+      if (academicYearId != null && academicYearId.trim().isNotEmpty) {
+        filters['academic_year_id'] = academicYearId.trim();
       }
-      final response = await SchoolDeskApi.instance.client.events(
-        queryParams.isEmpty ? null : queryParams,
-      );
-      if (response.success == true) {
-        return _asListMap(response.data).map((event) {
-          final normalized = Map<String, dynamic>.from(event);
-          normalized['id'] ??= normalized['event_id'];
-          normalized['event_title'] ??= normalized['event_name'];
-          normalized['location'] ??= normalized['venue'];
-          normalized['start_datetime'] ??=
-              '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
-          normalized['end_datetime'] ??=
-              '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
-          return normalized;
-        }).toList();
-      }
-      throw ServerException(message: 'Failed to get events');
+      final rows = <Map<String, dynamic>>[];
+      var page = 1;
+      var totalPages = 1;
+      do {
+        final response = await SchoolDeskApi.instance.client.events({
+          ...filters,
+          'page': page,
+        });
+        if (response.success != true) {
+          throw ServerException(message: 'Failed to get events');
+        }
+        rows.addAll(
+          _asListMap(response.data).map((event) {
+            final normalized = Map<String, dynamic>.from(event);
+            normalized['id'] ??= normalized['event_id'];
+            normalized['event_title'] ??= normalized['event_name'];
+            normalized['location'] ??= normalized['venue'];
+            normalized['start_date'] ??= normalized['event_date'];
+            normalized['end_date'] ??= normalized['event_date'];
+            normalized['start_datetime'] ??=
+                '${normalized['start_date'] ?? ''}T${normalized['start_time'] ?? '00:00:00'}';
+            normalized['end_datetime'] ??=
+                '${normalized['end_date'] ?? normalized['start_date'] ?? ''}T${normalized['end_time'] ?? '23:59:59'}';
+            return normalized;
+          }),
+        );
+        totalPages = response.totalPages;
+        page++;
+      } while (page <= totalPages && totalPages > 0);
+      return rows;
     } on DioException catch (e) {
       throw _handleError(e);
     }

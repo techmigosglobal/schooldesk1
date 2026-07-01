@@ -118,7 +118,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen> {
         defaultClassName: RoleAccessService.teacherClassName,
         defaultSubject: RoleAccessService.teacherSubject,
         assignedClasses: RoleAccessService.teacherAssignedClasses,
-        students: const [],
+        students: RoleAccessService.teacherClassStudents,
         homework: homework,
       ),
     );

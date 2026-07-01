@@ -159,6 +159,13 @@ class _ParentDrawerState extends State<ParentDrawer> {
               label: 'Lesson Planner',
               route: AppRoutes.parentLessonPlanner,
             ),
+            SchoolDeskNavigationItem(
+              index: ParentNav.health,
+              icon: Icons.medical_information_outlined,
+              activeIcon: Icons.medical_information_rounded,
+              label: 'Health Reminders',
+              route: AppRoutes.parentHealth,
+            ),
           ],
         ),
         SchoolDeskNavigationSection(
