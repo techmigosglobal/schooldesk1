@@ -49,10 +49,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     });
     try {
       _service = await NotificationService.getInstance();
-      final role = widget.role.trim().toLowerCase();
-      if (forceRefresh || role == 'principal' || role == 'teacher') {
-        await _service?.refresh();
-      }
+      await _service?.refresh();
     } catch (error) {
       _error = error.toString();
     }
@@ -76,8 +73,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
 
   int _tabCountForRole(String role) {
     return switch (role.trim().toLowerCase()) {
-      'teacher' => 3,
-      'principal' => 5,
+      'teacher' => 5,
+      'principal' => 6,
       _ => 5,
     };
   }
@@ -136,6 +133,20 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           mutedColor,
                         ),
                         _buildList(
+                          NotificationCategory.birthday,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.homework,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
                           NotificationCategory.health,
                           bgColor,
                           surfaceColor,
@@ -175,6 +186,13 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                         ),
                         _buildList(
                           NotificationCategory.health,
+                          bgColor,
+                          surfaceColor,
+                          onSurfaceColor,
+                          mutedColor,
+                        ),
+                        _buildList(
+                          NotificationCategory.birthday,
                           bgColor,
                           surfaceColor,
                           onSurfaceColor,
@@ -234,6 +252,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     return switch (role.trim().toLowerCase()) {
       'teacher' => const [
         Tab(text: 'All'),
+        Tab(text: 'Birthday'),
+        Tab(text: 'Homework'),
         Tab(text: 'Health'),
         Tab(text: 'Circulars'),
       ],
@@ -242,6 +262,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         Tab(text: 'Approvals'),
         Tab(text: 'Fees'),
         Tab(text: 'Health'),
+        Tab(text: 'Birthday'),
         Tab(text: 'Events'),
       ],
       _ => const [
@@ -274,6 +295,10 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         text.contains('medical') ||
         text.contains('medication')) {
       return NotificationCategory.health;
+    }
+    if (notification.category == NotificationCategory.birthday ||
+        text.contains('birthday')) {
+      return NotificationCategory.birthday;
     }
     if (notification.category == NotificationCategory.homework ||
         text.contains('homework') ||
@@ -421,6 +446,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     switch (_parentFilter) {
       case 'unread':
         return items.where((item) => !item.isRead).toList();
+      case 'homework':
+        return items
+            .where((item) =>
+                item.category == NotificationCategory.homework ||
+                '${item.title} ${item.body}'.toLowerCase().contains('homework'))
+            .toList();
       case 'fees':
         return items
             .where((item) => item.category == NotificationCategory.feeDue)
@@ -591,6 +622,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Events';
       case NotificationCategory.health:
         return 'Health';
+      case NotificationCategory.birthday:
+        return 'Birthday';
       case NotificationCategory.homework:
         return 'Homework';
       case NotificationCategory.general:
@@ -789,6 +822,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.event_available_rounded;
       case NotificationCategory.health:
         return Icons.health_and_safety_rounded;
+      case NotificationCategory.birthday:
+        return Icons.cake_rounded;
       case NotificationCategory.homework:
         return Icons.assignment_turned_in_rounded;
       default:
@@ -808,6 +843,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.success;
       case NotificationCategory.health:
         return context.appTheme.info;
+      case NotificationCategory.birthday:
+        return const Color(0xFFDB2777);
       case NotificationCategory.homework:
         return context.appTheme.primary;
       default:
@@ -1004,13 +1041,14 @@ class _ParentNotificationFilters extends StatelessWidget {
     final filters = const [
       ('all', 'All', 72.0),
       ('unread', 'Unread', 86.0),
+      ('homework', 'Homework', 98.0),
       ('fees', 'Fees', 76.0),
       ('academics', 'Academics', 100.0),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 8.0;
-        const baseWidth = 72.0 + 86.0 + 76.0 + 100.0;
+        const baseWidth = 72.0 + 86.0 + 98.0 + 76.0 + 100.0;
         final availableForChips = constraints.maxWidth - (gap * 3);
         final scale = availableForChips < baseWidth
             ? (availableForChips / baseWidth).clamp(0.82, 1.0)

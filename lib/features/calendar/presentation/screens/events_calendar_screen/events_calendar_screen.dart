@@ -1210,7 +1210,7 @@ class _EventCalendarDayCell extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Ink(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
             color: isToday
                 ? const Color(0xFFEAF4FF)
@@ -1228,6 +1228,7 @@ class _EventCalendarDayCell extends StatelessWidget {
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
@@ -1256,33 +1257,33 @@ class _EventCalendarDayCell extends StatelessWidget {
                     ),
                 ],
               ),
-              const Spacer(),
               if (firstEvent != null) ...[
+                const SizedBox(height: 2),
                 Text(
                   firstEvent.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     color: principalDirectoryText,
-                    fontSize: 9,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.w800,
+                    height: 1.0,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Row(
+                const SizedBox(height: 2),
+                Wrap(
+                  spacing: 3,
+                  runSpacing: 2,
                   children: [
-                    for (final event in events.take(3)) ...[
-                      // event preview dots
+                    for (final event in events.take(3))
                       Container(
                         width: 5,
                         height: 5,
-                        margin: const EdgeInsets.only(right: 3),
                         decoration: BoxDecoration(
                           color: event.typeColor,
                           shape: BoxShape.circle,
                         ),
                       ),
-                    ],
                   ],
                 ),
               ],
@@ -1536,13 +1537,17 @@ class _EventFormPageState extends State<_EventFormPage> {
       final payload = {
         'academic_year_id': _academicYearId,
         'event_name': _titleController.text.trim(),
+        'event_title': _titleController.text.trim(),
         'event_type': _isHoliday ? 'holiday' : _type,
         'description': _descriptionController.text.trim(),
         'start_date': _formatDate(_startDate),
         'end_date': _formatDate(_endDate),
         'start_time': _formatTime(_effectiveStartTime),
         'end_time': _formatTime(_effectiveEndTime),
+        'start_datetime': startDateTime.toUtc().toIso8601String(),
+        'end_datetime': endDateTime.toUtc().toIso8601String(),
         'venue': _venueController.text.trim(),
+        'location': _venueController.text.trim(),
         'audience_type': _audience,
         'status': _status,
         'is_holiday': _isHoliday,
