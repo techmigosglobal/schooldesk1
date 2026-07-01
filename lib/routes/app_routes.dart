@@ -6,6 +6,7 @@ import 'package:schooldesk1/features/communication/communication.dart';
 import 'package:schooldesk1/features/dashboard/dashboard.dart';
 import 'package:schooldesk1/features/documents/documents.dart';
 import 'package:schooldesk1/features/finance/finance.dart';
+import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 import 'package:schooldesk1/features/auth/auth.dart';
 import 'package:schooldesk1/features/reports/reports.dart';
 import 'package:schooldesk1/features/people/people.dart';
@@ -141,6 +142,7 @@ class AppRoutes {
   static const String parentDiary = '/parent-diary-screen';
   static const String parentTimetable = '/parent-timetable-screen';
   static const String parentPTMBooking = '/parent-ptm-booking-screen';
+  static const String parentHealth = '/parent-health-screen';
   static const String parentLessonPlanner = '/parent-lesson-planner-screen';
 
   // Shared Routes
@@ -303,6 +305,7 @@ class AppRoutes {
     parentDiary: (context) => const ParentDiaryScreen(),
     parentTimetable: (context) => const ParentTimetableScreen(),
     parentPTMBooking: (context) => const ParentPTMBookingScreen(),
+    parentHealth: (context) => const ParentHealthUpdateScreen(),
     parentLessonPlanner: (context) => const ParentLessonPlannerScreen(),
 
     // Shared
