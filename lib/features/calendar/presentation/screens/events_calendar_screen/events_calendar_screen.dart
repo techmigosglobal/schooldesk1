@@ -1130,7 +1130,7 @@ class _EventCalendarMonth extends StatelessWidget {
                 crossAxisCount: 7,
                 mainAxisSpacing: compact ? 4 : 6,
                 crossAxisSpacing: compact ? 4 : 6,
-                childAspectRatio: compact ? 1.0 : 1.15,
+                childAspectRatio: compact ? 1.12 : 1.22,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 children: cells,
@@ -1258,18 +1258,6 @@ class _EventCalendarDayCell extends StatelessWidget {
                 ],
               ),
               if (firstEvent != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  firstEvent.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: principalDirectoryText,
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w800,
-                    height: 1.0,
-                  ),
-                ),
                 const SizedBox(height: 2),
                 Wrap(
                   spacing: 3,

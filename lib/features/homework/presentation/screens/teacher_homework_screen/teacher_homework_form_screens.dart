@@ -654,33 +654,68 @@ class _TeacherHomeworkSubmissionsScreenState
   }
 
   Future<void> _review(Map<String, dynamic> submission, String status) async {
+    final normalizedStatus = _normalizeReviewStatus(status);
     final comment = await _askForFeedback(
-      defaultComment: status == 'approved'
+      defaultComment: normalizedStatus == 'reviewed'
           ? 'Reviewed by teacher'
-          : 'Needs revision',
+          : 'Please revise and resubmit',
     );
     if (comment == null) return;
     final homeworkId = _homeworkId;
     final submissionId = teacherFlowText(
       submission['id'] ?? submission['submission_id'],
     );
-    await BackendApiClient.instance.reviewHomeworkSubmission(
-      homeworkId,
-      submissionId,
-      status: status,
-      remarks: comment,
-    );
-    final notificationService = await NotificationService.getInstance();
-    await notificationService.triggerHomeworkFeedbackAlert(
-      homeworkId: homeworkId,
-      homeworkTitle: teacherFlowText(
-        widget.args.homework['title'],
-        fallback: 'Homework',
-      ),
-      comment: comment,
-      studentId: teacherFlowText(submission['student_id']),
-    );
-    await _loadSubmissions();
+    try {
+      await BackendApiClient.instance.reviewHomeworkSubmission(
+        homeworkId,
+        submissionId,
+        status: normalizedStatus,
+        remarks: comment,
+      );
+      final notificationService = await NotificationService.getInstance();
+      await notificationService.triggerHomeworkFeedbackAlert(
+        homeworkId: homeworkId,
+        homeworkTitle: teacherFlowText(
+          widget.args.homework['title'],
+          fallback: 'Homework',
+        ),
+        comment: comment,
+        studentId: teacherFlowText(submission['student_id']),
+      );
+      await _loadSubmissions();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              normalizedStatus == 'needs_revision'
+                  ? 'Revision sent to parent'
+                  : 'Homework approved',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not send review: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  String _normalizeReviewStatus(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'approved':
+      case 'reviewed':
+        return 'reviewed';
+      case 'needs_revision':
+      case 'revision_requested':
+      default:
+        return 'needs_revision';
+    }
   }
 
   Future<String?> _askForFeedback({required String defaultComment}) {
@@ -800,8 +835,8 @@ class _TeacherHomeworkSubmissionsScreenState
                             label: 'Needs Revision',
                             icon: Icons.replay_rounded,
                             onTap: () =>
-                                _review(submission, 'revision_requested'),
-                          ),
+                                _review(submission, 'needs_revision'),
+                              ),
                         ],
                       ),
                     ],
