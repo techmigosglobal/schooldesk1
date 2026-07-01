@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -259,6 +260,8 @@ func (v *verifier) runMutating() {
 	}, http.StatusCreated, "parent_user")
 	v.login("Parent", parentUser, parentPass, http.StatusOK)
 	v.runParentPaymentRequestFlow()
+	v.runPrincipalManualPaymentFlow()
+	v.runFeeStructureDeletePropagationFlow()
 	v.runAttendanceFlow()
 	v.runStudentLeaveFlow()
 	v.runTeacherHomeworkFlow()
@@ -348,23 +351,266 @@ func (v *verifier) runParentPaymentRequestFlow() {
 	if v.ids["payment_invoice"] == "" {
 		return
 	}
+	v.expect("Principal updates parent payment QR config", http.MethodPut, "/fees/payment-config", "Principal", "Principal", map[string]any{
+		"upi_id":       "schooldesk-local@upi",
+		"payee_name":   "SchoolDesk Local Verification",
+		"qr_note":      "Verifier payment " + v.suffix,
+		"qr_image_url": "/uploads/payment_proofs/local-verifier/qr-" + v.suffix + ".png",
+	}, http.StatusOK)
+	_, paymentConfig := v.expectAny("Parent reads configured payment QR", http.MethodGet, "/fees/payment-config?invoice_id="+v.ids["payment_invoice"], "Parent", "Parent", nil, http.StatusOK)
+	if upiID, ok := getString(paymentConfig, "upi_id"); !ok || !strings.Contains(upiID, "@upi") {
+		v.addFail("Parent reads configured payment QR content", "GET /fees/payment-config", "Parent", "UPI ID missing from payment config response")
+		return
+	}
+	if qrImage, ok := getString(paymentConfig, "qr_image_url"); !ok || !strings.Contains(qrImage, "/uploads/") {
+		v.addFail("Parent reads configured payment QR image", "GET /fees/payment-config", "Parent", "QR image URL missing from payment config response")
+		return
+	}
+	if updatedAt, ok := getString(paymentConfig, "updated_at"); !ok {
+		v.addFail("Parent reads configured payment QR freshness", "GET /fees/payment-config", "Parent", "updated_at missing from payment config response")
+		return
+	} else if strings.TrimSpace(updatedAt) == "" || strings.HasPrefix(updatedAt, "0001-01-01") {
+		v.addFail("Parent reads configured payment QR freshness", "GET /fees/payment-config", "Parent", "updated_at did not reflect a real QR/config update")
+		return
+	}
+
 	v.expect("Parent reads linked fee invoice", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
-	v.expectDataID("Parent submits payment request", http.MethodPost, "/fees/payment-requests", "Parent", "Parent", map[string]any{
-		"invoice_id":     v.ids["payment_invoice"],
-		"amount":         250,
-		"payment_date":   "2026-05-16",
-		"payment_mode":   "upi",
-		"transaction_id": "LOCAL-" + strings.ToUpper(v.suffix),
-		"proof_url":      "/uploads/local-verifier/payment-proof-" + v.suffix + ".png",
+	_, parentFeesBefore := v.expectAny("Parent reads fee status before payment proof", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesBefore, v.ids["payment_invoice"], "request_status") != "" {
+		v.addFail("Parent fee status before payment proof", "GET /parent/students/:studentId/fees", "Parent", "Expected no live request status before creating a payment intent")
+		return
+	}
+
+	v.expectDataID("Parent creates payment intent", http.MethodPost, "/fees/payments/intent", "Parent", "Parent", map[string]any{
+		"invoice_id":      v.ids["payment_invoice"],
+		"payment_method":  "upi",
+		"selected_months": 0,
+		"selected_terms":  0,
+		"remarks":         "Local verifier proof workflow",
 	}, http.StatusCreated, "payment_request")
 	if v.ids["payment_request"] == "" {
 		return
 	}
-	v.expect("Principal approves Parent payment request", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Principal", "Principal", map[string]any{
+	intentReference := ""
+	if _, intentData := v.expectAny("Parent fetches payment intent details", http.MethodGet, "/fees/payment-requests?invoice_id="+v.ids["payment_invoice"], "Parent", "Parent", nil, http.StatusOK); intentData != nil {
+		if rows, ok := asList(intentData); ok && len(rows) > 0 {
+			intentReference = strings.TrimSpace(fmt.Sprint(rows[0]["request_reference"]))
+		}
+	}
+	if intentReference == "" {
+		v.addFail("Parent payment intent reference", "GET /fees/payment-requests", "Parent", "Payment intent reference missing")
+		return
+	}
+
+	v.expectMultipartDataID("Parent submits payment proof", http.MethodPost, "/fees/payments/submit", "Parent", "Parent", map[string]string{
+		"payment_request_id": v.ids["payment_request"],
+		"request_reference":  intentReference,
+		"student_fee_id":     v.ids["payment_invoice"],
+		"amount":             "500.00",
+		"payment_method":     "upi",
+		"transaction_ref":    "LOCAL-" + strings.ToUpper(v.suffix),
+		"remarks":            "Initial proof from local verifier",
+	}, "screenshot", "payment-proof.png", []byte("png"), http.StatusCreated, "payment_request")
+
+	_, parentFeesPending := v.expectAny("Parent sees pending verification fee status", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesPending, v.ids["payment_invoice"], "request_status") != "pending_verification" {
+		v.addFail("Parent sees pending verification fee status content", "GET /parent/students/:studentId/fees", "Parent", "Expected request_status=pending_verification after proof submit")
+		return
+	}
+	v.expect("Principal lists payment requests for review", http.MethodGet, "/fees/payment-requests?status=pending_verification", "Principal", "Principal", nil, http.StatusOK)
+	v.expect("Principal requests clarification for parent payment proof", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Principal", "Principal", map[string]any{
+		"status":        "clarification_required",
+		"admin_remarks": "Please upload a clearer screenshot",
+	}, http.StatusOK)
+	_, parentHistoryClarify := v.expectAny("Parent sees clarification-required request history", http.MethodGet, "/fees/payments/history?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
+	if !listContainsStatus(parentHistoryClarify, "clarification_required") {
+		v.addFail("Parent sees clarification-required request history content", "GET /fees/payments/history", "Parent", "Expected clarification_required entry after principal decision")
+		return
+	}
+
+	v.expectMultipart("Parent resubmits payment proof after clarification", http.MethodPatch, "/fees/payments/"+v.ids["payment_request"]+"/resubmit", "Parent", "Parent", map[string]string{
+		"transaction_ref": "LOCAL-RESUBMIT-" + strings.ToUpper(v.suffix),
+		"remarks":         "Resubmitted proof from local verifier",
+	}, "screenshot", "payment-proof-fixed.png", []byte("png-fixed"), http.StatusOK)
+	v.expect("Principal approves parent payment request", http.MethodPut, "/fees/payment-requests/"+v.ids["payment_request"]+"/decision", "Principal", "Principal", map[string]any{
 		"status":        "approved",
 		"admin_remarks": "Verified by local Docker API verifier",
 	}, http.StatusOK)
-	v.expect("Parent sees invoice after approved request", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
+
+	_, parentFeesApproved := v.expectAny("Parent sees fee cleared after approval", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesApproved, v.ids["payment_invoice"], "status") != "paid" {
+		v.addFail("Parent sees fee cleared after approval content", "GET /parent/students/:studentId/fees", "Parent", "Expected invoice status=paid after approval")
+		return
+	}
+	_, parentDashboard := v.expectAny("Parent dashboard reflects approved fee", http.MethodGet, "/dashboard/parent", "Parent", "Parent", nil, http.StatusOK)
+	if pendingBalance := nestedString(parentDashboard, "metrics", "pending_fee_balance"); pendingBalance != "0" && pendingBalance != "0.0" && pendingBalance != "0.00" {
+		v.addFail("Parent dashboard reflects approved fee content", "GET /dashboard/parent", "Parent", "Expected pending_fee_balance to be cleared after approval, got "+pendingBalance)
+		return
+	}
+}
+
+func (v *verifier) runPrincipalManualPaymentFlow() {
+	if v.tokens["Principal"] == "" || v.tokens["Parent"] == "" || v.ids["payment_student"] == "" || v.ids["fee_category"] == "" {
+		v.addFail("Principal manual payment fixture", "local verifier", "Principal/Parent", "Missing payment fixture IDs for manual payment flow")
+		return
+	}
+
+	v.expectDataID("Principal creates manual-update invoice", http.MethodPost, "/fees/invoices", "Principal", "Principal", map[string]any{
+		"student_id":       v.ids["payment_student"],
+		"academic_year_id": "academic-year-default",
+		"invoice_number":   "INV-MANUAL-" + strings.ToUpper(v.suffix),
+		"invoice_date":     "2026-06-01",
+		"due_date":         "2026-06-10",
+		"total_amount":     300,
+		"discount_amount":  0,
+		"net_amount":       300,
+		"items": []map[string]any{{
+			"fee_category_id": v.ids["fee_category"],
+			"amount":          300,
+			"description":     "Manual cash carry-over fee",
+		}},
+	}, http.StatusCreated, "manual_payment_invoice")
+	if v.ids["manual_payment_invoice"] == "" {
+		return
+	}
+
+	_, parentFeesBefore := v.expectAny("Parent sees manual-update invoice before principal settlement", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesBefore, v.ids["manual_payment_invoice"], "status") == "" {
+		v.addFail("Parent sees manual-update invoice before principal settlement content", "GET /parent/students/:studentId/fees", "Parent", "Expected unpaid invoice to be visible before manual settlement")
+		return
+	}
+
+	v.expect("Principal records offline manual fee payment with optional fields omitted", http.MethodPost, "/fees/payments", "Principal", "Principal", map[string]any{
+		"invoice_id":     v.ids["manual_payment_invoice"],
+		"receipt_number": "RCPT-MANUAL-" + strings.ToUpper(v.suffix),
+		"amount_paid":    300,
+		"payment_date":   "2026-06-11",
+		"payment_mode":   "cash",
+	}, http.StatusOK)
+
+	_, parentFeesAfter := v.expectAny("Parent sees manual payment reflected in fee status", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesAfter, v.ids["manual_payment_invoice"], "status") != "paid" {
+		v.addFail("Parent sees manual payment reflected in fee status content", "GET /parent/students/:studentId/fees", "Parent", "Expected manual-settled invoice status=paid")
+		return
+	}
+
+	_, parentDashboard := v.expectAny("Parent dashboard reflects manual fee update", http.MethodGet, "/dashboard/parent", "Parent", "Parent", nil, http.StatusOK)
+	if pendingBalance := nestedString(parentDashboard, "metrics", "pending_fee_balance"); pendingBalance != "0" && pendingBalance != "0.0" && pendingBalance != "0.00" {
+		v.addFail("Parent dashboard reflects manual fee update content", "GET /dashboard/parent", "Parent", "Expected pending_fee_balance to be cleared after manual payment, got "+pendingBalance)
+		return
+	}
+
+	_, parentInvoices := v.expectAny("Parent invoice history includes manual cash payment", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Parent", "Parent", nil, http.StatusOK)
+	if !invoiceHasPaymentMode(parentInvoices, v.ids["manual_payment_invoice"], "cash") {
+		v.addFail("Parent invoice history includes manual cash payment content", "GET /fees/invoices", "Parent", "Expected manual invoice payments list to include cash payment")
+		return
+	}
+}
+
+func (v *verifier) runFeeStructureDeletePropagationFlow() {
+	if v.tokens["Principal"] == "" || v.tokens["Parent"] == "" || v.ids["payment_student"] == "" || v.ids["default_year"] == "" || v.ids["default_grade"] == "" || v.ids["default_section"] == "" {
+		v.addFail("Fee structure delete propagation fixture", "local verifier", "Principal/Parent", "Missing fixture IDs for delete propagation flow")
+		return
+	}
+
+	v.expectDataID("Principal creates fee category for delete propagation", http.MethodPost, "/fees/categories", "Principal", "Principal", map[string]any{
+		"category_name": "Delete Propagation Fee " + v.suffix,
+		"frequency":     "one_time",
+	}, http.StatusCreated, "delete_fee_category")
+	if v.ids["delete_fee_category"] == "" {
+		return
+	}
+	v.expectDataID("Principal creates fee structure for delete propagation", http.MethodPost, "/fees/structures", "Principal", "Principal", map[string]any{
+		"academic_year_id":  v.ids["default_year"],
+		"grade_id":          v.ids["default_grade"],
+		"section_id":        v.ids["default_section"],
+		"fee_category_id":   v.ids["delete_fee_category"],
+		"amount":            275,
+		"due_day":           12,
+		"late_fine_per_day": 0,
+	}, http.StatusCreated, "delete_fee_structure")
+	if v.ids["delete_fee_structure"] == "" {
+		return
+	}
+	v.expectDataID("Principal creates unpaid invoice for delete propagation", http.MethodPost, "/fees/invoices", "Principal", "Principal", map[string]any{
+		"student_id":       v.ids["payment_student"],
+		"academic_year_id": v.ids["default_year"],
+		"invoice_number":   "INV-DELETE-" + strings.ToUpper(v.suffix),
+		"invoice_date":     "2026-07-01",
+		"due_date":         "2026-07-12",
+		"total_amount":     275,
+		"discount_amount":  0,
+		"net_amount":       275,
+		"items": []map[string]any{{
+			"fee_category_id": v.ids["delete_fee_category"],
+			"amount":          275,
+			"description":     "Delete propagation fee",
+		}},
+	}, http.StatusCreated, "delete_fee_invoice")
+	if v.ids["delete_fee_invoice"] == "" {
+		return
+	}
+
+	_, parentFeesBefore := v.expectAny("Parent sees delete-target fee before structure removal", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesBefore, v.ids["delete_fee_invoice"], "status") == "" {
+		v.addFail("Parent sees delete-target fee before structure removal content", "GET /parent/students/:studentId/fees", "Parent", "Expected delete-target invoice to be visible before fee structure removal")
+		return
+	}
+	_, parentStudentsBefore := v.expectAny("Parent linked students show delete-target fee before structure removal", http.MethodGet, "/me/students?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Parent", "Parent", nil, http.StatusOK)
+	beforeStudentBalance := studentFeeBalance(parentStudentsBefore, v.ids["payment_student"])
+	_, parentDashboardBefore := v.expectAny("Parent dashboard child summary shows delete-target fee before structure removal", http.MethodGet, "/dashboard/parent?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Parent", "Parent", nil, http.StatusOK)
+	beforeDashboardBalance := dashboardChildFeeBalance(parentDashboardBefore, v.ids["payment_student"])
+	_, principalClassesBefore := v.expectAny("Principal class overview shows delete-target fee before structure removal", http.MethodGet, "/principal/classes?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Principal", "Principal", nil, http.StatusOK)
+	beforeClassBalance := classFeeBalance(principalClassesBefore, v.ids["default_section"])
+
+	v.expectDataID("Parent creates payment intent for delete-target fee", http.MethodPost, "/fees/payments/intent", "Parent", "Parent", map[string]any{
+		"invoice_id":      v.ids["delete_fee_invoice"],
+		"payment_method":  "upi",
+		"selected_months": 0,
+		"selected_terms":  0,
+		"remarks":         "Delete propagation pending request",
+	}, http.StatusCreated, "delete_fee_request")
+	if v.ids["delete_fee_request"] == "" {
+		return
+	}
+
+	v.expect("Principal deletes fee structure and clears unpaid propagation targets", http.MethodDelete, "/fees/structures/"+v.ids["delete_fee_structure"]+"?remove_pending=true", "Principal", "Principal", nil, http.StatusOK)
+
+	_, parentFeesAfter := v.expectAny("Parent fee list clears deleted structure invoice", http.MethodGet, "/parent/students/"+v.ids["payment_student"]+"/fees", "Parent", "Parent", nil, http.StatusOK)
+	if findRowString(parentFeesAfter, v.ids["delete_fee_invoice"], "status") != "" {
+		v.addFail("Parent fee list clears deleted structure invoice content", "GET /parent/students/:studentId/fees", "Parent", "Expected deleted structure invoice to be removed from parent fee list")
+		return
+	}
+
+	_, principalInvoices := v.expectAny("Principal invoice list clears deleted structure invoice", http.MethodGet, "/fees/invoices?student_id="+v.ids["payment_student"], "Principal", "Principal", nil, http.StatusOK)
+	if invoiceExists(principalInvoices, v.ids["delete_fee_invoice"]) {
+		v.addFail("Principal invoice list clears deleted structure invoice content", "GET /fees/invoices", "Principal", "Expected deleted structure invoice to be removed from principal invoice list")
+		return
+	}
+	_, parentStudentsAfter := v.expectAny("Parent linked students clear deleted structure balance", http.MethodGet, "/me/students?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Parent", "Parent", nil, http.StatusOK)
+	afterStudentBalance := studentFeeBalance(parentStudentsAfter, v.ids["payment_student"])
+	if beforeStudentBalance-afterStudentBalance < 274.99 {
+		v.addFail("Parent linked students clear deleted structure balance content", "GET /me/students", "Parent", fmt.Sprintf("Expected fee_summary.balance to drop by about 275.00, before=%.2f after=%.2f", beforeStudentBalance, afterStudentBalance))
+		return
+	}
+	_, parentDashboardAfter := v.expectAny("Parent dashboard child summary clears deleted structure balance", http.MethodGet, "/dashboard/parent?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Parent", "Parent", nil, http.StatusOK)
+	afterDashboardBalance := dashboardChildFeeBalance(parentDashboardAfter, v.ids["payment_student"])
+	if beforeDashboardBalance-afterDashboardBalance < 274.99 {
+		v.addFail("Parent dashboard child summary clears deleted structure balance content", "GET /dashboard/parent", "Parent", fmt.Sprintf("Expected child pending_fee_balance to drop by about 275.00, before=%.2f after=%.2f", beforeDashboardBalance, afterDashboardBalance))
+		return
+	}
+	_, principalClassesAfter := v.expectAny("Principal class overview clears deleted structure dues", http.MethodGet, "/principal/classes?refresh_nonce="+strconv.FormatInt(time.Now().UnixNano(), 10), "Principal", "Principal", nil, http.StatusOK)
+	afterClassBalance := classFeeBalance(principalClassesAfter, v.ids["default_section"])
+	if beforeClassBalance-afterClassBalance < 274.99 {
+		v.addFail("Principal class overview clears deleted structure dues content", "GET /principal/classes", "Principal", fmt.Sprintf("Expected fees_due_amount to drop by about 275.00, before=%.2f after=%.2f", beforeClassBalance, afterClassBalance))
+		return
+	}
+
+	_, parentRequests := v.expectAny("Parent payment requests clear deleted structure request", http.MethodGet, "/fees/payment-requests?invoice_id="+v.ids["delete_fee_invoice"], "Parent", "Parent", nil, http.StatusOK)
+	if invoiceExists(parentRequests, v.ids["delete_fee_request"]) {
+		v.addFail("Parent payment requests clear deleted structure request content", "GET /fees/payment-requests", "Parent", "Expected delete-target payment request to be removed after structure delete")
+		return
+	}
 }
 
 func (v *verifier) loadAcademicFixtureIDs() bool {
@@ -708,6 +954,23 @@ func (v *verifier) expectDataID(name, method, path, tokenRole, role string, body
 	v.rows[len(v.rows)-1].Error = "response data.id missing"
 }
 
+func (v *verifier) expectMultipart(name, method, path, tokenRole, role string, fields map[string]string, fileField, filename string, content []byte, want int) {
+	v.requestMultipart(name, method, path, tokenRole, role, fields, fileField, filename, content, []int{want}, "PASS", "")
+}
+
+func (v *verifier) expectMultipartDataID(name, method, path, tokenRole, role string, fields map[string]string, fileField, filename string, content []byte, want int, key string) {
+	entry, data := v.requestMultipart(name, method, path, tokenRole, role, fields, fileField, filename, content, []int{want}, "PASS", "")
+	if entry.Status != "PASS" {
+		return
+	}
+	if id, ok := getString(data, "id"); ok {
+		v.ids[key] = id
+		return
+	}
+	v.rows[len(v.rows)-1].Status = "FAIL"
+	v.rows[len(v.rows)-1].Error = "response data.id missing"
+}
+
 func (v *verifier) request(name, method, path, tokenRole, role string, body any, wants []int, expectedStatus, notes string) (reportEntry, any) {
 	if v.delay > 0 {
 		defer time.Sleep(v.delay)
@@ -776,6 +1039,87 @@ func (v *verifier) request(name, method, path, tokenRole, role string, body any,
 	return entry, data
 }
 
+func (v *verifier) requestMultipart(name, method, path, tokenRole, role string, fields map[string]string, fileField, filename string, content []byte, wants []int, expectedStatus, notes string) (reportEntry, any) {
+	if v.delay > 0 {
+		defer time.Sleep(v.delay)
+	}
+	endpoint := method + " " + path
+	if tokenRole != "" && v.tokens[tokenRole] == "" {
+		entry := reportEntry{
+			Name:               name,
+			Endpoint:           endpoint,
+			Role:               role,
+			Status:             "FAIL",
+			ExpectedStatusCode: formatExpected(wants),
+			Error:              "missing token for role " + tokenRole,
+			Notes:              notes,
+		}
+		v.rows = append(v.rows, entry)
+		return entry, nil
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		_ = writer.WriteField(key, value)
+	}
+	part, err := writer.CreateFormFile(fileField, filename)
+	if err == nil {
+		_, err = part.Write(content)
+	}
+	if err == nil {
+		err = writer.Close()
+	}
+	if err != nil {
+		entry := reportEntry{Name: name, Endpoint: endpoint, Role: role, Status: "FAIL", Error: err.Error(), Notes: notes}
+		v.rows = append(v.rows, entry)
+		return entry, nil
+	}
+
+	req, err := http.NewRequest(method, v.baseURL+path, &body)
+	if err != nil {
+		entry := reportEntry{Name: name, Endpoint: endpoint, Role: role, Status: "FAIL", Error: err.Error(), Notes: notes}
+		v.rows = append(v.rows, entry)
+		return entry, nil
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("X-Forwarded-For", v.nextClientIP())
+	if tokenRole != "" {
+		req.Header.Set("Authorization", "Bearer "+v.tokens[tokenRole])
+	}
+
+	start := time.Now()
+	resp, err := v.client.Do(req)
+	elapsed := time.Since(start)
+	entry := reportEntry{
+		Name:               name,
+		Endpoint:           endpoint,
+		Role:               role,
+		ExpectedStatusCode: formatExpected(wants),
+		ResponseTime:       elapsed.String(),
+		Notes:              notes,
+	}
+	if err != nil {
+		entry.Status = "FAIL"
+		entry.Error = err.Error()
+		v.rows = append(v.rows, entry)
+		return entry, nil
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	entry.StatusCode = resp.StatusCode
+	entry.ResponseBody = truncate(redactJSON(raw), 1200)
+	if containsStatus(wants, resp.StatusCode) {
+		entry.Status = expectedStatus
+	} else {
+		entry.Status = "FAIL"
+		entry.Error = fmt.Sprintf("expected HTTP %s, got %d", formatExpected(wants), resp.StatusCode)
+	}
+	data := extractData(raw)
+	v.rows = append(v.rows, entry)
+	return entry, data
+}
+
 func (v *verifier) nextClientIP() string {
 	v.counter++
 	return fmt.Sprintf("10.90.%d.%d", (v.counter/250)%250, (v.counter%250)+1)
@@ -824,6 +1168,22 @@ func getString(data any, key string) (string, bool) {
 		return "", false
 	}
 	return value, true
+}
+
+func asList(data any) ([]map[string]any, bool) {
+	rows, ok := data.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, row)
+	}
+	return out, true
 }
 
 func firstID(data any) string {
@@ -875,6 +1235,158 @@ func findRowString(data any, id, key string) string {
 		return strings.TrimSpace(fmt.Sprint(value))
 	}
 	return ""
+}
+
+func invoiceExists(data any, id string) bool {
+	rows, ok := data.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(row["id"])) == strings.TrimSpace(id) {
+			return true
+		}
+	}
+	return false
+}
+
+func invoiceHasPaymentMode(data any, invoiceID, paymentMode string) bool {
+	rows, ok := data.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok || strings.TrimSpace(fmt.Sprint(row["id"])) != strings.TrimSpace(invoiceID) {
+			continue
+		}
+		payments, ok := row["payments"].([]any)
+		if !ok {
+			return false
+		}
+		for _, payment := range payments {
+			paymentRow, ok := payment.(map[string]any)
+			if !ok {
+				continue
+			}
+			if strings.EqualFold(strings.TrimSpace(fmt.Sprint(paymentRow["payment_mode"])), paymentMode) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func listContainsStatus(data any, status string) bool {
+	rows, ok := asList(data)
+	if !ok {
+		return false
+	}
+	for _, row := range rows {
+		if strings.EqualFold(strings.TrimSpace(fmt.Sprint(row["status"])), status) {
+			return true
+		}
+	}
+	return false
+}
+
+func nestedString(data any, parentKey, key string) string {
+	row, ok := data.(map[string]any)
+	if !ok {
+		return ""
+	}
+	parent, ok := row[parentKey].(map[string]any)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(parent[key]))
+}
+
+func studentFeeBalance(data any, studentID string) float64 {
+	rows, ok := asList(data)
+	if !ok {
+		return 0
+	}
+	for _, row := range rows {
+		if strings.TrimSpace(fmt.Sprint(row["id"])) != strings.TrimSpace(studentID) {
+			continue
+		}
+		feeSummary, ok := row["fee_summary"].(map[string]any)
+		if !ok {
+			return 0
+		}
+		return floatValue(feeSummary["balance"])
+	}
+	return 0
+}
+
+func dashboardChildFeeBalance(data any, studentID string) float64 {
+	row, ok := data.(map[string]any)
+	if !ok {
+		return 0
+	}
+	children, ok := row["children"].([]any)
+	if !ok {
+		return 0
+	}
+	for _, item := range children {
+		child, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(child["id"])) != strings.TrimSpace(studentID) {
+			continue
+		}
+		return floatValue(child["pending_fee_balance"])
+	}
+	return 0
+}
+
+func classFeeBalance(data any, sectionID string) float64 {
+	row, ok := data.(map[string]any)
+	if !ok {
+		return 0
+	}
+	classes, ok := row["classes"].([]any)
+	if !ok {
+		return 0
+	}
+	for _, item := range classes {
+		classRow, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(fmt.Sprint(classRow["section_id"])) != strings.TrimSpace(sectionID) {
+			continue
+		}
+		return floatValue(classRow["fees_due_amount"])
+	}
+	return 0
+}
+
+func floatValue(value any) float64 {
+	switch typed := value.(type) {
+	case float64:
+		return typed
+	case float32:
+		return float64(typed)
+	case int:
+		return float64(typed)
+	case int64:
+		return float64(typed)
+	case int32:
+		return float64(typed)
+	case json.Number:
+		parsed, _ := typed.Float64()
+		return parsed
+	default:
+		parsed, _ := strconv.ParseFloat(strings.TrimSpace(fmt.Sprint(value)), 64)
+		return parsed
+	}
 }
 
 func hasNotification(data any, referenceType, referenceID string) bool {

@@ -27,6 +27,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
   List<GradeModel> _grades = [];
   List<SectionModel> _sections = [];
   List<StaffModel> _staff = [];
+  List<Map<String, dynamic>> _timetableSlots = [];
   bool _loading = true;
   String? _error;
   String _search = '';
@@ -66,18 +67,48 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         api.getGrades(),
         api.getSections(),
         api.getStaff(page: 1, pageSize: 500),
+        api.getTimetableSlots(),
       ]);
       final payload = results[0] as Map<String, dynamic>;
       if (!mounted) return;
+      final timetableSlots = results[6] as List<Map<String, dynamic>>;
+      final existingSubjectIds = <String>{
+        for (final subject in _asListMap(payload['subjects']))
+          _text(subject['subject_id'] ?? subject['id']),
+      };
+      final extraSubjects = <Map<String, dynamic>>[];
+      for (final slot in timetableSlots) {
+        final subjectId = _text(slot['subject_id']);
+        if (subjectId.isEmpty || existingSubjectIds.contains(subjectId)) {
+          continue;
+        }
+        existingSubjectIds.add(subjectId);
+        final subjectPayload = slot['subject'];
+        final subjectName = subjectPayload is Map
+            ? _text(subjectPayload['subject_name'] ?? subjectPayload['name'])
+            : _text(slot['subject_name']);
+        final subjectCode = subjectPayload is Map
+            ? _text(subjectPayload['subject_code'] ?? subjectPayload['code'])
+            : '';
+        extraSubjects.add({
+          'subject_id': subjectId,
+          'subject_name': subjectName,
+          'subject_code': subjectCode,
+        });
+      }
       setState(() {
         _analytics = _asMap(payload['analytics']);
-        _subjects = _asListMap(payload['subjects']);
+        _subjects = [
+          ..._asListMap(payload['subjects']),
+          ...extraSubjects,
+        ];
         _gradeSubjects = results[1] as List<Map<String, dynamic>>;
         _staffSubjects = results[2] as List<Map<String, dynamic>>;
         _gradeOptions = _asListMap(payload['grade_options']);
         _grades = results[3] as List<GradeModel>;
         _sections = results[4] as List<SectionModel>;
         _staff = (results[5] as PaginatedList<StaffModel>).data;
+        _timetableSlots = timetableSlots;
         final activeGrades = _activeGradesFrom(_grades, _sections);
         if (_selectedGradeId.isEmpty ||
             !activeGrades.any((grade) => grade.id == _selectedGradeId)) {
@@ -413,10 +444,21 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
             (sectionId.isEmpty || _activeSectionIds.contains(sectionId));
       }).toList();
 
-  Set<String> get _activeSubjectIds => {
-    ..._activeGradeSubjects.map((row) => _text(row['subject_id'])),
-    ..._activeStaffSubjects.map((row) => _text(row['subject_id'])),
-  }..removeWhere((id) => id.isEmpty);
+  Set<String> get _activeSubjectIds {
+    final ids = <String>{
+      ..._activeGradeSubjects.map((row) => _text(row['subject_id'])),
+      ..._activeStaffSubjects.map((row) => _text(row['subject_id'])),
+    };
+    for (final slot in _timetableSlots) {
+      ids.add(_text(slot['subject_id']));
+      final subject = slot['subject'];
+      if (subject is Map) {
+        ids.add(_text(subject['subject_id'] ?? subject['id']));
+      }
+    }
+    ids.removeWhere((id) => id.isEmpty);
+    return ids;
+  }
 
   String get _subjectsScopeLabel {
     final count = _activeGrades.length;

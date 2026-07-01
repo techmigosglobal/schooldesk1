@@ -80,7 +80,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     try {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
-        api.getPrincipalClassesOverview(),
+        api.getPrincipalClassesOverview(forceRefresh: true),
         api.getAcademicYears(),
         api.getStaff(page: 1, pageSize: 500, status: 'active'),
         api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
@@ -341,10 +341,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
                                 context,
                                 AppRoutes.feeMonitoring,
                               )
-                            : _openRoute(
-                                AppRoutes.feeMonitoring,
-                                rows.first,
-                              ),
+                            : _openFeesModule(rows.first),
                       ),
                     ],
                   ),
@@ -688,8 +685,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     if (changed == true) await _load();
   }
 
-  void _openFeesModule(Map<String, dynamic> row) {
-    Navigator.pushNamed(
+  Future<void> _openFeesModule(Map<String, dynamic> row) async {
+    await Navigator.pushNamed(
       context,
       AppRoutes.feeMonitoring,
       arguments: {
@@ -698,6 +695,8 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         'source': 'class_hub',
       },
     );
+    if (!mounted) return;
+    await _load();
   }
 
   Future<void> _openInstructionSheet(Map<String, dynamic> row) async {
@@ -1137,7 +1136,9 @@ class _ClassesDirectorySearchField extends StatelessWidget {
                 letterSpacing: 0,
               ),
               decoration: InputDecoration(
-                hintText: tiny ? 'Search' : (compact ? 'Search class' : 'Search class, teacher'),
+                hintText: tiny
+                    ? 'Search'
+                    : (compact ? 'Search class' : 'Search class, teacher'),
                 hintMaxLines: 1,
                 hintStyle: GoogleFonts.dmSans(
                   color: _classesDirectoryMuted,
@@ -4848,13 +4849,17 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
     }
     setState(() => _saving = true);
     try {
+      final structureIdsToSync = <String>{};
       for (final structureId in _deletedStructureIds) {
-        await BackendApiClient.instance.deleteFeeStructure(structureId);
+        await BackendApiClient.instance.deleteFeeStructure(
+          structureId,
+          removePending: true,
+        );
       }
       for (final component in _components) {
         final categoryId = await _ensureFeeCategory(component);
         if (component.structureId.isEmpty) {
-          await BackendApiClient.instance.createFeeStructure(
+          final created = await BackendApiClient.instance.createFeeStructure(
             academicYearId: _academicYearId,
             gradeId: _gradeId,
             sectionId: _sectionId,
@@ -4864,6 +4869,8 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             lateFinePerDay: component.lateFinePerDay,
             installmentCount: _installmentCountFor(component),
           );
+          final createdId = _classText(created['id']);
+          if (createdId.isNotEmpty) structureIdsToSync.add(createdId);
         } else {
           await BackendApiClient.instance.updateFeeStructure(
             component.structureId,
@@ -4876,7 +4883,14 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
             lateFinePerDay: component.lateFinePerDay,
             installmentCount: _installmentCountFor(component),
           );
+          structureIdsToSync.add(component.structureId);
         }
+      }
+      for (final structureId in structureIdsToSync) {
+        await BackendApiClient.instance.applyFeeInvoiceSync(
+          structureId,
+          includePartiallyPaid: true,
+        );
       }
       if (!mounted) return;
       setState(() {

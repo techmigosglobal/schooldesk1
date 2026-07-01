@@ -8,6 +8,8 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -309,6 +311,17 @@ class _AdminPaymentRequestsScreenState
             _detailRow('Proof upload', _text(request['proof_url'])),
           if (_text(request['admin_remarks']).isNotEmpty)
             _detailRow('Remarks', _text(request['admin_remarks'])),
+          if (_text(request['proof_url']).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openProofPreview(_text(request['proof_url'])),
+              icon: const Icon(Icons.visibility_rounded, size: 16),
+              label: Text(
+                'Preview Proof',
+                style: GoogleFonts.dmSans(fontSize: 12),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -385,6 +398,10 @@ class _AdminPaymentRequestsScreenState
     if (updated == true && mounted) {
       await _loadRequests(showSpinner: false);
     }
+  }
+
+  Future<void> _openProofPreview(String url) {
+    return openEventPostMediaPreview(context, EventPostMediaItem.fromUrl(url));
   }
 
   int _countByStatus(String status) => _requests

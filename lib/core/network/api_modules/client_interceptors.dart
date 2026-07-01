@@ -65,8 +65,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
         clean.contains('/lesson-planners') ||
         clean.contains('/fees/invoices') ||
         clean.contains('/fees/structures') ||
-        clean.contains('/fees/categories') ||
-        clean.contains('/fees/payment-config');
+        clean.contains('/fees/categories');
   }
 
   Duration _ttlForPath(String path) {
@@ -74,8 +73,7 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
     if (clean.contains('/academic-years') ||
         clean.contains('/grades') ||
         clean.contains('/sections') ||
-        clean.contains('/subjects') ||
-        clean.contains('/fees/payment-config')) {
+        clean.contains('/subjects')) {
       return const Duration(hours: 6);
     }
     if (clean.contains('/dashboard/')) return const Duration(minutes: 2);

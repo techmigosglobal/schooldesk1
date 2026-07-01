@@ -1,10 +1,18 @@
 part of '../backend_api_client.dart';
 
 extension BackendPrincipalApi on BackendApiClient {
-  Future<Map<String, dynamic>> getDashboard(String role) async {
+  Future<Map<String, dynamic>> getDashboard(
+    String role, {
+    bool forceRefresh = false,
+  }) async {
     final safeRole = role.trim().toLowerCase();
     try {
-      final response = await _dio.get('/dashboard/$safeRole');
+      final response = await _dio.get(
+        '/dashboard/$safeRole',
+        queryParameters: forceRefresh
+            ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return Map<String, dynamic>.from(data['data'] as Map? ?? {});
@@ -17,9 +25,16 @@ extension BackendPrincipalApi on BackendApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> getPrincipalClassesOverview() async {
+  Future<Map<String, dynamic>> getPrincipalClassesOverview({
+    bool forceRefresh = false,
+  }) async {
     try {
-      final response = await _dio.get('/principal/classes');
+      final response = await _dio.get(
+        '/principal/classes',
+        queryParameters: forceRefresh
+            ? {'refresh_nonce': DateTime.now().millisecondsSinceEpoch}
+            : null,
+      );
       final data = _asMap(response.data);
       if (data['success'] == true) {
         return _asMap(data['data']);

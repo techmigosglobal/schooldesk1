@@ -465,7 +465,7 @@ class _AdminFeeStructureFormScreenState
           includePartiallyPaid: true,
         );
       } else {
-        await BackendApiClient.instance.createFeeStructure(
+        final created = await BackendApiClient.instance.createFeeStructure(
           academicYearId: _selectedYearId,
           gradeId: _selectedGradeId,
           sectionId: _selectedSectionId,
@@ -475,6 +475,13 @@ class _AdminFeeStructureFormScreenState
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
           replaceExisting: _replaceExisting,
         );
+        final createdId = _textValue(created['id']);
+        if (createdId.isNotEmpty) {
+          await BackendApiClient.instance.applyFeeInvoiceSync(
+            createdId,
+            includePartiallyPaid: true,
+          );
+        }
       }
       if (!mounted) return;
       Navigator.pop(

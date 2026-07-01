@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -16,6 +17,10 @@ class TodaysHighlightsCard extends StatefulWidget {
 
 class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
   NotificationService? _service;
+  SharedPreferences? _prefs;
+  bool _expanded = false;
+  bool _stateReady = false;
+  String _activeSignature = '';
 
   @override
   void initState() {
@@ -24,9 +29,14 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
   }
 
   Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
     final svc = await NotificationService.getInstance();
     await svc.refresh();
-    if (mounted) setState(() => _service = svc);
+    if (!mounted) return;
+    setState(() {
+      _prefs = prefs;
+      _service = svc;
+    });
   }
 
   @override
@@ -60,12 +70,24 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
           _isSameDay(n.timestamp, today);
     }).toList();
 
-    final combinedBirthdays = _mergeUnique([...birthdayNotifs, ...birthdayByRef]);
+    final combinedBirthdays = _mergeUnique([
+      ...birthdayNotifs,
+      ...birthdayByRef,
+    ]);
     final combinedHealth = _mergeUnique([...healthNotifs, ...healthByRef]);
+    final todaysHighlights = [...combinedBirthdays, ...combinedHealth]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    if (combinedBirthdays.isEmpty && combinedHealth.isEmpty) {
+    if (todaysHighlights.isEmpty) {
       return const SizedBox.shrink();
     }
+
+    final signature = _signatureFor(todaysHighlights);
+    _syncExpandedState(today: today, signature: signature);
+    if (!_stateReady) {
+      return const SizedBox.shrink();
+    }
+    final unreadCount = todaysHighlights.where((item) => !item.isRead).length;
 
     return Container(
       width: double.infinity,
@@ -119,9 +141,39 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(width: 8),
+                Semantics(
+                  button: true,
+                  label: _expanded
+                      ? 'Collapse today highlights'
+                      : 'Expand today highlights',
+                  child: IconButton(
+                    tooltip: _expanded
+                        ? 'Collapse today highlights'
+                        : 'Expand today highlights',
+                    onPressed: () => _toggleExpanded(today, signature),
+                    icon: Icon(
+                      _expanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                    ),
+                  ),
+                ),
               ],
             ),
-            if (combinedBirthdays.isNotEmpty) ...[
+            if (unreadCount > 0) ...[
+              SizedBox(height: tokens.spacing.sm),
+              Text(
+                unreadCount == 1
+                    ? '1 new highlight'
+                    : '$unreadCount new highlights',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+            if (_expanded && combinedBirthdays.isNotEmpty) ...[
               SizedBox(height: tokens.spacing.md),
               _HighlightSection(
                 icon: '🎂',
@@ -139,7 +191,7 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
                     .toList(),
               ),
             ],
-            if (combinedHealth.isNotEmpty) ...[
+            if (_expanded && combinedHealth.isNotEmpty) ...[
               if (combinedBirthdays.isNotEmpty)
                 SizedBox(height: tokens.spacing.sm),
               _HealthAlertSection(
@@ -169,6 +221,48 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
 
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  String _storageKey(DateTime date) =>
+      'todays_highlights_${widget.role}_${date.year}_${date.month}_${date.day}';
+
+  String _signatureFor(List<AppNotification> items) {
+    final ids = items.map((item) => item.id).toList()..sort();
+    return ids.join('|');
+  }
+
+  void _syncExpandedState({
+    required DateTime today,
+    required String signature,
+  }) {
+    if (_prefs == null) return;
+    if (_stateReady && _activeSignature == signature) return;
+    final prefs = _prefs!;
+    final key = _storageKey(today);
+    final lastSignature = prefs.getString('${key}_signature') ?? '';
+    final storedExpanded = prefs.getBool('${key}_expanded') ?? false;
+    final hasNewHighlights = signature.isNotEmpty && signature != lastSignature;
+    _activeSignature = signature;
+    _stateReady = true;
+    _expanded = hasNewHighlights || storedExpanded;
+    if (hasNewHighlights) {
+      prefs.setString('${key}_signature', signature);
+      prefs.setBool('${key}_expanded', true);
+    }
+  }
+
+  Future<void> _toggleExpanded(DateTime today, String signature) async {
+    final next = !_expanded;
+    setState(() {
+      _expanded = next;
+      _stateReady = true;
+      _activeSignature = signature;
+    });
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final key = _storageKey(today);
+    await prefs.setString('${key}_signature', signature);
+    await prefs.setBool('${key}_expanded', next);
+  }
 
   String _formatDate(DateTime date) {
     const months = [

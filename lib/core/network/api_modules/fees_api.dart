@@ -205,10 +205,14 @@ extension BackendFeesApi on BackendApiClient {
     }
   }
 
-  Future<void> deleteFeeStructure(String structureId) async {
+  Future<void> deleteFeeStructure(
+    String structureId, {
+    bool removePending = true,
+  }) async {
     try {
       final response = await _dio.delete(
         '/fees/structures/${structureId.trim()}',
+        queryParameters: {'remove_pending': removePending},
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) return;
@@ -306,6 +310,7 @@ extension BackendFeesApi on BackendApiClient {
     String? gradeId,
     String? sectionId,
     String? termId,
+    int? refreshNonce,
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -316,6 +321,7 @@ extension BackendFeesApi on BackendApiClient {
       gradeId: gradeId,
       sectionId: sectionId,
       termId: termId,
+      refreshNonce: refreshNonce,
       page: page,
       pageSize: pageSize,
     )).data;
@@ -328,6 +334,7 @@ extension BackendFeesApi on BackendApiClient {
     String? gradeId,
     String? sectionId,
     String? termId,
+    int? refreshNonce,
     int page = 1,
     int pageSize = 100,
   }) async {
@@ -344,6 +351,7 @@ extension BackendFeesApi on BackendApiClient {
       if (gradeId != null) queryParams['grade_id'] = gradeId;
       if (sectionId != null) queryParams['section_id'] = sectionId;
       if (termId != null) queryParams['term_id'] = termId;
+      if (refreshNonce != null) queryParams['refresh_nonce'] = refreshNonce;
       final response = await _dio.get(
         '/fees/invoices',
         queryParameters: queryParams,

@@ -164,6 +164,7 @@ type Payment struct {
 	PaymentDate       time.Time   `json:"payment_date"`
 	PaymentMode       string      `gorm:"type:text;not null" json:"payment_mode"`
 	TransactionID     string      `gorm:"size:255" json:"transaction_id"`
+	Remarks           string      `gorm:"type:text" json:"remarks"`
 	PaymentConfigID   *string     `gorm:"type:text" json:"payment_config_id,omitempty"`
 	PaymentUPIID      string      `gorm:"type:text" json:"payment_upi_id"`
 	PaymentPayeeName  string      `gorm:"type:text" json:"payment_payee_name"`

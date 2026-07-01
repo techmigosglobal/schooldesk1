@@ -195,6 +195,11 @@ class NotificationService extends ChangeNotifier {
     try {
       final today = DateTime.now();
       final dayKey = _birthdayKey(today.year, today.month, today.day);
+      _notifications.removeWhere(
+        (n) =>
+            n.id.startsWith('transient_') &&
+            n.category == NotificationCategory.birthday,
+      );
       final existingKeys = _notifications
           .where((n) => n.category == NotificationCategory.birthday)
           .map((n) => '${n.referenceId}|${n.role}')
@@ -232,7 +237,7 @@ class NotificationService extends ChangeNotifier {
             0,
             AppNotification.transient(
               title: 'Birthday Today',
-              body: '$displayName has a birthday today.',
+              body: '$displayName is celebrating a birthday today.',
               category: NotificationCategory.birthday,
               role: 'principal',
               priority: NotificationPriority.high,
@@ -264,6 +269,39 @@ class NotificationService extends ChangeNotifier {
             ),
           );
           existingKeys.add('$studentKey|teacher');
+        }
+      }
+
+      final myStudents = await _api.getMyStudents();
+      for (final student in myStudents) {
+        final dob = DateTime.tryParse(
+          '${student['date_of_birth'] ?? student['dob'] ?? ''}',
+        );
+        if (dob == null || dob.month != today.month || dob.day != today.day) {
+          continue;
+        }
+        final studentId =
+            '${student['id'] ?? student['student_id'] ?? ''}'.trim();
+        if (studentId.isEmpty) continue;
+        final studentName =
+            '${student['name'] ?? student['full_name'] ?? 'Your child'}'.trim();
+        final displayName = studentName.isEmpty ? 'Your child' : studentName;
+        final parentKey = '$studentId|$dayKey';
+        if (!existingKeys.contains('$parentKey|parent')) {
+          _notifications.insert(
+            0,
+            AppNotification.transient(
+              title: 'Birthday Today',
+              body: 'Wish $displayName a happy birthday today.',
+              category: NotificationCategory.birthday,
+              role: 'parent',
+              priority: NotificationPriority.high,
+              referenceType: 'birthday_wish',
+              referenceId: parentKey,
+              studentId: studentId,
+            ),
+          );
+          existingKeys.add('$parentKey|parent');
         }
       }
     } catch (_) {

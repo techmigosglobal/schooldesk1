@@ -1152,7 +1152,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')}; existing invoices and payments are not changed.',
+                'This removes ${_textValue(structure['category'], fallback: 'this fee component')} from ${_textValue(structure['class'], fallback: 'this class')} and clears it from unpaid student invoices and pending parent requests. Paid history stays intact.',
               ),
               const SizedBox(height: 12),
               Row(
@@ -1180,7 +1180,10 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
     );
     if (confirmed != true) return;
     try {
-      await BackendApiClient.instance.deleteFeeStructure(id);
+      await BackendApiClient.instance.deleteFeeStructure(
+        id,
+        removePending: true,
+      );
       if (!mounted) return;
       await _loadData();
       _snack('Fee component deleted.', success: true);

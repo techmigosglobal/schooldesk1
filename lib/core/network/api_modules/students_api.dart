@@ -40,9 +40,14 @@ extension BackendStudentsApi on BackendApiClient {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMyStudents() async {
+  Future<List<Map<String, dynamic>>> getMyStudents({int? refreshNonce}) async {
     try {
-      final response = await _dio.get('/me/students');
+      final response = await _dio.get(
+        '/me/students',
+        queryParameters: {
+          if (refreshNonce != null) 'refresh_nonce': refreshNonce,
+        },
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         final payload = data['data'];
@@ -52,7 +57,7 @@ extension BackendStudentsApi on BackendApiClient {
         } else if (payload is Map && payload['students'] is List) {
           studentsList = payload['students'];
         }
-        
+
         if (studentsList.isNotEmpty) {
           return studentsList
               .whereType<Map>()

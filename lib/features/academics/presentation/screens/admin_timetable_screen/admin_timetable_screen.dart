@@ -1749,12 +1749,18 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     switch (value) {
       case 'edit_timetable':
         _startEditingSelectedTimetable();
+        break;
       case 'delete_timetable':
         _deleteSelectedClassTimetable();
+        break;
       case 'pre_primary':
         _openPrePrimaryScheduleSheet();
+        break;
       case 'import':
         _importTimetableCsv();
+        break;
+      default:
+        break;
     }
   }
 

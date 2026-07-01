@@ -51,7 +51,9 @@ class ParentPaymentRequestFormScreen extends StatefulWidget {
 
 class _ParentPaymentRequestFormScreenState
     extends State<ParentPaymentRequestFormScreen> {
-  static const List<String> _paymentModes = ['upi', 'cash', 'bank_transfer'];
+  static const List<String> _paymentModes = ['upi'];
+  static const String _verificationNotice =
+      'Your payment proof will stay pending until the principal verifies it.';
 
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _utrController;
@@ -107,13 +109,15 @@ class _ParentPaymentRequestFormScreenState
   String get _payeeName =>
       _text(_paymentConfig['payee_name'], fallback: 'School');
   String get _qrImageUrl => _text(_paymentConfig['qr_image_url']);
+  String get _qrImageCacheKey =>
+      _text(_paymentConfig['updated_at'], fallback: _qrImageUrl);
   bool get _upiEnabled =>
       _paymentConfig['upi_enabled'] == true &&
       (_upiId.isNotEmpty || _qrImageUrl.isNotEmpty);
   bool get _isUpiMode => _paymentMode == 'upi';
-  bool get _isCashMode => _paymentMode == 'cash';
   bool get _requiresProof => true;
-  bool get _requiresReference => !_isCashMode;
+  bool get _requiresReference => true;
+  bool get _isBusy => _uploadingProof || _creatingIntent || _submitting;
   Map<String, dynamic> get _resubmissionRequest =>
       widget.args.paymentRequest == null
       ? const <String, dynamic>{}
@@ -156,7 +160,7 @@ class _ParentPaymentRequestFormScreenState
         fallback: _paymentMode,
       );
     }
-    _loadPaymentConfig();
+    _loadPaymentConfig(forceRefresh: true);
   }
 
   @override
@@ -167,7 +171,7 @@ class _ParentPaymentRequestFormScreenState
     super.dispose();
   }
 
-  Future<void> _loadPaymentConfig() async {
+  Future<void> _loadPaymentConfig({bool forceRefresh = false}) async {
     setState(() {
       _loadingConfig = true;
       _configError = null;
@@ -176,6 +180,9 @@ class _ParentPaymentRequestFormScreenState
       final invoiceId = _fees.isEmpty ? '' : _text(_fees.first['id']);
       final config = await BackendApiClient.instance.getPaymentConfig(
         invoiceId: invoiceId,
+        refreshNonce: forceRefresh
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
       );
       if (!mounted) return;
       setState(() {
@@ -193,80 +200,93 @@ class _ParentPaymentRequestFormScreenState
 
   @override
   Widget build(BuildContext context) {
-    return SchoolDeskModuleScaffold(
-      title: 'Fee Payment Request',
-      subtitle: _isClarificationResubmit
-          ? 'Update proof requested by the school'
-          : 'Choose payment mode and submit request for verification',
-      drawer: ParentDrawer(
-        selectedIndex: ParentNav.fees,
-        onDestinationSelected: (_) {},
-      ),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.parent,
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _buildStudentSummary(),
-            const SizedBox(height: 14),
-            _buildFeeBreakdown(),
-            const SizedBox(height: 14),
-            _buildIntervalSelector(),
-            const SizedBox(height: 14),
-            _buildPaymentModeSelector(),
-            const SizedBox(height: 14),
-            _buildUpiPanel(),
-            const SizedBox(height: 14),
-            _buildReferenceFields(),
-            const SizedBox(height: 14),
-            _buildProofUpload(),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _remarksController,
-              enabled: !_submitting,
-              minLines: 3,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: 'Notes for school office',
-                hintText: 'Optional payer details or bank note',
-                alignLabelWithHint: true,
-              ),
+    return PopScope(
+      canPop: !_isBusy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !_isBusy) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please wait for the payment step to finish before leaving this screen.',
             ),
-            const SizedBox(height: 12),
-            _buildVerificationNotice(),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _canSubmit ? _submit : null,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send_rounded, size: 18),
-              label: Text(
-                _submitting
-                    ? 'Submitting...'
-                    : _isClarificationResubmit
-                    ? 'Resubmit Payment for Verification'
-                    : 'Submit Payment for Verification INR ${_totalAmount.toStringAsFixed(0)}',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+          ),
+        );
+      },
+      child: SchoolDeskModuleScaffold(
+        title: 'Fee Payment Request',
+        subtitle: _isClarificationResubmit
+            ? 'Update proof requested by the school'
+            : 'Pay with the school UPI QR and submit proof for verification',
+        drawer: ParentDrawer(
+          selectedIndex: ParentNav.fees,
+          onDestinationSelected: (_) {},
+        ),
+        floatingActionButton: const DashboardFabWidget(
+          role: DashboardRole.parent,
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildStudentSummary(),
+              const SizedBox(height: 14),
+              _buildFeeBreakdown(),
+              const SizedBox(height: 14),
+              _buildIntervalSelector(),
+              const SizedBox(height: 14),
+              _buildPaymentModeSelector(),
+              const SizedBox(height: 14),
+              _buildUpiPanel(),
+              const SizedBox(height: 14),
+              _buildReferenceFields(),
+              const SizedBox(height: 14),
+              _buildProofUpload(),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: _remarksController,
+                enabled: !_submitting,
+                minLines: 3,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Notes for school office',
+                  hintText: 'Optional payer details or bank note',
+                  alignLabelWithHint: true,
+                ),
               ),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: _submitting ? null : () => Navigator.pop(context),
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
-              label: Text(
-                'Back to Fees',
-                style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+              const SizedBox(height: 12),
+              _buildVerificationNotice(),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _canSubmit ? _submit : null,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: Text(
+                  _submitting
+                      ? 'Submitting...'
+                      : _isClarificationResubmit
+                      ? 'Resubmit Payment for Verification'
+                      : 'Submit Payment for Verification INR ${_totalAmount.toStringAsFixed(0)}',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _isBusy ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: Text(
+                  'Back to Fees',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -323,16 +343,6 @@ class _ParentPaymentRequestFormScreenState
               );
             }).toList(),
           ),
-          if (_isCashMode) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Cash mode submits a pay-at-office request. No UPI setup is required.',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: context.appTheme.muted,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -604,19 +614,6 @@ class _ParentPaymentRequestFormScreenState
         ),
       );
     }
-    if (!_isUpiMode) {
-      return _panel(
-        child: Text(
-          _isCashMode
-              ? 'Pay this amount at the school office and submit this request for approval.'
-              : 'Enter your bank transfer reference below and submit for verification.',
-          style: GoogleFonts.dmSans(
-            fontSize: 12,
-            color: context.appTheme.onSurface,
-          ),
-        ),
-      );
-    }
     if (_loadingConfig) {
       return _panel(child: const Center(child: CircularProgressIndicator()));
     }
@@ -632,7 +629,7 @@ class _ParentPaymentRequestFormScreenState
             const SizedBox(height: 8),
             Text(
               _configError ??
-                  'UPI is not available. Switch to Cash or Bank Transfer to continue.',
+                  'No school UPI QR is configured yet. Please retry after the school updates the QR.',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 color: context.appTheme.error,
@@ -640,7 +637,7 @@ class _ParentPaymentRequestFormScreenState
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(
-              onPressed: _loadPaymentConfig,
+              onPressed: () => _loadPaymentConfig(forceRefresh: true),
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Retry'),
             ),
@@ -726,7 +723,7 @@ class _ParentPaymentRequestFormScreenState
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: Image.network(
-                _absoluteMediaUrl(_qrImageUrl),
+                _absoluteMediaUrl(_qrImageUrl, cacheKey: _qrImageCacheKey),
                 width: 210,
                 height: 210,
                 fit: BoxFit.contain,
@@ -798,13 +795,9 @@ class _ParentPaymentRequestFormScreenState
             TextFormField(
               controller: _utrController,
               enabled: !_submitting,
-              decoration: InputDecoration(
-                labelText: _isUpiMode
-                    ? 'UTR / transaction reference'
-                    : 'Bank transfer reference',
-                hintText: _isUpiMode
-                    ? 'Enter UTR after successful UPI payment'
-                    : 'Enter NEFT/RTGS/IMPS transaction reference',
+              decoration: const InputDecoration(
+                labelText: 'UTR / transaction reference',
+                hintText: 'Enter UTR after successful UPI payment',
               ),
               validator: (value) {
                 if ((value ?? '').trim().length < 6) {
@@ -893,7 +886,7 @@ class _ParentPaymentRequestFormScreenState
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Fees will be updated in 12-24 hrs after Principal verification.',
+              _verificationNotice,
               style: GoogleFonts.dmSans(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -1182,7 +1175,13 @@ class _ParentPaymentRequestFormScreenState
           remarks: _remarksController.text.trim(),
         );
         final requestReference = '${request['request_reference'] ?? ''}'.trim();
+        final proofUrl = '${request['proof_url'] ?? ''}'.trim();
         if (requestReference.isNotEmpty) references.add(requestReference);
+        if (proofUrl.isEmpty) {
+          throw StateError(
+            'Payment proof was submitted, but the saved proof could not be confirmed.',
+          );
+        }
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1226,12 +1225,18 @@ class _ParentPaymentRequestFormScreenState
         remarks: _remarksController.text.trim(),
       );
       final requestReference = '${request['request_reference'] ?? ''}'.trim();
+      final proofUrl = '${request['proof_url'] ?? ''}'.trim();
       if (requestReference.isNotEmpty) references.add(requestReference);
+      if (proofUrl.isEmpty) {
+        throw StateError(
+          'Payment proof was submitted, but the saved proof could not be confirmed.',
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${_paymentModeLabel(_paymentMode)} request submitted. Fees will be updated in 12-24 hrs.',
+            'UPI proof submitted. Fees will be updated after principal verification.',
           ),
           behavior: SnackBarBehavior.floating,
         ),
@@ -1273,24 +1278,27 @@ class _ParentPaymentRequestFormScreenState
     return match && DateTime.tryParse(raw) != null;
   }
 
-  String _absoluteMediaUrl(String value) {
+  String _absoluteMediaUrl(String value, {String cacheKey = ''}) {
     final trimmed = value.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
-    return '${EnvConfig.apiOrigin}/$trimmed';
+    final base = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+        ? trimmed
+        : trimmed.startsWith('/')
+        ? '${EnvConfig.apiOrigin}$trimmed'
+        : '${EnvConfig.apiOrigin}/$trimmed';
+    if (cacheKey.trim().isEmpty) return base;
+    final uri = Uri.parse(base);
+    return uri
+        .replace(
+          queryParameters: {
+            ...uri.queryParameters,
+            'cache_key': cacheKey.trim(),
+          },
+        )
+        .toString();
   }
 
   String _paymentModeLabel(String mode) {
-    switch (mode) {
-      case 'cash':
-        return 'Cash';
-      case 'bank_transfer':
-        return 'Bank Transfer';
-      default:
-        return 'UPI';
-    }
+    return 'UPI';
   }
 }
 

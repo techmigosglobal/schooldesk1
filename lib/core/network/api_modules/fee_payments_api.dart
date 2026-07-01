@@ -41,11 +41,15 @@ extension BackendFeePaymentsApi on BackendApiClient {
   }
 
   Future<List<Map<String, dynamic>>> getParentStudentFees(
-    String studentId,
-  ) async {
+    String studentId, {
+    int? refreshNonce,
+  }) async {
     try {
       final response = await _dio.get(
         '/parent/students/${studentId.trim()}/fees',
+        queryParameters: {
+          if (refreshNonce != null) 'refresh_nonce': refreshNonce,
+        },
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -166,12 +170,16 @@ extension BackendFeePaymentsApi on BackendApiClient {
     }
   }
 
-  Future<Map<String, dynamic>> getPaymentConfig({String invoiceId = ''}) async {
+  Future<Map<String, dynamic>> getPaymentConfig({
+    String invoiceId = '',
+    int? refreshNonce,
+  }) async {
     try {
       final response = await _dio.get(
         '/fees/payment-config',
         queryParameters: {
           if (invoiceId.trim().isNotEmpty) 'invoice_id': invoiceId.trim(),
+          if (refreshNonce != null) 'refresh_nonce': refreshNonce,
         },
       );
       final data = response.data as Map<String, dynamic>;

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -18,11 +20,13 @@ class ParentFeesScreen extends StatefulWidget {
 }
 
 class _ParentFeesScreenState extends State<ParentFeesScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  static const Duration _autoRefreshInterval = Duration(seconds: 45);
   int _selectedNavIndex = ParentNav.fees;
   late TabController _tabController;
   int _activeChildIndex = 0;
   static const _headerColor = Color(0xFF1A6B4A);
+  Timer? _autoRefreshTimer;
 
   List<Map<String, dynamic>> _childrenData = [];
 
@@ -50,20 +54,59 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0),
   );
 
+  Map<String, dynamic>? get _latestClarificationRequest {
+    for (final payment in _paymentHistory) {
+      if (payment['rawStatus'] == 'clarification_required') return payment;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? get _latestPendingRequest {
+    for (final payment in _paymentHistory) {
+      final status = '${payment['rawStatus'] ?? ''}'.toLowerCase();
+      if (status == 'pending' || status == 'pending_verification') {
+        return payment;
+      }
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 3, vsync: this);
-    _loadData();
+    _loadData(forceRefresh: true);
+    _autoRefreshTimer = Timer.periodic(
+      _autoRefreshInterval,
+      (_) => _loadData(forceRefresh: true, showSpinner: false),
+    );
   }
 
-  Future<void> _loadData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadData(forceRefresh: true, showSpinner: false));
+    }
+  }
+
+  Future<void> _loadData({
+    bool forceRefresh = false,
+    bool showSpinner = true,
+  }) async {
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final children = await BackendApiClient.instance.getMyStudents();
+      final refreshNonce = forceRefresh
+          ? DateTime.now().millisecondsSinceEpoch
+          : null;
+      final children = await BackendApiClient.instance.getMyStudents(
+        refreshNonce: refreshNonce,
+      );
       final selectedIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
@@ -77,10 +120,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
         final feeRows = studentId.isEmpty
             ? <Map<String, dynamic>>[]
-            : await BackendApiClient.instance.getParentStudentFees(studentId);
+            : await BackendApiClient.instance.getParentStudentFees(
+                studentId,
+                refreshNonce: refreshNonce,
+              );
         final invoices = studentId.isEmpty
             ? <Map<String, dynamic>>[]
-            : await BackendApiClient.instance.getInvoices(studentId: studentId);
+            : await BackendApiClient.instance.getInvoices(
+                studentId: studentId,
+                refreshNonce: refreshNonce,
+              );
         final paymentRequests = studentId.isEmpty
             ? <Map<String, dynamic>>[]
             : await BackendApiClient.instance.getParentPaymentRequests(
@@ -197,6 +246,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoRefreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -421,6 +472,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           _buildFeeStudentCard(child),
           const SizedBox(height: 14),
           _buildDueSummaryCard(),
+          const SizedBox(height: 14),
+          _buildWorkflowActionCard(),
           const SizedBox(height: 16),
           Text(
             'Fee Items',
@@ -454,7 +507,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   onPressed: () => _openPaymentRequestForm(),
                   icon: const Icon(Icons.payment_rounded, size: 18),
                   label: Text(
-                    'Pay next fee',
+                    'Pay now with UPI',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -563,33 +616,77 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _money(
-                          (_nextPendingFee?['amount'] as num?)?.toDouble() ??
-                              pending,
-                        ),
-                        style: GoogleFonts.ibmPlexSans(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          color: context.appTheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          'Due by ${_nextDueDateLabel()}',
-                          style: GoogleFonts.ibmPlexSans(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: context.appTheme.error,
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final dueLabel = 'Due by ${_nextDueDateLabel()}';
+                      final amount = _money(
+                        (_nextPendingFee?['amount'] as num?)?.toDouble() ??
+                            pending,
+                      );
+                      final useStackedLayout = constraints.maxWidth < 340;
+                      if (useStackedLayout) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              amount,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: context.appTheme.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              dueLabel,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: context.appTheme.error,
+                              ),
+                            ),
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              amount,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                color: context.appTheme.onSurface,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ],
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(
+                                dueLabel,
+                                maxLines: 2,
+                                textAlign: TextAlign.end,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.ibmPlexSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.appTheme.error,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -852,9 +949,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     }
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: _paymentHistory.length,
+      itemCount: _paymentHistory.length + 1,
       itemBuilder: (_, i) {
-        final p = _paymentHistory[i];
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _buildWorkflowActionCard(showHistoryShortcut: false),
+          );
+        }
+        final p = _paymentHistory[i - 1];
         final isPaid = p['status'] == 'Paid';
         final needsClarification = p['rawStatus'] == 'clarification_required';
         final meta = <String>[
@@ -1007,6 +1110,119 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildWorkflowActionCard({bool showHistoryShortcut = true}) {
+    final clarification = _latestClarificationRequest;
+    final pending = _latestPendingRequest;
+    final hasDueAmount = _pendingAmount > 0;
+
+    String title;
+    String message;
+    if (clarification != null) {
+      title = 'Action Needed';
+      message =
+          'The principal asked for a clearer proof or reference update. Resubmit from here.';
+    } else if (pending != null) {
+      title = 'Payment Under Review';
+      message =
+          'Your latest proof is pending principal verification. You can track it in Payments.';
+    } else if (hasDueAmount) {
+      title = 'Ready to Pay';
+      message =
+          'Start the UPI flow from here, then track the request status from Payments.';
+    } else {
+      title = 'Fees Up to Date';
+      message =
+          'Everything is clear right now. Payment receipts and verified history stay in Payments.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: context.appTheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  clarification != null
+                      ? Icons.upload_file_rounded
+                      : pending != null
+                      ? Icons.pending_actions_rounded
+                      : Icons.payment_rounded,
+                  color: context.appTheme.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      message,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 12,
+                        color: context.appTheme.muted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (clarification != null)
+                FilledButton.icon(
+                  onPressed: () => _openClarificationResubmit(clarification),
+                  icon: const Icon(Icons.upload_rounded, size: 18),
+                  label: const Text('Resubmit Now'),
+                )
+              else if (hasDueAmount)
+                FilledButton.icon(
+                  onPressed: () => _openPaymentRequestForm(),
+                  icon: const Icon(Icons.qr_code_rounded, size: 18),
+                  label: const Text('Pay Now'),
+                ),
+              if (showHistoryShortcut)
+                OutlinedButton.icon(
+                  onPressed: () => _tabController.animateTo(1),
+                  icon: const Icon(Icons.history_rounded, size: 18),
+                  label: Text(
+                    clarification != null || pending != null
+                        ? 'View Request Status'
+                        : 'Open Payments',
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -1199,7 +1415,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     );
     if (!mounted) return;
     if (result != null) {
-      await _loadData();
+      await _loadData(forceRefresh: true);
     }
   }
 

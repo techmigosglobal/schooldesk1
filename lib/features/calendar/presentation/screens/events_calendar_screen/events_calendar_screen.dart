@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
@@ -22,7 +24,16 @@ enum _EventFilter {
   cancelled,
 }
 
-enum _EventsDisplayMode { calendar, week }
+enum _EventsDisplayMode { month, week, agenda }
+
+enum _CalendarCategoryFilter {
+  all,
+  events,
+  holidays,
+  ptms,
+  academic,
+  approvals,
+}
 
 enum SchoolCalendarPortal { principal, teacher, parent }
 
@@ -47,9 +58,12 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   String _selectedAcademicYearId = '';
   int _selectedMonth = DateTime.now().month;
   int _selectedYear = DateTime.now().year;
+  DateTime _selectedDate = DateTime.now();
+  DateTime _focusedDay = DateTime.now();
   late DateTime _selectedWeekStart;
   _EventFilter _filter = _EventFilter.month;
-  _EventsDisplayMode _displayMode = _EventsDisplayMode.calendar;
+  _EventsDisplayMode _displayMode = _EventsDisplayMode.month;
+  _CalendarCategoryFilter _categoryFilter = _CalendarCategoryFilter.all;
 
   @override
   void initState() {
@@ -79,18 +93,31 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       // the calendar grid always renders the correct year (e.g. 2026 for a
       // 2026-2027 academic year), regardless of the current wall-clock year.
       int derivedYear = _selectedYear;
+      DateTime? rangeStart;
+      DateTime? rangeEnd;
       for (final y in years) {
         if (y.id == selectedYearId) {
           final start = DateTime.tryParse(y.startDate);
+          final end = DateTime.tryParse(y.endDate);
           if (start != null) derivedYear = start.year;
+          rangeStart = start;
+          rangeEnd = end;
           break;
         }
       }
+      final effectiveSelectedDate = _normalizeSelectedDate(
+        rangeStart: rangeStart,
+        rangeEnd: rangeEnd,
+      );
       setState(() {
         _academicYears = years;
         _selectedAcademicYearId = selectedYearId;
         _events = events;
         _selectedYear = derivedYear;
+        _selectedMonth = effectiveSelectedDate.month;
+        _selectedDate = effectiveSelectedDate;
+        _focusedDay = effectiveSelectedDate;
+        _selectedWeekStart = _startOfWeek(effectiveSelectedDate);
         _loading = false;
       });
     } catch (error) {
@@ -119,6 +146,13 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   bool get _isPrincipalPortal =>
       widget.portal == SchoolCalendarPortal.principal;
 
+  AcademicYearModel? get _selectedAcademicYear {
+    for (final year in _academicYears) {
+      if (year.id == _selectedAcademicYearId) return year;
+    }
+    return null;
+  }
+
   List<_PrincipalEvent> get _visibleEvents {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -136,7 +170,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ].join(' ').toLowerCase().contains(query);
       if (!matchesSearch) return false;
 
-      return switch (_filter) {
+      final matchesTimeFilter = switch (_filter) {
         _EventFilter.month => event.overlapsMonth(_selectedMonth),
         _EventFilter.all => true,
         _EventFilter.today => event.overlapsDate(today),
@@ -146,15 +180,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         _EventFilter.approvals => event.needsApproval,
         _EventFilter.cancelled => event.isCancelled,
       };
+      if (!matchesTimeFilter) return false;
+      return _matchesCategoryFilter(event);
     }).toList();
     rows.sort((a, b) => a.start.compareTo(b.start));
     return rows;
   }
 
   int get _calendarYear {
-    // Prefer the explicitly tracked year (set from the academic year start date
-    // when data loads, or updated when the user navigates months).
-    return _selectedYear;
+    return _monthDateForAcademicYear(_selectedMonth).year;
   }
 
   List<_PrincipalEvent> _eventsForDay(DateTime day) {
@@ -171,8 +205,162 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         event.description,
       ].join(' ').toLowerCase().contains(query);
     }).toList();
+    rows.retainWhere(_matchesCategoryFilter);
     rows.sort((a, b) => a.start.compareTo(b.start));
     return rows;
+  }
+
+  List<_PrincipalEvent> get _selectedDayEvents => _eventsForDay(_selectedDate);
+
+  bool _matchesCategoryFilter(_PrincipalEvent event) {
+    return switch (_categoryFilter) {
+      _CalendarCategoryFilter.all => true,
+      _CalendarCategoryFilter.events => event.isGeneralEvent,
+      _CalendarCategoryFilter.holidays => event.isHolidayOrFestival,
+      _CalendarCategoryFilter.ptms => event.isPtm,
+      _CalendarCategoryFilter.academic => event.isAcademicEntry,
+      _CalendarCategoryFilter.approvals => event.needsApproval,
+    };
+  }
+
+  DateTime _startOfWeek(DateTime day) => DateTime(
+    day.year,
+    day.month,
+    day.day,
+  ).subtract(Duration(days: day.weekday - 1));
+
+  DateTime _normalizeSelectedDate({DateTime? rangeStart, DateTime? rangeEnd}) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
+    if (rangeStart != null && rangeEnd != null) {
+      final normalizedStart = DateTime(
+        rangeStart.year,
+        rangeStart.month,
+        rangeStart.day,
+      );
+      final normalizedEnd = DateTime(
+        rangeEnd.year,
+        rangeEnd.month,
+        rangeEnd.day,
+      );
+      if (today.isBefore(normalizedStart)) return normalizedStart;
+      if (today.isAfter(normalizedEnd)) {
+        return current.isBefore(normalizedStart)
+            ? normalizedStart
+            : normalizedEnd;
+      }
+      return today;
+    }
+    return today;
+  }
+
+  DateTime _monthDateForAcademicYear(int month) {
+    final year = _selectedAcademicYear;
+    final start = DateTime.tryParse(year?.startDate ?? '');
+    final end = DateTime.tryParse(year?.endDate ?? '');
+    if (start == null || end == null) {
+      return DateTime(_selectedYear, month, 1);
+    }
+    final startMonth = start.month;
+    final targetYear = month >= startMonth ? start.year : end.year;
+    return DateTime(targetYear, month, 1);
+  }
+
+  DateTime get _calendarFirstDay {
+    final year = _selectedAcademicYear;
+    final start = DateTime.tryParse(year?.startDate ?? '');
+    return start != null
+        ? DateTime(start.year, start.month, start.day)
+        : DateTime(_calendarYear - 1, 1, 1);
+  }
+
+  DateTime get _calendarLastDay {
+    final year = _selectedAcademicYear;
+    final end = DateTime.tryParse(year?.endDate ?? '');
+    return end != null
+        ? DateTime(end.year, end.month, end.day)
+        : DateTime(_calendarYear + 1, 12, 31);
+  }
+
+  void _selectDay(DateTime selected, DateTime focused) {
+    setState(() {
+      _selectedDate = DateTime(selected.year, selected.month, selected.day);
+      _focusedDay = DateTime(focused.year, focused.month, focused.day);
+      _selectedMonth = focused.month;
+      _selectedYear = focused.year;
+      _selectedWeekStart = _startOfWeek(selected);
+      if (_filter == _EventFilter.today) _filter = _EventFilter.month;
+    });
+  }
+
+  void _goToToday() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    _selectDay(today, today);
+  }
+
+  Future<void> _showDayEventsSheet(
+    DateTime day,
+    List<_PrincipalEvent> events,
+  ) async {
+    if (events.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  DateFormat('EEEE, d MMMM y').format(day),
+                  style: GoogleFonts.dmSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: principalDirectoryText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${events.length} ${events.length == 1 ? 'event' : 'events'}',
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: events.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (ctx, index) {
+                      final event = events[index];
+                      return _SelectedDayEventCard(
+                        event: event,
+                        onTap: () {
+                          Navigator.pop(sheetCtx);
+                          _openDetails(event);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _openCreateEvent({DateTime? initialDate}) async {
@@ -193,8 +381,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             : saved.academicYearId;
         _selectedMonth = saved.startDate.month;
         _selectedYear = saved.startDate.year;
+        _selectedDate = DateTime(
+          saved.startDate.year,
+          saved.startDate.month,
+          saved.startDate.day,
+        );
+        _focusedDay = _selectedDate;
+        _selectedWeekStart = _startOfWeek(_selectedDate);
         _filter = _EventFilter.month;
-        _displayMode = _EventsDisplayMode.calendar;
+        _displayMode = _EventsDisplayMode.month;
       });
       await _loadData();
       if (!mounted) return;
@@ -244,8 +439,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
             : saved.academicYearId;
         _selectedMonth = saved.startDate.month;
         _selectedYear = saved.startDate.year;
+        _selectedDate = DateTime(
+          saved.startDate.year,
+          saved.startDate.month,
+          saved.startDate.day,
+        );
+        _focusedDay = _selectedDate;
+        _selectedWeekStart = _startOfWeek(_selectedDate);
         _filter = _EventFilter.month;
-        _displayMode = _EventsDisplayMode.calendar;
+        _displayMode = _EventsDisplayMode.month;
       });
       await _loadData();
     }
@@ -534,21 +736,29 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       addIcon: Icons.event_available_rounded,
       secondaryActions: _canManageEvents
           ? [
-              IconButton(
-                tooltip: 'Approve event posts',
-                icon: const Icon(Icons.fact_check_rounded),
-                onPressed: () async {
-                  final changed = await Navigator.pushNamed(
-                    context,
-                    AppRoutes.principalEventApprovals,
-                  );
-                  if (changed == true && mounted) await _loadData();
-                },
+              Semantics(
+                button: true,
+                label: 'Open pending event approvals',
+                child: IconButton(
+                  tooltip: 'Approve event posts',
+                  icon: const Icon(Icons.fact_check_rounded),
+                  onPressed: () async {
+                    final changed = await Navigator.pushNamed(
+                      context,
+                      AppRoutes.principalEventApprovals,
+                    );
+                    if (changed == true && mounted) await _loadData();
+                  },
+                ),
               ),
-              IconButton(
-                tooltip: 'Load 2026–27 school calendar',
-                icon: const Icon(Icons.download_for_offline_rounded),
-                onPressed: _seedSchoolCalendar,
+              Semantics(
+                button: true,
+                label: 'Load seeded school calendar entries',
+                child: IconButton(
+                  tooltip: 'Load 2026–27 school calendar',
+                  icon: const Icon(Icons.download_for_offline_rounded),
+                  onPressed: _seedSchoolCalendar,
+                ),
               ),
             ]
           : null,
@@ -556,15 +766,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       emptyState: _buildCalendarEmptyState(),
       filters: _buildFilters(),
       slivers: [
-        if (_displayMode == _EventsDisplayMode.calendar)
+        if (_displayMode == _EventsDisplayMode.agenda)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
-            sliver: SliverToBoxAdapter(child: _buildCalendarMonth()),
+            sliver: SliverToBoxAdapter(child: _buildAgendaView()),
           )
         else
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 72),
-            sliver: SliverToBoxAdapter(child: _buildWeekView()),
+            sliver: SliverToBoxAdapter(child: _buildCalendarView()),
           ),
       ],
     );
@@ -576,10 +786,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       subtitle: 'Holidays, events, PTMs, and school milestones',
       drawer: _schoolCalendarDrawer(),
       actions: [
-        IconButton(
-          tooltip: 'Refresh calendar',
-          onPressed: _loading ? null : _loadData,
-          icon: const Icon(Icons.refresh_rounded),
+        Semantics(
+          button: true,
+          label: 'Refresh school calendar',
+          child: IconButton(
+            tooltip: 'Refresh calendar',
+            onPressed: _loading ? null : _loadData,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ),
       ],
       body: RefreshIndicator(
@@ -604,17 +818,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
                 ),
               )
             else ...[
-              if (_displayMode == _EventsDisplayMode.calendar)
+              if (_displayMode == _EventsDisplayMode.agenda)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
-                  sliver: SliverToBoxAdapter(
-                    child: _buildCalendarMonthReadOnly(),
-                  ),
+                  sliver: SliverToBoxAdapter(child: _buildAgendaView()),
                 )
               else
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 72),
-                  sliver: SliverToBoxAdapter(child: _buildWeekView()),
+                  sliver: SliverToBoxAdapter(child: _buildCalendarView()),
                 ),
             ],
           ],
@@ -640,214 +852,157 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     }
   }
 
-  Widget _buildCalendarMonthReadOnly() {
-    return _EventCalendarMonth(
-      month: _selectedMonth,
-      year: _calendarYear,
+  Widget _buildCalendarView() {
+    final focusedDay = _displayMode == _EventsDisplayMode.week
+        ? _selectedWeekStart
+        : _focusedDay;
+    final monthEventCount = _visibleEvents
+        .where((event) => event.overlapsMonth(_selectedMonth))
+        .length;
+    return _CalendarPanel(
+      title: DateFormat(
+        'MMMM y',
+      ).format(_monthDateForAcademicYear(_selectedMonth)),
+      monthEventCount: monthEventCount,
+      selectedDate: _selectedDate,
+      focusedDay: focusedDay,
+      firstDay: _calendarFirstDay,
+      lastDay: _calendarLastDay,
+      format: _displayMode == _EventsDisplayMode.week
+          ? CalendarFormat.week
+          : CalendarFormat.month,
       eventsForDay: _eventsForDay,
-      onEventTap: _openDetails,
-      onDayTap: (day, events) {
-        if (events.isEmpty) return; // read-only: no create on tap
-        if (events.length == 1) {
-          _openDetails(events.first);
-        } else {
-          showModalBottomSheet<void>(
-            context: context,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            builder: (sheetCtx) {
-              return SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        '${events.length} events on ${day.day} ${_monthName(day.month)}',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: events.length,
-                        itemBuilder: (ctx, i) {
-                          final ev = events[i];
-                          return ListTile(
-                            title: Text(
-                              ev.title,
-                              style: GoogleFonts.dmSans(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              ev.typeLabel,
-                              style: GoogleFonts.dmSans(),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right_rounded,
-                              size: 20,
-                            ),
-                            onTap: () {
-                              Navigator.pop(sheetCtx);
-                              _openDetails(ev);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        }
+      onDaySelected: _selectDay,
+      onToday: _goToToday,
+      onOpenAgenda: () {
+        setState(() => _displayMode = _EventsDisplayMode.agenda);
       },
-      onPrevMonth: () {
-        setState(() {
-          if (_selectedMonth == 1) {
-            _selectedMonth = 12;
-            _selectedYear--;
-          } else {
-            _selectedMonth--;
-          }
-        });
-      },
-      onNextMonth: () {
-        setState(() {
-          if (_selectedMonth == 12) {
-            _selectedMonth = 1;
-            _selectedYear++;
-          } else {
-            _selectedMonth++;
-          }
-        });
-      },
+      onIndicatorTap: _showDayEventsSheet,
+      selectedDayContent: _buildSelectedDayAgenda(),
     );
   }
 
-  Widget _buildCalendarMonth() {
-    return _EventCalendarMonth(
-      month: _selectedMonth,
-      year: _calendarYear,
-      eventsForDay: _eventsForDay,
-      onEventTap: _openDetails,
-      onDayTap: (day, events) {
-        if (events.isEmpty) {
-          _openCreateEvent(initialDate: day);
-        } else if (events.length == 1) {
-          _openDetails(events.first);
-        } else {
-          showModalBottomSheet<void>(
-            context: context,
-            backgroundColor: Theme.of(context).colorScheme.surface,
-            builder: (sheetCtx) {
-              return SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        '${events.length} events on ${day.day} ${_monthName(day.month)}',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: events.length,
-                        itemBuilder: (ctx, i) {
-                          final ev = events[i];
-                          return ListTile(
-                            title: Text(
-                              ev.title,
-                              style: GoogleFonts.dmSans(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            subtitle: Text(
-                              ev.typeLabel,
-                              style: GoogleFonts.dmSans(),
-                            ),
-                            trailing: const Icon(
-                              Icons.chevron_right_rounded,
-                              size: 20,
-                            ),
-                            onTap: () {
-                              Navigator.pop(sheetCtx);
-                              _openDetails(ev);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        }
-      },
-      onPrevMonth: () {
-        setState(() {
-          if (_selectedMonth == 1) {
-            _selectedMonth = 12;
-            _selectedYear--;
-          } else {
-            _selectedMonth--;
-          }
-        });
-      },
-      onNextMonth: () {
-        setState(() {
-          if (_selectedMonth == 12) {
-            _selectedMonth = 1;
-            _selectedYear++;
-          } else {
-            _selectedMonth++;
-          }
-        });
-      },
+  Widget _buildAgendaView() {
+    final events = _visibleEvents;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _AgendaSummaryCard(
+          title: DateFormat(
+            'MMMM y',
+          ).format(_monthDateForAcademicYear(_selectedMonth)),
+          subtitle: events.isEmpty
+              ? 'No entries match the current search and filters.'
+              : '${events.length} ${events.length == 1 ? 'entry' : 'entries'} in this view',
+          onToday: _goToToday,
+        ),
+        const SizedBox(height: 12),
+        if (events.isEmpty)
+          _buildSelectedDayEmptyState(
+            title: 'No calendar entries found',
+            message: 'Try another month or reset the active category filter.',
+            showCreate: false,
+          )
+        else
+          ...events.map(
+            (event) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _SelectedDayEventCard(
+                event: event,
+                onTap: () => _openDetails(event),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _buildWeekView() {
-    final endOfWeek = _selectedWeekStart.add(const Duration(days: 6));
+  Widget _buildSelectedDayAgenda() {
+    final events = _selectedDayEvents;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Selected: ${DateFormat('EEEE, d MMMM y').format(_selectedDate)}',
+          style: GoogleFonts.dmSans(
+            color: principalDirectoryText,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${events.length} ${events.length == 1 ? 'event' : 'events'}',
+          style: GoogleFonts.dmSans(
+            color: principalDirectoryMuted,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (events.isEmpty)
+          _buildSelectedDayEmptyState(
+            title: 'No entries on this day',
+            message: _canManageEvents
+                ? 'Select another date or create an event for this day.'
+                : 'Select another date to view school events, holidays, or PTMs.',
+            showCreate: _canManageEvents,
+          )
+        else
+          ...events.map(
+            (event) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _SelectedDayEventCard(
+                event: event,
+                onTap: () => _openDetails(event),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 
-    return _EventCalendarWeek(
-      startOfWeek: _selectedWeekStart,
-      endOfWeek: endOfWeek,
-      eventsForDay: _eventsForDay,
-      onEventTap: _openDetails,
-      onEmptyDayTap: (day) => _openCreateEvent(initialDate: day),
-      onPrevWeek: () {
-        setState(() {
-          _selectedWeekStart = _selectedWeekStart.subtract(
-            const Duration(days: 7),
-          );
-        });
-      },
-      onNextWeek: () {
-        setState(() {
-          _selectedWeekStart = _selectedWeekStart.add(const Duration(days: 7));
-        });
-      },
-      onGoToToday: () {
-        setState(() {
-          final now = DateTime.now();
-          _selectedWeekStart = now.subtract(Duration(days: now.weekday - 1));
-        });
-      },
+  Widget _buildSelectedDayEmptyState({
+    required String title,
+    required String message,
+    required bool showCreate,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FBFE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE8F4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.dmSans(
+              color: principalDirectoryText,
+              fontWeight: FontWeight.w900,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            message,
+            style: GoogleFonts.dmSans(
+              color: principalDirectoryMuted,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
+          if (showCreate) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _openCreateEvent(initialDate: _selectedDate),
+              icon: const Icon(Icons.add_circle_outline_rounded),
+              label: const Text('Create event on this date'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -883,8 +1038,12 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     setState(() {
       _query = '';
       _filter = _EventFilter.month;
-      _displayMode = _EventsDisplayMode.calendar;
+      _displayMode = _EventsDisplayMode.month;
       _selectedMonth = DateTime.now().month;
+      _selectedDate = DateTime.now();
+      _focusedDay = _selectedDate;
+      _selectedWeekStart = _startOfWeek(_selectedDate);
+      _categoryFilter = _CalendarCategoryFilter.all;
     });
   }
 
@@ -949,6 +1108,10 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               _buildDisplayModeSelector(),
               const SizedBox(height: 8),
               _buildMonthStrip(),
+              const SizedBox(height: 10),
+              _buildLegend(),
+              const SizedBox(height: 10),
+              _buildCategoryFilters(),
             ],
           );
         },
@@ -960,7 +1123,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return SegmentedButton<_EventsDisplayMode>(
       segments: const [
         ButtonSegment(
-          value: _EventsDisplayMode.calendar,
+          value: _EventsDisplayMode.month,
           icon: Icon(Icons.calendar_month_rounded),
           label: Text('Month'),
         ),
@@ -968,6 +1131,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           value: _EventsDisplayMode.week,
           icon: Icon(Icons.view_week_rounded),
           label: Text('Week'),
+        ),
+        ButtonSegment(
+          value: _EventsDisplayMode.agenda,
+          icon: Icon(Icons.view_agenda_rounded),
+          label: Text('Agenda'),
         ),
       ],
       selected: {_displayMode},
@@ -989,7 +1157,19 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               label: _monthName(month),
               selected: _selectedMonth == month,
               onTap: () => setState(() {
+                final target = _monthDateForAcademicYear(month);
                 _selectedMonth = month;
+                _selectedYear = target.year;
+                _selectedDate = DateTime(
+                  target.year,
+                  target.month,
+                  _selectedDate.day.clamp(
+                    1,
+                    DateUtils.getDaysInMonth(target.year, target.month),
+                  ),
+                );
+                _focusedDay = _selectedDate;
+                _selectedWeekStart = _startOfWeek(_selectedDate);
                 _filter = _EventFilter.month;
               }),
             ),
@@ -998,91 +1178,469 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ),
     );
   }
+
+  Widget _buildLegend() {
+    const items = [
+      _LegendItemData(
+        label: 'Holiday',
+        icon: Icons.beach_access_rounded,
+        color: Color(0xFFD14343),
+      ),
+      _LegendItemData(
+        label: 'Festival',
+        icon: Icons.celebration_rounded,
+        color: Color(0xFFF59E0B),
+      ),
+      _LegendItemData(
+        label: 'Academic',
+        icon: Icons.edit_note_rounded,
+        color: Color(0xFF2563EB),
+      ),
+      _LegendItemData(
+        label: 'PTM',
+        icon: Icons.groups_2_rounded,
+        color: Color(0xFF0F766E),
+      ),
+      _LegendItemData(
+        label: 'Approval',
+        icon: Icons.verified_rounded,
+        color: Color(0xFF16A34A),
+      ),
+    ];
+    return Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      children: items.map((item) => _LegendChip(item: item)).toList(),
+    );
+  }
+
+  Widget _buildCategoryFilters() {
+    final filters = [
+      (_CalendarCategoryFilter.all, 'All'),
+      (_CalendarCategoryFilter.events, 'Events'),
+      (_CalendarCategoryFilter.holidays, 'Holidays'),
+      (_CalendarCategoryFilter.ptms, 'PTMs'),
+      (_CalendarCategoryFilter.academic, 'Academic'),
+      (_CalendarCategoryFilter.approvals, 'Approvals'),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (filter, label) in filters)
+          FilterChip(
+            label: Text(label),
+            selected: _categoryFilter == filter,
+            onSelected: (_) => setState(() => _categoryFilter = filter),
+          ),
+      ],
+    );
+  }
 }
 
-class _EventCalendarMonth extends StatelessWidget {
-  final int month;
-  final int year;
+class _CalendarPanel extends StatelessWidget {
+  final String title;
+  final int monthEventCount;
+  final DateTime selectedDate;
+  final DateTime focusedDay;
+  final DateTime firstDay;
+  final DateTime lastDay;
+  final CalendarFormat format;
   final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
-  final ValueChanged<_PrincipalEvent> onEventTap;
-  final void Function(DateTime day, List<_PrincipalEvent> events)? onDayTap;
-  final VoidCallback? onPrevMonth;
-  final VoidCallback? onNextMonth;
+  final void Function(DateTime selectedDay, DateTime focusedDay) onDaySelected;
+  final VoidCallback onToday;
+  final VoidCallback onOpenAgenda;
+  final Future<void> Function(DateTime day, List<_PrincipalEvent> events)
+  onIndicatorTap;
+  final Widget selectedDayContent;
 
-  const _EventCalendarMonth({
-    required this.month,
-    required this.year,
+  const _CalendarPanel({
+    required this.title,
+    required this.monthEventCount,
+    required this.selectedDate,
+    required this.focusedDay,
+    required this.firstDay,
+    required this.lastDay,
+    required this.format,
     required this.eventsForDay,
-    required this.onEventTap,
-    this.onDayTap,
-    this.onPrevMonth,
-    this.onNextMonth,
+    required this.onDaySelected,
+    required this.onToday,
+    required this.onOpenAgenda,
+    required this.onIndicatorTap,
+    required this.selectedDayContent,
   });
 
   @override
   Widget build(BuildContext context) {
-    final firstDay = DateTime(year, month);
-    final leadingBlankDays = firstDay.weekday - 1;
-    final dayCount = DateUtils.getDaysInMonth(year, month);
-    final totalCells = ((leadingBlankDays + dayCount + 6) ~/ 7) * 7;
-    var monthEventCount = 0;
-
-    final cells = List<Widget>.generate(totalCells, (index) {
-      final dayNumber = index - leadingBlankDays + 1;
-      if (dayNumber < 1 || dayNumber > dayCount) {
-        return const _EventCalendarDayCell(outsideMonth: true, events: []);
-      }
-      final day = DateTime(year, month, dayNumber);
-      final events = eventsForDay(day);
-      monthEventCount += events.length;
-      return _EventCalendarDayCell(
-        day: day,
-        events: events,
-        onTap: () => onDayTap?.call(day, events),
-      );
-    });
-
+    final smallScreen = MediaQuery.sizeOf(context).width < 380;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: EdgeInsets.all(smallScreen ? 12 : 16),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFDDE8F4)),
         boxShadow: [
           BoxShadow(
-            color: context.appTheme.onSurface.withAlpha(8),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: context.appTheme.onSurface.withAlpha(10),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
             children: [
-              if (onPrevMonth != null)
-                IconButton(
-                  tooltip: 'Previous month',
-                  icon: const Icon(Icons.chevron_left_rounded, size: 24),
-                  onPressed: onPrevMonth,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEAF4FF),
-                    foregroundColor: principalDirectoryAccent,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.dmSans(
+                      color: principalDirectoryText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  InkWell(
+                    onTap: onOpenAgenda,
+                    borderRadius: BorderRadius.circular(999),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 2,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            monthEventCount == 0
+                                ? '0 calendar entries'
+                                : '$monthEventCount calendar entries',
+                            style: GoogleFonts.dmSans(
+                              color: principalDirectoryMuted,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 18,
+                            color: principalDirectoryMuted,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Semantics(
+                button: true,
+                label: 'Go to today',
+                child: Tooltip(
+                  message: 'Go to today',
+                  child: OutlinedButton.icon(
+                    onPressed: onToday,
+                    icon: const Icon(Icons.today_rounded),
+                    label: const Text('Today'),
                   ),
                 ),
-              const SizedBox(width: 8),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TableCalendar<_PrincipalEvent>(
+            firstDay: firstDay,
+            lastDay: lastDay,
+            focusedDay: focusedDay,
+            headerVisible: false,
+            daysOfWeekHeight: 30,
+            calendarFormat: format,
+            availableGestures: AvailableGestures.horizontalSwipe,
+            selectedDayPredicate: (day) => isSameDay(day, selectedDate),
+            eventLoader: eventsForDay,
+            rowHeight: format == CalendarFormat.month
+                ? (smallScreen ? 58 : 72)
+                : 88,
+            onDaySelected: onDaySelected,
+            onPageChanged: (focused) => onDaySelected(
+              isSameDay(selectedDate, focused) ? selectedDate : focused,
+              focused,
+            ),
+            calendarBuilders: CalendarBuilders<_PrincipalEvent>(
+              dowBuilder: (context, day) => Center(
+                child: Text(
+                  DateFormat('EEE').format(day),
+                  style: GoogleFonts.dmSans(
+                    color: day.weekday >= DateTime.saturday
+                        ? const Color(0xFF9A5A3A)
+                        : principalDirectoryMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              defaultBuilder: (context, day, focusedDay) => _CalendarDateCell(
+                day: day,
+                events: eventsForDay(day),
+                isWeekend: day.weekday >= DateTime.saturday,
+                onTap: () => onDaySelected(day, focusedDay),
+                onIndicatorTap: () => onIndicatorTap(day, eventsForDay(day)),
+              ),
+              todayBuilder: (context, day, focusedDay) => _CalendarDateCell(
+                day: day,
+                events: eventsForDay(day),
+                isToday: true,
+                isWeekend: day.weekday >= DateTime.saturday,
+                onTap: () => onDaySelected(day, focusedDay),
+                onIndicatorTap: () => onIndicatorTap(day, eventsForDay(day)),
+              ),
+              selectedBuilder: (context, day, focusedDay) => _CalendarDateCell(
+                day: day,
+                events: eventsForDay(day),
+                isSelected: true,
+                isToday: isSameDay(day, DateTime.now()),
+                isWeekend: day.weekday >= DateTime.saturday,
+                onTap: () => onDaySelected(day, focusedDay),
+                onIndicatorTap: () => onIndicatorTap(day, eventsForDay(day)),
+              ),
+              outsideBuilder: (context, day, focusedDay) => _CalendarDateCell(
+                day: day,
+                events: eventsForDay(day),
+                isOutsideMonth: true,
+                isWeekend: day.weekday >= DateTime.saturday,
+                onTap: () => onDaySelected(day, focusedDay),
+                onIndicatorTap: () => onIndicatorTap(day, eventsForDay(day)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          selectedDayContent,
+        ],
+      ),
+    );
+  }
+}
+
+class _CalendarDateCell extends StatelessWidget {
+  final DateTime day;
+  final List<_PrincipalEvent> events;
+  final bool isSelected;
+  final bool isToday;
+  final bool isWeekend;
+  final bool isOutsideMonth;
+  final VoidCallback onTap;
+  final VoidCallback onIndicatorTap;
+
+  const _CalendarDateCell({
+    required this.day,
+    required this.events,
+    required this.onTap,
+    required this.onIndicatorTap,
+    this.isSelected = false,
+    this.isToday = false,
+    this.isWeekend = false,
+    this.isOutsideMonth = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = events.isNotEmpty
+        ? events.first.typeColor
+        : principalDirectoryAccent;
+    final background = isSelected
+        ? primary.withAlpha(26)
+        : isToday
+        ? const Color(0xFFEAF4FF)
+        : isWeekend
+        ? const Color(0xFFFFF8F1)
+        : const Color(0xFFF9FBFE);
+    final border = isSelected
+        ? primary
+        : isToday
+        ? principalDirectoryAccent
+        : isWeekend
+        ? const Color(0xFFF3D6BB)
+        : const Color(0xFFE4ECF5);
+    final textColor = isOutsideMonth
+        ? principalDirectoryMuted.withAlpha(150)
+        : isSelected || isToday
+        ? principalDirectoryText
+        : isWeekend
+        ? const Color(0xFF8B4C2F)
+        : principalDirectoryText;
+
+    return Semantics(
+      button: true,
+      label:
+          '${DateFormat('EEEE d MMMM').format(day)}. ${events.length} ${events.length == 1 ? 'event' : 'events'}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: border, width: isSelected ? 1.5 : 1),
+          ),
+          child: Stack(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: Text(
+                  '${day.day}',
+                  style: GoogleFonts.dmSans(
+                    color: textColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (events.length > 1)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: _EventCountBadge(count: events.length),
+                ),
+              if (events.isNotEmpty)
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onIndicatorTap,
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final event in events.take(3))
+                          Tooltip(
+                            message: event.title,
+                            child: Icon(
+                              event.calendarIcon,
+                              size: 15,
+                              color: event.typeColor,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EventCountBadge extends StatelessWidget {
+  final int count;
+
+  const _EventCountBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: principalDirectoryText,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$count',
+        style: GoogleFonts.dmSans(
+          color: Colors.white,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _LegendItemData {
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _LegendItemData({
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+}
+
+class _LegendChip extends StatelessWidget {
+  final _LegendItemData item;
+
+  const _LegendChip({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: item.color.withAlpha(18),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: item.color.withAlpha(55)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(item.icon, size: 16, color: item.color),
+          const SizedBox(width: 6),
+          Text(
+            item.label,
+            style: GoogleFonts.dmSans(
+              color: principalDirectoryText,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SelectedDayEventCard extends StatelessWidget {
+  final _PrincipalEvent event;
+  final VoidCallback onTap;
+
+  const _SelectedDayEventCard({required this.event, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: event.calendarTone,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: event.typeColor.withAlpha(50)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF4FF),
-                  borderRadius: BorderRadius.circular(8),
+                  color: event.typeColor.withAlpha(24),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.calendar_month_rounded,
-                  color: principalDirectoryAccent,
-                ),
+                child: Icon(event.calendarIcon, color: event.typeColor),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1090,221 +1648,102 @@ class _EventCalendarMonth extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${_monthName(month)} $year',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      event.title,
                       style: GoogleFonts.dmSans(
                         color: principalDirectoryText,
-                        fontSize: 16,
                         fontWeight: FontWeight.w900,
+                        fontSize: 14,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     Text(
-                      monthEventCount == 0
-                          ? 'Calendar'
-                          : '$monthEventCount calendar entries',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      '${event.typeLabel} · ${event.timeLabel}',
                       style: GoogleFonts.dmSans(
                         color: principalDirectoryMuted,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                  ],
-                ),
-              ),
-              if (onNextMonth != null)
-                IconButton(
-                  tooltip: 'Next month',
-                  icon: const Icon(Icons.chevron_right_rounded, size: 24),
-                  onPressed: onNextMonth,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEAF4FF),
-                    foregroundColor: principalDirectoryAccent,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: const [
-              _CalendarWeekLabel('Mon'),
-              _CalendarWeekLabel('Tue'),
-              _CalendarWeekLabel('Wed'),
-              _CalendarWeekLabel('Thu'),
-              _CalendarWeekLabel('Fri'),
-              _CalendarWeekLabel('Sat'),
-              _CalendarWeekLabel('Sun'),
-            ],
-          ),
-          const SizedBox(height: 6),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final compact = constraints.maxWidth < 560;
-              return GridView.count(
-                crossAxisCount: 7,
-                mainAxisSpacing: compact ? 4 : 6,
-                crossAxisSpacing: compact ? 4 : 6,
-                childAspectRatio: compact ? 1.0 : 1.15,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: cells,
-              );
-            },
-          ),
-          if (monthEventCount == 0) ...[
-            const SizedBox(height: 14),
-            const _CalendarNotice(
-              icon: Icons.event_available_rounded,
-              title: 'No events scheduled',
-              message: 'Use the create event button to add one for this month.',
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CalendarWeekLabel extends StatelessWidget {
-  final String label;
-
-  const _CalendarWeekLabel(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Center(
-        child: Text(
-          label,
-          style: GoogleFonts.dmSans(
-            color: principalDirectoryMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EventCalendarDayCell extends StatelessWidget {
-  final DateTime? day;
-  final List<_PrincipalEvent> events;
-  final VoidCallback? onTap;
-  final bool outsideMonth;
-
-  const _EventCalendarDayCell({
-    required this.events,
-    this.day,
-    this.onTap,
-    this.outsideMonth = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (outsideMonth || day == null) {
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.appTheme.surface.withAlpha(100),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFEAF1F7)),
-        ),
-      );
-    }
-    final now = DateTime.now();
-    final actualDay = day!;
-    final isToday = DateUtils.isSameDay(actualDay, now);
-    final hasEvents = events.isNotEmpty;
-    final firstEvent = hasEvents ? events.first : null;
-    final accent = firstEvent?.typeColor ?? principalDirectoryAccent;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Ink(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: isToday
-                ? const Color(0xFFEAF4FF)
-                : hasEvents
-                ? firstEvent!.calendarTone
-                : const Color(0xFFF9FBFE),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: isToday
-                  ? principalDirectoryAccent.withAlpha(120)
-                  : hasEvents
-                  ? accent.withAlpha(110)
-                  : const Color(0xFFE4ECF5),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${actualDay.day}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        color: isToday
-                            ? principalDirectoryAccent
-                            : principalDirectoryText,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
+                    if (event.venue.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        event.venue,
+                        style: GoogleFonts.dmSans(
+                          color: principalDirectoryText,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                  ),
-                  if (events.length > 1)
-                    Text(
-                      '${events.length}',
-                      style: GoogleFonts.dmSans(
-                        color: principalDirectoryMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                ],
-              ),
-              const Spacer(),
-              if (firstEvent != null) ...[
-                Text(
-                  firstEvent.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    color: principalDirectoryText,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    for (final event in events.take(3)) ...[
-                      // event preview dots
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(right: 3),
-                        decoration: BoxDecoration(
-                          color: event.typeColor,
-                          shape: BoxShape.circle,
+                    ],
+                    if (event.audience.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        event.audience,
+                        style: GoogleFonts.dmSans(
+                          color: principalDirectoryMuted,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ],
                 ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: principalDirectoryMuted),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AgendaSummaryCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final VoidCallback onToday;
+
+  const _AgendaSummaryCard({
+    required this.title,
+    required this.subtitle,
+    required this.onToday,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFDDE8F4)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(onPressed: onToday, child: const Text('Today')),
+        ],
       ),
     );
   }
@@ -2034,225 +2473,6 @@ class _CalendarNotice extends StatelessWidget {
   }
 }
 
-class _EventCalendarWeek extends StatelessWidget {
-  final DateTime startOfWeek;
-  final DateTime endOfWeek;
-  final List<_PrincipalEvent> Function(DateTime day) eventsForDay;
-  final ValueChanged<_PrincipalEvent> onEventTap;
-  final ValueChanged<DateTime>? onEmptyDayTap;
-  final VoidCallback? onPrevWeek;
-  final VoidCallback? onNextWeek;
-  final VoidCallback? onGoToToday;
-
-  const _EventCalendarWeek({
-    required this.startOfWeek,
-    required this.endOfWeek,
-    required this.eventsForDay,
-    required this.onEventTap,
-    this.onEmptyDayTap,
-    this.onPrevWeek,
-    this.onNextWeek,
-    this.onGoToToday,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final days = List.generate(7, (i) => startOfWeek.add(Duration(days: i)));
-
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDDE8F4)),
-        boxShadow: [
-          BoxShadow(
-            color: context.appTheme.onSurface.withAlpha(8),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              if (onPrevWeek != null)
-                IconButton(
-                  tooltip: 'Previous week',
-                  icon: const Icon(Icons.chevron_left_rounded, size: 22),
-                  onPressed: onPrevWeek,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEAF4FF),
-                    foregroundColor: principalDirectoryAccent,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${_monthName(startOfWeek.month)} ${startOfWeek.day} – ${_monthName(endOfWeek.month)} ${endOfWeek.day}, ${endOfWeek.year}',
-                  style: GoogleFonts.dmSans(
-                    color: principalDirectoryText,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              if (onGoToToday != null)
-                TextButton(
-                  onPressed: onGoToToday,
-                  child: Text(
-                    'Today',
-                    style: GoogleFonts.dmSans(
-                      color: principalDirectoryAccent,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              const SizedBox(width: 4),
-              if (onNextWeek != null)
-                IconButton(
-                  tooltip: 'Next week',
-                  icon: const Icon(Icons.chevron_right_rounded, size: 22),
-                  onPressed: onNextWeek,
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(0xFFEAF4FF),
-                    foregroundColor: principalDirectoryAccent,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ...days.map((day) {
-            final events = eventsForDay(day);
-            final isToday = DateUtils.isSameDay(day, now);
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isToday
-                    ? const Color(0xFFEAF4FF)
-                    : context.appTheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isToday
-                      ? principalDirectoryAccent.withAlpha(120)
-                      : const Color(0xFFE4ECF5),
-                ),
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 48,
-                    child: Column(
-                      children: [
-                        Text(
-                          _dayName(day.weekday),
-                          style: GoogleFonts.dmSans(
-                            color: principalDirectoryMuted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        Text(
-                          '${day.day}',
-                          style: GoogleFonts.dmSans(
-                            color: isToday
-                                ? principalDirectoryAccent
-                                : principalDirectoryText,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: events.isEmpty
-                        ? InkWell(
-                            onTap: () => onEmptyDayTap?.call(day),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Text(
-                                'No events',
-                                style: GoogleFonts.dmSans(
-                                  color: principalDirectoryMuted,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: events.map((event) {
-                              return InkWell(
-                                onTap: () => onEventTap(event),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 3,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        margin: const EdgeInsets.only(right: 8),
-                                        decoration: BoxDecoration(
-                                          color: event.typeColor,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          event.title,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.dmSans(
-                                            color: principalDirectoryText,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                        ),
-                                      ),
-                                      if (event.venue.isNotEmpty)
-                                        Text(
-                                          event.venue,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.dmSans(
-                                            color: principalDirectoryMuted,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-String _dayName(int weekday) {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  return days[weekday - 1];
-}
-
 class _PrincipalEvent {
   final String id;
   final String academicYearId;
@@ -2312,6 +2532,16 @@ class _PrincipalEvent {
 
   bool get isCancelled => status == 'cancelled';
 
+  bool get isPtm => type == 'ptm' || type == 'meeting';
+
+  bool get isAcademicEntry => type == 'academic' || type == 'exam';
+
+  bool get isHolidayOrFestival =>
+      isHoliday || type == 'cultural' || type == 'festival';
+
+  bool get isGeneralEvent =>
+      !isHoliday && !isPtm && !isAcademicEntry && !needsApproval;
+
   bool overlapsMonth(int month) {
     var cursor = DateTime(start.year, start.month, 1);
     final last = DateTime(end.year, end.month, 1);
@@ -2358,6 +2588,17 @@ class _PrincipalEvent {
       'staff' => Icons.badge_rounded,
       'health' => Icons.health_and_safety_rounded,
       _ => Icons.event_rounded,
+    };
+  }
+
+  IconData get calendarIcon {
+    if (needsApproval) return Icons.verified_rounded;
+    if (isHoliday) return Icons.beach_access_rounded;
+    return switch (type) {
+      'cultural' || 'festival' => Icons.celebration_rounded,
+      'academic' || 'exam' => Icons.edit_note_rounded,
+      'ptm' || 'meeting' => Icons.groups_2_rounded,
+      _ => Icons.campaign_rounded,
     };
   }
 

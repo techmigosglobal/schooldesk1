@@ -8,6 +8,18 @@ void main() {
       final form = File(
         'lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart',
       ).readAsStringSync();
+      final parentFees = File(
+        'lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart',
+      ).readAsStringSync();
+      final parentDashboard = File(
+        'lib/features/dashboard/presentation/screens/parent_dashboard_screen/parent_dashboard_screen.dart',
+      ).readAsStringSync();
+      final principalApi = File(
+        'lib/core/network/api_modules/principal_api.dart',
+      ).readAsStringSync();
+      final cacheInterceptor = File(
+        'lib/core/network/api_modules/client_interceptors.dart',
+      ).readAsStringSync();
       final datasource = File(
         'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
       ).readAsStringSync();
@@ -20,8 +32,17 @@ void main() {
       final formAndApi = '$form\n$feePaymentsApi';
 
       expect(form, contains('Pay by UPI'));
+      expect(
+        form,
+        contains("static const List<String> _paymentModes = ['upi']"),
+      );
+      expect(form, isNot(contains("'cash'")));
+      expect(form, isNot(contains("'bank_transfer'")));
       expect(form, contains('qr_flutter'));
       expect(form, contains('_proofPath'));
+      expect(form, contains('PopScope('));
+      expect(form, contains('cache_key'));
+      expect(form, contains("request['proof_url']"));
       expect(formAndApi, contains('submitFeePaymentProof'));
       expect(formAndApi, contains('createFeePaymentIntent'));
       expect(formAndApi, contains('/fees/payments/intent'));
@@ -36,7 +57,18 @@ void main() {
       expect(form, contains('Term-wise'));
       expect(form, contains('Book & Kit'));
       expect(models, contains('proof_url'));
-      expect(form, contains('Fees will be updated in 12-24 hrs'));
+      expect(
+        form,
+        contains(
+          'Your payment proof will stay pending until the principal verifies it.',
+        ),
+      );
+      expect(
+        form,
+        contains(
+          'Your payment proof will stay pending until the principal verifies it.',
+        ),
+      );
       expect(form, contains('UTR'));
       expect(form, contains('Confirm Payment'));
       expect(form, contains('Pay Now'));
@@ -48,6 +80,27 @@ void main() {
       expect(form, contains('getPaymentConfig'));
       expect(form, contains(r'Payee: $_payeeName'));
       expect(form, contains("_text(_paymentConfig['qr_note'])"));
+      expect(form, contains('No school UPI QR is configured yet.'));
+      expect(formAndApi, contains('refreshNonce'));
+      expect(formAndApi, contains("'updated_at'"));
+      expect(
+        cacheInterceptor,
+        isNot(contains("clean.contains('/fees/payment-config')")),
+      );
+      expect(principalApi, contains('forceRefresh'));
+      expect(parentFees, contains('WidgetsBindingObserver'));
+      expect(parentFees, contains('Timer.periodic'));
+      expect(parentFees, contains('_buildWorkflowActionCard'));
+      expect(parentFees, contains('View Request Status'));
+      expect(parentFees, contains('Resubmit Now'));
+      expect(parentFees, contains('Pay now with UPI'));
+      expect(parentFees, contains('Expanded('));
+      expect(parentFees, contains('Flexible('));
+      expect(parentFees, contains('textAlign: TextAlign.end'));
+      expect(parentFees, contains('maxLines: 2'));
+      expect(parentDashboard, contains('WidgetsBindingObserver'));
+      expect(parentDashboard, contains('Timer.periodic'));
+      expect(parentDashboard, contains('Fees & Status'));
       expect(form, isNot(contains('Razorpay')));
       expect(datasource, isNot(contains('Razorpay')));
     });
@@ -67,6 +120,7 @@ void main() {
       expect(handler, contains('"upi_id"'));
       expect(handler, contains('"payee_name"'));
       expect(handler, contains('"qr_image_url"'));
+      expect(handler, contains('"updated_at"'));
       expect(handler, contains('UpdatePaymentConfig'));
       expect(handler, contains('UploadPaymentQR'));
       expect(handler, contains('ProofURL'));
@@ -93,6 +147,9 @@ void main() {
       final requestsScreen = File(
         'lib/features/finance/presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart',
       ).readAsStringSync();
+      final monitoring = File(
+        'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
+      ).readAsStringSync();
 
       expect(decisionScreen, contains('Request Clarification'));
       expect(decisionScreen, contains('clarification_required'));
@@ -105,6 +162,10 @@ void main() {
       expect(decisionScreen, isNot(contains('launchUrl(')));
       expect(requestsScreen, contains('Clarification'));
       expect(requestsScreen, contains('pending_verification'));
+      expect(monitoring, contains('Find It Faster'));
+      expect(monitoring, contains('Review Parent Requests'));
+      expect(monitoring, contains('Manual Fee Update'));
+      expect(monitoring, contains('Reports'));
     });
 
     test(
@@ -134,7 +195,8 @@ void main() {
 
         expect(screen, contains('_deleteFeeStructure'));
         expect(screen, contains('Delete fee component'));
-        expect(screen, contains('deleteFeeStructure(id)'));
+        expect(screen, contains('deleteFeeStructure('));
+        expect(screen, contains('removePending: true'));
 
         expect(dto, contains('ReplaceExisting'));
         expect(handler, contains('ReplaceExisting'));
@@ -143,7 +205,7 @@ void main() {
       },
     );
 
-    test('fee structure delete preserves generated invoices and payments', () {
+    test('fee structure delete clears unpaid fee rows but keeps paid history', () {
       final api = File(
         'lib/core/network/api_modules/fees_api.dart',
       ).readAsStringSync();
@@ -154,23 +216,51 @@ void main() {
         'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
       ).readAsStringSync();
 
-      expect(api, isNot(contains('remove_pending')));
-      expect(api, isNot(contains('removePending')));
+      expect(api, contains('remove_pending'));
+      expect(api, contains('removePending = true'));
       expect(
         adminFees,
-        contains('existing invoices and payments are not changed'),
+        contains(
+          'clears it from unpaid student invoices and pending parent requests',
+        ),
       );
       expect(
         monitoring,
-        contains('existing invoices and payments are not changed'),
+        contains(
+          'removes it from unpaid student invoices and pending parent requests',
+        ),
       );
-      expect(adminFees, isNot(contains('Remove from unpaid invoices')));
-      expect(
-        monitoring,
-        isNot(contains('Remove from unpaid student invoices')),
-      );
-      expect(adminFees, contains('deleteFeeStructure(id)'));
+      expect(adminFees, contains('deleteFeeStructure('));
+      expect(adminFees, contains('removePending: true'));
       expect(monitoring, contains('_deleteFeeStructureBundle(bundle)'));
+      expect(
+        monitoring,
+        contains('deleteFeeStructure(structureId, removePending: true)'),
+      );
+    });
+
+    test('class hub fee save syncs unpaid invoices for parent and student views', () {
+      final classHub = File(
+        'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+      ).readAsStringSync();
+      final form = File(
+        'lib/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart',
+      ).readAsStringSync();
+      final monitoring = File(
+        'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
+      ).readAsStringSync();
+
+      expect(classHub, contains('final structureIdsToSync = <String>{};'));
+      expect(classHub, contains('applyFeeInvoiceSync('));
+      expect(classHub, contains('includePartiallyPaid: true'));
+      expect(classHub, contains('final created = await BackendApiClient.instance.createFeeStructure('));
+      expect(classHub, contains('structureIdsToSync.add(component.structureId)'));
+      expect(classHub, contains("final createdId = _classText(created['id']);"));
+      expect(form, contains('final created = await BackendApiClient.instance.createFeeStructure('));
+      expect(form, contains("final createdId = _textValue(created['id']);"));
+      expect(form, contains('await BackendApiClient.instance.applyFeeInvoiceSync('));
+      expect(monitoring, contains('final structureIdsToSync = <String>{};'));
+      expect(monitoring, contains('await api.applyFeeInvoiceSync('));
     });
 
     test('parent payment flow presents fee item intervals', () {

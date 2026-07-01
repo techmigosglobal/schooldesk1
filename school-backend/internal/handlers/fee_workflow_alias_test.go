@@ -3,10 +3,12 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -206,6 +208,18 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 		t.Fatalf("intent must not update invoice: %+v", tuitionInvoice)
 	}
 
+	nonUpiIntentResp := httptest.NewRecorder()
+	nonUpiIntentReq := httptest.NewRequest(
+		http.MethodPost,
+		"/fees/payments/intent",
+		strings.NewReader(`{"invoice_id":"`+tuitionInvoiceID+`","payment_method":"cash","selected_months":2}`),
+	)
+	nonUpiIntentReq.Header.Set("Content-Type", "application/json")
+	parentRouter.ServeHTTP(nonUpiIntentResp, nonUpiIntentReq)
+	if nonUpiIntentResp.Code != http.StatusBadRequest {
+		t.Fatalf("non-upi parent intent should fail status=%d body=%s", nonUpiIntentResp.Code, nonUpiIntentResp.Body.String())
+	}
+
 	monthlyReq := multipartPaymentRequest(t, map[string]string{
 		"payment_request_id": intentID,
 		"request_reference":  intentReference,
@@ -232,6 +246,20 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	if submitBody.Data.ID != intentID || submitBody.Data.RequestReference != intentReference {
 		t.Fatalf("proof submit should update the existing intent, got %+v", submitBody.Data)
 	}
+
+	nonUpiSubmit := multipartPaymentRequest(t, map[string]string{
+		"student_fee_id":  tuitionInvoiceID,
+		"amount":          "1000",
+		"payment_method":  "bank_transfer",
+		"transaction_ref": "UTR-BANK-001",
+		"selected_months": "1",
+	}, "proof.png", []byte("png-data"))
+	nonUpiSubmitResp := httptest.NewRecorder()
+	parentRouter.ServeHTTP(nonUpiSubmitResp, nonUpiSubmit)
+	if nonUpiSubmitResp.Code != http.StatusBadRequest {
+		t.Fatalf("non-upi parent proof submit should fail status=%d body=%s", nonUpiSubmitResp.Code, nonUpiSubmitResp.Body.String())
+	}
+
 	if err := db.First(&tuitionInvoice, "id = ?", tuitionInvoiceID).Error; err != nil {
 		t.Fatalf("reload tuition invoice: %v", err)
 	}
@@ -368,6 +396,32 @@ func TestFeesWorkflowAliasesAutoSplitTuitionAndKeepBookKitOneTime(t *testing.T) 
 	if historyResp.Code != http.StatusOK {
 		t.Fatalf("history status=%d body=%s", historyResp.Code, historyResp.Body.String())
 	}
+
+	proofDir := filepath.Join("uploads", "payment_proofs", school.ID)
+	beforeFailedSubmit := countUploadedProofFiles(t, proofDir)
+	if err := db.Callback().Create().Before("gorm:create").Register("force_parent_payment_request_create_failure", func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Schema != nil && tx.Statement.Schema.Name == "ParentPaymentRequest" {
+			tx.AddError(errors.New("forced parent payment request create failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register create failure callback: %v", err)
+	}
+	failedCreateReq := multipartPaymentRequest(t, map[string]string{
+		"student_fee_id":  tuitionInvoiceID,
+		"amount":          "1000",
+		"payment_method":  "upi",
+		"transaction_ref": "UTR-CREATE-FAIL-01",
+		"selected_months": "1",
+	}, "proof-fail.png", []byte("png-data"))
+	failedCreateResp := httptest.NewRecorder()
+	parentRouter.ServeHTTP(failedCreateResp, failedCreateReq)
+	if failedCreateResp.Code != http.StatusInternalServerError {
+		t.Fatalf("forced create failure should return 500 status=%d body=%s", failedCreateResp.Code, failedCreateResp.Body.String())
+	}
+	afterFailedSubmit := countUploadedProofFiles(t, proofDir)
+	if afterFailedSubmit != beforeFailedSubmit {
+		t.Fatalf("failed payment proof submit should clean uploaded file, before=%d after=%d", beforeFailedSubmit, afterFailedSubmit)
+	}
 }
 
 func multipartPaymentRequest(t *testing.T, fields map[string]string, filename string, content []byte) *http.Request {
@@ -416,4 +470,19 @@ func multipartPaymentResubmitRequest(t *testing.T, path string, fields map[strin
 	req := httptest.NewRequest(http.MethodPatch, path, &body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
+}
+
+func countUploadedProofFiles(t *testing.T, root string) int {
+	t.Helper()
+	count := 0
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info != nil && !info.IsDir() {
+			count++
+		}
+		return nil
+	})
+	return count
 }

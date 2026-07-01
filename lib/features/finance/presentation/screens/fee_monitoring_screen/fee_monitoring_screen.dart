@@ -634,9 +634,44 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        const _FeeSectionTitle('Find It Faster'),
+        const SizedBox(height: 10),
+        _FeeActionRow(
+          icon: Icons.rule_folder_outlined,
+          iconColor: const Color(0xFF7C3AED),
+          title: 'Review Parent Requests',
+          subtitle: _paymentRequests.isEmpty
+              ? 'No parent fee proofs are waiting right now'
+              : '${_paymentRequests.length} request(s) waiting for review',
+          onTap: _openAllPaymentRequests,
+        ),
+        _FeeActionRow(
+          icon: Icons.payments_outlined,
+          iconColor: const Color(0xFF16A34A),
+          title: 'Manual Fee Update',
+          subtitle:
+              'Open a student ledger and record old cash or offline payments',
+          onTap: _openStudentsForCollection,
+        ),
+        _FeeActionRow(
+          icon: Icons.bar_chart_outlined,
+          iconColor: const Color(0xFF2563EB),
+          title: 'Reports',
+          subtitle:
+              'Collection summary, class-wise, student-wise, and outstanding reports',
+          onTap: () => _setView(_FeeView.reports),
+        ),
+        _FeeActionRow(
+          icon: Icons.qr_code_2_rounded,
+          iconColor: const Color(0xFFF59E0B),
+          title: 'Parent Payment QR',
+          subtitle: 'Edit the QR details parents use before submitting proof',
+          onTap: _showPaymentQrEditor,
+        ),
         if (_paymentRequests.isNotEmpty) ...[
           const SizedBox(height: 20),
-          _FeeSectionTitle('Payment Requests (${_paymentRequests.length})'),
+          _FeeSectionTitle('Review Requests (${_paymentRequests.length})'),
           const SizedBox(height: 10),
           for (final request in _paymentRequests.take(5))
             _PaymentRequestRow(
@@ -1219,7 +1254,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                   ? null
                   : () => _openCollectForAccount(account),
               icon: const Icon(Icons.payments_outlined, size: 18),
-              label: const Text('Make Payment'),
+              label: const Text('Manual Update'),
             ),
             OutlinedButton.icon(
               onPressed: () => _previewInvoicePdf(account),
@@ -1245,14 +1280,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final account = _selectedAccount;
     if (account == null) {
       return _missingSelectionPage(
-        title: 'Collect Fee',
-        message: 'Select a student before collecting a fee.',
+        title: 'Manual Fee Update',
+        message: 'Select a student before recording an offline fee update.',
       );
     }
 
     return _FeePage(
       header: _FeeHeader(
-        title: 'Collect Fee',
+        title: 'Manual Fee Update',
         subtitle: '${account.name} - ${account.rollNumber}',
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
@@ -1288,6 +1323,11 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
             onTap: () => setState(() => _selectedPaymentMode = mode),
           ),
         const SizedBox(height: 10),
+        _FeeInfoBanner(
+          text:
+              'Use this for cash or older offline payments. Amount is required; reference number and note are optional.',
+        ),
+        const SizedBox(height: 10),
         FilledButton(
           onPressed: account.balance <= 0 ? null : _continueToPaymentDetails,
           child: const Text('Continue'),
@@ -1300,14 +1340,14 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final account = _selectedAccount;
     if (account == null) {
       return _missingSelectionPage(
-        title: 'Collect Fee',
-        message: 'Select a student before collecting a fee.',
+        title: 'Manual Fee Update',
+        message: 'Select a student before recording an offline fee update.',
       );
     }
 
     return _FeePage(
       header: _FeeHeader(
-        title: 'Collect Fee',
+        title: 'Manual Fee Update',
         subtitle: '${account.name} - ${account.rollNumber}',
         leadingIcon: Icons.arrow_back_rounded,
         onLeading: _goBack,
@@ -1349,7 +1389,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _transactionController,
-                decoration: const InputDecoration(labelText: 'Transaction ID'),
+                decoration: const InputDecoration(
+                  labelText: 'Reference Number (Optional)',
+                ),
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -2266,6 +2308,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                   final categories = await api
                                       .getFeeCategories();
 
+                                  final structureIdsToSync = <String>{};
                                   for (final comp in components) {
                                     final compName = comp.nameController.text
                                         .trim();
@@ -2300,7 +2343,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                             ))['id'],
                                           );
 
-                                    await api.createFeeStructure(
+                                    final created = await api.createFeeStructure(
                                       academicYearId: yearId,
                                       gradeId: gradeId,
                                       sectionId: _selectedSectionId,
@@ -2312,6 +2355,17 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                       effectiveFrom: DateFormat(
                                         'yyyy-MM-dd',
                                       ).format(DateTime.now()),
+                                    );
+                                    final createdId = _textValue(created['id']);
+                                    if (createdId.isNotEmpty) {
+                                      structureIdsToSync.add(createdId);
+                                    }
+                                  }
+                                  for (final structureId
+                                      in structureIdsToSync) {
+                                    await api.applyFeeInvoiceSync(
+                                      structureId,
+                                      includePartiallyPaid: true,
                                     );
                                   }
                                   setSheetState(() => saving = false);
@@ -2407,7 +2461,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
               ),
               const SizedBox(height: 16),
               const Text(
-                'Deleting this fee structure only removes the template; existing invoices and payments are not changed.',
+                'Deleting this fee structure also removes it from unpaid student invoices and pending parent requests. Paid history remains available.',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ],
@@ -2493,7 +2547,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       }
       final api = BackendApiClient.instance;
       for (final structureId in idsToDelete) {
-        await api.deleteFeeStructure(structureId);
+        await api.deleteFeeStructure(structureId, removePending: true);
       }
       if (!mounted) return;
       _snack('Fee structure deleted.', success: true);
@@ -3293,6 +3347,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           transactionId: _transactionController.text.trim().isEmpty
               ? null
               : _transactionController.text.trim(),
+          remarks: _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
         ),
       );
       final result = _FeePaymentResult(

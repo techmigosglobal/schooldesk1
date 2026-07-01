@@ -64,6 +64,13 @@ func isParentPaymentReservableStatus(status string) bool {
 	return false
 }
 
+func ensureParentUsesUPI(paymentMode string) error {
+	if strings.ToLower(strings.TrimSpace(paymentMode)) != "upi" {
+		return fmt.Errorf("parent fee payments must use the configured UPI QR")
+	}
+	return nil
+}
+
 func (h *FeeHandler) GetFeeCategories(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	var categories []models.FeeCategory
@@ -595,11 +602,20 @@ func validateFeeStructureRefs(schoolID, academicYearID, gradeID, feeCategoryID s
 func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {
 	schoolID := scopedSchoolID(c)
 	id := c.Param("id")
+	removePending := true
+	if raw := strings.TrimSpace(c.Query("remove_pending")); raw != "" {
+		removePending = strings.EqualFold(raw, "true") || raw == "1" || strings.EqualFold(raw, "yes")
+	}
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		var structure models.FeeStructure
 		if err := tx.Where("id = ? AND school_id = ?", id, schoolID).First(&structure).Error; err != nil {
 			return err
+		}
+		if removePending {
+			if err := removeOpenFeeInvoicesForStructureTx(tx, structure); err != nil {
+				return err
+			}
 		}
 
 		if err := tx.Where("fee_structure_id = ?", id).Delete(&models.FeeInstallment{}).Error; err != nil {
@@ -620,6 +636,90 @@ func (h *FeeHandler) DeleteFeeStructure(c *gin.Context) {
 	}
 	auditAction(c, "fees", "delete", "fee_structures", &id)
 	c.JSON(http.StatusOK, models.APIResponse{Success: true, Data: gin.H{"id": id}})
+}
+
+func removeOpenFeeInvoicesForStructureTx(tx *gorm.DB, structure models.FeeStructure) error {
+	sectionID := ""
+	if structure.SectionID != nil {
+		sectionID = strings.TrimSpace(*structure.SectionID)
+	}
+
+	var invoices []models.FeeInvoice
+	query := tx.
+		Model(&models.FeeInvoice{}).
+		Joins("JOIN students ON students.id = fee_invoices.student_id").
+		Joins("JOIN sections ON sections.id = students.current_section_id").
+		Where("students.school_id = ? AND students.status != ?", structure.SchoolID, "inactive").
+		Where("fee_invoices.academic_year_id = ? AND sections.grade_id = ?", structure.AcademicYearID, structure.GradeID).
+		Where("fee_invoices.paid_amount <= ? AND fee_invoices.balance > ?", 0, 0).
+		Preload("Items")
+	if sectionID != "" {
+		query = query.Where("students.current_section_id = ?", sectionID)
+	}
+	if err := query.Find(&invoices).Error; err != nil {
+		return err
+	}
+
+	for _, invoice := range invoices {
+		var removedItemIDs []string
+		var remainingTotal float64
+		remainingItems := 0
+		for _, item := range invoice.Items {
+			if item.FeeCategoryID == structure.FeeCategoryID {
+				removedItemIDs = append(removedItemIDs, item.ID)
+				continue
+			}
+			remainingItems++
+			remainingTotal += item.Amount
+		}
+		if len(removedItemIDs) == 0 {
+			continue
+		}
+
+		if err := tx.Where("invoice_id = ? AND payment_id IS NULL", invoice.ID).Delete(&models.ParentPaymentRequest{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", removedItemIDs).Delete(&models.FeeInvoiceItem{}).Error; err != nil {
+			return err
+		}
+
+		if remainingItems == 0 {
+			if err := tx.Delete(&invoice).Error; err != nil {
+				return err
+			}
+			continue
+		}
+
+		concessionAmount := invoice.ConcessionAmount
+		if concessionAmount > remainingTotal {
+			concessionAmount = remainingTotal
+		}
+		payableAmount := roundMoney(remainingTotal - invoice.DiscountAmount - concessionAmount + invoice.FineAmount)
+		if payableAmount < 0 {
+			payableAmount = 0
+		}
+		balanceAmount := roundMoney(payableAmount - invoice.PaidAmount)
+		if balanceAmount < 0 {
+			balanceAmount = 0
+		}
+		status := "pending"
+		if balanceAmount <= 0 {
+			status = "paid"
+		}
+		if err := tx.Model(&models.FeeInvoice{}).
+			Where("id = ?", invoice.ID).
+			Updates(map[string]any{
+				"total_amount":      roundMoney(remainingTotal),
+				"concession_amount": roundMoney(concessionAmount),
+				"payable_amount":    payableAmount,
+				"balance":           balanceAmount,
+				"status":            status,
+			}).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (h *FeeHandler) RolloverFeeStructures(c *gin.Context) {
@@ -1800,6 +1900,7 @@ func (h *FeeHandler) RecordPayment(c *gin.Context) {
 		PaymentDate   string  `json:"payment_date" binding:"required"`
 		PaymentMode   string  `json:"payment_mode" binding:"required"`
 		TransactionID string  `json:"transaction_id"`
+		Remarks       string  `json:"remarks"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1833,6 +1934,7 @@ func (h *FeeHandler) RecordPayment(c *gin.Context) {
 		PaymentDate:   paymentDate,
 		PaymentMode:   req.PaymentMode,
 		TransactionID: req.TransactionID,
+		Remarks:       strings.TrimSpace(req.Remarks),
 	}
 
 	if err := database.DB.Transaction(func(tx *gorm.DB) error {
@@ -1979,6 +2081,10 @@ func (h *FeeHandler) CreateFeePaymentIntent(c *gin.Context) {
 	if paymentMode == "" {
 		paymentMode = "upi"
 	}
+	if err := ensureParentUsesUPI(paymentMode); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	var invoice models.FeeInvoice
 	if err := preloadFeeInvoiceDetails(scopedFeeInvoiceQuery(c)).First(&invoice, "fee_invoices.id = ?", invoiceID).Error; err != nil {
@@ -2068,6 +2174,10 @@ func (h *FeeHandler) CreateParentPaymentRequest(c *gin.Context) {
 		return
 	}
 	paymentMode := strings.ToLower(strings.TrimSpace(req.PaymentMode))
+	if err := ensureParentUsesUPI(paymentMode); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	transactionID := strings.TrimSpace(req.TransactionID)
 	proofURL := strings.TrimSpace(req.ProofURL)
 	if paymentMode == "upi" {
@@ -2166,6 +2276,10 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 	if paymentMethod == "" {
 		paymentMethod = "upi"
 	}
+	if err := ensureParentUsesUPI(paymentMethod); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	transactionRef := strings.TrimSpace(firstNonEmpty(c.PostForm("transaction_ref"), c.PostForm("transaction_id")))
 	if paymentMethod != "cash" && len(transactionRef) < 6 {
 		fail(c, http.StatusBadRequest, "transaction_ref is required")
@@ -2250,6 +2364,10 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	previousProofURL := ""
+	if hasExistingRequest && existing.ProofURL != nil {
+		previousProofURL = strings.TrimSpace(*existing.ProofURL)
+	}
 	paymentSetting := resolvePaymentSettingForInvoice(scopedSchoolID(c), invoice.ID)
 	paymentConfigID := (*string)(nil)
 	if strings.TrimSpace(paymentSetting.ID) != "" {
@@ -2275,8 +2393,12 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		existing.DecidedBy = nil
 		existing.DecidedAt = nil
 		if err := database.DB.Save(&existing).Error; err != nil {
+			removeUploadedPaymentProof(proofURL)
 			fail(c, http.StatusInternalServerError, "Failed to update payment request")
 			return
+		}
+		if previousProofURL != "" && previousProofURL != proofURL {
+			removeUploadedPaymentProof(previousProofURL)
 		}
 		id := existing.ID
 		auditAction(c, "fees", "submit_payment_proof", "parent_payment_requests", &id)
@@ -2309,6 +2431,7 @@ func (h *FeeHandler) SubmitFeePayment(c *gin.Context) {
 		PaymentQRNote:     paymentSetting.QRNote,
 	}
 	if err := database.DB.Create(&request).Error; err != nil {
+		removeUploadedPaymentProof(proofURL)
 		fail(c, http.StatusInternalServerError, "Failed to create payment request")
 		return
 	}
@@ -2350,6 +2473,10 @@ func (h *FeeHandler) ResubmitFeePayment(c *gin.Context) {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	previousProofURL := ""
+	if paymentRequest.ProofURL != nil {
+		previousProofURL = strings.TrimSpace(*paymentRequest.ProofURL)
+	}
 	paymentRequest.TransactionID = transactionRef
 	paymentRequest.ProofURL = &proofURL
 	paymentRequest.Status = parentPaymentStatusPendingVerification
@@ -2357,8 +2484,12 @@ func (h *FeeHandler) ResubmitFeePayment(c *gin.Context) {
 	paymentRequest.DecidedBy = nil
 	paymentRequest.DecidedAt = nil
 	if err := database.DB.Save(&paymentRequest).Error; err != nil {
+		removeUploadedPaymentProof(proofURL)
 		fail(c, http.StatusInternalServerError, "Failed to resubmit payment proof")
 		return
+	}
+	if previousProofURL != "" && previousProofURL != proofURL {
+		removeUploadedPaymentProof(previousProofURL)
 	}
 	auditAction(c, "fees", "resubmit_payment_proof", "parent_payment_requests", &id)
 	if err := preloadPaymentRequestDetails(database.DB).First(&paymentRequest, "id = ?", paymentRequest.ID).Error; err != nil {
@@ -2941,6 +3072,18 @@ func (h *FeeHandler) savePaymentProof(c *gin.Context) (string, error) {
 		return "", fmt.Errorf("failed to save payment proof")
 	}
 	return "/" + dest, nil
+}
+
+func removeUploadedPaymentProof(proofURL string) {
+	trimmed := strings.TrimSpace(proofURL)
+	if trimmed == "" {
+		return
+	}
+	clean := filepath.Clean(strings.TrimPrefix(trimmed, "/"))
+	if !strings.HasPrefix(clean, filepath.Join("uploads", "payment_proofs")) {
+		return
+	}
+	_ = os.Remove(clean)
 }
 
 func parseRequiredMoney(raw, field string) (float64, error) {
@@ -3552,6 +3695,7 @@ func paymentSettingResponse(setting models.SchoolPaymentSetting) gin.H {
 		"merchant_code": setting.MerchantCode,
 		"qr_note":       setting.QRNote,
 		"qr_image_url":  setting.QRImageURL,
+		"updated_at":    setting.UpdatedAt,
 	}
 }
 
@@ -3595,12 +3739,12 @@ func resolvePaymentSettingForInvoice(schoolID, invoiceID string) models.ScopedPa
 }
 
 func scopedFromSchoolPaymentSetting(setting models.SchoolPaymentSetting) models.ScopedPaymentSetting {
-	id := setting.ID
-	if id == "" {
-		id = "school-default"
+	base := setting.BaseModel
+	if base.ID == "" {
+		base.ID = "school-default"
 	}
 	return models.ScopedPaymentSetting{
-		BaseModel:    models.BaseModel{ID: id},
+		BaseModel:    base,
 		SchoolID:     setting.SchoolID,
 		Scope:        "school",
 		UPIID:        setting.UPIID,
@@ -3625,5 +3769,6 @@ func scopedPaymentSettingResponse(setting models.ScopedPaymentSetting) gin.H {
 		"merchant_code": setting.MerchantCode,
 		"qr_note":       setting.QRNote,
 		"qr_image_url":  setting.QRImageURL,
+		"updated_at":    setting.UpdatedAt,
 	}
 }

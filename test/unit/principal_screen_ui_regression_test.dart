@@ -179,6 +179,11 @@ void main() {
     expect(screen, contains('Your Classes'));
     expect(screen, contains('No pending actions'));
     expect(screen, contains('Quick Actions'));
+    expect(screen, contains('_openFeesModule(rows.first)'));
+    expect(screen, contains('await Navigator.pushNamed('));
+    expect(screen, contains("AppRoutes.feeMonitoring,"));
+    expect(screen, contains("'source': 'class_hub'"));
+    expect(screen, contains('await _load();'));
     expect(screen, contains('Edit Class'));
     expect(screen, contains('Open roster'));
     expect(screen, contains('Setup subjects'));
@@ -657,18 +662,19 @@ void main() {
     expect(events, contains('Live school calendar'));
     expect(events, contains('_EventFilter.month'));
     expect(events, contains('enum _EventsDisplayMode'));
-    expect(events, contains('_EventsDisplayMode.calendar'));
+    expect(events, contains('_EventsDisplayMode.month'));
     expect(events, contains('_EventsDisplayMode.week'));
-    expect(events, contains('Calendar'));
-    expect(events, isNot(contains("label: Text('List')")));
-    expect(events, contains('_buildCalendarMonth()'));
-    expect(events, contains('class _EventCalendarMonth'));
-    expect(events, contains('class _EventCalendarDayCell'));
+    expect(events, contains('_EventsDisplayMode.agenda'));
+    expect(events, contains("label: Text('Agenda')"));
+    expect(events, contains('class _CalendarPanel'));
+    expect(events, contains('class _CalendarDateCell'));
     expect(events, contains('_eventsForDay('));
-    expect(events, contains('DateUtils.getDaysInMonth'));
+    expect(events, contains('TableCalendar<_PrincipalEvent>('));
     expect(events, contains('monthEventCount'));
     expect(events, contains('overlapsMonth'));
     expect(events, contains('overlapsDate'));
+    expect(events, contains('Go to today'));
+    expect(events, contains(r'Selected: ${DateFormat'));
     expect(events, contains('Approve event'));
     expect(events, contains('Cancel event'));
     expect(events, contains('_setEventStatus'));
@@ -710,9 +716,12 @@ void main() {
     expect(calendar, contains('_resetCalendarFilters'));
     expect(calendar, contains('Reset filters'));
     expect(calendar, contains('No calendar entries match these filters'));
-    expect(calendar, contains('outsideMonth'));
-    expect(calendar, contains('event preview dots'));
-    expect(calendar, contains('childAspectRatio: compact ? 1.0 : 1.15'));
+    expect(calendar, contains('_buildLegend()'));
+    expect(calendar, contains('_buildCategoryFilters()'));
+    expect(calendar, contains('TableCalendar<_PrincipalEvent>('));
+    expect(calendar, contains('class _EventCountBadge'));
+    expect(calendar, contains('class _SelectedDayEventCard'));
+    expect(calendar, contains("label: 'Open pending event approvals'"));
     expect(
       calendar,
       isNot(contains("label: _filterLabel(_EventFilter.month)")),

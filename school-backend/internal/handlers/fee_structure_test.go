@@ -32,9 +32,14 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 		&models.AcademicYear{},
 		&models.Grade{},
 		&models.Section{},
+		&models.Student{},
 		&models.FeeCategory{},
 		&models.FeeStructure{},
 		&models.FeeInstallment{},
+		&models.FeeInvoice{},
+		&models.FeeInvoiceItem{},
+		&models.Payment{},
+		&models.ParentPaymentRequest{},
 		&models.AuditLog{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -196,7 +201,7 @@ func TestFeeStructureCRUDUsesScopedSchoolAndSupportsManagement(t *testing.T) {
 	}
 }
 
-func TestDeleteFeeStructureKeepsAttachedStudentFinancialHistory(t *testing.T) {
+func TestDeleteFeeStructureClearsUnpaidFeeRowsAndKeepsPaidHistory(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -227,16 +232,22 @@ func TestDeleteFeeStructureKeepsAttachedStudentFinancialHistory(t *testing.T) {
 	grade := models.Grade{BaseModel: models.BaseModel{ID: "grade-delete-attached"}, SchoolID: school.ID, GradeName: "Class 7", GradeNumber: 7}
 	section := models.Section{BaseModel: models.BaseModel{ID: "section-delete-attached"}, GradeID: grade.ID, AcademicYearID: year.ID, SectionName: "A", Capacity: 40}
 	category := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-delete-attached"}, SchoolID: school.ID, CategoryName: "Tuition", Frequency: "term"}
+	otherCategory := models.FeeCategory{BaseModel: models.BaseModel{ID: "cat-delete-other-item"}, SchoolID: school.ID, CategoryName: "Transport", Frequency: "monthly"}
 	structure := models.FeeStructure{BaseModel: models.BaseModel{ID: "structure-delete-attached"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &section.ID, FeeCategoryID: category.ID, Amount: 40000, DueDay: 10, InstallmentCount: 4}
 	installment := models.FeeInstallment{BaseModel: models.BaseModel{ID: "installment-delete-attached"}, SchoolID: school.ID, AcademicYearID: year.ID, GradeID: grade.ID, SectionID: &section.ID, FeeStructureID: &structure.ID, Method: "equal", InstallmentName: "Term 1", InstallmentNumber: 1, Amount: 10000, DueDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC), Status: "upcoming"}
 	student := models.Student{BaseModel: models.BaseModel{ID: "student-delete-attached"}, SchoolID: school.ID, StudentCode: "DA-001", AdmissionNumber: "DA-001", FirstName: "Attached", LastName: "Student", DateOfBirth: time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC), AdmissionDate: time.Now(), CurrentSectionID: &section.ID, Status: "active"}
 	invoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-attached"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-ATTACHED", InvoiceDate: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC), TotalAmount: 10000, PayableAmount: 10000, NetAmount: 10000, PaidAmount: 4000, Balance: 6000, Status: "partial"}
 	item := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-attached"}, InvoiceID: invoice.ID, FeeCategoryID: category.ID, Amount: 10000, Description: "Tuition - Term 1"}
-	pendingInvoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-pending"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-PENDING", InvoiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), TotalAmount: 10000, PayableAmount: 10000, NetAmount: 10000, PaidAmount: 0, Balance: 10000, Status: "pending"}
+	pendingInvoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-pending"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-PENDING", InvoiceDate: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 7, 10, 0, 0, 0, 0, time.UTC), TotalAmount: 12000, PayableAmount: 12000, NetAmount: 12000, PaidAmount: 0, Balance: 12000, Status: "pending"}
 	pendingItem := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-pending"}, InvoiceID: pendingInvoice.ID, FeeCategoryID: category.ID, Amount: 10000, Description: "Tuition - Term 2"}
+	pendingOtherItem := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-pending-other"}, InvoiceID: pendingInvoice.ID, FeeCategoryID: otherCategory.ID, Amount: 2000, Description: "Transport - July"}
+	onlyDeletedInvoice := models.FeeInvoice{BaseModel: models.BaseModel{ID: "invoice-delete-only"}, StudentID: student.ID, AcademicYearID: year.ID, InvoiceNumber: "INV-DELETE-ONLY", InvoiceDate: time.Date(2026, 7, 5, 0, 0, 0, 0, time.UTC), DueDate: time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC), TotalAmount: 8000, PayableAmount: 8000, NetAmount: 8000, PaidAmount: 0, Balance: 8000, Status: "pending"}
+	onlyDeletedItem := models.FeeInvoiceItem{BaseModel: models.BaseModel{ID: "item-delete-only"}, InvoiceID: onlyDeletedInvoice.ID, FeeCategoryID: category.ID, Amount: 8000, Description: "Tuition - Term 3"}
 	payment := models.Payment{BaseModel: models.BaseModel{ID: "payment-delete-attached"}, InvoiceID: invoice.ID, ReceiptNumber: "RCPT-DELETE-ATTACHED", AmountPaid: 4000, PaymentDate: time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC), PaymentMode: "upi", TransactionID: "UTR-DELETE", CreatedAt: time.Now()}
 	request := models.ParentPaymentRequest{BaseModel: models.BaseModel{ID: "request-delete-attached"}, SchoolID: school.ID, InvoiceID: invoice.ID, StudentID: student.ID, ParentUserID: "parent-delete-attached", RequestReference: "PPR-DELETE-ATTACHED", Amount: 4000, PaymentDate: payment.PaymentDate, PaymentMode: "upi", TransactionID: payment.TransactionID, Status: "approved"}
-	for _, seed := range []any{&school, &otherSchool, &year, &grade, &section, &category, &structure, &installment, &student, &invoice, &item, &pendingInvoice, &pendingItem, &payment, &request} {
+	pendingRequest := models.ParentPaymentRequest{BaseModel: models.BaseModel{ID: "request-delete-pending"}, SchoolID: school.ID, InvoiceID: pendingInvoice.ID, StudentID: student.ID, ParentUserID: "parent-delete-attached", RequestReference: "PPR-DELETE-PENDING", Amount: 12000, PaymentDate: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC), PaymentMode: "upi", TransactionID: "UTR-DELETE-PENDING", Status: "pending_verification"}
+	onlyDeletedRequest := models.ParentPaymentRequest{BaseModel: models.BaseModel{ID: "request-delete-only"}, SchoolID: school.ID, InvoiceID: onlyDeletedInvoice.ID, StudentID: student.ID, ParentUserID: "parent-delete-attached", RequestReference: "PPR-DELETE-ONLY", Amount: 8000, PaymentDate: time.Date(2026, 7, 6, 0, 0, 0, 0, time.UTC), PaymentMode: "upi", TransactionID: "UTR-DELETE-ONLY", Status: "pending"}
+	for _, seed := range []any{&school, &otherSchool, &year, &grade, &section, &category, &otherCategory, &structure, &installment, &student, &invoice, &item, &pendingInvoice, &pendingItem, &pendingOtherItem, &onlyDeletedInvoice, &onlyDeletedItem, &payment, &request, &pendingRequest, &onlyDeletedRequest} {
 		if err := db.Create(seed).Error; err != nil {
 			t.Fatalf("seed %T: %v", seed, err)
 		}
@@ -272,18 +283,17 @@ func TestDeleteFeeStructureKeepsAttachedStudentFinancialHistory(t *testing.T) {
 		t.Fatalf("delete attached structure status=%d body=%s", deleteResp.Code, deleteResp.Body.String())
 	}
 
-	var structureCount, installmentCount, invoiceCount, itemCount, paymentCount, requestCount int64
+	var structureCount, installmentCount, invoiceCount, paymentCount, requestCount int64
 	db.Model(&models.FeeStructure{}).Where("id = ?", structure.ID).Count(&structureCount)
 	db.Model(&models.FeeInstallment{}).Where("fee_structure_id = ?", structure.ID).Count(&installmentCount)
-	db.Model(&models.FeeInvoice{}).Where("id IN ?", []string{invoice.ID, pendingInvoice.ID}).Count(&invoiceCount)
-	db.Model(&models.FeeInvoiceItem{}).Where("id IN ?", []string{item.ID, pendingItem.ID}).Count(&itemCount)
+	db.Model(&models.FeeInvoice{}).Where("id IN ?", []string{invoice.ID, pendingInvoice.ID, onlyDeletedInvoice.ID}).Count(&invoiceCount)
 	db.Model(&models.Payment{}).Where("id = ?", payment.ID).Count(&paymentCount)
-	db.Model(&models.ParentPaymentRequest{}).Where("id = ?", request.ID).Count(&requestCount)
+	db.Model(&models.ParentPaymentRequest{}).Where("id IN ?", []string{request.ID, pendingRequest.ID, onlyDeletedRequest.ID}).Count(&requestCount)
 	if structureCount != 0 || installmentCount != 0 {
 		t.Fatalf("structure/installments should be deleted, structures=%d installments=%d", structureCount, installmentCount)
 	}
-	if invoiceCount != 2 || itemCount != 2 || paymentCount != 1 || requestCount != 1 {
-		t.Fatalf("financial history should remain, invoices=%d items=%d payments=%d requests=%d", invoiceCount, itemCount, paymentCount, requestCount)
+	if invoiceCount != 2 || paymentCount != 1 || requestCount != 1 {
+		t.Fatalf("paid history should remain while open fee rows are cleared, invoices=%d payments=%d requests=%d", invoiceCount, paymentCount, requestCount)
 	}
 
 	var keptInvoice models.FeeInvoice
@@ -297,8 +307,30 @@ func TestDeleteFeeStructureKeepsAttachedStudentFinancialHistory(t *testing.T) {
 	if err := db.First(&keptPending, "id = ?", pendingInvoice.ID).Error; err != nil {
 		t.Fatalf("load preserved pending invoice: %v", err)
 	}
-	if keptPending.TotalAmount != 10000 || keptPending.PayableAmount != 10000 || keptPending.PaidAmount != 0 || keptPending.Balance != 10000 || keptPending.Status != "pending" {
-		t.Fatalf("pending invoice should remain unchanged, got %+v", keptPending)
+	if keptPending.TotalAmount != 2000 || keptPending.PayableAmount != 2000 || keptPending.PaidAmount != 0 || keptPending.Balance != 2000 || keptPending.Status != "pending" {
+		t.Fatalf("pending invoice should be recalculated after deleting fee rows, got %+v", keptPending)
+	}
+	var pendingItemCount int64
+	db.Model(&models.FeeInvoiceItem{}).Where("invoice_id = ?", pendingInvoice.ID).Count(&pendingItemCount)
+	if pendingItemCount != 1 {
+		t.Fatalf("pending invoice should keep only the unrelated item, got %d items", pendingItemCount)
+	}
+	var remainingPendingItem models.FeeInvoiceItem
+	if err := db.First(&remainingPendingItem, "invoice_id = ?", pendingInvoice.ID).Error; err != nil {
+		t.Fatalf("load remaining pending item: %v", err)
+	}
+	if remainingPendingItem.FeeCategoryID != otherCategory.ID || remainingPendingItem.Amount != 2000 {
+		t.Fatalf("pending invoice should retain the unrelated item only, got %+v", remainingPendingItem)
+	}
+	var deletedOnlyInvoiceCount int64
+	db.Model(&models.FeeInvoice{}).Where("id = ?", onlyDeletedInvoice.ID).Count(&deletedOnlyInvoiceCount)
+	if deletedOnlyInvoiceCount != 0 {
+		t.Fatalf("invoice containing only deleted fee items should be removed")
+	}
+	var clearedPendingRequests int64
+	db.Model(&models.ParentPaymentRequest{}).Where("id IN ?", []string{pendingRequest.ID, onlyDeletedRequest.ID}).Count(&clearedPendingRequests)
+	if clearedPendingRequests != 0 {
+		t.Fatalf("pending parent requests tied to deleted fee rows should be removed, got %d", clearedPendingRequests)
 	}
 }
 

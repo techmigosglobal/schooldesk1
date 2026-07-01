@@ -94,11 +94,15 @@ void main() {
       expect(calendar, contains('_filter = _EventFilter.month'));
       expect(calendar, contains('Event created and calendar refreshed'));
       expect(calendar, contains('_ResponsivePickerGrid'));
+      expect(calendar, contains('_buildSelectedDayAgenda()'));
+      expect(calendar, contains('No entries on this day'));
+      expect(calendar, contains("label: Text('Agenda')"));
+      expect(calendar, contains('class _CalendarDateCell'));
       expect(
         calendar,
         contains('constraints: const BoxConstraints(minHeight: 68)'),
       );
-      expect(calendar, contains('Flexible('));
+      expect(calendar, contains('showModalBottomSheet<void>('));
       expect(calendar, contains('TextOverflow.ellipsis'));
     },
   );

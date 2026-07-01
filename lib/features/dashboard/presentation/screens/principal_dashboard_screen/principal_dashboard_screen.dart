@@ -52,7 +52,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       // Only 3 calls needed to paint the dashboard. Render immediately.
       final criticalResults =
           await Future.wait<Object>([
-            api.getDashboard('principal'),
+            api.getDashboard('principal', forceRefresh: true),
             api.getCurrentSchool(),
             api.getProfile(),
           ]).timeout(

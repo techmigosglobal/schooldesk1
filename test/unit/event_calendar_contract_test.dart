@@ -13,6 +13,14 @@ void main() {
     expect(source, isNot(contains("createRaw('/events', payload)")));
     expect(source, contains('BackendApiClient.instance.createEventPayload'));
     expect(source, contains('event.overlapsDate(day)'));
+    expect(source, contains("import 'package:table_calendar/table_calendar.dart';"));
+    expect(source, contains('TableCalendar<_PrincipalEvent>('));
+    expect(source, contains("_EventsDisplayMode.agenda"));
+    expect(source, contains('_buildSelectedDayAgenda()'));
+    expect(source, contains('_buildLegend()'));
+    expect(source, contains('_buildCategoryFilters()'));
+    expect(source, contains("label: Text('Agenda')"));
+    expect(source, contains("message: 'Go to today'"));
   });
 
   test('event api creates events with the Go /events contract', () {

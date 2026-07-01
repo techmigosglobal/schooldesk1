@@ -4,9 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -489,33 +491,7 @@ class _AdminPaymentRequestDecisionScreenState
   }
 
   void _showProofDocumentPreview(String url) {
-    final fullUrl = _absoluteMediaUrl(url);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Payment Proof'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.description_rounded, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              'Preview this proof inside the application.',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            SelectableText(fullUrl, style: GoogleFonts.dmSans(fontSize: 12)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+    openEventPostMediaPreview(context, EventPostMediaItem.fromUrl(url));
   }
 
   String _absoluteMediaUrl(String value) {

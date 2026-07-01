@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -20,7 +22,9 @@ class ParentDashboardScreen extends StatefulWidget {
   State<ParentDashboardScreen> createState() => _ParentDashboardScreenState();
 }
 
-class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
+class _ParentDashboardScreenState extends State<ParentDashboardScreen>
+    with WidgetsBindingObserver {
+  static const Duration _autoRefreshInterval = Duration(seconds: 45);
   int _selectedNavIndex = 0;
   int _activeChildIndex = 0;
   bool _loading = true;
@@ -28,23 +32,38 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   Map<String, dynamic> _dashboard = const {};
   List<Map<String, dynamic>> _children = const [];
   List<dynamic> _eventPosts = [];
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    WidgetsBinding.instance.addObserver(this);
+    _loadDashboardData(forceRefresh: true);
+    _autoRefreshTimer = Timer.periodic(
+      _autoRefreshInterval,
+      (_) => _loadDashboardData(forceRefresh: true, showSpinner: false),
+    );
   }
 
-  Future<void> _loadDashboardData() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  Future<void> _loadDashboardData({
+    bool forceRefresh = false,
+    bool showSpinner = true,
+  }) async {
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final api = BackendApiClient.instance;
       final results = await Future.wait([
-        api.getDashboard('parent'),
-        api.getMyStudents(),
+        api.getDashboard('parent', forceRefresh: forceRefresh),
+        api.getMyStudents(
+          refreshNonce: forceRefresh
+              ? DateTime.now().millisecondsSinceEpoch
+              : null,
+        ),
         api.getHomeFeedEventPosts().catchError(
           (_) => const <Map<String, dynamic>>[],
         ),
@@ -128,7 +147,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
         IconButton(
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh_rounded),
-          onPressed: _loadDashboardData,
+          onPressed: () => _loadDashboardData(forceRefresh: true),
         ),
       ],
       bodyIsScrollable: true,
@@ -184,6 +203,20 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   void _selectChild(int index) {
     setState(() => _activeChildIndex = index);
     ParentChildSelectionService.saveIndex(_children, index);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadDashboardData(forceRefresh: true, showSpinner: false));
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 }
 
@@ -382,7 +415,7 @@ class _ParentWorkflowShortcuts extends StatelessWidget {
         AppRoutes.parentHomework,
       ),
       _ShortcutAction(
-        'Pay Fees',
+        'Fees & Status',
         Icons.receipt_long_rounded,
         AppRoutes.parentFees,
       ),
