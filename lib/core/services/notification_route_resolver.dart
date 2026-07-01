@@ -31,7 +31,7 @@ class NotificationRouteResolver {
     final fallbackRoute = switch (referenceType) {
       'announcement' || 'notice' => _communicationRouteFor(role),
       'message' => _messageRouteFor(role),
-      'homework' => _homeworkRouteFor(role),
+      'homework' => _homeworkRouteFor(role, data),
       'fee' => _feeRouteFor(role),
       'exam' || 'exam_schedule' => _examRouteFor(role),
       'ptm' || 'parent_teacher_meeting' => _ptmRouteFor(role),
@@ -102,6 +102,16 @@ class NotificationRouteResolver {
         'initialTab': 'event_posts',
       };
     }
+    if (referenceType == 'homework' ||
+        route == AppRoutes.teacherHomeworkSubmissions ||
+        route == AppRoutes.parentHomeworkSubmit ||
+        route == AppRoutes.parentHomework ||
+        route == AppRoutes.teacherHomework) {
+      return {
+        'reference_id': referenceId,
+        'id': referenceId,
+      };
+    }
     return null;
   }
 
@@ -131,10 +141,15 @@ class NotificationRouteResolver {
     };
   }
 
-  static String _homeworkRouteFor(String role) {
+  static String _homeworkRouteFor(String role, Map<String, dynamic> data) {
+    final action = (data['action'] ?? data['sub_type'] ?? '').toString().toLowerCase();
     return switch (role) {
-      'parent' => AppRoutes.parentHomework,
-      'teacher' => AppRoutes.teacherDiary,
+      'parent' => (action == 'assignment' || action == 'feedback' || action == 'submission_feedback' || action == 'created')
+          ? AppRoutes.parentHomeworkSubmit
+          : AppRoutes.parentHomework,
+      'teacher' => (action == 'submission')
+          ? AppRoutes.teacherHomeworkSubmissions
+          : AppRoutes.teacherHomework,
       _ => AppRoutes.notificationCenter,
     };
   }

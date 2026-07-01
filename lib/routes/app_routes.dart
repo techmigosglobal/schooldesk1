@@ -23,6 +23,7 @@ import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
+import 'package:schooldesk1/features/health/presentation/screens/parent_health_update_screen/parent_health_update_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -108,6 +109,9 @@ class AppRoutes {
   static const String teacherLessonPlanner = '/teacher-lesson-planner-screen';
   static const String teacherStudentNotes = '/teacher-student-notes-screen';
   static const String teacherDocuments = '/teacher-documents-screen';
+  static const String teacherHomework = '/teacher-homework-screen';
+  static const String teacherHomeworkForm = '/teacher-homework-screen/form';
+  static const String teacherHomeworkSubmissions = '/teacher-homework-screen/submissions';
 
   // Parent Module Routes
   static const String parentLogin = '/parent-login-screen';
@@ -132,6 +136,7 @@ class AppRoutes {
   static const String parentTimetable = '/parent-timetable-screen';
   static const String parentPTMBooking = '/parent-ptm-booking-screen';
   static const String parentLessonPlanner = '/parent-lesson-planner-screen';
+  static const String parentHealth = '/parent-health-screen';
 
   // Shared Routes
   static const String schoolGallery = '/school-gallery-screen';
@@ -245,6 +250,13 @@ class AppRoutes {
     teacherDocuments: (context) => const TeacherDocumentsScreen(),
     teacherCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.teacher),
+    teacherHomework: (context) => const TeacherHomeworkScreen(),
+    teacherHomeworkForm: (context) => TeacherHomeworkFormScreen(
+      args: _teacherHomeworkFormArgs(context),
+    ),
+    teacherHomeworkSubmissions: (context) => TeacherHomeworkSubmissionsScreen(
+      args: _teacherHomeworkSubmissionsArgs(context),
+    ),
 
     // Parent
     parentLogin: (context) => const AuthLoginScreen(),
@@ -272,6 +284,7 @@ class AppRoutes {
     parentLeave: (context) => const ParentLeaveScreen(),
     parentLeaveRequestForm: (context) =>
         ParentLeaveRequestFormScreen(args: _parentLeaveFormArgs(context)),
+    parentHealth: (context) => const ParentHealthUpdateScreen(),
     parentCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.parent),
     parentDocuments: (context) => const ParentDocumentsScreen(),
@@ -475,6 +488,52 @@ class AppRoutes {
       return AdminPaymentRequestDecisionArgs(request: args);
     }
     return const AdminPaymentRequestDecisionArgs(request: <String, dynamic>{});
+  }
+
+  static TeacherHomeworkFormArgs _teacherHomeworkFormArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is TeacherHomeworkFormArgs) return args;
+    if (args is Map<String, dynamic>) {
+      return TeacherHomeworkFormArgs(
+        teacherStaffId: (args['teacherStaffId'] ?? '').toString(),
+        defaultClassName: (args['defaultClassName'] ?? '').toString(),
+        defaultSubject: (args['defaultSubject'] ?? '').toString(),
+        assignedClasses: (args['assignedClasses'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            [],
+        students: (args['students'] as List?)
+                ?.map((e) => Map<String, dynamic>.from(e as Map))
+                .toList() ??
+            [],
+        homework: args['homework'] as Map<String, dynamic>?,
+      );
+    }
+    return const TeacherHomeworkFormArgs(
+      teacherStaffId: '',
+      defaultClassName: '',
+      defaultSubject: '',
+      assignedClasses: [],
+      students: [],
+    );
+  }
+
+  static TeacherHomeworkSubmissionsArgs _teacherHomeworkSubmissionsArgs(
+    BuildContext context,
+  ) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is TeacherHomeworkSubmissionsArgs) return args;
+    if (args is Map<String, dynamic>) {
+      final homeworkData = args['homework'] is Map
+          ? Map<String, dynamic>.from(args['homework'] as Map)
+          : (args.containsKey('id') || args.containsKey('reference_id')
+              ? {'id': args['reference_id'] ?? args['id'], ...args}
+              : <String, dynamic>{});
+      return TeacherHomeworkSubmissionsArgs(homework: homeworkData);
+    }
+    return const TeacherHomeworkSubmissionsArgs(homework: <String, dynamic>{});
   }
 }
 

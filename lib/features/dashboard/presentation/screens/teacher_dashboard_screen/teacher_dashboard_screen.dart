@@ -541,6 +541,15 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         color: Colors.purple,
         route: AppRoutes.teacherLeave,
       ),
+      _teacherActionItem(
+        context,
+        time: 'Tasks',
+        title: 'Homework',
+        subtitle: 'Assign homework and review submissions.',
+        icon: Icons.assignment_rounded,
+        color: Colors.indigo,
+        route: AppRoutes.teacherHomework,
+      ),
     ];
     return rows;
   }

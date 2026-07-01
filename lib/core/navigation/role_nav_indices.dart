@@ -17,6 +17,7 @@ class ParentNav {
   static const calendar = 13;
   static const documents = 14;
   static const gallery = 15;
+  static const health = 16;
 }
 
 class TeacherNav {
