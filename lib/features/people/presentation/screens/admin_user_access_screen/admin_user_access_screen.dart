@@ -42,13 +42,12 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       'Staff',
       'Students',
       'Fees',
-      'Exams',
       'Reports',
       'Approvals',
       'Communication',
       'All Access',
     ],
-    'Teacher': ['Dashboard', 'Attendance', 'Exams', 'Communication'],
+    'Teacher': ['Dashboard', 'Attendance', 'Communication'],
     'Parent': ['Child Profile', 'Attendance View', 'Fee View', 'Notices'],
   };
 

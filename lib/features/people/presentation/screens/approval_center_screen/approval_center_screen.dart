@@ -23,7 +23,6 @@ enum ApprovalType {
   student,
   event,
   timetable,
-  exam,
   document,
   communication,
   academicInfo,
@@ -83,9 +82,6 @@ class ApprovalModel {
         return ApprovalType.event;
       case 'timetable':
         return ApprovalType.timetable;
-      case 'exam':
-      case 'exams':
-        return ApprovalType.exam;
       case 'document':
       case 'documents':
         return ApprovalType.document;
@@ -161,7 +157,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     'Students',
     'Fees',
     'Timetable',
-    'Exams',
     'Documents',
     'Communication',
     'Event Posts',
@@ -414,8 +409,6 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         return 'fee';
       case 'timetable':
         return 'timetable';
-      case 'exams':
-        return 'exam';
       case 'documents':
         return 'document';
       case 'communication':
@@ -463,10 +456,9 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
       7: ApprovalType.student,
       8: ApprovalType.fee,
       9: ApprovalType.timetable,
-      10: ApprovalType.exam,
-      11: ApprovalType.document,
-      12: ApprovalType.communication,
-      13: ApprovalType.event,
+      10: ApprovalType.document,
+      11: ApprovalType.communication,
+      12: ApprovalType.event,
     };
     return _allApprovals.where((a) => a.type == typeMap[tabIndex]).toList();
   }

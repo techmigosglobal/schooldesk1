@@ -92,6 +92,19 @@ void main() {
       expect(service, contains('/monitoring/error-events'));
     });
 
+    test('Supabase API gateway dispatches monitoring routes', () {
+      final index = read('supabase/functions/api/index.ts');
+      final handler = read('supabase/functions/api/handlers/monitoring.ts');
+
+      expect(index, contains('handleMonitoring'));
+      expect(index, contains('path.startsWith("/monitoring")'));
+      expect(handler, contains('export async function handleMonitoring'));
+      expect(handler, contains('/monitoring/error-events'));
+      expect(handler, contains('method === "POST"'));
+      expect(handler, contains('method === "GET"'));
+      expect(handler, contains('method === "PATCH"'));
+    });
+
     test('principal has a usable system monitor screen', () {
       final routes = read('lib/routes/app_routes.dart');
       final guard = read('lib/routes/route_access_guard.dart');

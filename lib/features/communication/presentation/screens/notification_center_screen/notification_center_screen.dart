@@ -231,13 +231,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
                           mutedColor,
                         ),
                         _buildList(
-                          NotificationCategory.examReminder,
-                          bgColor,
-                          surfaceColor,
-                          onSurfaceColor,
-                          mutedColor,
-                        ),
-                        _buildList(
                           NotificationCategory.general,
                           bgColor,
                           surfaceColor,
@@ -271,7 +264,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         Tab(text: 'All'),
         Tab(text: 'Approvals'),
         Tab(text: 'Fees'),
-        Tab(text: 'Exams'),
+        Tab(text: 'Events'),
         Tab(text: 'Circulars'),
       ],
     };
@@ -445,8 +438,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   }
 
   bool _isAcademicParentNotification(AppNotification item) {
-    if (item.category == NotificationCategory.examReminder ||
-        item.category == NotificationCategory.pendingApproval) {
+    if (item.category == NotificationCategory.pendingApproval) {
       return true;
     }
     final haystack = '${item.title} ${item.body}'.toLowerCase();
@@ -608,8 +600,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Approvals';
       case NotificationCategory.feeDue:
         return 'Fees';
-      case NotificationCategory.examReminder:
-        return 'Exams';
       case NotificationCategory.event:
         return 'Events';
       case NotificationCategory.general:
@@ -806,8 +796,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return Icons.pending_actions_rounded;
       case NotificationCategory.feeDue:
         return Icons.account_balance_wallet_rounded;
-      case NotificationCategory.examReminder:
-        return Icons.quiz_rounded;
       case NotificationCategory.event:
         return Icons.event_available_rounded;
       case NotificationCategory.health:
@@ -829,8 +817,6 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return context.appTheme.warning;
       case NotificationCategory.feeDue:
         return context.appTheme.error;
-      case NotificationCategory.examReminder:
-        return context.appTheme.primary;
       case NotificationCategory.event:
         return context.appTheme.success;
       case NotificationCategory.health:

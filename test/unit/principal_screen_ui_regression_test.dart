@@ -184,6 +184,12 @@ void main() {
     expect(screen, contains("AppRoutes.feeMonitoring,"));
     expect(screen, contains("'source': 'class_hub'"));
     expect(screen, contains('await _load();'));
+    expect(screen, contains('api.getAcademicYears(forceRefresh: true)'));
+    expect(
+      screen,
+      contains('await BackendApiClient.instance.getAcademicYears('),
+    );
+    expect(screen, contains('Unable to refresh academic years:'));
     expect(screen, contains('Edit Class'));
     expect(screen, contains('Open roster'));
     expect(screen, contains('Setup subjects'));
@@ -255,6 +261,8 @@ void main() {
     expect(client, contains('createPrincipalClass'));
     expect(client, contains('updatePrincipalClassSetup'));
     expect(client, contains('deletePrincipalClass'));
+    expect(client, contains('bool forceRefresh = false'));
+    expect(client, contains("queryParams['refresh_nonce']"));
     expect(client, contains("'grade_name': gradeName.trim()"));
     expect(client, contains('savePrincipalSubjectMapping'));
     expect(client, contains('getFeeStructures'));

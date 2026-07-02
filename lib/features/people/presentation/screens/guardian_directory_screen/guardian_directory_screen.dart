@@ -391,7 +391,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],
@@ -420,7 +422,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
               ? '$removed guardian${removed == 1 ? '' : 's'} removed'
               : '$removed removed, ${failures.length} failed',
         ),
-        backgroundColor: failures.isEmpty ? context.appTheme.success : context.appTheme.warning,
+        backgroundColor: failures.isEmpty
+            ? context.appTheme.success
+            : context.appTheme.warning,
       ),
     );
   }
@@ -805,10 +809,8 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
   }
 
   Future<void> _syncGuardianRows(_GuardianProfileInput input) async {
-    // Base payload for the /guardians CRUD endpoint.
-    // NOTE: student_id is intentionally omitted — the backend Guardian model
-    // marks StudentID as gorm:"-" so it is silently ignored by GORM on writes.
-    // Student ↔ guardian linking is done via POST /students/:id/guardians below.
+    // Base payload for the /guardians CRUD endpoint. Supabase requires
+    // student_id on guardian rows; the join table link is still written below.
     final payloadBase = {
       'full_name': input.fullName,
       'relationship': input.relationship,
@@ -857,16 +859,19 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       String guardianRowId;
 
       if (existing == null) {
-        // Create the guardian profile row — student_id is NOT included because
-        // Guardian.StudentID is gorm:"-" and would be silently dropped anyway.
         final created = await api.BackendApiClient.instance.createRaw(
           '/guardians',
-          {...payloadBase, 'is_primary': isPrimary},
+          {
+            ...payloadBase,
+            'student_id': student.studentId,
+            'is_primary': isPrimary,
+          },
         );
         // The CRUD endpoint wraps responses in { success, data } or returns
         // the record directly depending on the handler — handle both shapes.
-        final record =
-            created['data'] is Map ? created['data'] as Map : created;
+        final record = created['data'] is Map
+            ? created['data'] as Map
+            : created;
         guardianRowId = _stringValue(record['id']);
       } else {
         guardianRowId = _stringValue(existing['id']);
@@ -1006,7 +1011,9 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: const Text('Remove'),
           ),
         ],

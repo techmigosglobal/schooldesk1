@@ -29,16 +29,21 @@ class RoleAccessService {
         ? await _try(() => api.getDashboard('teacher'))
         : null;
     _teacherDashboard = teacherDashboard ?? const {};
-    _teacherAssignedClasses = _listMap(_teacherDashboard['assigned_classes']);
+    _teacherAssignedClasses = _listMap(_teacherDashboard['assigned_classes'])
+        .map(_normalizeTeacherAssignedClass)
+        .where((row) {
+          return _sectionId(row).isNotEmpty;
+        })
+        .toList();
 
     final teacherStaffId = _text(_teacherDashboard['staff_id']);
     final classTeacherRow = _teacherAssignedClasses.firstWhere(
-      (row) => row['is_class_teacher'] == true,
+      (row) => _isTrue(row['is_class_teacher']),
       orElse: () => _teacherAssignedClasses.isNotEmpty
           ? _teacherAssignedClasses.first
           : const {},
     );
-    final teacherSectionId = _text(classTeacherRow['id']);
+    final teacherSectionId = _sectionId(classTeacherRow);
 
     final students = await _try(
       () => api.getStudents(
@@ -96,7 +101,9 @@ class RoleAccessService {
         )
         .toList();
     final timetableRows = timetable ?? [];
-    final assignedSubject = _subjectFromTimetable(timetableRows);
+    final assignedSubject = _subjectFromTimetable(timetableRows).isNotEmpty
+        ? _subjectFromTimetable(timetableRows)
+        : _subjectFromAssignments(_teacherAssignedClasses);
     _parentChildren = parentChildren ?? [];
     _teacherTimetable = timetableRows;
     _todayTimetable = _filterTodayTimetable(timetableRows);
@@ -227,7 +234,7 @@ class RoleAccessService {
   static List<Map<String, dynamic>> get teacherClassTeacherClasses {
     _ensureInitialized();
     return _teacherAssignedClasses
-        .where((row) => row['is_class_teacher'] == true)
+        .where((row) => _isTrue(row['is_class_teacher']))
         .map((row) => {...row, 'label': _classLabel(row)})
         .toList();
   }
@@ -247,7 +254,7 @@ class RoleAccessService {
   static List<String> get teacherSectionIds {
     _ensureInitialized();
     return _teacherAssignedClasses
-        .map((row) => _text(row['id'] ?? row['section_id']))
+        .map(_sectionId)
         .where((id) => id.isNotEmpty)
         .toSet()
         .toList();
@@ -259,6 +266,11 @@ class RoleAccessService {
     for (final row in _teacherAssignedClasses) {
       final subjectId = _text(row['subject_id']);
       if (subjectId.isNotEmpty) ids.add(subjectId);
+      final subject = row['subject'];
+      if (subject is Map) {
+        final id = _text(subject['id'] ?? subject['subject_id']);
+        if (id.isNotEmpty) ids.add(id);
+      }
       final subjects = row['subjects'];
       if (subjects is List) {
         for (final subject in subjects) {
@@ -492,6 +504,32 @@ class RoleAccessService {
     return '';
   }
 
+  static String _subjectFromAssignments(List<Map<String, dynamic>> classes) {
+    for (final row in classes) {
+      final subject = row['subject'];
+      if (subject is Map) {
+        final label = _text(subject['subject_name']);
+        if (label.isNotEmpty) return label;
+      }
+      final label = _text(row['subject_name'] ?? row['subject']);
+      if (label.isNotEmpty &&
+          label.toLowerCase() != 'class teacher' &&
+          label.toLowerCase() != 'co-teacher') {
+        return label;
+      }
+      final subjects = row['subjects'];
+      if (subjects is List) {
+        for (final item in subjects) {
+          if (item is Map) {
+            final nested = _text(item['subject_name']);
+            if (nested.isNotEmpty) return nested;
+          }
+        }
+      }
+    }
+    return '';
+  }
+
   static String _displayName(UserResponse? profile) {
     final name = profile?.name.trim() ?? '';
     if (name.isNotEmpty) return name;
@@ -520,7 +558,7 @@ class RoleAccessService {
   static String _classLabelForSection(String sectionId) {
     if (sectionId.isEmpty) return '';
     final match = _teacherAssignedClasses.where(
-      (row) => _text(row['id']) == sectionId,
+      (row) => _sectionId(row) == sectionId,
     );
     if (match.isNotEmpty) return _classLabel(match.first);
     return sectionId;
@@ -529,7 +567,7 @@ class RoleAccessService {
   static String _sectionLabelForSection(String sectionId) {
     if (sectionId.isEmpty) return '';
     final match = _teacherAssignedClasses.where(
-      (row) => _text(row['id']) == sectionId,
+      (row) => _sectionId(row) == sectionId,
     );
     if (match.isNotEmpty) return _text(match.first['section_name']);
     return '';
@@ -547,10 +585,100 @@ class RoleAccessService {
   }
 
   static String _classLabel(Map<String, dynamic> row) {
-    final grade = _text(row['grade_name']);
-    final section = _text(row['section_name']);
+    final sectionRow = row['section'];
+    final gradeRow = row['grade'];
+    final nestedGrade = sectionRow is Map ? sectionRow['grade'] : null;
+    final grade = _text(
+      row['grade_name'] ??
+          (nestedGrade is Map ? nestedGrade['grade_name'] : null) ??
+          (gradeRow is Map ? gradeRow['grade_name'] : null),
+    );
+    final section = _text(
+      row['section_name'] ??
+          (sectionRow is Map ? sectionRow['section_name'] : null),
+    );
     final label = _joinGradeSectionLabel(grade, section);
-    return label.isNotEmpty ? label : _text(row['id']);
+    return label.isNotEmpty ? label : _sectionId(row);
+  }
+
+  static Map<String, dynamic> _normalizeTeacherAssignedClass(
+    Map<String, dynamic> row,
+  ) {
+    final section = row['section'];
+    final grade = row['grade'];
+    final subject = row['subject'];
+    final sectionMap = section is Map<String, dynamic>
+        ? section
+        : section is Map
+        ? Map<String, dynamic>.from(section)
+        : const <String, dynamic>{};
+    final gradeMap = grade is Map<String, dynamic>
+        ? grade
+        : grade is Map
+        ? Map<String, dynamic>.from(grade)
+        : const <String, dynamic>{};
+    final subjectMap = subject is Map<String, dynamic>
+        ? subject
+        : subject is Map
+        ? Map<String, dynamic>.from(subject)
+        : const <String, dynamic>{};
+    final nestedGrade = sectionMap['grade'];
+    final nestedGradeMap = nestedGrade is Map<String, dynamic>
+        ? nestedGrade
+        : nestedGrade is Map
+        ? Map<String, dynamic>.from(nestedGrade)
+        : const <String, dynamic>{};
+    final sectionId = _text(row['section_id'] ?? sectionMap['id'] ?? row['id']);
+    final assignmentId = _text(row['assignment_id']).isNotEmpty
+        ? _text(row['assignment_id'])
+        : (_text(row['section_id']).isNotEmpty && _text(row['id']) != sectionId
+              ? _text(row['id'])
+              : '');
+    final subjectId = _text(
+      row['subject_id'] ?? subjectMap['id'] ?? subjectMap['subject_id'],
+    );
+    final subjectName = _text(
+      row['subject_name'] ?? subjectMap['subject_name'] ?? row['subject'],
+    );
+    final rawSubjects = row['subjects'];
+    final subjects = rawSubjects is List
+        ? rawSubjects.map((entry) {
+            if (entry is Map<String, dynamic>) return entry;
+            if (entry is Map) return Map<String, dynamic>.from(entry);
+            return {'id': _text(entry), 'subject_id': _text(entry)};
+          }).toList()
+        : <Map<String, dynamic>>[
+            if (subjectId.isNotEmpty || subjectName.isNotEmpty)
+              {
+                if (subjectId.isNotEmpty) 'id': subjectId,
+                if (subjectId.isNotEmpty) 'subject_id': subjectId,
+                if (subjectName.isNotEmpty) 'subject_name': subjectName,
+              },
+          ];
+    return {
+      ...row,
+      'id': sectionId,
+      'section_id': sectionId,
+      if (assignmentId.isNotEmpty) 'assignment_id': assignmentId,
+      'grade_name': _text(
+        row['grade_name'] ??
+            nestedGradeMap['grade_name'] ??
+            gradeMap['grade_name'],
+      ),
+      'section_name': _text(row['section_name'] ?? sectionMap['section_name']),
+      'subject_id': subjectId,
+      'subject_name': subjectName,
+      'subject': subjectMap.isEmpty ? row['subject'] : subjectMap,
+      'grade': gradeMap.isEmpty ? row['grade'] : gradeMap,
+      'section': sectionMap.isEmpty ? row['section'] : sectionMap,
+      'subjects': subjects,
+      'is_class_teacher': _isTrue(row['is_class_teacher']),
+      'is_co_teacher': _isTrue(row['is_co_teacher']),
+    };
+  }
+
+  static String _sectionId(Map<String, dynamic> row) {
+    return _text(row['section_id'] ?? row['id']);
   }
 
   static String _joinGradeSectionLabel(String grade, String section) {
@@ -574,5 +702,10 @@ class RoleAccessService {
     } catch (_) {
       return null;
     }
+  }
+
+  static bool _isTrue(dynamic value) {
+    if (value is bool) return value;
+    return value?.toString().trim().toLowerCase() == 'true';
   }
 }

@@ -172,20 +172,6 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       },
                     ),
                     _buildSwitchTile(
-                      icon: Icons.quiz_rounded,
-                      iconColor: context.appTheme.primary,
-                      title: 'Exam Reminders',
-                      subtitle: 'Alerts for upcoming exams and results',
-                      value:
-                          _notifService?.getSetting('exam_reminders') ?? true,
-                      onSurfaceColor: onSurfaceColor,
-                      mutedColor: mutedColor,
-                      onChanged: (v) async {
-                        await _notifService?.updateSetting('exam_reminders', v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
-                    _buildSwitchTile(
                       icon: Icons.how_to_reg_rounded,
                       iconColor: context.appTheme.success,
                       title: 'Attendance Alerts',

@@ -225,10 +225,14 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         page++;
       }
 
-      final sections = await api.BackendApiClient.instance.getSections();
-      final grades = await api.BackendApiClient.instance.getGrades();
+      final sections = await api.BackendApiClient.instance.getSections(
+        forceRefresh: true,
+      );
+      final grades = await api.BackendApiClient.instance.getGrades(
+        forceRefresh: true,
+      );
       final academicYears = await api.BackendApiClient.instance
-          .getAcademicYears();
+          .getAcademicYears(forceRefresh: true);
       final feeStructures = await api.BackendApiClient.instance
           .getFeeStructures();
       final parents = await _loadParentAccounts();
@@ -238,24 +242,28 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final loaded = students
           .map((student) => _mapApiStudentToUi(student, sectionMap, gradeMap))
           .toList();
-      final classes = {
-        ...sections.map((section) {
-          final grade = gradeMap[section.gradeId];
-          final gradeName = _gradeLabel(grade, section);
-          final sectionName = section.sectionName.trim();
-          return gradeName.isNotEmpty && sectionName.isNotEmpty
-              ? 'Class $gradeName / Section $sectionName'
-              : gradeName.isNotEmpty
-              ? 'Class $gradeName'
-              : sectionName.isNotEmpty
-              ? 'Section $sectionName'
-              : 'Class not assigned';
-        }),
-        ...loaded.map((student) => student.classSection),
-      }
-          .where((value) => value.trim().isNotEmpty && value != 'Class not assigned')
-          .toList()
-        ..sort();
+      final classes =
+          {
+                ...sections.map((section) {
+                  final grade = gradeMap[section.gradeId];
+                  final gradeName = _gradeLabel(grade, section);
+                  final sectionName = section.sectionName.trim();
+                  return gradeName.isNotEmpty && sectionName.isNotEmpty
+                      ? 'Class $gradeName / Section $sectionName'
+                      : gradeName.isNotEmpty
+                      ? 'Class $gradeName'
+                      : sectionName.isNotEmpty
+                      ? 'Section $sectionName'
+                      : 'Class not assigned';
+                }),
+                ...loaded.map((student) => student.classSection),
+              }
+              .where(
+                (value) =>
+                    value.trim().isNotEmpty && value != 'Class not assigned',
+              )
+              .toList()
+            ..sort();
       final classOptions = ['All', ...classes];
       final scopedClassLabel = _routeClassFilterLabel(sectionMap, gradeMap);
       if (scopedClassLabel.isNotEmpty &&
@@ -1114,6 +1122,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       );
     }
 
+    if (input.shouldCreateParentLogin && input.parentName.trim().isNotEmpty) {
+      await _createGuardianProfileForStudent(savedStudentId, input);
+    }
+
     if ((input.photoPath ?? '').isNotEmpty ||
         (input.photoBytes?.isNotEmpty ?? false)) {
       await client.uploadStudentPhoto(
@@ -1148,6 +1160,30 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               : '${input.studentName.trim()} updated',
         ),
       ),
+    );
+  }
+
+  Future<void> _createGuardianProfileForStudent(
+    String studentId,
+    _AddStudentInput input,
+  ) async {
+    final created = await api.BackendApiClient.instance
+        .createRaw('/guardians', {
+          'student_id': studentId,
+          'full_name': input.parentName.trim(),
+          'relationship': 'parent',
+          'phone': input.parentPhone.trim(),
+          'email': input.parentEmail.trim(),
+          'is_primary': true,
+        });
+    final record = created['data'] is Map ? created['data'] as Map : created;
+    final guardianId = '${record['id'] ?? ''}'.trim();
+    if (guardianId.isEmpty) return;
+    await api.BackendApiClient.instance.linkGuardianToStudent(
+      studentId: studentId,
+      guardianId: guardianId,
+      isPrimary: true,
+      canPickup: true,
     );
   }
 
@@ -2249,33 +2285,36 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                           ..._documents.asMap().entries.map((entry) {
                             final index = entry.key;
                             final document = entry.value;
-                            return ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: const Icon(
-                                Icons.description_outlined,
-                                size: 20,
-                              ),
-                              title: Text(
-                                document.docType,
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
+                            return Material(
+                              color: Colors.transparent,
+                              child: ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                leading: const Icon(
+                                  Icons.description_outlined,
+                                  size: 20,
                                 ),
-                              ),
-                              subtitle: Text(
-                                document.fileName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              trailing: IconButton(
-                                tooltip: 'Remove document',
-                                onPressed: _saving
-                                    ? null
-                                    : () => setState(
-                                        () => _documents.removeAt(index),
-                                      ),
-                                icon: const Icon(Icons.close_rounded),
+                                title: Text(
+                                  document.docType,
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  document.fileName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                trailing: IconButton(
+                                  tooltip: 'Remove document',
+                                  onPressed: _saving
+                                      ? null
+                                      : () => setState(
+                                          () => _documents.removeAt(index),
+                                        ),
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
                               ),
                             );
                           }),

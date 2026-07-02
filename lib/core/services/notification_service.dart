@@ -162,12 +162,12 @@ class NotificationService extends ChangeNotifier {
     required String date,
     required String role,
   }) async {
-    if (!getSetting('exam_reminders')) return;
+    if (!getSetting('general_alerts')) return;
     await addNotification(
       AppNotification.transient(
-        title: 'Exam Reminder',
-        body: '$examName scheduled for $date.',
-        category: NotificationCategory.examReminder,
+        title: 'School Update',
+        body: '$examName is scheduled for $date.',
+        category: NotificationCategory.general,
         role: role,
         priority: NotificationPriority.medium,
       ),
@@ -524,7 +524,6 @@ class NotificationService extends ChangeNotifier {
 class NotificationCategory {
   static const String pendingApproval = 'pending_approval';
   static const String feeDue = 'fee_due';
-  static const String examReminder = 'exam_reminder';
   static const String event = 'event';
   static const String health = 'health';
   static const String homework = 'homework';

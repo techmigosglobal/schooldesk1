@@ -27,8 +27,6 @@ class SchoolDeskGlossary {
   static const feeMonitoring = 'Fee Monitoring';
   static const timetable = 'Timetable';
   static const timetableRecords = 'Timetable Records';
-  static const exams = 'Exams';
-  static const examRecords = 'Exam Records';
   static const academics = 'Academics';
   static const academicInfo = 'Academic Info';
   static const academicManagement = 'Academic Management';

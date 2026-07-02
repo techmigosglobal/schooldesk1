@@ -47,24 +47,41 @@ void main() {
     );
   });
 
-  test('release builds default to the Railway backend without build args', () {
+  test('release builds default to the Supabase backend without build args', () {
     final source = File('lib/core/config/env_config.dart').readAsStringSync();
 
     expect(
       source,
-      contains('https://schooldesk1-production.up.railway.app/api'),
+      contains('https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api'),
     );
     expect(() => EnvConfig.validate(isRelease: true), returnsNormally);
   });
 
-  test('Codemagic debug APK is explicitly attached to Railway backend', () {
+  test('plain flutter run defaults to Supabase with operation logs enabled', () {
+    final mainSource = File('lib/main.dart').readAsStringSync();
+
+    expect(
+      EnvConfig.apiBaseUrl,
+      'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
+    );
+    expect(EnvConfig.enableLogging, isTrue);
+    expect(mainSource, contains('Backend attached'));
+  });
+
+  test('Codemagic debug APK is explicitly attached to Supabase backend', () {
     final codemagic = File('codemagic.yaml').readAsStringSync();
 
     expect(codemagic, contains('flutter build apk --debug'));
     expect(
       codemagic,
       contains(
-        '--dart-define=API_BASE_URL=https://schooldesk1-production.up.railway.app/api',
+        r'--dart-define=API_BASE_URL=$API_BASE_URL',
+      ),
+    );
+    expect(
+      codemagic,
+      contains(
+        'API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
       ),
     );
     expect(codemagic, contains('--dart-define=APP_ENV=production'));
@@ -72,24 +89,28 @@ void main() {
     expect(codemagic, isNot(contains('env.railway.json')));
   });
 
-  test('release Android helper always builds artifacts against Hostinger', () {
-    final script = File('scripts/build-android-vps.sh');
+  test('release Android helper always builds artifacts against Supabase', () {
+    final script = File('scripts/build-android-supabase.sh');
     final readme = File('README.md').readAsStringSync();
+    final example = File('env.supabase.example.json');
 
     expect(script.existsSync(), isTrue);
+    expect(example.existsSync(), isTrue);
 
     final source = script.readAsStringSync();
-    expect(source, contains('env.hostinger.json'));
+    expect(source, contains('env.supabase.json'));
     expect(source, contains(r'--dart-define-from-file="$env_file"'));
     expect(source, contains('flutter build apk --release'));
     expect(source, contains('flutter build appbundle --release'));
     expect(source, contains('aab|abb'));
     expect(source, contains('jq -e'));
     expect(source, contains('API_BASE_URL'));
-    expect(source, contains('https://'));
+    expect(source, contains(r'test("^https://.+\\.supabase\\.co/functions/v1/api$")'));
+    expect(source, contains('SUPABASE_URL'));
+    expect(source, contains('SUPABASE_ANON_KEY'));
 
-    expect(readme, contains('scripts/build-android-vps.sh apk'));
-    expect(readme, contains('scripts/build-android-vps.sh aab'));
+    expect(readme, contains('scripts/build-android-supabase.sh apk'));
+    expect(readme, contains('scripts/build-android-supabase.sh aab'));
     expect(readme, isNot(contains('flutter build apk --release\n')));
   });
 }

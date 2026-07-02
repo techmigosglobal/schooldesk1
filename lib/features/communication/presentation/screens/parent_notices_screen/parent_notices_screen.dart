@@ -27,8 +27,8 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
     'Urgent',
     'Events',
     'Holidays',
-    'Exams',
     'Finance',
+    'General',
   ];
 
   List<Map<String, dynamic>> _notices = [];
@@ -102,7 +102,7 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
     if (haystack.contains('exam') ||
         haystack.contains('test') ||
         haystack.contains('assessment')) {
-      return 'Exams';
+      return 'General';
     }
     if (haystack.contains('holiday') || haystack.contains('vacation')) {
       return 'Holidays';
@@ -225,14 +225,14 @@ class _ParentNoticesScreenState extends State<ParentNoticesScreen>
       'Events': const Color(0xFF1E8449),
       'Finance': const Color(0xFFD4850A),
       'Holidays': const Color(0xFF6C3483),
-      'Exams': const Color(0xFF1565C0),
+      'General': const Color(0xFF1565C0),
       'Urgent': context.appTheme.error,
     };
     final typeIcons = {
       'Events': Icons.emoji_events_rounded,
       'Finance': Icons.account_balance_wallet_rounded,
       'Holidays': Icons.celebration_rounded,
-      'Exams': Icons.quiz_rounded,
+      'General': Icons.notifications_rounded,
       'Meeting': Icons.people_rounded,
     };
     final color = typeColors[type] ?? context.appTheme.primary;

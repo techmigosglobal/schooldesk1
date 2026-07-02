@@ -51,8 +51,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return context.appTheme.primary;
       case ApprovalType.timetable:
         return context.appTheme.error;
-      case ApprovalType.exam:
-        return context.appTheme.secondary;
       case ApprovalType.document:
         return context.appTheme.primary;
       case ApprovalType.communication:
@@ -86,8 +84,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return Icons.celebration_rounded;
       case ApprovalType.timetable:
         return Icons.schedule_rounded;
-      case ApprovalType.exam:
-        return Icons.quiz_rounded;
       case ApprovalType.document:
         return Icons.description_rounded;
       case ApprovalType.communication:
@@ -121,8 +117,6 @@ class _ApprovalItemWidgetState extends State<ApprovalItemWidget> {
         return 'Event';
       case ApprovalType.timetable:
         return 'Timetable';
-      case ApprovalType.exam:
-        return 'Exam';
       case ApprovalType.document:
         return 'Document';
       case ApprovalType.communication:

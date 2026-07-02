@@ -60,7 +60,6 @@ extension BackendUsersApi on BackendApiClient {
           if (cleanEmail.isNotEmpty) 'email': cleanEmail,
           'phone': phone,
           'is_active': isActive,
-          'request_principal_approval': requestPrincipalApproval,
         },
       );
       final data = response.data as Map<String, dynamic>;

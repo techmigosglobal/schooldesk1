@@ -53,6 +53,7 @@ env.*.json
 !env.*.example.json
 .env
 *.env
+.env.supabase
 
 # Android release signing secrets
 android/key.properties

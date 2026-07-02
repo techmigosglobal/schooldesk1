@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:developer' as developer;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui';
 import 'package:flutter/semantics.dart';
 
@@ -22,7 +24,18 @@ void main() async {
   SemanticsBinding.instance.ensureSemantics();
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  await Supabase.initialize(
+    url: EnvConfig.supabaseUrl,
+    anonKey: EnvConfig.supabaseAnonKey,
+  );
+
   await BackendApiClient.initialize();
+  if (EnvConfig.enableLogging) {
+    developer.log(
+      '[API CONFIG] Backend attached: ${BackendApiClient.instance.baseUrl}',
+      name: 'BackendApiClient',
+    );
+  }
   await ErrorReportingService.instance.initialize();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -72,7 +85,7 @@ void main() async {
   _deferStartupServices();
 }
 
-  void _deferStartupServices() {
+void _deferStartupServices() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     unawaited(_initializeDeferredStartupServices());
   });
@@ -89,7 +102,6 @@ Future<void> _initializeDeferredStartupServices() async {
     print('Deferred startup services failed: $error');
   }
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

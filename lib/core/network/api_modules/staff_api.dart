@@ -18,21 +18,34 @@ extension BackendStaffApi on BackendApiClient {
       if (status != null) queryParams['status'] = status;
 
       final response = await _dio.get('/staff', queryParameters: queryParams);
-      final data = response.data as Map<String, dynamic>;
+      final data = _asMap(response.data);
       if (data['success'] == true) {
+        final payload = _asMap(data['data']);
+        final rows = data['data'] is List ? data['data'] : payload['data'];
         return PaginatedList<StaffModel>(
-          data: (data['data'] as List)
-              .map((e) => StaffModel.fromJson(e as Map<String, dynamic>))
+          data: (rows as List? ?? const [])
+              .whereType<Map>()
+              .map((e) => StaffModel.fromJson(Map<String, dynamic>.from(e)))
               .toList(),
-          total: data['total'] as int,
-          page: data['page'] as int,
-          pageSize: data['page_size'] as int,
+          total: _intValue(data['total'] ?? payload['total']),
+          page: _intValue(data['page'] ?? payload['page'], fallback: page),
+          pageSize: _intValue(
+            data['page_size'] ?? payload['page_size'],
+            fallback: pageSize,
+          ),
         );
       }
       throw ServerException(message: data['error'] ?? 'Failed to get staff');
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  int _intValue(dynamic value, {int fallback = 0}) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
   }
 
   Future<StaffModel> getStaffMember(String id) async {

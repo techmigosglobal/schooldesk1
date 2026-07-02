@@ -1,0 +1,191 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('principal classes load depends on backend-backed setup resources', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final index = File('supabase/functions/api/index.ts').readAsStringSync();
+
+    expect(screen, contains('getPrincipalClassesOverview(forceRefresh: true)'));
+    expect(screen, contains('getAcademicYears(forceRefresh: true)'));
+    expect(screen, contains("api.getStaff(page: 1, pageSize: 500"));
+    expect(screen, contains("api.getRawList('/subjects'"));
+    expect(screen, contains("api.getRawList(\n          '/grade-subjects'"));
+    expect(screen, contains("api.getRawList(\n          '/staff-subjects'"));
+    expect(index, contains('path.startsWith("/staff-subjects")'));
+  });
+
+  test('principal classes handler guards UUID-like foreign keys', () {
+    final principal = File(
+      'supabase/functions/api/handlers/principal.ts',
+    ).readAsStringSync();
+
+    expect(principal, contains('function uuidText'));
+    expect(principal, contains('function uuidList'));
+    expect(
+      principal,
+      contains('await resolveStaffId(svc, school, body.class_teacher_id)'),
+    );
+    expect(
+      principal,
+      contains('await resolveStaffId(svc, school, body.co_teacher_id)'),
+    );
+    expect(
+      principal,
+      contains('const explicitId = uuidText(row.academic_year_id)'),
+    );
+    expect(principal, contains('const gradeId = uuidText(body.grade_id)'));
+    expect(principal, contains('const roomId = uuidText(body.room_id)'));
+    expect(
+      principal,
+      contains('const explicitId = uuidText(mapping.subject_id)'),
+    );
+    expect(principal, contains('uuidList(body.deleted_grade_subject_ids)'));
+    expect(principal, contains('uuidList(body.deleted_staff_subject_ids)'));
+    expect(principal, contains('uuidList(body.deleted_fee_structure_ids)'));
+  });
+
+  test(
+    'principal classes details include class teacher and co-teacher names',
+    () {
+      final principal = File(
+        'supabase/functions/api/handlers/principal.ts',
+      ).readAsStringSync();
+      final screen = File(
+        'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+      ).readAsStringSync();
+
+      expect(
+        principal,
+        contains('class_teacher:staff!sections_class_teacher_id_fkey(*)'),
+      );
+      expect(
+        principal,
+        contains('co_teacher:staff!sections_co_teacher_id_fkey(*)'),
+      );
+      expect(principal, contains('class_teacher: staffDisplayName'));
+      expect(principal, contains('co_teacher: staffDisplayName'));
+      expect(screen, contains("'co_teacher_id': _classText("));
+      expect(screen, contains("'class_teacher': _staffDisplayName("));
+      expect(screen, contains("'co_teacher': _staffDisplayName("));
+    },
+  );
+
+  test('staff subject assignments have a direct class name relationship', () {
+    final migrations = Directory('supabase/migrations')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.sql'))
+        .map((file) => file.readAsStringSync())
+        .join('\n');
+    final academics = File(
+      'supabase/functions/api/handlers/academics.ts',
+    ).readAsStringSync();
+
+    expect(
+      migrations,
+      contains('grade_id uuid references public.grades(id) on delete cascade'),
+    );
+    expect(migrations, contains('idx_staff_subjects_grade'));
+    expect(
+      academics,
+      contains('staff:staff(*), subject:subjects(*), grade:grades(*)'),
+    );
+    expect(academics, contains('q = q.eq("grade_id"'));
+  });
+
+  test('classes hub subject setup only sends supported subject columns', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final academics = File(
+      'supabase/functions/api/handlers/academics.ts',
+    ).readAsStringSync();
+    final subjectsHandler = academics.substring(
+      academics.indexOf('if (path.startsWith("/subjects"))'),
+      academics.indexOf('if (path.startsWith("/grade-subjects"))'),
+    );
+
+    final createSubject = screen.substring(
+      screen.indexOf('class _CreateSubjectSetupPage'),
+      screen.indexOf('class _EditSubjectSetupSheet'),
+    );
+    final editSubject = screen.substring(
+      screen.indexOf('class _EditSubjectSetupSheet'),
+      screen.indexOf('class _SubjectNameCode'),
+    );
+
+    for (final subjectForm in [createSubject, editSubject]) {
+      expect(subjectForm, isNot(contains('credit_hours')));
+      expect(subjectForm, isNot(contains('department_name')));
+      expect(subjectForm, isNot(contains("label: 'Type'")));
+      expect(subjectForm, isNot(contains("label: 'Department'")));
+      expect(subjectForm, isNot(contains("label: 'Credits'")));
+      expect(
+        subjectForm,
+        contains("'subject_name': _nameController.text.trim()"),
+      );
+      expect(
+        subjectForm,
+        contains("'subject_code': _codeController.text.trim()"),
+      );
+      expect(subjectForm, contains("'subject_color': _subjectColor"));
+    }
+
+    expect(subjectsHandler, contains('subjectPayload(body)'));
+    expect(subjectsHandler, contains('subjectPayload(body, false)'));
+    expect(subjectsHandler, isNot(contains('department:departments(*)')));
+    expect(subjectsHandler, isNot(contains('...safe, school_id: sid')));
+    expect(academics, contains('function subjectPayload'));
+    expect(academics, contains('subject_name: text(payload["subject_name"])'));
+    expect(
+      academics,
+      contains('subject_code: text(payload["subject_code"]) || null'),
+    );
+    expect(
+      academics,
+      contains('subject_color: text(payload["subject_color"]) || null'),
+    );
+  });
+
+  test(
+    'classes hub subjects are class-level without teacher or timetable prompts',
+    () {
+      final screen = File(
+        'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+      ).readAsStringSync();
+      final academics = File(
+        'supabase/functions/api/handlers/academics.ts',
+      ).readAsStringSync();
+      final subjectSetup = screen.substring(
+        screen.indexOf('class _AssignSubjectsSetupPage'),
+        screen.indexOf('class _FeesSetupPage'),
+      );
+      final assignedTile = screen.substring(
+        screen.indexOf('class _AssignedSubjectTile'),
+        screen.indexOf('class _EditSubjectSetupSheet'),
+      );
+      final subjectsHandler = academics.substring(
+        academics.indexOf('if (path.startsWith("/subjects"))'),
+        academics.indexOf('if (path.startsWith("/grade-subjects"))'),
+      );
+
+      expect(subjectSetup, isNot(contains('_setTeacher')));
+      expect(subjectSetup, isNot(contains('_promptRegenerateTimetable')));
+      expect(subjectSetup, isNot(contains('_regenerateTimetable')));
+      expect(subjectSetup, isNot(contains('onTeacherChanged')));
+      expect(subjectSetup, isNot(contains('teacherId')));
+      expect(assignedTile, isNot(contains('_TeacherAssignmentDropdown')));
+      expect(screen, isNot(contains('Regenerate timetable?')));
+      expect(screen, isNot(contains('class _TeacherAssignmentDropdown')));
+      expect(screen, isNot(contains('class _TeacherMiniLabel')));
+      expect(
+        subjectsHandler,
+        contains('method === "PATCH" || method === "PUT"'),
+      );
+    },
+  );
+}

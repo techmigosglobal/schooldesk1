@@ -23,6 +23,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   List<String> _children = [];
   List<String> _childIds = [];
+  List<Map<String, dynamic>> _childRows = [];
   List<dynamic> _allSlots = [];
   bool _loading = true;
   int _selectedDay = 1; // 1 = Monday, 2 = Tuesday, etc.
@@ -76,6 +77,9 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       setState(() {
         _children = childLabels;
         _childIds = childIds;
+        _childRows = childrenResponse
+            .map((child) => Map<String, dynamic>.from(child))
+            .toList();
         _activeChildIndex = selectedIndex;
       });
       if (_children.isNotEmpty && _childIds.isNotEmpty) {
@@ -90,13 +94,18 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
   }
 
   Future<void> _loadChildTimetable(int childIndex) async {
-    if (childIndex >= _childIds.length) return;
+    if (childIndex >= _childRows.length) return;
     setState(() => _loading = true);
     try {
-      final studentId = _childIds[childIndex];
-      final response = await BackendApiClient.instance.getRawList(
-        '/me/timetable?student_id=$studentId',
+      final child = _childRows[childIndex];
+      final sectionId = _stringValue(
+        child['current_section_id'] ?? child['section_id'],
       );
+      final response = sectionId.isEmpty
+          ? <Map<String, dynamic>>[]
+          : await BackendApiClient.instance.getTimetableSlots(
+              sectionId: sectionId,
+            );
       setState(() {
         _allSlots = response;
         _loading = false;

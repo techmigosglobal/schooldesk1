@@ -148,6 +148,125 @@ void main() {
     },
   );
 
+  test(
+    'teacher scope uses section_id from Supabase assignment rows instead of assignment id',
+    () async {
+      adapter.routes['GET /auth/profile'] = _ok({
+        'id': 'teacher-user-1',
+        'email': 'teacher@example.test',
+        'name': 'Backend Teacher',
+        'school_id': 'school-1',
+        'role_id': 'role-teacher',
+        'role_name': 'Teacher',
+        'is_active': true,
+      });
+      adapter.routes['GET /dashboard/teacher'] = _ok({
+        'role': 'Teacher',
+        'staff_id': 'staff-1',
+        'metrics': {
+          'assigned_classes': 1,
+          'assigned_students': 1,
+          'homework_total': 0,
+          'homework_due': 0,
+          'unread_messages': 0,
+        },
+        'assigned_classes': [
+          {
+            'id': 'staff-subject-1',
+            'section_id': 'section-1',
+            'section': {
+              'id': 'section-1',
+              'section_name': 'A',
+              'grade': {'grade_name': 'Grade 2'},
+            },
+            'subject': {'id': 'subject-1', 'subject_name': 'Robotics'},
+          },
+        ],
+      });
+      adapter.routes['GET /students'] = _okList([
+        {
+          'id': 'student-1',
+          'school_id': 'school-1',
+          'student_code': 'STU-1',
+          'admission_number': 'ADM-1',
+          'first_name': 'Linked',
+          'last_name': 'Student',
+          'current_section_id': 'section-1',
+          'status': 'active',
+        },
+      ], total: 1);
+      adapter.routes['GET /timetable/slots'] = _ok([]);
+
+      await RoleAccessService.initialize();
+
+      expect(RoleAccessService.teacherClassId, 'section-1');
+      expect(RoleAccessService.teacherClassName, 'Grade 2 A');
+      expect(RoleAccessService.teacherSubject, 'Robotics');
+      expect(RoleAccessService.teacherClassStudents, hasLength(1));
+      expect(
+        RoleAccessService.teacherAssignedClasses.single['assignment_id'],
+        'staff-subject-1',
+      );
+    },
+  );
+
+  test(
+    'teacher scope treats class-teacher section assignments as assigned classes even without subject rows',
+    () async {
+      adapter.routes['GET /auth/profile'] = _ok({
+        'id': 'teacher-user-1',
+        'email': 'teacher@example.test',
+        'name': 'Backend Teacher',
+        'school_id': 'school-1',
+        'role_id': 'role-teacher',
+        'role_name': 'Teacher',
+        'is_active': true,
+      });
+      adapter.routes['GET /dashboard/teacher'] = _ok({
+        'role': 'Teacher',
+        'staff_id': 'staff-1',
+        'metrics': {
+          'assigned_classes': 1,
+          'assigned_students': 1,
+          'homework_total': 0,
+          'homework_due': 0,
+          'unread_messages': 0,
+        },
+        'assigned_classes': [
+          {
+            'id': 'section-1',
+            'section_id': 'section-1',
+            'grade_name': 'Grade 4',
+            'section_name': 'B',
+            'is_class_teacher': true,
+            'subject_name': 'Class Teacher',
+          },
+        ],
+      });
+      adapter.routes['GET /students'] = _okList([
+        {
+          'id': 'student-1',
+          'school_id': 'school-1',
+          'student_code': 'STU-1',
+          'admission_number': 'ADM-1',
+          'first_name': 'Linked',
+          'last_name': 'Student',
+          'current_section_id': 'section-1',
+          'status': 'active',
+        },
+      ], total: 1);
+      adapter.routes['GET /timetable/slots'] = _ok([]);
+
+      await RoleAccessService.initialize();
+
+      expect(RoleAccessService.hasAssignedClasses, isTrue);
+      expect(RoleAccessService.teacherClassId, 'section-1');
+      expect(RoleAccessService.teacherClassName, 'Grade 4 B');
+      expect(RoleAccessService.teacherClassTeacherClasses, hasLength(1));
+      expect(RoleAccessService.teacherClassStudents, hasLength(1));
+    },
+  );
+
   testWidgets(
     'teacher classes screen initializes backend role scope before rendering assigned class',
     (tester) async {

@@ -38,7 +38,6 @@ const Set<String> _tablesMDRoots = {
   'classes',
   'attendance',
   'fees',
-  'exams',
   'homework',
   'leaves',
   'notifications',

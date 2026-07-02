@@ -5,6 +5,10 @@ workflows:
     environment:
       flutter: stable
       java: 17
+      vars:
+        API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api
+        SUPABASE_URL: https://ouvwogguttybmpgfgctc.supabase.co
+        SUPABASE_ANON_KEY: sb_publishable_qCKMNCupGkjnNwK77gWdbg_Yxe83REn
     cache:
       cache_paths:
         - $HOME/.gradle/caches
@@ -28,9 +32,52 @@ workflows:
       - name: Build debug APK
         script: >
           flutter build apk --debug
-          --dart-define=API_BASE_URL=https://schooldesk1-production.up.railway.app/api
+          --dart-define=API_BASE_URL=$API_BASE_URL
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
           --dart-define=APP_ENV=production
           --dart-define=ENABLE_LOGGING=false
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
       - build/app/outputs/apk/debug/*.apk
+
+  ios-simulator-build:
+    name: iOS Simulator Build
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      vars:
+        API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api
+        SUPABASE_URL: https://ouvwogguttybmpgfgctc.supabase.co
+        SUPABASE_ANON_KEY: sb_publishable_qCKMNCupGkjnNwK77gWdbg_Yxe83REn
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "*"
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Show tool versions
+        script: |
+          flutter --version
+          xcodebuild -version
+      - name: Install Flutter dependencies
+        script: flutter pub get
+      - name: Build iOS simulator app
+        script: >
+          flutter build ios --simulator
+          --dart-define=API_BASE_URL=$API_BASE_URL
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          --dart-define=APP_ENV=production
+          --dart-define=ENABLE_LOGGING=false
+    artifacts:
+      - build/ios/iphonesimulator/*.app

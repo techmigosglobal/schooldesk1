@@ -81,7 +81,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
         api.getPrincipalClassesOverview(forceRefresh: true),
-        api.getAcademicYears(),
+        api.getAcademicYears(forceRefresh: true),
         api.getStaff(page: 1, pageSize: 500, status: 'active'),
         api.getRawList('/subjects', queryParameters: const {'page_size': 500}),
         api.getRawList(
@@ -426,6 +426,26 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _openClassForm() async {
+    setState(() => _saving = true);
+    try {
+      final academicYears = await BackendApiClient.instance.getAcademicYears(
+        forceRefresh: true,
+      );
+      if (!mounted) return;
+      setState(() => _academicYears = academicYears);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to refresh academic years: $error'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
+      return;
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _CreateClassSetupPage(
@@ -675,7 +695,6 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           classRow: row,
           setupPayload: const {},
           academicYears: _academicYears,
-          staff: _staff,
           initialSubjects: _subjects,
           initialGradeSubjects: _gradeSubjects,
           initialStaffSubjects: _staffSubjects,
@@ -3137,6 +3156,18 @@ String _classLabel(String gradeName, String sectionName) {
   return '$grade - $section';
 }
 
+String _staffDisplayName(List<StaffModel> staff, String staffId) {
+  final cleanId = staffId.trim();
+  if (cleanId.isEmpty) return '';
+  for (final member in staff) {
+    if (member.id == cleanId) {
+      final name = member.fullName.trim();
+      return name.isNotEmpty ? name : member.staffCode;
+    }
+  }
+  return '';
+}
+
 class _CreateClassSetupPage extends StatefulWidget {
   final List<AcademicYearModel> academicYears;
   final List<StaffModel> staff;
@@ -3469,7 +3500,6 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
             classRow: _createdClassRow(created),
             setupPayload: created,
             academicYears: widget.academicYears,
-            staff: widget.staff,
             initialSubjects: widget.subjects,
             initialGradeSubjects: widget.gradeSubjects,
             initialStaffSubjects: widget.staffSubjects,
@@ -3525,6 +3555,12 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
         section['class_teacher_id'],
         fallback: _teacherId,
       ),
+      'co_teacher_id': _classText(
+        section['co_teacher_id'],
+        fallback: _coTeacherId,
+      ),
+      'class_teacher': _staffDisplayName(widget.staff, _teacherId),
+      'co_teacher': _staffDisplayName(widget.staff, _coTeacherId),
       'room_id': _classText(section['room_id']),
       'room_number': _classText(
         section['room_number'] ?? _classMap(section['room'])['room_number'],
@@ -4144,7 +4180,6 @@ class _AssignSubjectsSetupPage extends StatefulWidget {
   final Map<String, dynamic> classRow;
   final Map<String, dynamic> setupPayload;
   final List<AcademicYearModel> academicYears;
-  final List<StaffModel> staff;
   final List<Map<String, dynamic>> initialSubjects;
   final List<Map<String, dynamic>> initialGradeSubjects;
   final List<Map<String, dynamic>> initialStaffSubjects;
@@ -4153,7 +4188,6 @@ class _AssignSubjectsSetupPage extends StatefulWidget {
     required this.classRow,
     required this.setupPayload,
     required this.academicYears,
-    required this.staff,
     required this.initialSubjects,
     required this.initialGradeSubjects,
     required this.initialStaffSubjects,
@@ -4298,68 +4332,11 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         builder: (_) => _AddSelectSubjectSetupPage(
           classRow: widget.classRow,
           mappedSubjectIds: _mappedSubjects.map(_subjectId).toSet(),
-          staff: widget.staff,
         ),
       ),
     );
     if (changed == true) {
       await _load();
-      await _promptRegenerateTimetable();
-    }
-  }
-
-  Future<void> _setTeacher(
-    Map<String, dynamic> subject,
-    String teacherId,
-  ) async {
-    final subjectId = _subjectId(subject);
-    if (subjectId.isEmpty || _saving) return;
-    final assignment = _staffSubjectFor(subjectId);
-    final assignmentId = _classText(assignment['id']);
-    setState(() => _saving = true);
-    try {
-      if (teacherId.isEmpty && assignmentId.isNotEmpty) {
-        await BackendApiClient.instance.updatePrincipalClassSetup(
-          sectionId: _sectionId,
-          gradeId: _gradeId,
-          academicYearId: _academicYearId,
-          sectionName: _sectionName,
-          capacity: _classInt(widget.classRow['capacity'], fallback: 40),
-          classTeacherId: _classText(widget.classRow['class_teacher_id']),
-          subjectMappings: [
-            {
-              'subject_id': subjectId,
-              'staff_subject_id': assignmentId,
-              'delete': true,
-            },
-          ],
-        );
-      } else {
-        await BackendApiClient.instance.savePrincipalSubjectMapping(
-          subjectId: subjectId,
-          academicYearId: _academicYearId,
-          gradeId: _gradeId,
-          sectionId: _sectionId,
-          teacherId: teacherId,
-          assignmentId: assignmentId,
-          periodsPerWeek: _classInt(
-            _gradeSubjectFor(subjectId)['periods_per_week'],
-          ),
-          isPrimary: true,
-        );
-      }
-      await _load();
-      await _promptRegenerateTimetable();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to save teacher assignment: $error'),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -4388,7 +4365,6 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ],
       );
       await _load();
-      await _promptRegenerateTimetable();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -4476,70 +4452,6 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     }
   }
 
-  Future<void> _promptRegenerateTimetable() async {
-    if (!mounted || _sectionId.isEmpty || _academicYearId.isEmpty) return;
-    final regenerate = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Regenerate timetable?'),
-        content: Text(
-          'Subject setup for $_className changed. Regenerate now so teacher subjects and teacher timetable stay in sync.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Later'),
-          ),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.auto_awesome_rounded),
-            label: const Text('Regenerate'),
-          ),
-        ],
-      ),
-    );
-    if (regenerate == true) {
-      await _regenerateTimetable();
-    }
-  }
-
-  Future<void> _regenerateTimetable() async {
-    setState(() => _saving = true);
-    try {
-      final terms = await BackendApiClient.instance.getTerms(_academicYearId);
-      final termId = terms.isEmpty ? '' : _classText(terms.first['id']);
-      if (termId.isEmpty) {
-        throw Exception('Create a term for this academic year first.');
-      }
-      final response = await BackendApiClient.instance.generateSmartTimetable(
-        sectionId: _sectionId,
-        academicYearId: _academicYearId,
-        termId: termId,
-      );
-      if (!mounted) return;
-      final created = _classInt(response['created']);
-      final replaced = _classInt(response['deleted']);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Timetable regenerated for $_className. $created slots created, $replaced old slots replaced.',
-          ),
-          backgroundColor: context.appTheme.success,
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to regenerate timetable: $error'),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     assert(_classHubSetupTruth.isNotEmpty);
@@ -4551,7 +4463,8 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
           children: [
             _SetupFlowHeader(
               title: 'Assign Subjects',
-              subtitle: 'Add subjects and assign teachers for $_className',
+              subtitle:
+                  'Add class subjects. Class teacher and co-teacher teach these subjects.',
               icon: Icons.menu_book_rounded,
             ),
             Expanded(
@@ -4616,17 +4529,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
                                         ),
                                         child: _AssignedSubjectTile(
                                           subject: subject,
-                                          staff: widget.staff,
-                                          teacherId: _safeTeacherId(
-                                            _classText(
-                                              _staffSubjectFor(
-                                                _subjectId(subject),
-                                              )['staff_id'],
-                                            ),
-                                          ),
                                           busy: _saving,
-                                          onTeacherChanged: (teacherId) =>
-                                              _setTeacher(subject, teacherId),
                                           onEdit: () => _editSubject(subject),
                                           onRemove: () =>
                                               _removeSubject(subject),
@@ -4661,10 +4564,6 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ),
       ),
     );
-  }
-
-  String _safeTeacherId(String teacherId) {
-    return widget.staff.any((staff) => staff.id == teacherId) ? teacherId : '';
   }
 
   String _academicYearLabel() {
@@ -5366,12 +5265,10 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
 class _AddSelectSubjectSetupPage extends StatefulWidget {
   final Map<String, dynamic> classRow;
   final Set<String> mappedSubjectIds;
-  final List<StaffModel> staff;
 
   const _AddSelectSubjectSetupPage({
     required this.classRow,
     required this.mappedSubjectIds,
-    required this.staff,
   });
 
   @override
@@ -5384,7 +5281,6 @@ class _AddSelectSubjectSetupPageState
   bool _loading = true;
   String? _error;
   String _query = '';
-  String _typeFilter = 'All';
   String _addingSubjectId = '';
   List<Map<String, dynamic>> _subjects = [];
 
@@ -5429,32 +5325,15 @@ class _AddSelectSubjectSetupPageState
       if (subjectId.isEmpty || widget.mappedSubjectIds.contains(subjectId)) {
         return false;
       }
-      final type = _classText(subject['subject_type'], fallback: 'core');
-      final matchesType =
-          _typeFilter == 'All' ||
-          type.toLowerCase() == _typeFilter.toLowerCase();
       final matchesSearch =
           query.isEmpty || _subjectSearchText(subject).contains(query);
-      return matchesType && matchesSearch;
+      return matchesSearch;
     }).toList();
     rows.sort(
       (left, right) =>
           _subjectName(left).toLowerCase().compareTo(_subjectName(right)),
     );
     return rows;
-  }
-
-  List<String> get _typeOptions {
-    final values = <String>{'All'};
-    for (final subject in _subjects) {
-      final type = _classText(subject['subject_type']);
-      if (type.isNotEmpty) values.add(type);
-    }
-    return values.toList()..sort((left, right) {
-      if (left == 'All') return -1;
-      if (right == 'All') return 1;
-      return left.compareTo(right);
-    });
   }
 
   Future<void> _addSubject(Map<String, dynamic> subject) async {
@@ -5467,7 +5346,6 @@ class _AddSelectSubjectSetupPageState
         academicYearId: _academicYearId,
         gradeId: _gradeId,
         sectionId: _sectionId,
-        teacherId: '',
         periodsPerWeek: 0,
         isPrimary: true,
       );
@@ -5523,43 +5401,12 @@ class _AddSelectSubjectSetupPageState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  final search = TextField(
-                                    onChanged: (value) =>
-                                        setState(() => _query = value),
-                                    decoration: _plainSearchDecoration(
-                                      'Search subject by name or code',
-                                    ),
-                                  );
-                                  final filter = _SubjectFilterButton(
-                                    options: _typeOptions,
-                                    selected: _typeFilter,
-                                    onSelected: (value) =>
-                                        setState(() => _typeFilter = value),
-                                  );
-                                  if (constraints.maxWidth < 330) {
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        search,
-                                        const SizedBox(height: 10),
-                                        Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: filter,
-                                        ),
-                                      ],
-                                    );
-                                  }
-                                  return Row(
-                                    children: [
-                                      Expanded(child: search),
-                                      const SizedBox(width: 12),
-                                      filter,
-                                    ],
-                                  );
-                                },
+                              TextField(
+                                onChanged: (value) =>
+                                    setState(() => _query = value),
+                                decoration: _plainSearchDecoration(
+                                  'Search subject by name or code',
+                                ),
                               ),
                               const SizedBox(height: 20),
                               _SectionTitleWithCount(
@@ -5622,21 +5469,10 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _codeController = TextEditingController();
-  final _creditsController = TextEditingController(text: '0');
-  String _type = 'Core';
-  String _department = 'Academics';
   String _subjectColor = '#1E63F3';
   bool _saving = false;
   String? _error;
 
-  static const _types = ['Core', 'Elective', 'Language', 'Activity'];
-  static const _departments = [
-    'Academics',
-    'Languages',
-    'Arts',
-    'Sports',
-    'Technology',
-  ];
   static const _colors = [
     '#1E63F3',
     '#40C46D',
@@ -5656,7 +5492,6 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
   void dispose() {
     _nameController.dispose();
     _codeController.dispose();
-    _creditsController.dispose();
     super.dispose();
   }
 
@@ -5670,9 +5505,6 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
       final subject = await BackendApiClient.instance.createRaw('/subjects', {
         'subject_name': _nameController.text.trim(),
         'subject_code': _codeController.text.trim(),
-        'subject_type': _type.toLowerCase(),
-        'department_name': _department,
-        'credit_hours': double.tryParse(_creditsController.text.trim()) ?? 0,
         'subject_color': _subjectColor,
       });
       final subjectId = _subjectId(subject);
@@ -5684,7 +5516,6 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
         academicYearId: _academicYearId,
         gradeId: _gradeId,
         sectionId: _sectionId,
-        teacherId: '',
         periodsPerWeek: 0,
         isPrimary: true,
       );
@@ -5765,55 +5596,16 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
                                         ? 'Code is required'
                                         : null,
                                   ),
-                                  _SimpleSetupDropdown(
-                                    label: 'Type',
-                                    required: true,
-                                    value: _type,
-                                    values: _types,
-                                    icon: Icons.layers_outlined,
-                                    iconColor: const Color(0xFF16A34A),
-                                    iconTone: const Color(0xFFEAFBF0),
+                                  _SubjectColorPicker(
+                                    selected: _subjectColor,
+                                    colors: _colors,
                                     enabled: !_saving,
                                     onChanged: (value) =>
-                                        setState(() => _type = value),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              _ClassSetupTwoColumnRow(
-                                children: [
-                                  _SimpleSetupDropdown(
-                                    label: 'Department',
-                                    required: true,
-                                    value: _department,
-                                    values: _departments,
-                                    icon: Icons.account_balance_outlined,
-                                    iconColor: const Color(0xFFF59E0B),
-                                    iconTone: const Color(0xFFFFF7E8),
-                                    enabled: !_saving,
-                                    onChanged: (value) =>
-                                        setState(() => _department = value),
-                                  ),
-                                  _ClassSetupInputField(
-                                    label: 'Credits',
-                                    controller: _creditsController,
-                                    hint: '0',
-                                    icon: Icons.stars_rounded,
-                                    iconColor: const Color(0xFFE11D48),
-                                    iconTone: const Color(0xFFFFEAF1),
-                                    enabled: !_saving,
-                                    keyboardType: TextInputType.number,
+                                        setState(() => _subjectColor = value),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 20),
-                              _SubjectColorPicker(
-                                selected: _subjectColor,
-                                colors: _colors,
-                                enabled: !_saving,
-                                onChanged: (value) =>
-                                    setState(() => _subjectColor = value),
-                              ),
                               if (_error != null) ...[
                                 const SizedBox(height: 16),
                                 _SetupErrorBox(message: _error!),
@@ -7493,20 +7285,14 @@ class _RoundAddButton extends StatelessWidget {
 
 class _AssignedSubjectTile extends StatelessWidget {
   final Map<String, dynamic> subject;
-  final List<StaffModel> staff;
-  final String teacherId;
   final bool busy;
-  final ValueChanged<String> onTeacherChanged;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
   final VoidCallback onDelete;
 
   const _AssignedSubjectTile({
     required this.subject,
-    required this.staff,
-    required this.teacherId,
     required this.busy,
-    required this.onTeacherChanged,
     required this.onEdit,
     required this.onRemove,
     required this.onDelete,
@@ -7514,9 +7300,6 @@ class _AssignedSubjectTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeTeacherId = staff.any((teacher) => teacher.id == teacherId)
-        ? teacherId
-        : '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
@@ -7527,39 +7310,12 @@ class _AssignedSubjectTile extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final subjectHeader = Row(
-                  children: [
-                    _SubjectIconBadge(subject: subject),
-                    const SizedBox(width: 12),
-                    Expanded(child: _SubjectNameCode(subject: subject)),
-                  ],
-                );
-                final dropdown = _TeacherAssignmentDropdown(
-                  staff: staff,
-                  value: safeTeacherId,
-                  enabled: !busy,
-                  onChanged: onTeacherChanged,
-                );
-                if (constraints.maxWidth < 390) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      subjectHeader,
-                      const SizedBox(height: 10),
-                      dropdown,
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Expanded(child: subjectHeader),
-                    const SizedBox(width: 10),
-                    SizedBox(width: 174, child: dropdown),
-                  ],
-                );
-              },
+            child: Row(
+              children: [
+                _SubjectIconBadge(subject: subject),
+                const SizedBox(width: 12),
+                Expanded(child: _SubjectNameCode(subject: subject)),
+              ],
             ),
           ),
           PopupMenuButton<String>(
@@ -7598,19 +7354,8 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _codeController;
-  late final TextEditingController _creditsController;
-  late String _type;
-  late String _department;
   late String _subjectColor;
 
-  static const _types = ['Core', 'Elective', 'Language', 'Activity'];
-  static const _departments = [
-    'Academics',
-    'Languages',
-    'Arts',
-    'Sports',
-    'Technology',
-  ];
   static const _colors = _CreateSubjectSetupPageState._colors;
 
   @override
@@ -7619,13 +7364,6 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
     final subject = widget.subject;
     _nameController = TextEditingController(text: _subjectName(subject));
     _codeController = TextEditingController(text: _subjectCode(subject));
-    _creditsController = TextEditingController(
-      text: _formatAmountInput(_classNum(subject['credit_hours'])),
-    );
-    _type = _titleCase(_classText(subject['subject_type'], fallback: 'core'));
-    if (!_types.contains(_type)) _type = 'Core';
-    _department = _classText(subject['department_name'], fallback: 'Academics');
-    if (!_departments.contains(_department)) _department = 'Academics';
     _subjectColor = _classText(subject['subject_color'], fallback: '#1E63F3');
     if (!_colors.contains(_subjectColor)) _subjectColor = '#1E63F3';
   }
@@ -7634,7 +7372,6 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
   void dispose() {
     _nameController.dispose();
     _codeController.dispose();
-    _creditsController.dispose();
     super.dispose();
   }
 
@@ -7643,9 +7380,6 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
     Navigator.pop(context, {
       'subject_name': _nameController.text.trim(),
       'subject_code': _codeController.text.trim(),
-      'subject_type': _type.toLowerCase(),
-      'department_name': _department,
-      'credit_hours': double.tryParse(_creditsController.text.trim()) ?? 0,
       'subject_color': _subjectColor,
     });
   }
@@ -7689,53 +7423,16 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
                   validator: (value) =>
                       _classText(value).isEmpty ? 'Code is required' : null,
                 ),
-                _SimpleSetupDropdown(
-                  label: 'Type',
-                  required: true,
-                  value: _type,
-                  values: _types,
-                  icon: Icons.layers_outlined,
-                  iconColor: const Color(0xFF16A34A),
-                  iconTone: const Color(0xFFEAFBF0),
+                _SubjectColorPicker(
+                  selected: _subjectColor,
+                  colors: _colors,
                   enabled: true,
-                  onChanged: (value) => setState(() => _type = value),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _ClassSetupTwoColumnRow(
-              children: [
-                _SimpleSetupDropdown(
-                  label: 'Department',
-                  required: true,
-                  value: _department,
-                  values: _departments,
-                  icon: Icons.account_balance_outlined,
-                  iconColor: const Color(0xFFF59E0B),
-                  iconTone: const Color(0xFFFFF7E8),
-                  enabled: true,
-                  onChanged: (value) => setState(() => _department = value),
-                ),
-                _ClassSetupInputField(
-                  label: 'Credits',
-                  controller: _creditsController,
-                  hint: '0',
-                  icon: Icons.stars_rounded,
-                  iconColor: const Color(0xFFE11D48),
-                  iconTone: const Color(0xFFFFEAF1),
-                  enabled: true,
-                  keyboardType: TextInputType.number,
+                  onChanged: (value) => setState(() => _subjectColor = value),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            _SubjectColorPicker(
-              selected: _subjectColor,
-              colors: _colors,
-              enabled: true,
-              onChanged: (value) => setState(() => _subjectColor = value),
-            ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 6),
             _SetupPrimaryButton(
               label: 'Save Subject',
               icon: Icons.save_rounded,
@@ -7745,93 +7442,6 @@ class _EditSubjectSetupSheetState extends State<_EditSubjectSetupSheet> {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _TeacherAssignmentDropdown extends StatelessWidget {
-  final List<StaffModel> staff;
-  final String value;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  const _TeacherAssignmentDropdown({
-    required this.staff,
-    required this.value,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: _CreateClassSetupPageState._line),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
-          onChanged: enabled ? (next) => onChanged(next ?? '') : null,
-          items: [
-            const DropdownMenuItem(
-              value: '',
-              child: _TeacherMiniLabel(name: 'Assign teacher'),
-            ),
-            ...staff.map(
-              (teacher) => DropdownMenuItem(
-                value: teacher.id,
-                child: _TeacherMiniLabel(name: teacher.fullName),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _TeacherMiniLabel extends StatelessWidget {
-  final String name;
-
-  const _TeacherMiniLabel({required this.name});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        CircleAvatar(
-          radius: 12,
-          backgroundColor: const Color(0xFFFFF1E8),
-          child: Text(
-            _initials(name),
-            style: GoogleFonts.dmSans(
-              color: const Color(0xFF9A3412),
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.dmSans(
-              color: _CreateClassSetupPageState._ink,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -7969,7 +7579,7 @@ class _SubjectSetupTip extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: Text(
-              'You can add subjects and assign teachers now.\nYou can edit or add more later from class settings.',
+              'Class teacher and co-teacher teach these subjects.\nYou can edit or add more later from class settings.',
               style: GoogleFonts.dmSans(
                 color: _CreateClassSetupPageState._ink,
                 fontSize: 14,
@@ -8108,53 +7718,6 @@ class _SubjectSetupCardHeader extends StatelessWidget {
   }
 }
 
-class _SimpleSetupDropdown extends StatelessWidget {
-  final String label;
-  final bool required;
-  final String value;
-  final List<String> values;
-  final IconData icon;
-  final Color iconColor;
-  final Color iconTone;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  const _SimpleSetupDropdown({
-    required this.label,
-    this.required = false,
-    required this.value,
-    required this.values,
-    required this.icon,
-    required this.iconColor,
-    required this.iconTone,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _ClassSetupFieldShell(
-      label: label,
-      required: required,
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        isExpanded: true,
-        icon: const Icon(Icons.keyboard_arrow_down_rounded),
-        decoration: _fieldDecoration(
-          hint: label,
-          icon: icon,
-          iconColor: iconColor,
-          iconTone: iconTone,
-        ),
-        items: values
-            .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-            .toList(),
-        onChanged: enabled ? (next) => onChanged(next ?? value) : null,
-      ),
-    );
-  }
-}
-
 class _SubjectColorPicker extends StatelessWidget {
   final String selected;
   final List<String> colors;
@@ -8215,45 +7778,6 @@ class _SubjectColorPicker extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _SubjectFilterButton extends StatelessWidget {
-  final List<String> options;
-  final String selected;
-  final ValueChanged<String> onSelected;
-
-  const _SubjectFilterButton({
-    required this.options,
-    required this.selected,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'Filter subjects',
-      initialValue: selected,
-      onSelected: onSelected,
-      itemBuilder: (_) => [
-        for (final option in options)
-          PopupMenuItem(value: option, child: Text(option)),
-      ],
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: context.appTheme.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: _CreateClassSetupPageState._line),
-        ),
-        child: const Icon(
-          Icons.tune_rounded,
-          color: Color(0xFF475569),
-          size: 22,
-        ),
-      ),
     );
   }
 }
@@ -8508,18 +8032,6 @@ Color _hexColor(String value) {
   return _CreateClassSetupPageState._primary;
 }
 
-String _initials(String value) {
-  final parts = value
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts.first.characters.first.toUpperCase();
-  return '${parts.first.characters.first}${parts.last.characters.first}'
-      .toUpperCase();
-}
-
 TextStyle get _sectionTitleStyle => GoogleFonts.dmSans(
   color: _CreateClassSetupPageState._ink,
   fontSize: 16,
@@ -8613,20 +8125,6 @@ String _formatBackendDate(DateTime value) {
   final month = value.month.toString().padLeft(2, '0');
   final day = value.day.toString().padLeft(2, '0');
   return '${value.year}-$month-$day';
-}
-
-String _titleCase(String value) {
-  final text = value.trim();
-  if (text.isEmpty) return text;
-  return text
-      .split(RegExp(r'[\s_]+'))
-      .where((part) => part.isNotEmpty)
-      .map(
-        (part) => part.length == 1
-            ? part.toUpperCase()
-            : '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
-      )
-      .join(' ');
 }
 
 String _formatCurrency(num value) {

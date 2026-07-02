@@ -55,20 +55,20 @@ void main() {
     final timetable = File(
       'lib/features/academics/presentation/screens/parent_timetable_screen/parent_timetable_screen.dart',
     ).readAsStringSync();
-    final parentSelf = File(
-      'school-backend/internal/handlers/parent_self.go',
-    ).readAsStringSync();
     final routes = File('lib/routes/app_routes.dart').readAsStringSync();
-    final backendRoutes = readBackendRouteSources();
+    final supabaseTimetable = File(
+      'supabase/functions/api/handlers/timetable.ts',
+    ).readAsStringSync();
 
-    expect(dashboard, contains("api.getDashboard('parent')"));
-    expect(dashboard, contains('api.getMyStudents()'));
+    expect(dashboard, contains("api.getDashboard('parent'"));
+    expect(dashboard, contains('api.getMyStudents('));
     expect(attendance, contains('getStudentAttendanceSummary'));
     expect(attendance, isNot(contains('statusMap')));
     expect(homework, contains('getHomework('));
     expect(homework, contains('getHomeworkSubmissions('));
     expect(homeworkSubmit, contains('submitHomework('));
-    expect(fees, contains('getInvoices(studentId: studentId)'));
+    expect(fees, contains('getInvoices('));
+    expect(fees, contains('studentId: studentId'));
     expect(fees, contains('getParentPaymentRequests('));
     expect(routes, isNot(contains('parentAcademicProgress')));
     expect(leaveForm, contains('getLeaveTypes()'));
@@ -79,22 +79,10 @@ void main() {
       leaveForm,
       isNot(contains('No leave types are configured for this school account.')),
     );
-    expect(timetable, contains('/me/timetable?student_id='));
+    expect(timetable, contains('getTimetableSlots('));
+    expect(timetable, contains("child['current_section_id']"));
     expect(timetable, contains("c['id'] ?? c['student_id']"));
-    expect(
-      backendRoutes,
-      contains('me.GET("/timetable", middleware.RBACMiddleware("Parent")'),
-    );
-    expect(
-      parentSelf,
-      contains('func (h *ParentSelfHandler) GetMyChildTimetable'),
-    );
-    expect(parentSelf, contains('scopedTimetableSlotQuery(c)'));
-    expect(parentSelf, contains('timetable_slots.section_id'));
-    expect(
-      parentSelf,
-      isNot(contains('Where("school_id = ? AND section_id = ?"')),
-    );
+    expect(supabaseTimetable, contains('url.searchParams.get("section_id")'));
   });
 
   test('parent dashboard puts media-rich school feed before utility actions', () {

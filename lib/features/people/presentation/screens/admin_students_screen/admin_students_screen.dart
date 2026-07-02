@@ -47,8 +47,12 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
 
   Future<void> _refreshFromBackend() async {
     try {
-      final grades = await BackendApiClient.instance.getGrades();
-      final sections = await BackendApiClient.instance.getSections();
+      final grades = await BackendApiClient.instance.getGrades(
+        forceRefresh: true,
+      );
+      final sections = await BackendApiClient.instance.getSections(
+        forceRefresh: true,
+      );
       final students = await BackendApiClient.instance.getStudents(
         page: 1,
         pageSize: 500,
@@ -615,10 +619,27 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                 currentSectionId: payload['current_section_id'],
                 status: 'active',
               );
+              var parentUserId = values.parentUserId;
+              if (values.shouldCreateParentLogin) {
+                final parent = await BackendApiClient.instance.createUser(
+                  username: values.parentUsername,
+                  password: values.parentPassword,
+                  role: 'Parent',
+                  fullName: values.parentName,
+                  email: values.parentEmail,
+                  phone: values.parentPhone,
+                  isActive: true,
+                );
+                parentUserId = parent.id;
+              }
               await BackendApiClient.instance.setStudentParent(
                 studentId: created.id,
-                parentUserId: values.parentUserId,
+                parentUserId: parentUserId,
               );
+              if (values.shouldCreateParentLogin &&
+                  values.parentName.trim().isNotEmpty) {
+                await _createGuardianProfileForStudent(created.id, values);
+              }
             } else {
               await _requestStudentApproval(
                 action: 'create',
@@ -670,10 +691,30 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
                 currentSectionId: payload['current_section_id'],
                 status: payload['status'] ?? 'active',
               );
+              var parentUserId = values.parentUserId;
+              if (values.shouldCreateParentLogin) {
+                final parent = await BackendApiClient.instance.createUser(
+                  username: values.parentUsername,
+                  password: values.parentPassword,
+                  role: 'Parent',
+                  fullName: values.parentName,
+                  email: values.parentEmail,
+                  phone: values.parentPhone,
+                  isActive: true,
+                );
+                parentUserId = parent.id;
+              }
               await BackendApiClient.instance.setStudentParent(
                 studentId: (s['id'] ?? '').toString(),
-                parentUserId: values.parentUserId,
+                parentUserId: parentUserId,
               );
+              if (values.shouldCreateParentLogin &&
+                  values.parentName.trim().isNotEmpty) {
+                await _createGuardianProfileForStudent(
+                  (s['id'] ?? '').toString(),
+                  values,
+                );
+              }
             } else {
               await _requestStudentApproval(
                 action: 'update',
@@ -936,6 +977,31 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       'parent_user_id': parentUserId?.trim() ?? '',
     });
   }
+
+  Future<void> _createGuardianProfileForStudent(
+    String studentId,
+    _StudentFormValues values,
+  ) async {
+    final cleanStudentId = studentId.trim();
+    if (cleanStudentId.isEmpty) return;
+    final created = await BackendApiClient.instance.createRaw('/guardians', {
+      'student_id': cleanStudentId,
+      'full_name': values.parentName.trim(),
+      'relationship': 'parent',
+      'phone': values.parentPhone.trim(),
+      'email': values.parentEmail.trim(),
+      'is_primary': true,
+    });
+    final record = created['data'] is Map ? created['data'] as Map : created;
+    final guardianId = '${record['id'] ?? ''}'.trim();
+    if (guardianId.isEmpty) return;
+    await BackendApiClient.instance.linkGuardianToStudent(
+      studentId: cleanStudentId,
+      guardianId: guardianId,
+      isPrimary: true,
+      canPickup: true,
+    );
+  }
 }
 
 class _StudentActionResult {
@@ -952,6 +1018,12 @@ class _StudentFormValues {
   final String gender;
   final String? sectionId;
   final String parentUserId;
+  final bool shouldCreateParentLogin;
+  final String parentName;
+  final String parentUsername;
+  final String parentPassword;
+  final String parentEmail;
+  final String parentPhone;
 
   const _StudentFormValues({
     required this.name,
@@ -961,6 +1033,12 @@ class _StudentFormValues {
     required this.gender,
     required this.sectionId,
     required this.parentUserId,
+    required this.shouldCreateParentLogin,
+    required this.parentName,
+    required this.parentUsername,
+    required this.parentPassword,
+    required this.parentEmail,
+    required this.parentPhone,
   });
 }
 
@@ -990,9 +1068,15 @@ class _StudentFormPageState extends State<_StudentFormPage> {
   late final TextEditingController _admissionCtrl;
   late final TextEditingController _codeCtrl;
   late final TextEditingController _dobCtrl;
+  late final TextEditingController _parentNameCtrl;
+  late final TextEditingController _parentUsernameCtrl;
+  late final TextEditingController _parentPasswordCtrl;
+  late final TextEditingController _parentEmailCtrl;
+  late final TextEditingController _parentPhoneCtrl;
   late String _selectedGender;
   late String? _selectedSectionId;
   late String _selectedParentId;
+  bool _createParentLogin = false;
   bool _saving = false;
   String? _errorText;
 
@@ -1012,6 +1096,11 @@ class _StudentFormPageState extends State<_StudentFormPage> {
     _dobCtrl = TextEditingController(
       text: student?['dob']?.toString() ?? '2010-01-01',
     );
+    _parentNameCtrl = TextEditingController();
+    _parentUsernameCtrl = TextEditingController();
+    _parentPasswordCtrl = TextEditingController();
+    _parentEmailCtrl = TextEditingController();
+    _parentPhoneCtrl = TextEditingController();
     _selectedGender = _normalizeGender(student?['gender']?.toString());
     _selectedSectionId = _normalizeSectionId(
       student?['sectionId']?.toString() ?? widget.defaultSectionId,
@@ -1025,6 +1114,11 @@ class _StudentFormPageState extends State<_StudentFormPage> {
     _admissionCtrl.dispose();
     _codeCtrl.dispose();
     _dobCtrl.dispose();
+    _parentNameCtrl.dispose();
+    _parentUsernameCtrl.dispose();
+    _parentPasswordCtrl.dispose();
+    _parentEmailCtrl.dispose();
+    _parentPhoneCtrl.dispose();
     super.dispose();
   }
 
@@ -1056,6 +1150,16 @@ class _StudentFormPageState extends State<_StudentFormPage> {
       setState(() => _errorText = 'Student name is required');
       return;
     }
+    if (_createParentLogin &&
+        (_parentNameCtrl.text.trim().isEmpty ||
+            _parentUsernameCtrl.text.trim().isEmpty ||
+            _parentPasswordCtrl.text.trim().length < 8)) {
+      setState(
+        () => _errorText =
+            'Parent name, username, and an 8+ character password are required',
+      );
+      return;
+    }
     setState(() {
       _saving = true;
       _errorText = null;
@@ -1069,7 +1173,13 @@ class _StudentFormPageState extends State<_StudentFormPage> {
           dateOfBirth: _dobCtrl.text,
           gender: _selectedGender,
           sectionId: _selectedSectionId,
-          parentUserId: _selectedParentId,
+          parentUserId: _createParentLogin ? '' : _selectedParentId,
+          shouldCreateParentLogin: _createParentLogin,
+          parentName: _parentNameCtrl.text.trim(),
+          parentUsername: _parentUsernameCtrl.text.trim(),
+          parentPassword: _parentPasswordCtrl.text.trim(),
+          parentEmail: _parentEmailCtrl.text.trim(),
+          parentPhone: _parentPhoneCtrl.text.trim(),
         ),
       );
       if (!mounted) return;
@@ -1220,11 +1330,83 @@ class _StudentFormPageState extends State<_StudentFormPage> {
                         ),
                       ),
                     ],
-                    onChanged: _saving
+                    onChanged: _saving || _createParentLogin
                         ? null
                         : (value) =>
                               setState(() => _selectedParentId = value ?? ''),
                   ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    value: _createParentLogin,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Create Parent Login with Password',
+                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      'Use this when the parent account does not exist yet.',
+                      style: GoogleFonts.dmSans(fontSize: 12),
+                    ),
+                    onChanged: _saving
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _createParentLogin = value;
+                              if (value) _selectedParentId = '';
+                            });
+                          },
+                  ),
+                  if (_createParentLogin) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _parentNameCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Name',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _parentUsernameCtrl,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Login Username',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _parentPasswordCtrl,
+                      textInputAction: TextInputAction.next,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Login Password',
+                        helperText: 'Minimum 8 characters',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _parentEmailCtrl,
+                      textInputAction: TextInputAction.next,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Email (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _parentPhoneCtrl,
+                      textInputAction: TextInputAction.done,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Phone (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
                   if (_errorText != null) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -1447,38 +1629,41 @@ class _StudentDocumentUploadPage extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Card(
-                  child: ListTile(
-                    leading: Icon(
-                      uploaded
-                          ? Icons.check_circle_rounded
-                          : Icons.upload_file_rounded,
-                      color: uploaded
-                          ? context.appTheme.success
-                          : context.appTheme.muted,
-                    ),
-                    title: Text(
-                      document,
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-                    ),
-                    subtitle: Text(
-                      uploaded
-                          ? 'Already recorded'
-                          : 'Upload blocked until backend file storage is implemented',
-                      style: GoogleFonts.dmSans(fontSize: 12),
-                    ),
-                    trailing: uploaded
-                        ? Icon(
-                            Icons.verified_rounded,
-                            color: context.appTheme.success,
-                          )
-                        : FilledButton.icon(
-                            onPressed: null,
-                            icon: const Icon(
-                              Icons.lock_outline_rounded,
-                              size: 18,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: Icon(
+                        uploaded
+                            ? Icons.check_circle_rounded
+                            : Icons.upload_file_rounded,
+                        color: uploaded
+                            ? context.appTheme.success
+                            : context.appTheme.muted,
+                      ),
+                      title: Text(
+                        document,
+                        style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        uploaded
+                            ? 'Already recorded'
+                            : 'Upload blocked until backend file storage is implemented',
+                        style: GoogleFonts.dmSans(fontSize: 12),
+                      ),
+                      trailing: uploaded
+                          ? Icon(
+                              Icons.verified_rounded,
+                              color: context.appTheme.success,
+                            )
+                          : FilledButton.icon(
+                              onPressed: null,
+                              icon: const Icon(
+                                Icons.lock_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('Blocked'),
                             ),
-                            label: const Text('Blocked'),
-                          ),
+                    ),
                   ),
                 ),
               );

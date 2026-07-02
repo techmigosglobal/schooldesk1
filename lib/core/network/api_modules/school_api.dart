@@ -69,14 +69,20 @@ extension BackendSchoolApi on BackendApiClient {
 
   // ─── Academic Years ─────────────────────────────────────────────────────────
 
-  Future<List<AcademicYearModel>> getAcademicYears({String? schoolId}) async {
+  Future<List<AcademicYearModel>> getAcademicYears({
+    String? schoolId,
+    bool forceRefresh = false,
+  }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (schoolId != null) queryParams['school_id'] = schoolId;
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
+      }
 
       final response = await _dio.get(
         '/academic-years',
-        queryParameters: queryParams,
+        queryParameters: queryParams.isEmpty ? null : queryParams,
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
@@ -162,12 +168,21 @@ extension BackendSchoolApi on BackendApiClient {
 
   // ─── Grades ─────────────────────────────────────────────────────────────────
 
-  Future<List<GradeModel>> getGrades({String? schoolId}) async {
+  Future<List<GradeModel>> getGrades({
+    String? schoolId,
+    bool forceRefresh = false,
+  }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (schoolId != null) queryParams['school_id'] = schoolId;
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
+      }
 
-      final response = await _dio.get('/grades', queryParameters: queryParams);
+      final response = await _dio.get(
+        '/grades',
+        queryParameters: queryParams.isEmpty ? null : queryParams,
+      );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {
         return (data['data'] as List)
@@ -210,15 +225,19 @@ extension BackendSchoolApi on BackendApiClient {
   Future<List<SectionModel>> getSections({
     String? gradeId,
     String? yearId,
+    bool forceRefresh = false,
   }) async {
     try {
       final queryParams = <String, dynamic>{};
       if (gradeId != null) queryParams['grade_id'] = gradeId;
       if (yearId != null) queryParams['academic_year_id'] = yearId;
+      if (forceRefresh) {
+        queryParams['refresh_nonce'] = DateTime.now().millisecondsSinceEpoch;
+      }
 
       final response = await _dio.get(
         '/sections',
-        queryParameters: queryParams,
+        queryParameters: queryParams.isEmpty ? null : queryParams,
       );
       final data = response.data as Map<String, dynamic>;
       if (data['success'] == true) {

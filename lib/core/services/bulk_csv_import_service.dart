@@ -534,8 +534,6 @@ class BulkCsvImportService {
     final teacherCodes = _splitList(row.value('subject_teacher_staff_codes'));
     final teacherEmails = _splitList(row.value('subject_teacher_emails'));
     final periods = _splitList(row.value('periods_per_week'));
-    final maxMarks = _splitList(row.value('max_marks'));
-    final passMarks = _splitList(row.value('pass_marks'));
 
     return [
       for (var index = 0; index < names.length; index++)
@@ -549,10 +547,9 @@ class BulkCsvImportService {
             email: _at(teacherEmails, index),
           ),
           'periods_per_week': int.tryParse(_at(periods, index)) ?? 5,
-          'max_marks': int.tryParse(_at(maxMarks, index)) ?? 100,
-          'pass_marks': int.tryParse(_at(passMarks, index)) ?? 35,
           'is_mandatory': true,
           'is_primary': true,
+          // max_marks and pass_marks removed — not in Supabase schema
         },
     ];
   }
@@ -831,8 +828,6 @@ class BulkCsvImportService {
             'subject_teacher_staff_codes',
             'subject_teacher_emails',
             'periods_per_week',
-            'max_marks',
-            'pass_marks',
             'fee_categories',
             'fee_amounts',
             'fee_frequencies',
@@ -855,7 +850,7 @@ class BulkCsvImportService {
           ],
           aliases: _baseAliases,
           template:
-              'grade_name,grade_number,section_name,capacity,room_number,room_type,room_capacity,year_label,academic_year_id,term_id,term_name,class_teacher_id,class_teacher_staff_code,class_teacher_email,subject_names,subject_codes,subject_types,subject_departments,subject_teacher_staff_codes,subject_teacher_emails,periods_per_week,max_marks,pass_marks,fee_categories,fee_amounts,fee_frequencies,fee_due_days,fee_late_fines,working_days,periods_per_day,start_time,period_duration_minutes,gap_minutes,short_break_period,short_break_label,short_break_start_time,short_break_end_time,long_break_period,long_break_label,long_break_start_time,long_break_end_time,regenerate_scope\n5,5,A,40,5-A,classroom,40,2026-2027,,,Term 1,,T-101,,Mathematics;English,MATH;ENG,core;core,Academics;Languages,T-101;T-102,,6;5,100;100,35;35,Tuition;Transport,25000;8000,term;monthly,10;5,0;0,Mon;Tue;Wed;Thu;Fri,6,09:00,40,5,3,Interval,10:45,11:00,5,Lunch Break,12:20,12:50,true',
+              'grade_name,grade_number,section_name,capacity,room_number,room_type,room_capacity,year_label,academic_year_id,term_id,term_name,class_teacher_id,class_teacher_staff_code,class_teacher_email,subject_names,subject_codes,subject_types,subject_departments,subject_teacher_staff_codes,subject_teacher_emails,periods_per_week,fee_categories,fee_amounts,fee_frequencies,fee_due_days,fee_late_fines,working_days,periods_per_day,start_time,period_duration_minutes,gap_minutes,short_break_period,short_break_label,short_break_start_time,short_break_end_time,long_break_period,long_break_label,long_break_start_time,long_break_end_time,regenerate_scope\n5,5,A,40,5-A,classroom,40,2026-2027,,,Term 1,,T-101,,Mathematics;English,MATH;ENG,core;core,Academics;Languages,T-101;T-102,,6;5,Tuition;Transport,25000;8000,term;monthly,10;5,0;0,Mon;Tue;Wed;Thu;Fri,6,09:00,40,5,3,Interval,10:45,11:00,5,Lunch Break,12:20,12:50,true',
         );
       case BulkCsvImportTarget.classTimetables:
         return _CsvSchema(
@@ -953,8 +948,6 @@ class BulkCsvImportService {
     'long_break_start_time': ['long_break_start_time', 'lunch_start_time'],
     'long_break_end_time': ['long_break_end_time', 'lunch_end_time'],
     'regenerate_scope': ['regenerate_scope', 'replace_existing_timetable'],
-    'max_marks': ['max_marks'],
-    'pass_marks': ['pass_marks'],
     'fee_categories': ['fee_categories', 'fee_category_names', 'fees'],
     'fee_amounts': ['fee_amounts', 'amounts'],
     'fee_frequencies': ['fee_frequencies', 'fee_frequency'],

@@ -155,62 +155,6 @@ abstract class TablesMdFeeDto with _$TablesMdFeeDto {
 }
 
 @freezed
-abstract class ExamDto with _$ExamDto {
-  const factory ExamDto({
-    String? id,
-    @JsonKey(name: 'school_id') String? schoolId,
-    @JsonKey(name: 'academic_year_id') String? academicYearId,
-    @JsonKey(name: 'term_id') String? termId,
-    @JsonKey(name: 'exam_type_id') String? examTypeId,
-    @JsonKey(name: 'exam_name') String? examName,
-    @JsonKey(name: 'start_date') dynamic startDate,
-    @JsonKey(name: 'end_date') dynamic endDate,
-    @JsonKey(name: 'is_published') bool? isPublished,
-    @Default(<ExamScheduleDto>[]) List<ExamScheduleDto> schedules,
-  }) = _ExamDto;
-
-  factory ExamDto.fromJson(Map<String, dynamic> json) =>
-      _$ExamDtoFromJson(json);
-}
-
-@freezed
-abstract class ExamScheduleDto with _$ExamScheduleDto {
-  const factory ExamScheduleDto({
-    String? id,
-    @JsonKey(name: 'exam_id') String? examId,
-    @JsonKey(name: 'grade_id') String? gradeId,
-    @JsonKey(name: 'section_id') String? sectionId,
-    @JsonKey(name: 'subject_id') String? subjectId,
-    @JsonKey(name: 'exam_date') dynamic examDate,
-    @JsonKey(name: 'start_time') String? startTime,
-    @JsonKey(name: 'end_time') String? endTime,
-    @JsonKey(name: 'max_marks') int? maxMarks,
-    @JsonKey(name: 'pass_marks') int? passMarks,
-    @JsonKey(name: 'room_id') String? roomId,
-  }) = _ExamScheduleDto;
-
-  factory ExamScheduleDto.fromJson(Map<String, dynamic> json) =>
-      _$ExamScheduleDtoFromJson(json);
-}
-
-@freezed
-abstract class StudentMarkDto with _$StudentMarkDto {
-  const factory StudentMarkDto({
-    String? id,
-    @JsonKey(name: 'exam_schedule_id') String? examScheduleId,
-    @JsonKey(name: 'student_id') String? studentId,
-    @JsonKey(name: 'enrollment_id') String? enrollmentId,
-    @JsonKey(name: 'marks_obtained') num? marksObtained,
-    @JsonKey(name: 'grade_label') String? gradeLabel,
-    @JsonKey(name: 'is_absent') bool? isAbsent,
-    @JsonKey(name: 'is_exempted') bool? isExempted,
-  }) = _StudentMarkDto;
-
-  factory StudentMarkDto.fromJson(Map<String, dynamic> json) =>
-      _$StudentMarkDtoFromJson(json);
-}
-
-@freezed
 abstract class HomeworkDto with _$HomeworkDto {
   const factory HomeworkDto({
     String? id,

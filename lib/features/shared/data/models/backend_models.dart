@@ -100,9 +100,11 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) => LoginResponse(
-    token: json['token'] as String,
+    // Supabase issues 'access_token'; Go backend issued 'token'.
+    // Accept either for seamless blue-green transition.
+    token: (json['access_token'] as String? ?? json['token'] as String? ?? ''),
     refreshToken: json['refresh_token'] as String? ?? '',
-    expiresAt: json['expires_at'] as int,
+    expiresAt: json['expires_at'] as int? ?? 0,
     user: UserResponse.fromJson(json['user'] as Map<String, dynamic>),
   );
 }
@@ -623,30 +625,38 @@ class StudentModel {
     return '';
   }
 
-  factory StudentModel.fromJson(Map<String, dynamic> json) => StudentModel(
-    id: json['id'] as String,
-    schoolId: json['school_id'] as String? ?? '',
-    studentCode: json['student_code'] as String? ?? '',
-    admissionNumber: json['admission_number'] as String? ?? '',
-    firstName: json['first_name'] as String? ?? '',
-    lastName: json['last_name'] as String? ?? '',
-    dateOfBirth: json['date_of_birth'] as String?,
-    admissionDate: json['admission_date'] as String?,
-    gender: json['gender'] as String?,
-    currentSectionId: json['current_section_id'] as String?,
-    activeEnrollmentId: '${json['active_enrollment_id'] ?? ''}',
-    status: json['status'] as String? ?? 'active',
-    photoUrl: _photoUrlFromJson(json),
-    guardians: _asListMap(json['guardians']),
-    documents: _asListMap(json['documents']),
-    parentAccounts: _asListMap(json['parent_accounts']),
-    primaryGuardian: _asMap(json['primary_guardian']),
-    medicalRecord: _asMap(json['medical_record']),
-    currentSection: _asMap(json['current_section']),
-    attendanceSummary: _asMap(json['attendance_summary']),
-    feeSummary: _asMap(json['fee_summary']),
-    performanceSummary: _asMap(json['performance_summary']),
-  );
+  factory StudentModel.fromJson(Map<String, dynamic> json) {
+    final guardians = _guardianList(json);
+    final primaryGuardian = _asMap(json['primary_guardian']).isNotEmpty
+        ? _asMap(json['primary_guardian'])
+        : guardians.isNotEmpty
+        ? guardians.first
+        : const <String, dynamic>{};
+    return StudentModel(
+      id: json['id'] as String,
+      schoolId: json['school_id'] as String? ?? '',
+      studentCode: json['student_code'] as String? ?? '',
+      admissionNumber: json['admission_number'] as String? ?? '',
+      firstName: json['first_name'] as String? ?? '',
+      lastName: json['last_name'] as String? ?? '',
+      dateOfBirth: json['date_of_birth'] as String?,
+      admissionDate: json['admission_date'] as String?,
+      gender: json['gender'] as String?,
+      currentSectionId: json['current_section_id'] as String?,
+      activeEnrollmentId: '${json['active_enrollment_id'] ?? ''}',
+      status: json['status'] as String? ?? 'active',
+      photoUrl: _photoUrlFromJson(json),
+      guardians: guardians,
+      documents: _asListMap(json['documents']),
+      parentAccounts: _asListMap(json['parent_accounts']),
+      primaryGuardian: primaryGuardian,
+      medicalRecord: _asMap(json['medical_record']),
+      currentSection: _asMap(json['current_section']),
+      attendanceSummary: _asMap(json['attendance_summary']),
+      feeSummary: _asMap(json['fee_summary']),
+      performanceSummary: _asMap(json['performance_summary']),
+    );
+  }
 
   static List<Map<String, dynamic>> _asListMap(dynamic value) {
     if (value is! List) return const [];
@@ -660,6 +670,25 @@ class StudentModel {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return const {};
+  }
+
+  static List<Map<String, dynamic>> _guardianList(Map<String, dynamic> json) {
+    final direct = _asListMap(json['guardians']);
+    final joined = _asListMap(json['student_guardians'])
+        .map((row) => _asMap(row['guardian']))
+        .where((guardian) => guardian.isNotEmpty)
+        .toList();
+    final byId = <String, Map<String, dynamic>>{};
+    final withoutId = <Map<String, dynamic>>[];
+    for (final guardian in [...direct, ...joined]) {
+      final id = '${guardian['id'] ?? ''}'.trim();
+      if (id.isEmpty) {
+        withoutId.add(guardian);
+      } else {
+        byId[id] = guardian;
+      }
+    }
+    return [...byId.values, ...withoutId];
   }
 
   static double _doubleFromJson(Object? value) {

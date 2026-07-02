@@ -21,6 +21,11 @@ flutter pub get
 flutter run
 ```
 
+Plain `flutter run` attaches to the deployed Supabase Edge backend by default:
+`https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api`. Debug runs also
+keep API operation logging enabled so login, class, staff, and other backend
+requests are visible in the Flutter console.
+
 ## Local FastAPI Backend
 
 1. Start the FastAPI backend, PostgreSQL, and Redis:
@@ -77,8 +82,8 @@ Details are in `docs/observability-runbook.md`.
 
 ## Switching Backend Targets
 
-Release builds default to the Railway backend
-(`https://schooldesk1-production.up.railway.app/api`). The app can still change
+All no-argument runs and release builds default to the Supabase Edge backend
+(`https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api`). The app can still change
 backend linkage through `API_BASE_URL`; no Dart code should be edited when
 switching between local Docker, staging, or another production backend.
 
@@ -89,6 +94,14 @@ cp env.local.example.json env.json
 flutter run --dart-define-from-file=env.json
 ```
 
+For the current Supabase backend, this explicit env file is optional because it
+matches the built-in default:
+
+```bash
+cp env.supabase.example.json env.supabase.json
+flutter run --dart-define-from-file=env.supabase.json
+```
+
 For Hostinger after the API domain is live:
 
 ```bash
@@ -97,11 +110,12 @@ cp env.hostinger.example.json env.hostinger.json
 flutter run --dart-define-from-file=env.hostinger.json
 ```
 
-Release builds must use HTTPS:
+Release APK builds for the current backend should use the Supabase helper:
 
 ```bash
-scripts/build-android-vps.sh apk
-scripts/build-android-vps.sh aab
+cp env.supabase.example.json env.supabase.json
+scripts/build-android-supabase.sh apk
+scripts/build-android-supabase.sh aab
 ```
 
 ## Railway Deployment
@@ -117,6 +131,10 @@ To attach your Flutter APK to the Railway backend:
 flutter build apk --dart-define-from-file=env.railway.json
 ```
 This ensures your APK is attached to the Railway backend.
+
+If Railway is not the active backend, do not use that build path. Use
+`scripts/build-android-supabase.sh` with `env.supabase.json` for Supabase-backed
+APKs.
 
 For the Hostinger "Ubuntu 24.04 with Docker and Traefik" template, deploy the
 backend with:
