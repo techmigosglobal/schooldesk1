@@ -775,14 +775,14 @@ class AttendanceSessionModel {
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) =>
       AttendanceSessionModel(
         id: json['id'] as String,
-        sectionId: json['section_id'] as String,
+        sectionId: json['section_id'] as String? ?? '',
         timetableSlotId: json['timetable_slot_id'] as String? ?? '',
-        subjectId: json['subject_id'] as String,
+        subjectId: json['subject_id'] as String? ?? '',
         subjectName: _attendanceNestedText(json['subject'], const [
           'subject_name',
           'name',
         ]),
-        staffId: json['staff_id'] as String,
+        staffId: json['staff_id'] as String? ?? '',
         staffName: _attendanceStaffName(json['staff']),
         date: json['date'] as String,
         periodNumber: json['period_number'] as int? ?? 0,

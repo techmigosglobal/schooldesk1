@@ -69,7 +69,15 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     });
     try {
       await RoleAccessService.initialize();
-      final rows = await BackendApiClient.instance.getRawList('/diary-entries');
+      final rows = await BackendApiClient.instance.getRawList(
+        '/diary-entries',
+        queryParameters: {
+          if (RoleAccessService.teacherStaffId.isNotEmpty)
+            'staff_id': RoleAccessService.teacherStaffId,
+          if (RoleAccessService.teacherClassId.isNotEmpty)
+            'section_id': RoleAccessService.teacherClassId,
+        },
+      );
       if (!mounted) return;
       setState(() {
         _entries = rows.where(_belongsToTeacherFlow).map(_mapEntry).toList()

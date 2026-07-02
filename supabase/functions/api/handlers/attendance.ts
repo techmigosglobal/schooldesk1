@@ -12,7 +12,10 @@ function canDisplayStaffQr(roleName: string) {
   return ["admin", "principal", "kiosk", "super_admin"].includes(roleName);
 }
 function canScanStaffQr(roleName: string) {
-  return ["teacher", "staff", "kiosk"].includes(roleName);
+  return ["teacher", "staff"].includes(roleName);
+}
+function canManageAttendance(roleName: string) {
+  return ["admin", "principal", "super_admin"].includes(roleName);
 }
 const staffQRRefreshSeconds = 7;
 const staffQRScanGraceSeconds = 10;
@@ -117,6 +120,57 @@ function staffAttendanceCsv(rows: Array<Record<string, any>>) {
   return [header.join(","), ...lines].join("\n");
 }
 
+async function teacherCanUseSection(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+  sectionId: string,
+) {
+  if (!staffId || !sectionId) return false;
+  const section = await svc.from("sections").select("id").eq("school_id", school)
+    .eq("id", sectionId)
+    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`)
+    .maybeSingle();
+  if (section.error) throw new Error(section.error.message);
+  if (section.data) return true;
+
+  const subject = await svc.from("staff_subjects").select("id").eq(
+    "school_id",
+    school,
+  ).eq("staff_id", staffId).eq("section_id", sectionId).limit(1);
+  if (subject.error) throw new Error(subject.error.message);
+  return (subject.data ?? []).length > 0;
+}
+
+async function loadAttendanceSession(
+  svc: SupabaseClient,
+  school: string,
+  sessionId: string,
+) {
+  const { data, error } = await svc.from("attendance_sessions").select("*")
+    .eq("id", sessionId).eq("school_id", school).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as Record<string, unknown> | null;
+}
+
+async function canUseAttendanceSession(
+  svc: SupabaseClient,
+  school: string,
+  roleName: string,
+  linkedStaffId: string,
+  session: Record<string, unknown>,
+) {
+  if (canManageAttendance(roleName)) return true;
+  if (!linkedStaffId) return false;
+  if (`${session.staff_id ?? ""}` !== linkedStaffId) return false;
+  return teacherCanUseSection(
+    svc,
+    school,
+    linkedStaffId,
+    `${session.section_id ?? ""}`,
+  );
+}
+
 export async function handleAttendance(
   req: Request,
   path: string,
@@ -160,10 +214,17 @@ export async function handleAttendance(
   // ── Sessions ───────────────────────────────────────────────
   if (path === "/attendance/sessions" && method === "GET") {
     let q = svc.from("attendance_sessions").select(
-      "*, section:sections(*), staff:staff(*)",
+      "*, section:sections(*), staff:staff(*), subject:subjects(*), student_attendances(*)",
     ).eq("school_id", school);
-    if (url.searchParams.get("section_id")) {
-      q = q.eq("section_id", url.searchParams.get("section_id")!);
+    const sectionId = url.searchParams.get("section_id") ?? "";
+    if (!canManageAttendance(roleName) && linkedStaffId) {
+      if (sectionId && !await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+        return fail("forbidden", 403);
+      }
+      q = q.eq("staff_id", linkedStaffId);
+    }
+    if (sectionId) {
+      q = q.eq("section_id", sectionId);
     }
     if (url.searchParams.get("date")) {
       q = q.eq("date", url.searchParams.get("date")!);
@@ -184,10 +245,24 @@ export async function handleAttendance(
       string,
       unknown
     >;
+    const sectionId = `${body.section_id ?? ""}`.trim();
+    const staffId = `${body.staff_id ?? ""}`.trim();
+    if (!sectionId) return fail("section_id required");
+    if (!canManageAttendance(roleName)) {
+      if (!linkedStaffId) return fail("staff profile not linked", 400);
+      if (staffId && staffId !== linkedStaffId) return fail("forbidden", 403);
+      if (!await teacherCanUseSection(svc, school, linkedStaffId, sectionId)) {
+        return fail("forbidden", 403);
+      }
+    }
     const payload = {
       ...rest,
       school_id: school,
+      subject_id: `${body.subject_id ?? ""}`.trim() || null,
+      timetable_slot_id: `${body.timetable_slot_id ?? ""}`.trim() || null,
+      staff_id: canManageAttendance(roleName) ? body.staff_id : linkedStaffId,
       period_number: body.period_number ?? body.period_no ?? null,
+      status: "draft",
     };
     const { data, error } = await svc.from("attendance_sessions").insert(
       payload,
@@ -210,6 +285,19 @@ export async function handleAttendance(
   );
   if (sessionMarkMatch && method === "POST") {
     const sessionId = sessionMarkMatch[1];
+    let session: Record<string, unknown> | null;
+    try {
+      session = await loadAttendanceSession(svc, school, sessionId);
+      if (!session) return fail("session not found", 404);
+      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+        return fail("forbidden", 403);
+      }
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to load session");
+    }
+    if (session.is_finalized === true) {
+      return fail("attendance session is finalized", 409);
+    }
     const attendances = Array.isArray(body.attendances)
       ? body.attendances
       : body.attendance_records;
@@ -217,8 +305,11 @@ export async function handleAttendance(
     const records = attendances.map((r: Record<string, unknown>) => ({
       session_id: sessionId,
       student_id: r.student_id,
+      enrollment_id: r.enrollment_id || null,
       status: r.status ?? "present",
-      remarks: r.remarks ?? null,
+      reason: r.reason ?? r.remarks ?? "",
+      remarks: r.remarks ?? r.reason ?? null,
+      updated_at: new Date().toISOString(),
     }));
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -228,7 +319,16 @@ export async function handleAttendance(
     if (body.finalize != false) {
       await svc.from("attendance_sessions").update({
         is_finalized: true,
+        status: "submitted",
+        submitted_at: new Date().toISOString(),
         correction_request: null,
+        correction_reason: null,
+        correction_asked_at: null,
+        updated_at: new Date().toISOString(),
+      }).eq("id", sessionId).eq("school_id", school);
+    } else {
+      await svc.from("attendance_sessions").update({
+        status: "draft",
         updated_at: new Date().toISOString(),
       }).eq("id", sessionId).eq("school_id", school);
     }
@@ -244,11 +344,27 @@ export async function handleAttendance(
     if (!sessionId || attendanceRecords.length == 0) {
       return fail("session_id and attendance_records required");
     }
+    let session: Record<string, unknown> | null;
+    try {
+      session = await loadAttendanceSession(svc, school, sessionId);
+      if (!session) return fail("session not found", 404);
+      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+        return fail("forbidden", 403);
+      }
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to load session");
+    }
+    if (session.is_finalized === true) {
+      return fail("attendance session is finalized", 409);
+    }
     const records = attendanceRecords.map((r: Record<string, unknown>) => ({
       session_id: sessionId,
       student_id: r.student_id,
+      enrollment_id: r.enrollment_id || null,
       status: r.status ?? "present",
-      remarks: r.remarks ?? null,
+      reason: r.reason ?? r.remarks ?? "",
+      remarks: r.remarks ?? r.reason ?? null,
+      updated_at: new Date().toISOString(),
     }));
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -257,6 +373,8 @@ export async function handleAttendance(
     if (error) return fail(error.message);
     await svc.from("attendance_sessions").update({
       is_finalized: true,
+      status: "submitted",
+      submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", sessionId).eq("school_id", school);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
@@ -267,9 +385,21 @@ export async function handleAttendance(
     /^\/attendance\/sessions\/([^/]+)\/correction-request$/,
   );
   if (correctionMatch && method === "POST") {
+    let session: Record<string, unknown> | null;
+    try {
+      session = await loadAttendanceSession(svc, school, correctionMatch[1]);
+      if (!session) return fail("session not found", 404);
+      if (!await canUseAttendanceSession(svc, school, roleName, linkedStaffId, session)) {
+        return fail("forbidden", 403);
+      }
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to load session");
+    }
     const { data, error } = await svc.from("attendance_sessions").update({
       correction_request: body.reason ?? "",
-      is_finalized: false,
+      correction_reason: body.reason ?? "",
+      correction_asked_at: new Date().toISOString(),
+      status: "needs_review",
       updated_at: new Date().toISOString(),
     }).eq("id", correctionMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);
@@ -278,9 +408,14 @@ export async function handleAttendance(
 
   const reopenMatch = path.match(/^\/attendance\/sessions\/([^/]+)\/reopen$/);
   if (reopenMatch && method === "POST") {
+    if (!canManageAttendance(roleName)) return fail("forbidden", 403);
     const { data, error } = await svc.from("attendance_sessions").update({
       is_finalized: false,
+      status: "reopened",
       correction_request: body.reason ?? null,
+      reopen_reason: body.reason ?? null,
+      reopened_by: user.id,
+      reopened_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", reopenMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);
@@ -459,16 +594,20 @@ export async function handleAttendance(
 
   // ── QR attendance ─────────────────────────────────────────
   if (path === "/attendance/qr" && method === "POST") {
-    const { qr_token, staff_id } = body;
-    if (!qr_token || !staff_id) return fail("qr_token and staff_id required");
+    const { qr_token } = body;
+    if (!canScanStaffQr(roleName)) return fail("forbidden", 403);
+    if (!linkedStaffId) return fail("staff profile not linked", 400);
+    if (!qr_token) return fail("qr_token required");
     const today = new Date().toISOString().split("T")[0];
     const { data, error } = await svc.from("staff_attendances").upsert({
       school_id: school,
-      staff_id,
+      staff_id: linkedStaffId,
       date: today,
       status: "present",
       qr_scanned: true,
       check_in: new Date().toTimeString().split(" ")[0],
+      source: "qr",
+      marked_by: user.id,
     }, { onConflict: "staff_id,date" }).select().single();
     if (error) return fail(error.message);
     return ok(data);

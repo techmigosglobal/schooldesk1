@@ -15,6 +15,19 @@ void main() {
     expect(source, contains('/attendance/staff/me/today'));
     expect(source, contains('/attendance/staff/qr-token'));
     expect(source, contains('/attendance/staff/qr-scan'));
+    expect(source, contains('student_attendances(*)'));
+    expect(source, contains('enrollment_id: r.enrollment_id || null'));
+    expect(source, contains('reason: r.reason ?? r.remarks ?? ""'));
+    expect(source, contains('status: "submitted"'));
+    expect(source, contains('status: "needs_review"'));
+    expect(
+      source,
+      isNot(
+        contains(
+          'is_finalized: false,\n      updated_at: new Date().toISOString(),',
+        ),
+      ),
+    );
   });
 
   test(
@@ -44,6 +57,37 @@ void main() {
       expect(source, contains('/attendance/staff/qr-logs/export'));
     },
   );
+
+  test('attendance schema migration stores Flutter attendance metadata', () {
+    final migration = File(
+      'supabase/migrations/0012_teacher_attendance_alignment.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('add column if not exists enrollment_id'));
+    expect(migration, contains('add column if not exists reason text'));
+    expect(migration, contains('add column if not exists status text'));
+    expect(migration, contains('add column if not exists submitted_at'));
+    expect(migration, contains('idx_student_attendances_enrollment'));
+  });
+
+  test('diary route scopes teacher rows and supports delete', () {
+    final source = File(
+      'supabase/functions/api/handlers/communications.ts',
+    ).readAsStringSync();
+    final diary = File(
+      'lib/features/academics/presentation/screens/teacher_diary_screen/teacher_diary_screen.dart',
+    ).readAsStringSync();
+
+    expect(
+      source,
+      contains('const staffId = url.searchParams.get("staff_id")'),
+    );
+    expect(source, contains('staffId !== linkedStaffId(user)'));
+    expect(source, contains('staff_id: canManageSchoolContent(user)'));
+    expect(source, contains('if (diaryMatch && method === "DELETE")'));
+    expect(diary, contains("'staff_id': RoleAccessService.teacherStaffId"));
+    expect(diary, contains("'section_id': RoleAccessService.teacherClassId"));
+  });
 
   test('leave handler matches Flutter balances recall and decision routes', () {
     final source = File(

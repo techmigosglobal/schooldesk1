@@ -695,8 +695,13 @@ export async function handleFees(
       if (error) return fail(error.message);
       const receiptNum = `RCP-${Date.now()}`;
       await svc.from("fee_receipts").insert({
+        school_id: school,
+        invoice_id: body.invoice_id ?? null,
         payment_id: payment.id,
         receipt_number: receiptNum,
+        amount: body.amount ?? payment.amount ?? null,
+        payment_method: body.payment_method ?? payment.payment_method ?? null,
+        transaction_ref: body.reference_number ?? payment.reference_number ?? null,
       });
       if (body.invoice_id) {
         const { data: inv } = await svc.from("fee_invoices").select(
@@ -803,8 +808,13 @@ export async function handleFees(
         paymentId = payment.id;
         const receiptNumber = `RCP-${Date.now()}`;
         const { data: receipt, error: receiptError } = await svc.from("fee_receipts").insert({
+          school_id: school,
+          invoice_id: existing.invoice_id,
           payment_id: payment.id,
           receipt_number: receiptNumber,
+          amount: existing.amount,
+          payment_method: existing.payment_method ?? "upi",
+          transaction_ref: existing.transaction_ref ?? existing.transaction_id ?? existing.request_reference,
         }).select().single();
         if (receiptError) return fail(receiptError.message);
         receiptId = receipt.id;

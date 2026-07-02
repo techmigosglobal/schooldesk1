@@ -3,6 +3,10 @@ import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok, fail } from "../index.ts";
 function sid(u: User) { return (u.app_metadata?.school_id as string) ?? ""; }
 function linkedStaffId(u: User) { return (u.app_metadata?.linked_id as string) ?? ""; }
+function role(u: User) { return `${u.app_metadata?.role_name ?? ""}`.trim().toLowerCase(); }
+function canManageSchoolContent(u: User) {
+  return ["admin", "principal", "super_admin"].includes(role(u));
+}
 
 function normalizeAnnouncementPayload(
   school: string,
@@ -310,6 +314,14 @@ export async function handleCommunications(req: Request, path: string, method: s
   // ── Diary ─────────────────────────────────────────────────
   if ((path === "/diary" || path === "/diary-entries") && method === "GET") {
     let q = svc.from("diary_entries").select("*").eq("school_id", school);
+    const staffId = url.searchParams.get("staff_id") ?? "";
+    if (!canManageSchoolContent(user) && staffId && staffId !== linkedStaffId(user)) {
+      return fail("forbidden", 403);
+    }
+    if (staffId) q = q.eq("staff_id", staffId);
+    if (!staffId && !canManageSchoolContent(user) && linkedStaffId(user)) {
+      q = q.eq("staff_id", linkedStaffId(user));
+    }
     if (url.searchParams.get("section_id")) q = q.eq("section_id", url.searchParams.get("section_id")!);
     if (url.searchParams.get("date")) q = q.eq("date", url.searchParams.get("date")!);
     const { data, error } = await q.order("date", { ascending: false });
@@ -317,15 +329,41 @@ export async function handleCommunications(req: Request, path: string, method: s
     return ok(data);
   }
   if ((path === "/diary" || path === "/diary-entries") && method === "POST") {
-    const { data, error } = await svc.from("diary_entries").insert({ ...body, school_id: school, created_by: user.id }).select().single();
+    const teacherId = linkedStaffId(user);
+    if (!canManageSchoolContent(user) && !teacherId) return fail("staff profile not linked", 400);
+    const payload = {
+      ...body,
+      school_id: school,
+      staff_id: canManageSchoolContent(user) ? body.staff_id : teacherId,
+      teacher_id: canManageSchoolContent(user) ? body.teacher_id ?? body.staff_id : teacherId,
+      created_by: user.id,
+    };
+    const { data, error } = await svc.from("diary_entries").insert(payload).select().single();
     if (error) return fail(error.message);
     return ok(data);
   }
   const diaryMatch = path.match(/^\/diary-entries\/([^/]+)$/);
   if (diaryMatch && method === "PUT") {
-    const { data, error } = await svc.from("diary_entries").update(body).eq("id", diaryMatch[1]).eq("school_id", school).select().single();
+    let q = svc.from("diary_entries").update(body).eq("id", diaryMatch[1]).eq("school_id", school);
+    if (!canManageSchoolContent(user)) {
+      const teacherId = linkedStaffId(user);
+      if (!teacherId) return fail("staff profile not linked", 400);
+      q = q.eq("staff_id", teacherId);
+    }
+    const { data, error } = await q.select().single();
     if (error) return fail(error.message);
     return ok(data);
+  }
+  if (diaryMatch && method === "DELETE") {
+    let q = svc.from("diary_entries").delete().eq("id", diaryMatch[1]).eq("school_id", school);
+    if (!canManageSchoolContent(user)) {
+      const teacherId = linkedStaffId(user);
+      if (!teacherId) return fail("staff profile not linked", 400);
+      q = q.eq("staff_id", teacherId);
+    }
+    const { error } = await q;
+    if (error) return fail(error.message);
+    return ok({ success: true });
   }
 
   // ── Lesson planners ───────────────────────────────────────
