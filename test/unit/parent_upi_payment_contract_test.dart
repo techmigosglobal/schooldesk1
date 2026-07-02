@@ -52,9 +52,13 @@ void main() {
       expect(formAndApi, contains('resubmitFeePaymentProof'));
       expect(formAndApi, contains(r'/fees/payments/$id/resubmit'));
       expect(formAndApi, contains('selected_months'));
+      expect(formAndApi, contains('selected_month_names'));
       expect(formAndApi, contains('selected_terms'));
       expect(form, contains('Monthly'));
       expect(form, contains('Term-wise'));
+      expect(form, contains('FilterChip'));
+      expect(form, contains('Selected months:'));
+      expect(form, contains('Submit payment proof?'));
       expect(form, contains('Book & Kit'));
       expect(models, contains('proof_url'));
       expect(
@@ -253,12 +257,31 @@ void main() {
       expect(classHub, contains('final structureIdsToSync = <String>{};'));
       expect(classHub, contains('applyFeeInvoiceSync('));
       expect(classHub, contains('includePartiallyPaid: true'));
-      expect(classHub, contains('final created = await BackendApiClient.instance.createFeeStructure('));
-      expect(classHub, contains('structureIdsToSync.add(component.structureId)'));
-      expect(classHub, contains("final createdId = _classText(created['id']);"));
-      expect(form, contains('final created = await BackendApiClient.instance.createFeeStructure('));
+      expect(
+        classHub,
+        contains(
+          'final created = await BackendApiClient.instance.createFeeStructure(',
+        ),
+      );
+      expect(
+        classHub,
+        contains('structureIdsToSync.add(component.structureId)'),
+      );
+      expect(
+        classHub,
+        contains("final createdId = _classText(created['id']);"),
+      );
+      expect(
+        form,
+        contains(
+          'final created = await BackendApiClient.instance.createFeeStructure(',
+        ),
+      );
       expect(form, contains("final createdId = _textValue(created['id']);"));
-      expect(form, contains('await BackendApiClient.instance.applyFeeInvoiceSync('));
+      expect(
+        form,
+        contains('await BackendApiClient.instance.applyFeeInvoiceSync('),
+      );
       expect(monitoring, contains('final structureIdsToSync = <String>{};'));
       expect(monitoring, contains('await api.applyFeeInvoiceSync('));
     });

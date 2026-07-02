@@ -10,8 +10,6 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-import 'package:schooldesk1/features/finance/presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
-import 'package:schooldesk1/routes/app_routes.dart';
 
 class AdminPaymentRequestDecisionArgs {
   final Map<String, dynamic> request;
@@ -34,7 +32,6 @@ class _AdminPaymentRequestDecisionScreenState
   final _remarksController = TextEditingController();
   String _decision = 'approved';
   bool _submitting = false;
-  bool _navigatingToInvoice = false;
 
   @override
   void dispose() {
@@ -79,27 +76,6 @@ class _AdminPaymentRequestDecisionScreenState
               ),
             ),
             const SizedBox(height: 20),
-            if (_navigatingToInvoice)
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    SizedBox(width: 12),
-                    Text(
-                      'Loading invoice form...',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             FilledButton.icon(
               onPressed: _submitting ? null : _submit,
               icon: _submitting
@@ -297,8 +273,8 @@ class _AdminPaymentRequestDecisionScreenState
         ),
       );
       if (_decision == 'approved' && mounted) {
-        final invoiceShown = await _offerGenerateInvoice(widget.args.request);
-        if (!invoiceShown && mounted) Navigator.pop(context, true);
+        await _showPaymentCompleted(widget.args.request);
+        if (mounted) Navigator.pop(context, true);
       } else {
         Navigator.pop(context, true);
       }
@@ -309,96 +285,28 @@ class _AdminPaymentRequestDecisionScreenState
     }
   }
 
-  Future<bool> _offerGenerateInvoice(Map<String, dynamic> req) async {
+  Future<void> _showPaymentCompleted(Map<String, dynamic> req) async {
     final student = _map(req['student']);
     final studentName = _studentName(student);
     final amount = _money(_num(req['amount']));
-    final studentId = '${req['student_id'] ?? student['id'] ?? ''}'.trim();
-    final gradeId = '${req['grade_id'] ?? student['grade_id'] ?? ''}'.trim();
 
-    if (!mounted) return false;
-    final shouldGenerate = await showDialog<bool>(
+    if (!mounted) return;
+    await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Generate Invoice?'),
+        title: const Text('Payment Completed'),
         content: Text(
-          'Payment of $amount approved for $studentName.\n\n'
-          'Would you like to generate a fee receipt / invoice for this payment?',
+          'Payment of $amount has been approved for $studentName.\n\n'
+          'The receipt/payment record is complete and the parent fee balance will show the updated status.',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Later'),
-          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Generate Invoice'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
           ),
         ],
       ),
     );
-    if (shouldGenerate != true) return true; // user chose 'Later'
-    if (!mounted) return false;
-    setState(() => _navigatingToInvoice = true);
-    try {
-      await _navigateToInvoiceGeneration(
-        studentId: studentId,
-        gradeId: gradeId,
-        studentName: studentName,
-      );
-      return true;
-    } catch (error) {
-      if (mounted) _showError(error.toString());
-      return false;
-    } finally {
-      if (mounted) setState(() => _navigatingToInvoice = false);
-    }
-  }
-
-  Future<void> _navigateToInvoiceGeneration({
-    required String studentId,
-    required String gradeId,
-    required String studentName,
-  }) async {
-    final api = BackendApiClient.instance;
-    final results = await Future.wait<Object>([
-      api.getAcademicYears(),
-      api.getGrades(),
-      api.getSections(),
-      api.getStudents(page: 1, pageSize: 500),
-      api.getFeeStructures(),
-    ]);
-    if (!mounted) return;
-    final academicYears = results[0] as List<AcademicYearModel>;
-    final grades = results[1] as List<GradeModel>;
-    final sections = results[2] as List<SectionModel>;
-    final students = (results[3] as PaginatedList<StudentModel>).data;
-    final feeStructures = results[4] as List<Map<String, dynamic>>;
-
-    final result = await Navigator.pushNamed(
-      context,
-      AppRoutes.principalInvoiceGenerationForm,
-      arguments: AdminInvoiceGenerationFormArgs(
-        academicYears: academicYears,
-        grades: grades,
-        sections: sections,
-        students: students,
-        feeStructures: feeStructures,
-        seedStructure: {if (gradeId.isNotEmpty) 'grade_id': gradeId},
-        ownerRole: 'principal',
-      ),
-    );
-    if (!mounted) return;
-    if (result is AdminInvoiceGenerationFormResult) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Invoice request submitted: ${result.created} created, ${result.skipped} skipped for $studentName.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
   }
 
   void _showError(String message) {

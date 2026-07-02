@@ -97,6 +97,7 @@ extension BackendFeesApi on BackendApiClient {
     String sectionId = '',
     required String feeCategoryId,
     required double amount,
+    String frequency = 'term',
     String feeType = '',
     String billingMode = '',
     int priority = 0,
@@ -118,6 +119,7 @@ extension BackendFeesApi on BackendApiClient {
           if (sectionId.trim().isNotEmpty) 'section_id': sectionId.trim(),
           'fee_category_id': feeCategoryId.trim(),
           'amount': amount,
+          'frequency': frequency.trim().isEmpty ? 'term' : frequency.trim(),
           if (feeType.trim().isNotEmpty) 'fee_type': feeType.trim(),
           if (billingMode.trim().isNotEmpty) 'billing_mode': billingMode.trim(),
           if (priority > 0) 'priority': priority,
@@ -151,6 +153,7 @@ extension BackendFeesApi on BackendApiClient {
     String? sectionId,
     String? feeCategoryId,
     double? amount,
+    String? frequency,
     String? feeType,
     String? billingMode,
     int? priority,
@@ -169,6 +172,7 @@ extension BackendFeesApi on BackendApiClient {
       if (sectionId != null) payload['section_id'] = sectionId;
       if (feeCategoryId != null) payload['fee_category_id'] = feeCategoryId;
       if (amount != null) payload['amount'] = amount;
+      if (frequency != null) payload['frequency'] = frequency.trim();
       if (feeType != null) payload['fee_type'] = feeType;
       if (billingMode != null) payload['billing_mode'] = billingMode;
       if (priority != null) payload['priority'] = priority;

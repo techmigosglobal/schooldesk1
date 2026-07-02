@@ -66,7 +66,7 @@ void main() {
       expect(source, contains('Equal Installments'));
       expect(source, contains('Percentage Division'));
       expect(source, contains('Custom Amounts'));
-      expect(source, contains('Tuition is split automatically'));
+      expect(source, contains('Live payment preview'));
       expect(source, contains('Term Wise'));
       expect(source, contains('One Time Payment'));
       expect(source, contains('Students'));

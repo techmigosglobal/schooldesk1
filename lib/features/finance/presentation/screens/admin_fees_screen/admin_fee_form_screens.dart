@@ -72,6 +72,15 @@ class AdminInvoiceGenerationFormResult {
   });
 }
 
+typedef _FeeFrequencyOption = ({String value, String label});
+
+const List<_FeeFrequencyOption> _feeFrequencyOptions = [
+  (value: 'one_time', label: 'One Time'),
+  (value: 'yearly', label: 'Yearly'),
+  (value: 'monthly', label: 'Monthly'),
+  (value: 'term', label: 'Term'),
+];
+
 @immutable
 class AdminPaymentRecordFormArgs {
   final List<Map<String, dynamic>> pendingDues;
@@ -116,6 +125,7 @@ class _AdminFeeStructureFormScreenState
   late String _selectedGradeId;
   late String _selectedSectionId;
   late String _selectedCategoryId;
+  late String _selectedFrequency;
   bool _replaceExisting = false;
   bool _saving = false;
 
@@ -141,9 +151,10 @@ class _AdminFeeStructureFormScreenState
       ...widget.args.sections.map((section) => section.id),
     ]);
     _selectedCategoryId = _initialId(
-      '${fee['fee_category_id'] ?? ''}',
+      '${fee['fee_category_id'] ?? fee['category_id'] ?? ''}',
       widget.args.feeCategories.map((category) => '${category['id']}'),
     );
+    _selectedFrequency = _initialFrequency(fee);
     _amountController = TextEditingController(
       text: _controllerNumber(fee['amount'] ?? fee['total'] ?? fee['tuition']),
     );
@@ -341,7 +352,10 @@ class _AdminFeeStructureFormScreenState
                 (category) => DropdownMenuItem(
                   value: '${category['id']}',
                   child: Text(
-                    _textValue(category['category_name'], fallback: 'Fee'),
+                    _textValue(
+                      category['category_name'] ?? category['name'],
+                      fallback: 'Fee',
+                    ),
                   ),
                 ),
               )
@@ -349,7 +363,30 @@ class _AdminFeeStructureFormScreenState
           validator: (value) => _required(value, 'Select fee category.'),
           onChanged: _saving
               ? null
-              : (value) => setState(() => _selectedCategoryId = value ?? ''),
+              : (value) => setState(() {
+                  _selectedCategoryId = value ?? '';
+                  _selectedFrequency = _defaultFrequencyForCategory(
+                    _selectedCategoryName,
+                    fallback: _selectedFrequency,
+                  );
+                }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _selectedFrequency,
+          decoration: const InputDecoration(labelText: 'Frequency'),
+          items: _feeFrequencyOptions
+              .map(
+                (option) => DropdownMenuItem(
+                  value: option.value,
+                  child: Text(option.label),
+                ),
+              )
+              .toList(),
+          validator: (value) => _required(value, 'Select frequency.'),
+          onChanged: _saving
+              ? null
+              : (value) => setState(() => _selectedFrequency = value ?? 'term'),
         ),
       ],
     );
@@ -403,7 +440,7 @@ class _AdminFeeStructureFormScreenState
           },
         ),
         const SizedBox(height: 12),
-        _automaticSplitNotice(),
+        _feePreview(),
         if (!widget.args.isEditing) ...[
           const SizedBox(height: 12),
           SwitchListTile.adaptive(
@@ -422,7 +459,18 @@ class _AdminFeeStructureFormScreenState
     );
   }
 
-  Widget _automaticSplitNotice() {
+  Widget _feePreview() {
+    final amount = double.tryParse(_amountController.text) ?? 0;
+    final dueDay = int.tryParse(_dueDayController.text) ?? 10;
+    final frequencyLabel = _feeFrequencyLabel(_selectedFrequency);
+    final parentBehavior = switch (_selectedFrequency) {
+      'one_time' => 'Parents pay this once. It is not split.',
+      'yearly' =>
+        'One annual invoice is created; parents can choose named months against the tuition balance.',
+      'monthly' => 'Parents pay this as monthly dues.',
+      'term' => 'Parents pay this term-wise when terms are generated.',
+      _ => 'Parents pay according to the saved frequency.',
+    };
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
@@ -431,13 +479,36 @@ class _AdminFeeStructureFormScreenState
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: context.appTheme.outlineVariant),
       ),
-      child: Text(
-        'Principal sets only the fee amount and due day. Book & Kit stays one-time; Tuition is automatically divided monthly or term-wise for parents.',
-        style: GoogleFonts.dmSans(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: context.appTheme.primary,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Live payment preview',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: context.appTheme.primary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'INR ${amount.toStringAsFixed(0)} | $frequencyLabel | due day $dueDay',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: context.appTheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            parentBehavior,
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.appTheme.muted,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -457,6 +528,7 @@ class _AdminFeeStructureFormScreenState
           sectionId: _selectedSectionId,
           feeCategoryId: _selectedCategoryId,
           amount: double.parse(_amountController.text),
+          frequency: _selectedFrequency,
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
         );
@@ -471,6 +543,7 @@ class _AdminFeeStructureFormScreenState
           sectionId: _selectedSectionId,
           feeCategoryId: _selectedCategoryId,
           amount: double.parse(_amountController.text),
+          frequency: _selectedFrequency,
           dueDay: int.parse(_dueDayController.text),
           lateFinePerDay: double.tryParse(_lateFineController.text) ?? 0,
           replaceExisting: _replaceExisting,
@@ -536,6 +609,24 @@ class _AdminFeeStructureFormScreenState
       widget.args.sections.where((section) {
         return section.gradeId == _selectedGradeId;
       }).toList()..sort((a, b) => a.sectionName.compareTo(b.sectionName));
+
+  String get _selectedCategoryName {
+    for (final category in widget.args.feeCategories) {
+      if ('${category['id']}' == _selectedCategoryId) {
+        return _textValue(
+          category['category_name'] ?? category['name'],
+          fallback: 'Fee',
+        );
+      }
+    }
+    return 'Fee';
+  }
+
+  String _initialFrequency(Map<String, dynamic> fee) {
+    final raw = _textValue(fee['frequency'] ?? fee['billing_mode']);
+    if (raw.isNotEmpty) return _feeFrequencyPayload(raw);
+    return _defaultFrequencyForCategory(_selectedCategoryName);
+  }
 }
 
 class AdminInvoiceGenerationFormScreen extends StatefulWidget {
@@ -1447,6 +1538,35 @@ String _termLabel(Map<String, dynamic> term) {
   return number.isEmpty ? 'Term' : 'Term $number';
 }
 
+String _defaultFrequencyForCategory(String categoryName, {String? fallback}) {
+  final text = categoryName.toLowerCase().replaceAll(
+    RegExp(r'[^a-z0-9]+'),
+    ' ',
+  );
+  if (text.contains('tuition')) return 'yearly';
+  if (text.contains('book') || text.contains('kit')) return 'one_time';
+  return _feeFrequencyPayload(fallback ?? 'term');
+}
+
+String _feeFrequencyPayload(String frequency) {
+  final raw = frequency.toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+  if (raw.contains('one')) return 'one_time';
+  if (raw.contains('year')) return 'yearly';
+  if (raw.contains('month')) return 'monthly';
+  if (raw.contains('term')) return 'term';
+  return raw.isEmpty ? 'term' : raw;
+}
+
+String _feeFrequencyLabel(String frequency) {
+  return switch (_feeFrequencyPayload(frequency)) {
+    'one_time' => 'One Time',
+    'yearly' => 'Yearly',
+    'monthly' => 'Monthly',
+    'term' => 'Term',
+    _ => frequency,
+  };
+}
+
 String _feeFrequency(Map<String, dynamic> fee) {
   final category = fee['fee_category'] is Map
       ? Map<String, dynamic>.from(fee['fee_category'] as Map)
@@ -1454,12 +1574,8 @@ String _feeFrequency(Map<String, dynamic> fee) {
   final raw = _textValue(
     fee['frequency'] ?? category['frequency'],
     fallback: 'term',
-  ).toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
-  if (raw.contains('one')) return 'one_time';
-  if (raw.contains('year')) return 'yearly';
-  if (raw.contains('month')) return 'monthly';
-  if (raw.contains('term')) return 'term';
-  return raw.isEmpty ? 'term' : raw;
+  );
+  return _feeFrequencyPayload(raw);
 }
 
 String _studentLabel(StudentModel student) {

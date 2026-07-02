@@ -72,8 +72,22 @@ class _ParentPaymentRequestFormScreenState
   Map<String, dynamic>? _paymentIntent;
   String _paymentMode = 'upi';
   String _intervalMode = 'full';
-  int _selectedMonths = 1;
+  final Set<String> _selectedMonthNames = {'January'};
   int _selectedTerms = 1;
+  static const List<String> _monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
 
   List<Map<String, dynamic>> get _fees => widget.args.fees
       .where((fee) {
@@ -96,7 +110,7 @@ class _ParentPaymentRequestFormScreenState
     if (_isTuition && _intervalMode == 'monthly') {
       final monthly =
           (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? balance / 12;
-      return monthly * _selectedMonths;
+      return monthly * _selectedMonthNames.length;
     }
     if (_isTuition && _intervalMode == 'term_wise') {
       final term = (_selectedFee['term_amount'] as num?)?.toDouble() ?? balance;
@@ -130,12 +144,14 @@ class _ParentPaymentRequestFormScreenState
   String get _intentUpiUri => _text(_paymentIntent?['upi_uri']);
   String get _effectiveUpiUri =>
       _intentUpiUri.isNotEmpty ? _intentUpiUri : _upiUri;
+  double get _payableAmount =>
+      (_paymentIntent?['amount'] as num?)?.toDouble() ?? _totalAmount;
 
   String get _upiUri {
     final params = {
       'pa': _upiId,
       'pn': _payeeName,
-      'am': _totalAmount.toStringAsFixed(2),
+      'am': _payableAmount.toStringAsFixed(2),
       'cu': 'INR',
       'tn': _intentReference.isNotEmpty
           ? _intentReference
@@ -272,7 +288,7 @@ class _ParentPaymentRequestFormScreenState
                       ? 'Submitting...'
                       : _isClarificationResubmit
                       ? 'Resubmit Payment for Verification'
-                      : 'Submit Payment for Verification INR ${_totalAmount.toStringAsFixed(0)}',
+                      : 'Submit Payment for Verification INR ${_payableAmount.toStringAsFixed(0)}',
                   style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -453,7 +469,7 @@ class _ParentPaymentRequestFormScreenState
               ),
               const Spacer(),
               Text(
-                'INR ${_totalAmount.toStringAsFixed(0)}',
+                'INR ${_payableAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(
                   fontWeight: FontWeight.w800,
                   color: context.appTheme.primary,
@@ -519,20 +535,33 @@ class _ParentPaymentRequestFormScreenState
               '₹${monthly.toStringAsFixed(0)} per month',
               style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
             ),
-            Slider(
-              value: _selectedMonths.toDouble(),
-              min: 1,
-              max: 12,
-              divisions: 11,
-              label: '$_selectedMonths month(s)',
-              onChanged: _submitting
-                  ? null
-                  : (value) => setState(() {
-                      _selectedMonths = value.round();
-                      _resetPaymentIntent();
-                    }),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _monthNames.map((month) {
+                final selected = _selectedMonthNames.contains(month);
+                return FilterChip(
+                  label: Text(month),
+                  selected: selected,
+                  onSelected: _submitting
+                      ? null
+                      : (value) => setState(() {
+                          if (value) {
+                            _selectedMonthNames.add(month);
+                          } else if (_selectedMonthNames.length > 1) {
+                            _selectedMonthNames.remove(month);
+                          }
+                          _resetPaymentIntent();
+                        }),
+                );
+              }).toList(),
             ),
-            Text('Selected months: $_selectedMonths'),
+            const SizedBox(height: 8),
+            Text(
+              'Selected months: ${_selectedMonthNames.join(', ')}',
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
           ] else ...[
             Text(
               termCount > 0
@@ -566,7 +595,7 @@ class _ParentPaymentRequestFormScreenState
               ),
               const Spacer(),
               Text(
-                'INR ${_totalAmount.toStringAsFixed(0)}',
+                'INR ${_payableAmount.toStringAsFixed(0)}',
                 style: GoogleFonts.dmSans(
                   fontWeight: FontWeight.w900,
                   color: context.appTheme.primary,
@@ -1077,8 +1106,11 @@ class _ParentPaymentRequestFormScreenState
       final intent = await BackendApiClient.instance.createFeePaymentIntent(
         invoiceId: '${_selectedFee['id']}',
         paymentMethod: _paymentMode,
+        selectedMonthNames: _isTuition && _intervalMode != 'term_wise'
+            ? _selectedMonthNames.toList()
+            : const [],
         selectedMonths: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonths
+            ? _selectedMonthNames.length
             : 0,
         selectedTerms: _isTuition && _intervalMode == 'term_wise'
             ? _selectedTerms
@@ -1163,6 +1195,7 @@ class _ParentPaymentRequestFormScreenState
       );
       return;
     }
+    if (!await _confirmSubmission()) return;
     setState(() => _submitting = true);
     final references = <String>[];
     try {
@@ -1211,13 +1244,16 @@ class _ParentPaymentRequestFormScreenState
         paymentRequestId: _intentId,
         requestReference: _intentReference,
         studentFeeId: '${_selectedFee['id']}',
-        amount: _totalAmount,
+        amount: _payableAmount,
         paymentMethod: _paymentMode,
         transactionRef: reference,
         screenshotPath: _proofPath!,
         screenshotName: _proofName ?? 'payment-proof',
+        selectedMonthNames: _isTuition && _intervalMode != 'term_wise'
+            ? _selectedMonthNames.toList()
+            : const [],
         selectedMonths: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonths
+            ? _selectedMonthNames.length
             : 0,
         selectedTerms: _isTuition && _intervalMode == 'term_wise'
             ? _selectedTerms
@@ -1259,6 +1295,65 @@ class _ParentPaymentRequestFormScreenState
         ),
       );
     }
+  }
+
+  Future<bool> _confirmSubmission() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Submit payment proof?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _confirmRow('Amount', 'INR ${_payableAmount.toStringAsFixed(0)}'),
+            _confirmRow(
+              'Invoice',
+              _text(
+                _selectedFee['invoice_number'],
+                fallback: _text(_selectedFee['id']),
+              ),
+            ),
+            if (_isTuition && _intervalMode != 'term_wise')
+              _confirmRow('Months', _selectedMonthNames.join(', ')),
+            if (_isTuition && _intervalMode == 'term_wise')
+              _confirmRow('Terms', '$_selectedTerms'),
+            _confirmRow('UTR', _utrController.text.trim()),
+            _confirmRow('Proof', _proofName ?? 'Selected proof'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Review'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Widget _confirmRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(
+              label,
+              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(child: Text(value, style: GoogleFonts.dmSans())),
+        ],
+      ),
+    );
   }
 
   String _studentName(Map<String, dynamic> student) {

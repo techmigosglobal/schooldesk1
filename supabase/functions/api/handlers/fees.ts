@@ -6,6 +6,99 @@ function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
 
+function roleName(u: User) {
+  return `${u.app_metadata?.role_name ?? u.app_metadata?.role ?? ""}`.toLowerCase();
+}
+
+function isAdminOrPrincipal(u: User) {
+  return ["admin", "principal", "super_admin"].includes(roleName(u));
+}
+
+function text(value: unknown, fallback = "") {
+  const raw = `${value ?? ""}`.trim();
+  return raw === "null" ? fallback : raw || fallback;
+}
+
+function money(value: unknown) {
+  const parsed = typeof value === "number" ? value : parseFloat(`${value ?? 0}`);
+  return Math.round((Number.isFinite(parsed) ? parsed : 0) * 100) / 100;
+}
+
+function normalizeFrequency(value: unknown) {
+  const raw = text(value, "term").toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  if (raw.includes("one")) return "one_time";
+  if (raw.includes("year")) return "yearly";
+  if (raw.includes("month")) return "monthly";
+  if (raw.includes("term")) return "term";
+  return raw || "term";
+}
+
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function selectedMonthNamesFrom(value: unknown) {
+  const raw = Array.isArray(value) ? value : text(value).split(",");
+  const selected = raw.map((item) => text(item)).filter((item) =>
+    monthNames.map((m) => m.toLowerCase()).includes(item.toLowerCase())
+  );
+  return [...new Set(selected.map((item) =>
+    monthNames.find((month) => month.toLowerCase() === item.toLowerCase())!
+  ))];
+}
+
+function dueDateFrom(dueDate: unknown, dueDay: unknown) {
+  const explicit = text(dueDate);
+  if (explicit) return explicit.split("T")[0];
+  const now = new Date();
+  const day = Math.min(Math.max(parseInt(text(dueDay, "10")), 1), 28);
+  return `${now.getUTCFullYear()}-${`${now.getUTCMonth() + 1}`.padStart(2, "0")}-${`${day}`.padStart(2, "0")}`;
+}
+
+async function parentCanAccessStudent(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+  studentId: string,
+) {
+  if (isAdminOrPrincipal(user)) return true;
+  const { data, error } = await svc.from("parent_student_links").select("id")
+    .eq("school_id", school)
+    .eq("parent_user_id", user.id)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data);
+}
+
+function invoicePayableAmount(
+  invoice: Record<string, unknown>,
+  selectedMonthNames: string[],
+  selectedMonths: number,
+  selectedTerms: number,
+) {
+  const balance = money(invoice.balance ?? invoice.net_amount ?? invoice.total_amount);
+  const monthCount = selectedMonthNames.length || selectedMonths;
+  if (monthCount > 0) {
+    return Math.min(balance, money((money(invoice.net_amount ?? invoice.total_amount) / 12) * monthCount));
+  }
+  if (selectedTerms > 0) {
+    return Math.min(balance, money((money(invoice.net_amount ?? invoice.total_amount) / selectedTerms) * selectedTerms));
+  }
+  return balance;
+}
+
 function configRecordId(scope: string, gradeId = "", sectionId = ""): string {
   return [scope || "school", gradeId, sectionId].filter(Boolean).join(":");
 }
@@ -54,7 +147,10 @@ export async function handleFees(
   user: User,
 ): Promise<Response> {
   const school = sid(user);
-  const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
+  const contentType = req.headers.get("content-type") ?? "";
+  const body = method !== "GET" && contentType.includes("application/json")
+    ? await req.json().catch(() => ({}))
+    : {};
   const feesPath = path.replace(/^\/fees/, "");
 
   if (feesPath === "/reports/exports" && method === "POST") {
@@ -91,15 +187,19 @@ export async function handleFees(
   }
 
   function normalizeStructurePayload(input: Record<string, unknown>) {
+    const categoryId = input.category_id ?? input.fee_category_id;
     return {
       school_id: school,
       academic_year_id: input.academic_year_id,
       grade_id: input.grade_id ?? null,
       section_id: input.section_id ?? null,
-      category_id: input.category_id ?? input.fee_category_id,
+      category_id: categoryId,
+      fee_category_id: categoryId,
       amount: input.amount ?? 0,
       due_date: input.due_date ?? null,
-      frequency: input.frequency ?? input.billing_mode ?? "term",
+      due_day: input.due_day ?? 10,
+      late_fine_per_day: input.late_fine_per_day ?? 0,
+      frequency: normalizeFrequency(input.frequency ?? input.billing_mode),
       is_mandatory: input.is_mandatory ?? input.is_active ?? true,
     };
   }
@@ -256,11 +356,100 @@ export async function handleFees(
     }
 
     if (seg === "generate" && method === "POST") {
+      const academicYearId = text(body.academic_year_id);
+      const gradeId = text(body.grade_id);
+      const sectionId = text(body.section_id);
+      const studentId = text(body.student_id);
+      if (!academicYearId || !gradeId) return fail("academic_year_id and grade_id are required");
+
+      let structuresQuery = svc.from("fee_structures").select("*, category:fee_categories(*)")
+        .eq("school_id", school)
+        .eq("academic_year_id", academicYearId)
+        .eq("grade_id", gradeId);
+      if (sectionId) {
+        structuresQuery = structuresQuery.or(`section_id.is.null,section_id.eq.${sectionId}`);
+      }
+      const { data: rawStructures, error: structuresError } = await structuresQuery;
+      if (structuresError) return fail(structuresError.message);
+      const includeOneTime = body.include_one_time === true;
+      const includeYearly = body.include_yearly === true;
+      const structures = (rawStructures ?? []).filter((row: Record<string, unknown>) => {
+        const frequency = normalizeFrequency(row.frequency);
+        if (frequency === "one_time") return includeOneTime;
+        if (frequency === "yearly") return includeYearly;
+        return true;
+      });
+      if (structures.length === 0) {
+        return ok({ created: 0, skipped: 0, generated_count: 0, skipped_count: 0 });
+      }
+
+      let sectionIds = sectionId ? [sectionId] : [];
+      if (sectionIds.length === 0) {
+        const { data: sections, error: sectionError } = await svc.from("sections").select("id")
+          .eq("school_id", school)
+          .eq("grade_id", gradeId);
+        if (sectionError) return fail(sectionError.message);
+        sectionIds = (sections ?? []).map((section: Record<string, unknown>) => text(section.id)).filter(Boolean);
+      }
+
+      let studentsQuery = svc.from("students").select("*")
+        .eq("school_id", school)
+        .eq("status", "active");
+      if (studentId) studentsQuery = studentsQuery.eq("id", studentId);
+      else if (sectionIds.length > 0) studentsQuery = studentsQuery.in("current_section_id", sectionIds);
+      const { data: students, error: studentsError } = await studentsQuery;
+      if (studentsError) return fail(studentsError.message);
+
+      let created = 0;
+      let skipped = 0;
+      const createdInvoices: Record<string, unknown>[] = [];
+      const label = text(body.invoice_label, "Fees").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toUpperCase();
+      for (const student of students ?? []) {
+        const studentCode = text(student.admission_number ?? student.student_code ?? student.id).replace(/[^A-Za-z0-9]+/g, "").slice(-8);
+        const invoiceNumber = `FEE-${label}-${studentCode || text(student.id).slice(0, 8)}`;
+        const total = money(structures.reduce((sum: number, row: Record<string, unknown>) => sum + money(row.amount), 0));
+        const dueDate = dueDateFrom(body.due_date, structures[0]?.due_day);
+        const { data: invoice, error: invoiceError } = await svc.from("fee_invoices").insert({
+          school_id: school,
+          student_id: student.id,
+          academic_year_id: academicYearId,
+          invoice_number: invoiceNumber,
+          due_date: dueDate,
+          total_amount: total,
+          net_amount: total,
+          balance: total,
+          status: "pending",
+        }).select().single();
+        if (invoiceError) {
+          if (invoiceError.message.toLowerCase().includes("duplicate")) {
+            skipped++;
+            continue;
+          }
+          return fail(invoiceError.message);
+        }
+        const items = structures.map((structure: Record<string, unknown>) => ({
+          invoice_id: invoice.id,
+          fee_structure_id: structure.id,
+          category_name: text((structure.category as Record<string, unknown> | null)?.name, "Fee"),
+          amount: money(structure.amount),
+        }));
+        const { error: itemError } = await svc.from("fee_invoice_items").insert(items);
+        if (itemError) return fail(itemError.message);
+        created++;
+        createdInvoices.push({
+          ...invoice,
+          monthly_amount: money(total / 12),
+        });
+      }
       return ok({
-        generated_count: 0,
-        academic_year_id: body.academic_year_id ?? null,
-        section_id: body.section_id ?? null,
-        student_id: body.student_id ?? null,
+        created,
+        skipped,
+        generated_count: created,
+        skipped_count: skipped,
+        academic_year_id: academicYearId,
+        section_id: sectionId || null,
+        student_id: studentId || null,
+        invoices: createdInvoices,
       });
     }
 
@@ -338,16 +527,54 @@ export async function handleFees(
     }
 
     if (seg === "intent" && method === "POST") {
-      const { data: invoice } = body.invoice_id
+      const selectedMonthNames = selectedMonthNamesFrom(body.selected_month_names);
+      const selectedMonths = parseInt(text(body.selected_months, `${selectedMonthNames.length || 0}`)) || 0;
+      const selectedTerms = parseInt(text(body.selected_terms, "0")) || 0;
+      const { data: invoice, error: invoiceError } = body.invoice_id
         ? await svc.from("fee_invoices").select("*").eq("id", body.invoice_id)
           .eq("school_id", school).maybeSingle()
         : { data: null };
+      if (invoiceError) return fail(invoiceError.message);
+      if (!invoice) return fail("Invoice not found", 404);
+      try {
+        if (!await parentCanAccessStudent(svc, school, user, text(invoice.student_id))) {
+          return fail("Invoice does not belong to a linked child", 403);
+        }
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to verify parent access");
+      }
+      const amount = invoicePayableAmount(
+        invoice as Record<string, unknown>,
+        selectedMonthNames,
+        selectedMonths,
+        selectedTerms,
+      );
+      const reference = `FPR-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      const { data: request, error: requestError } = await svc.from("parent_payment_requests").insert({
+        school_id: school,
+        student_id: invoice.student_id,
+        invoice_id: invoice.id,
+        parent_user_id: isAdminOrPrincipal(user) ? null : user.id,
+        amount,
+        payment_method: body.payment_method ?? "upi",
+        request_reference: reference,
+        payment_date: new Date().toISOString().split("T")[0],
+        selected_months: selectedMonthNames.length || selectedMonths,
+        selected_month_names: selectedMonthNames,
+        selected_terms: selectedTerms,
+        remarks: body.remarks ?? "",
+        status: "initiated",
+      }).select().single();
+      if (requestError) return fail(requestError.message);
       return ok({
+        id: request.id,
+        request_reference: reference,
         invoice_id: body.invoice_id ?? null,
         payment_method: body.payment_method ?? "",
-        amount: invoice?.balance ?? invoice?.net_amount ?? 0,
-        selected_months: body.selected_months ?? 0,
-        selected_terms: body.selected_terms ?? 0,
+        amount,
+        selected_months: selectedMonthNames.length || selectedMonths,
+        selected_month_names: selectedMonthNames,
+        selected_terms: selectedTerms,
         remarks: body.remarks ?? "",
       });
     }
@@ -356,6 +583,45 @@ export async function handleFees(
       const form = await req.formData().catch(() => null);
       if (!form) return fail("multipart form required");
       const screenshot = form.get("screenshot") as File | null;
+      const invoiceId = text(form.get("invoice_id") ?? form.get("student_fee_id"));
+      const requestId = text(form.get("payment_request_id") ?? form.get("request_id"));
+      const requestReference = text(form.get("request_reference"));
+      const selectedMonthNames = selectedMonthNamesFrom(form.get("selected_month_names"));
+      const selectedMonths = parseInt(text(form.get("selected_months"), `${selectedMonthNames.length || 0}`)) || 0;
+      const selectedTerms = parseInt(text(form.get("selected_terms"), "0")) || 0;
+      let existingRequest: Record<string, unknown> | null = null;
+      if (requestId || requestReference) {
+        let requestQuery = svc.from("parent_payment_requests").select("*").eq("school_id", school);
+        if (requestId) requestQuery = requestQuery.eq("id", requestId);
+        else requestQuery = requestQuery.eq("request_reference", requestReference);
+        const { data, error } = await requestQuery.maybeSingle();
+        if (error) return fail(error.message);
+        if (!data) return fail("Payment intent not found", 404);
+        existingRequest = data as Record<string, unknown>;
+      }
+      const effectiveInvoiceId = text(existingRequest?.invoice_id, invoiceId);
+      const { data: invoice, error: invoiceError } = await svc.from("fee_invoices").select("*")
+        .eq("id", effectiveInvoiceId)
+        .eq("school_id", school)
+        .maybeSingle();
+      if (invoiceError) return fail(invoiceError.message);
+      if (!invoice) return fail("Invoice not found", 404);
+      try {
+        if (!await parentCanAccessStudent(svc, school, user, text(invoice.student_id))) {
+          return fail("Invoice does not belong to a linked child", 403);
+        }
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to verify parent access");
+      }
+      const expectedAmount = invoicePayableAmount(
+        invoice as Record<string, unknown>,
+        selectedMonthNames.length > 0 ? selectedMonthNames : selectedMonthNamesFrom(existingRequest?.selected_month_names),
+        selectedMonths || money(existingRequest?.selected_months),
+        selectedTerms || money(existingRequest?.selected_terms),
+      );
+      if (money(form.get("amount")) !== expectedAmount) {
+        return fail(`payment amount must be ${expectedAmount.toFixed(2)} for selected fee interval`);
+      }
       let proofUrl = "";
       if (screenshot) {
         const filePath =
@@ -366,17 +632,31 @@ export async function handleFees(
         proofUrl =
           svc.storage.from("school-assets").getPublicUrl(filePath).data.publicUrl;
       }
-      const { data, error } = await svc.from("parent_payment_requests").insert({
+      const payload = {
         school_id: school,
-        student_id:
-          `${form.get("student_id") ?? form.get("student_fee_id") ?? ""}`,
-        invoice_id: `${form.get("invoice_id") ?? ""}` || null,
-        amount: parseFloat(`${form.get("amount") ?? "0"}`) || 0,
-        payment_method: `${form.get("payment_method") ?? ""}`,
+        student_id: invoice.student_id,
+        invoice_id: invoice.id,
+        parent_user_id: isAdminOrPrincipal(user) ? null : user.id,
+        amount: expectedAmount,
+        payment_method: `${form.get("payment_method") ?? ""}` || "upi",
+        request_reference: requestReference || text(existingRequest?.request_reference) || `FPR-${Date.now()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        transaction_ref: text(form.get("transaction_ref") ?? form.get("transaction_id")),
+        transaction_id: text(form.get("transaction_ref") ?? form.get("transaction_id")),
+        payment_date: text(form.get("payment_date"), new Date().toISOString().split("T")[0]),
+        selected_months: selectedMonthNames.length || selectedMonths || money(existingRequest?.selected_months),
+        selected_month_names: selectedMonthNames.length > 0 ? selectedMonthNames : selectedMonthNamesFrom(existingRequest?.selected_month_names),
+        selected_terms: selectedTerms || money(existingRequest?.selected_terms),
         proof_url: proofUrl,
+        proof_file_name: screenshot?.name ?? null,
+        proof_content_type: screenshot?.type ?? null,
+        proof_size: screenshot?.size ?? null,
         remarks: `${form.get("remarks") ?? ""}`,
-        status: "pending",
-      }).select().single();
+        status: "pending_verification",
+        updated_at: new Date().toISOString(),
+      };
+      const { data, error } = existingRequest
+        ? await svc.from("parent_payment_requests").update(payload).eq("id", existingRequest.id).eq("school_id", school).select().single()
+        : await svc.from("parent_payment_requests").insert(payload).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
@@ -438,6 +718,13 @@ export async function handleFees(
 
   if (/^\/parent\/students\/[^/]+\/fees$/.test(path) && method === "GET") {
     const studentId = path.split("/")[3];
+    try {
+      if (!await parentCanAccessStudent(svc, school, user, studentId)) {
+        return fail("Student does not belong to a linked child", 403);
+      }
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : "failed to verify parent access");
+    }
     const { data, error } = await svc.from("fee_invoices").select(
       "*, fee_invoice_items(*)",
     ).eq("school_id", school).eq("student_id", studentId).order(
@@ -445,7 +732,12 @@ export async function handleFees(
       { ascending: false },
     );
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    return ok((data ?? []).map((invoice: Record<string, unknown>) => ({
+      ...invoice,
+      amount: money(invoice.balance ?? invoice.net_amount ?? invoice.total_amount),
+      balance_amount: money(invoice.balance ?? invoice.net_amount ?? invoice.total_amount),
+      monthly_amount: money(money(invoice.net_amount ?? invoice.total_amount) / 12),
+    })));
   }
 
   if (feesPath.startsWith("/payment-requests")) {
@@ -457,6 +749,7 @@ export async function handleFees(
         "school_id",
         school,
       );
+      if (!isAdminOrPrincipal(user)) q = q.eq("parent_user_id", user.id);
       if (url.searchParams.get("student_id")) q = q.eq("student_id", url.searchParams.get("student_id")!);
       if (url.searchParams.get("invoice_id")) q = q.eq("invoice_id", url.searchParams.get("invoice_id")!);
       if (url.searchParams.get("status")) q = q.eq("status", url.searchParams.get("status")!);
@@ -465,18 +758,78 @@ export async function handleFees(
       return ok(data ?? []);
     }
     if (!seg && method === "POST") {
+      const studentId = text((body as Record<string, unknown>).student_id);
+      try {
+        if (studentId && !await parentCanAccessStudent(svc, school, user, studentId)) {
+          return fail("Student does not belong to a linked child", 403);
+        }
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to verify parent access");
+      }
       const { data, error } = await svc.from("parent_payment_requests").insert({
         ...body,
         school_id: school,
+        parent_user_id: isAdminOrPrincipal(user) ? body.parent_user_id ?? null : user.id,
       }).select().single();
       if (error) return fail(error.message);
       return ok(data);
     }
     if (seg && path.endsWith("/decision") && method === "PUT") {
+      if (!isAdminOrPrincipal(user)) return fail("admin or principal access required", 403);
+      const status = text(body.status, "pending");
+      const { data: existing, error: existingError } = await svc.from("parent_payment_requests")
+        .select("*")
+        .eq("id", seg)
+        .eq("school_id", school)
+        .maybeSingle();
+      if (existingError) return fail(existingError.message);
+      if (!existing) return fail("not found", 404);
+      let paymentId: string | null = null;
+      let receiptId: string | null = null;
+      if (["approved", "completed", "paid"].includes(status)) {
+        const { data: payment, error: paymentError } = await svc.from("payments").insert({
+          school_id: school,
+          student_id: existing.student_id,
+          invoice_id: existing.invoice_id,
+          amount: existing.amount,
+          payment_method: existing.payment_method ?? "upi",
+          reference_number: existing.transaction_ref ?? existing.transaction_id ?? existing.request_reference,
+          paid_at: existing.payment_date ?? new Date().toISOString(),
+          notes: existing.remarks ?? "",
+          status: "completed",
+          created_by: user.id,
+        }).select().single();
+        if (paymentError) return fail(paymentError.message);
+        paymentId = payment.id;
+        const receiptNumber = `RCP-${Date.now()}`;
+        const { data: receipt, error: receiptError } = await svc.from("fee_receipts").insert({
+          payment_id: payment.id,
+          receipt_number: receiptNumber,
+        }).select().single();
+        if (receiptError) return fail(receiptError.message);
+        receiptId = receipt.id;
+        const { data: invoice } = await svc.from("fee_invoices").select("net_amount, paid_amount")
+          .eq("id", existing.invoice_id)
+          .eq("school_id", school)
+          .maybeSingle();
+        if (invoice) {
+          const newPaid = money(invoice.paid_amount) + money(existing.amount);
+          const newBalance = Math.max(0, money(invoice.net_amount) - newPaid);
+          await svc.from("fee_invoices").update({
+            paid_amount: newPaid,
+            balance: newBalance,
+            status: newBalance <= 0 ? "paid" : "partial",
+            updated_at: new Date().toISOString(),
+          }).eq("id", existing.invoice_id).eq("school_id", school);
+        }
+      }
       const { data, error } = await svc.from("parent_payment_requests").update({
         status: body.status ?? "pending",
         remarks: body.admin_remarks ?? body.remarks ?? null,
         reviewed_by: user.id,
+        reviewed_at: new Date().toISOString(),
+        payment_id: paymentId ?? existing.payment_id ?? null,
+        receipt_id: receiptId ?? existing.receipt_id ?? null,
         updated_at: new Date().toISOString(),
       }).eq("id", seg).eq("school_id", school).select().single();
       if (error) return fail(error.message);
