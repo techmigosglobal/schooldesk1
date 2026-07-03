@@ -660,8 +660,8 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         final compact = constraints.maxWidth < 430;
         final message = Text(
           _editing
-              ? 'Review changes, then save them to the local Docker backend.'
-              : 'School identity is synced from the local Docker backend.',
+              ? 'Review changes, then save them to Supabase.'
+              : 'School identity is synced from Supabase.',
           style: GoogleFonts.dmSans(
             fontSize: 12,
             color: context.appTheme.onSurface,

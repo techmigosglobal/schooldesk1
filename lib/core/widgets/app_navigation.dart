@@ -251,7 +251,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,
-              label: 'Message Oversight',
+              label: 'Communications',
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(

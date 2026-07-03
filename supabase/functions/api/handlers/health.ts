@@ -2,16 +2,16 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok } from "../index.ts";
 
+type DirectSql = {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+  end: (options?: { timeout?: number }) => Promise<void>;
+};
+
 async function checkDatabaseViaDirectConnection(): Promise<boolean> {
   const dbUrl = Deno.env.get("SUPABASE_DB_URL");
   if (!dbUrl) return false;
 
-  let sql:
-    | ((
-      strings: TemplateStringsArray,
-      ...values: unknown[]
-    ) => Promise<unknown[]> & { end: (options?: { timeout?: number }) => Promise<void> })
-    | null = null;
+  let sql: DirectSql | null = null;
 
   try {
     const postgresModule = await import("npm:postgres@3.4.5");
@@ -20,7 +20,7 @@ async function checkDatabaseViaDirectConnection(): Promise<boolean> {
       max: 1,
       idle_timeout: 1,
       connect_timeout: 5,
-    });
+    }) as DirectSql;
     await sql`select 1 as ok`;
     return true;
   } catch (_error) {
@@ -38,12 +38,7 @@ export async function inspectDatabaseViaDirectConnection() {
     return { connected: false, reason: "missing_db_url" };
   }
 
-  let sql:
-    | ((
-      strings: TemplateStringsArray,
-      ...values: unknown[]
-    ) => Promise<unknown[]> & { end: (options?: { timeout?: number }) => Promise<void> })
-    | null = null;
+  let sql: DirectSql | null = null;
 
   try {
     const postgresModule = await import("npm:postgres@3.4.5");
@@ -52,19 +47,19 @@ export async function inspectDatabaseViaDirectConnection() {
       max: 1,
       idle_timeout: 1,
       connect_timeout: 5,
-    });
+    }) as DirectSql;
     const schools = await sql`
       select exists (
         select 1
         from information_schema.tables
         where table_schema = 'public' and table_name = 'schools'
       ) as exists
-    `;
+    ` as Array<{ exists?: boolean }>;
     const tables = await sql`
       select count(*)::int as total
       from information_schema.tables
       where table_schema = 'public'
-    `;
+    ` as Array<{ total?: number }>;
     return {
       connected: true,
       schools_exists: schools[0]?.exists ?? false,

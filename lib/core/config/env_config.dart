@@ -5,14 +5,16 @@ import 'package:flutter/foundation.dart';
 class EnvConfig {
   EnvConfig._();
 
+  static const String _defaultSupabaseApiBaseUrl =
+      'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api';
+
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
   );
   static const String _productionApiBaseUrl = String.fromEnvironment(
     'PRODUCTION_API_BASE_URL',
-    defaultValue:
-        'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
+    defaultValue: _defaultSupabaseApiBaseUrl,
   );
 
   // ── Supabase constants ───────────────────────────────────────
@@ -81,9 +83,9 @@ class EnvConfig {
   static bool get isDevelopment => appEnv == 'development';
   static bool get isStaging => appEnv == 'staging';
 
-  /// The backend base URL. Always reads from --dart-define=API_BASE_URL first.
-  /// Defaults to Supabase Edge for every build, including plain `flutter run`.
-  /// Use API_BASE_URL when intentionally switching to local Docker or VPS.
+  /// The backend base URL. This checkout is pinned to Supabase Edge.
+  /// Non-Supabase values from --dart-define are ignored to avoid attaching
+  /// APKs or local runs to the retired Go/local backend by mistake.
   static String get apiBaseUrl {
     if (_configuredApiBaseUrl.isNotEmpty) {
       return v1BaseUrlFrom(_configuredApiBaseUrl);
@@ -102,18 +104,27 @@ class EnvConfig {
 
   static String v1BaseUrlFrom(String value) {
     final clean = _withoutTrailingSlash(value);
-    if (clean.endsWith('/functions/v1/api')) return clean;
-    if (clean.endsWith('/api/v1')) return clean;
-    final root = clean.endsWith('/api')
-        ? clean.substring(0, clean.length - 4)
-        : clean;
-    return '$root/api/v1';
+    if (clean.isEmpty) return _defaultSupabaseApiBaseUrl;
+    if (_isSupabaseFunctionsApi(clean)) return clean;
+    if (_isSupabaseProjectUrl(clean)) return '$clean/functions/v1/api';
+    return _defaultSupabaseApiBaseUrl;
   }
 
   static String apiOriginFromBaseUrl(String baseUrl) {
     return baseUrl
+        .replaceFirst(RegExp(r'/functions/v1/api/?$'), '')
         .replaceFirst(RegExp(r'/api(?:/v1)?/?$'), '')
         .replaceFirst(RegExp(r'/$'), '');
+  }
+
+  static bool _isSupabaseFunctionsApi(String value) {
+    return RegExp(
+      r'^https://[a-z0-9-]+\.supabase\.co/functions/v1/api$',
+    ).hasMatch(value);
+  }
+
+  static bool _isSupabaseProjectUrl(String value) {
+    return RegExp(r'^https://[a-z0-9-]+\.supabase\.co$').hasMatch(value);
   }
 
   static String _withoutTrailingSlash(String value) {

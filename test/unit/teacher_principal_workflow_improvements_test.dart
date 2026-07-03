@@ -12,7 +12,7 @@ void main() {
     expect(source, contains('_teacherActionQueue'));
     expect(source, contains('Mark Student Attendance'));
     expect(source, contains('Record Class Diary'));
-    expect(source, contains('Post Homework'));
+    expect(source, contains('Homework'));
     expect(source, contains('Review PTM Slots'));
     expect(source, contains('Track Leave'));
   });
@@ -43,10 +43,10 @@ void main() {
     ).readAsStringSync();
 
     expect(teacherNav, contains("label: 'Parent Messages'"));
-    expect(teacherNav, contains("label: 'Homework Feedback'"));
+    expect(teacherNav, contains("label: 'PTM Slots'"));
     expect(principalNav, contains("label: 'Broadcasts & Notices'"));
-    expect(principalNav, contains("label: 'Message Oversight'"));
-    expect(principalDashboard, contains("label: 'Message Oversight'"));
+    expect(principalNav, contains("label: 'Communications'"));
+    expect(principalDashboard, contains("label: 'Communications'"));
     expect(principalDashboard, isNot(contains("label: 'Chat Communications'")));
   });
 

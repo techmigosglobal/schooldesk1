@@ -399,7 +399,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFE8F7FF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Message Oversight',
+                    label: 'Communications',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
                     fallbackIcon: Icons.forum_rounded,

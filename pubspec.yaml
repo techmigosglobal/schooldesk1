@@ -70,7 +70,7 @@ flutter:
     - assets/images/
     - assets/images/ui/
     - assets/google_fonts/
-    - school-backend/internal/policy/admin_principal_ownership_matrix.json
+    - assets/policy/admin_principal_ownership_matrix.json
   # CRITICAL ASSET MANAGEMENT RULES:
   # - Only use asset directories listed above.
   # - Google Fonts are bundled locally to avoid runtime network fetching.

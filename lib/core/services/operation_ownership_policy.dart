@@ -133,7 +133,7 @@ class ModuleOwnership {
 
 class OperationOwnershipMatrix {
   static const assetPath =
-      'school-backend/internal/policy/admin_principal_ownership_matrix.json';
+      'assets/policy/admin_principal_ownership_matrix.json';
 
   final int version;
   final List<String> statuses;

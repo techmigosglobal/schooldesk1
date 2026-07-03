@@ -234,7 +234,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/principal-chat-communications-screen',
-      title: 'Chat Communications',
+      title: 'Communications',
       module: 'Communication',
       portal: 'principal',
     ),

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'backend_api_sources.dart';
-import 'backend_route_sources.dart';
 
 void main() {
   test(
@@ -16,7 +15,9 @@ void main() {
         'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
       ).readAsStringSync();
       final api = readBackendApiSources();
-      final routes = readBackendRouteSources();
+      final supabaseTimetable = File(
+        'supabase/functions/api/handlers/timetable.ts',
+      ).readAsStringSync();
 
       expect(
         teacher,
@@ -29,7 +30,7 @@ void main() {
 
       expect(principal, contains("value: 'edit_timetable'"));
       expect(principal, contains("value: 'delete_timetable'"));
-      expect(principal, contains('Edit Timetable'));
+      expect(principal, contains('Manual Edit Today'));
       expect(principal, contains('Delete Timetable'));
       expect(principal, contains('_editingTimetable'));
       expect(principal, contains('_editableSchedulePanel'));
@@ -40,8 +41,11 @@ void main() {
 
       expect(api, contains('Future<Map<String, dynamic>> updateTimetableSlot'));
       expect(api, contains('Future<void> deleteTimetableSlot'));
-      expect(routes, contains('timetable.PUT("/slots/:id"'));
-      expect(routes, contains('timetable.DELETE("/slots/:id"'));
+      expect(
+        supabaseTimetable,
+        contains('method === "PATCH" || method === "PUT"'),
+      );
+      expect(supabaseTimetable, contains('method === "DELETE"'));
     },
   );
 }

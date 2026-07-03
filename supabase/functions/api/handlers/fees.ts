@@ -137,6 +137,34 @@ async function savePaymentConfigRecord(
   return data;
 }
 
+async function attachFeeCategories(
+  svc: SupabaseClient,
+  school: string,
+  rows: Record<string, unknown>[],
+) {
+  const categoryIds = [...new Set(rows.map((row) =>
+    text(row.fee_category_id ?? row.category_id)
+  ).filter(Boolean))];
+  if (categoryIds.length === 0) {
+    return rows.map((row) => ({ ...row, category: null, fee_category: null }));
+  }
+  const { data, error } = await svc.from("fee_categories").select("*")
+    .eq("school_id", school)
+    .in("id", categoryIds);
+  if (error) throw error;
+  const byId = new Map(
+    (data ?? []).map((category: Record<string, unknown>) => [
+      text(category.id),
+      category,
+    ]),
+  );
+  return rows.map((row) => {
+    const category = byId.get(text(row.fee_category_id ?? row.category_id)) ??
+      null;
+    return { ...row, category, fee_category: category };
+  });
+}
+
 export async function handleFees(
   req: Request,
   path: string,
@@ -251,14 +279,18 @@ export async function handleFees(
 
     if (!seg && method === "GET") {
       let q = svc.from("fee_structures").select(
-        "*, category:fee_categories(*), grade:grades(*), section:sections(*)",
+        "*, grade:grades(*), section:sections(*)",
       ).eq("school_id", school);
       if (url.searchParams.get("academic_year_id")) q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
       if (url.searchParams.get("grade_id")) q = q.eq("grade_id", url.searchParams.get("grade_id")!);
       if (url.searchParams.get("section_id")) q = q.eq("section_id", url.searchParams.get("section_id")!);
       const { data, error } = await q;
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      try {
+        return ok(await attachFeeCategories(svc, school, data ?? []));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load fee categories");
+      }
     }
 
     if (!seg && method === "POST") {
@@ -280,12 +312,20 @@ export async function handleFees(
 
     if (seg && parts[1] === "invoice-sync" && parts[2] === "preview" && method === "POST") {
       const { data: structure, error } = await svc.from("fee_structures").select(
-        "*, category:fee_categories(*)",
+        "*",
       ).eq("id", seg).eq("school_id", school).maybeSingle();
       if (error) return fail(error.message);
+      let hydratedStructure = structure;
+      if (structure) {
+        try {
+          hydratedStructure = (await attachFeeCategories(svc, school, [structure]))[0];
+        } catch (error) {
+          return fail(error instanceof Error ? error.message : "failed to load fee category");
+        }
+      }
       return ok({
         structure_id: seg,
-        structure,
+        structure: hydratedStructure,
         affected_invoice_count: 0,
         include_partially_paid: false,
         mode: "preview",
@@ -362,7 +402,7 @@ export async function handleFees(
       const studentId = text(body.student_id);
       if (!academicYearId || !gradeId) return fail("academic_year_id and grade_id are required");
 
-      let structuresQuery = svc.from("fee_structures").select("*, category:fee_categories(*)")
+      let structuresQuery = svc.from("fee_structures").select("*")
         .eq("school_id", school)
         .eq("academic_year_id", academicYearId)
         .eq("grade_id", gradeId);
@@ -373,7 +413,13 @@ export async function handleFees(
       if (structuresError) return fail(structuresError.message);
       const includeOneTime = body.include_one_time === true;
       const includeYearly = body.include_yearly === true;
-      const structures = (rawStructures ?? []).filter((row: Record<string, unknown>) => {
+      let hydratedStructures: Record<string, unknown>[];
+      try {
+        hydratedStructures = await attachFeeCategories(svc, school, rawStructures ?? []);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load fee categories");
+      }
+      const structures = hydratedStructures.filter((row: Record<string, unknown>) => {
         const frequency = normalizeFrequency(row.frequency);
         if (frequency === "one_time") return includeOneTime;
         if (frequency === "yearly") return includeYearly;
@@ -430,7 +476,7 @@ export async function handleFees(
         const items = structures.map((structure: Record<string, unknown>) => ({
           invoice_id: invoice.id,
           fee_structure_id: structure.id,
-          category_name: text((structure.category as Record<string, unknown> | null)?.name, "Fee"),
+          category_name: text((structure.fee_category as Record<string, unknown> | null)?.name, "Fee"),
           amount: money(structure.amount),
         }));
         const { error: itemError } = await svc.from("fee_invoice_items").insert(items);

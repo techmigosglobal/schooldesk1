@@ -1,6 +1,0 @@
-appId: com.techmigos.schooldesk1
----
-- tapOn: "Open navigation"
-- extendedWaitUntil:
-    visible: "Leave Requests"
-    timeout: 15000

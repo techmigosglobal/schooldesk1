@@ -31,6 +31,11 @@ import { handleMedical } from "./handlers/medical.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
+type DirectSql = {
+  (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+  end: (options?: { timeout?: number }) => Promise<void>;
+};
+
 // ── CORS ──────────────────────────────────────────────────────
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -76,14 +81,7 @@ async function ensureSchemaCacheReady() {
     const dbUrl = Deno.env.get("SUPABASE_DB_URL");
     if (!dbUrl) return;
 
-    let sql:
-      | ((
-        strings: TemplateStringsArray,
-        ...values: unknown[]
-      ) => Promise<unknown[]> & {
-        end: (options?: { timeout?: number }) => Promise<void>;
-      })
-      | null = null;
+    let sql: DirectSql | null = null;
 
     try {
       const postgresModule = await import("npm:postgres@3.4.5");
@@ -92,7 +90,7 @@ async function ensureSchemaCacheReady() {
         max: 1,
         idle_timeout: 1,
         connect_timeout: 5,
-      });
+      }) as DirectSql;
       await sql`NOTIFY pgrst, 'reload schema'`;
       await sql`NOTIFY pgrst, 'reload config'`;
     } catch (_error) {

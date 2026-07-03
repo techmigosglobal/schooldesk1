@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext", "deno.ns"],
-    "target": "esnext",
     "module": "esnext",
     "moduleResolution": "bundler",
     "strict": false

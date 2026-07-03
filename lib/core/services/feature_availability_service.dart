@@ -65,7 +65,7 @@ class FeatureAvailabilityService {
       isAvailable: true,
       reason: 'Backend-backed student leave submission and approval is wired.',
       recommendedAction:
-          'Keep role-wise E2E coverage in the local Docker verifier.',
+          'Keep role-wise E2E coverage in Supabase-backed release verification.',
     ),
     SchoolDeskFeature.documents: FeatureAvailabilityState(
       feature: SchoolDeskFeature.documents,

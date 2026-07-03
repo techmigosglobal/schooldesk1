@@ -233,7 +233,12 @@ extension BackendTimetableApi on BackendApiClient {
     required String startTime,
     required String endTime,
     String roomId = '',
+    String slotType = 'regular',
   }) async {
+    final normalizedSlotType = slotType.trim().isEmpty
+        ? 'regular'
+        : slotType.trim();
+    final normalizedSubjectId = subjectId.trim();
     try {
       final response = await _dio.post(
         '/timetable/slots',
@@ -243,10 +248,13 @@ extension BackendTimetableApi on BackendApiClient {
           'term_id': termId.trim(),
           'day_of_week': dayOfWeek,
           'period_number': periodNumber,
-          'subject_id': subjectId.trim(),
+          'subject_id': normalizedSubjectId.isEmpty
+              ? null
+              : normalizedSubjectId,
           'staff_id': staffId.trim(),
           'start_time': startTime.trim(),
           'end_time': endTime.trim(),
+          'slot_type': normalizedSlotType,
           if (roomId.trim().isNotEmpty) 'room_id': roomId.trim(),
         },
       );
@@ -272,7 +280,12 @@ extension BackendTimetableApi on BackendApiClient {
     required String startTime,
     required String endTime,
     String roomId = '',
+    String slotType = 'regular',
   }) async {
+    final normalizedSlotType = slotType.trim().isEmpty
+        ? 'regular'
+        : slotType.trim();
+    final normalizedSubjectId = subjectId.trim();
     try {
       final response = await _dio.put(
         '/timetable/slots/${id.trim()}',
@@ -282,10 +295,13 @@ extension BackendTimetableApi on BackendApiClient {
           'term_id': termId.trim(),
           'day_of_week': dayOfWeek,
           'period_number': periodNumber,
-          'subject_id': subjectId.trim(),
+          'subject_id': normalizedSubjectId.isEmpty
+              ? null
+              : normalizedSubjectId,
           'staff_id': staffId.trim(),
           'start_time': startTime.trim(),
           'end_time': endTime.trim(),
+          'slot_type': normalizedSlotType,
           if (roomId.trim().isNotEmpty) 'room_id': roomId.trim(),
         },
       );

@@ -1,6 +1,6 @@
 // handlers/auth.ts
 // Login via username OR email → resolves to Supabase Auth
-// Returns same envelope as the Go backend: { token, refresh_token, expires_at, user }
+// Returns the legacy auth envelope: { token, refresh_token, expires_at, user }
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ok, fail, serviceClient } from "../index.ts";

@@ -1,6 +1,0 @@
-appId: com.techmigos.schooldesk1
----
-- tapOn: "Open navigation"
-- extendedWaitUntil:
-    visible: "Approval Center"
-    timeout: 15000

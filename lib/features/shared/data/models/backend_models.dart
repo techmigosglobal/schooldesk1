@@ -100,7 +100,7 @@ class LoginResponse {
   });
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) => LoginResponse(
-    // Supabase issues 'access_token'; Go backend issued 'token'.
+    // Supabase issues 'access_token'; legacy responses may still include 'token'.
     // Accept either for seamless blue-green transition.
     token: (json['access_token'] as String? ?? json['token'] as String? ?? ''),
     refreshToken: json['refresh_token'] as String? ?? '',

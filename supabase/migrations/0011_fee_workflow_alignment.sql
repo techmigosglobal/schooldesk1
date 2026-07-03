@@ -1,6 +1,6 @@
 -- ============================================================
 -- Migration 0011: Fee Workflow Schema Alignment
--- Aligns Supabase fee runtime with the Go backend contract used by Flutter.
+-- Aligns Supabase fee runtime with the Flutter fee contract.
 -- ============================================================
 
 alter table public.fee_structures

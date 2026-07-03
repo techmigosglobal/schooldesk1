@@ -189,7 +189,7 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains('Generate Time Table'));
-    expect(source, contains('Generate from class CSV'));
+    expect(source, contains('Import CSV'));
     expect(source, contains('BulkCsvImportTarget.classTimetables'));
     expect(source, contains('applyPrePrimaryClassSchedule('));
     expect(source, contains('generateSmartTimetable('));
@@ -246,7 +246,7 @@ void main() {
     expect(academicForms, contains('DropdownButtonFormField<String>'));
     expect(academicForms, contains("'classTeacherId': _teacherId"));
     expect(timetableScreen, contains('classTeacherName'));
-    expect(timetableScreen, contains('Class teacher for all periods'));
+    expect(timetableScreen, contains('Class teacher stays fixed'));
     expect(timetableScreen, isNot(contains('gradeId.substring')));
   });
 

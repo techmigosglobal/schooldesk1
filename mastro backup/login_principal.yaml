@@ -1,9 +1,0 @@
-appId: com.techmigos.schooldesk1
----
-- launchApp:
-    clearState: true
-- runFlow: subflows/login_principal.yaml
-- extendedWaitUntil:
-    visible: "Academic\nYears"
-    timeout: 20000
-

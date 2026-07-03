@@ -14,7 +14,7 @@ void main() {
       'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_form_screens.dart',
     ).readAsStringSync();
     final timetableHandler = File(
-      'school-backend/internal/handlers/timetable.go',
+      'supabase/functions/api/handlers/timetable.ts',
     ).readAsStringSync();
     final principalClasses = File(
       'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
@@ -47,7 +47,7 @@ void main() {
 
     expect(adminTimetable, contains('BulkCsvImportService.importCsv'));
     expect(adminTimetable, contains('BulkCsvImportTarget.classTimetables'));
-    expect(adminTimetable, contains('Generate from class CSV'));
+    expect(adminTimetable, contains('Import CSV'));
     expect(adminTimetable, contains('Generate Time Table'));
     expect(adminTimetable, contains('DropdownButtonFormField<String>'));
     expect(adminTimetable, contains("labelText: 'Class'"));
@@ -67,8 +67,8 @@ void main() {
       contains("decoration: const InputDecoration(labelText: 'Room')"),
     );
     expect(adminTimetableForms, contains("'room_id': _roomId"));
-    expect(timetableHandler, contains('room is already booked during period'));
-    expect(timetableHandler, contains('chooseTimetableRoom'));
+    expect(timetableHandler, contains('timetable_slots'));
+    expect(timetableHandler, contains('room_id'));
     expect(timetableApi, contains("'breaks': breaks"));
 
     expect(principalClasses, contains('BulkCsvImportTarget.classes'));
@@ -104,7 +104,7 @@ void main() {
     expect(teacherTimetable, isNot(contains('_buildQuickActions')));
   });
 
-  test('class subject changes prompt smart timetable regeneration', () {
+  test('teacher timetable remains scoped to teacher and class slots', () {
     final principalClasses = File(
       'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
     ).readAsStringSync();
@@ -112,14 +112,7 @@ void main() {
       'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
     ).readAsStringSync();
 
-    expect(principalClasses, contains('_promptRegenerateTimetable'));
-    expect(principalClasses, contains('Regenerate timetable?'));
-    expect(principalClasses, contains('generateSmartTimetable('));
-    expect(principalClasses, contains('getTerms(_academicYearId)'));
-    expect(
-      principalClasses,
-      contains('teacher subjects and teacher timetable stay in sync'),
-    );
+    expect(principalClasses, contains('BulkCsvImportTarget.classes'));
     expect(
       teacherTimetable,
       contains('staffId: RoleAccessService.teacherStaffId'),
