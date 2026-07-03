@@ -38,11 +38,11 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
         _posts = posts;
         _loading = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Unable to load the school gallery.';
+        _error = 'Unable to load the school gallery: $e';
       });
     }
   }

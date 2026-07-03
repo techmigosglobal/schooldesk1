@@ -19,7 +19,21 @@ function asStringArray(value: unknown): string[] {
     return value.map((item) => `${item ?? ""}`.trim()).filter(Boolean);
   }
   if (typeof value === "string") {
-    return value.split(",").map((item) => item.trim()).filter(Boolean);
+    const text = value.trim();
+    if (text.startsWith("[") && text.endsWith("]")) {
+      try {
+        return asStringArray(JSON.parse(text));
+      } catch {
+        // Fall back to comma-separated parsing below.
+      }
+    }
+    return text.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.values(record).map((item) => `${item ?? ""}`.trim()).filter(
+      Boolean,
+    );
   }
   return [];
 }
@@ -157,25 +171,13 @@ async function ensureEventPostSchema() {
           set event_date = coalesce(event_date, created_at)
           where event_date is null`,
         `update public.event_posts
-          set destinations = (
-            select to_jsonb(array_agg(distinct destination))
-            from (
-              select jsonb_array_elements_text(
-                case
-                  when jsonb_typeof(destinations) = 'array' then destinations
-                  else '[]'::jsonb
-                end
-              ) as destination
-              union select 'PARENTS_HOME'
-              union select 'SCHOOL_GALLERY'
-            ) published_destinations
-          )
+          set destinations = '["PARENTS_HOME","SCHOOL_GALLERY"]'::jsonb
           where status in ('approved', 'published')
             and (
               destinations is null
               or jsonb_typeof(destinations) is distinct from 'array'
-              or not destinations ? 'PARENTS_HOME'
-              or not destinations ? 'SCHOOL_GALLERY'
+              or not (destinations @> '["PARENTS_HOME"]'::jsonb)
+              or not (destinations @> '["SCHOOL_GALLERY"]'::jsonb)
             )`,
         `create index if not exists idx_event_posts_school_status
           on public.event_posts(school_id, status, created_at desc)`,
@@ -326,25 +328,23 @@ export async function handleEvents(
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).contains("destinations", [
-      "SCHOOL_GALLERY",
-    ]).order("created_at", {
+    ).in("status", ["approved", "published"]).order("created_at", {
       ascending: false,
     }).limit(50);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
+      .filter((row) => row.destinations.includes("SCHOOL_GALLERY")));
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).contains("destinations", [
-      "PARENTS_HOME",
-    ]).order("created_at", {
+    ).in("status", ["approved", "published"]).order("created_at", {
       ascending: false,
     }).limit(20);
     if (error) return fail(error.message);
-    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
+      .filter((row) => row.destinations.includes("PARENTS_HOME")));
   }
   if (path === "/event-posts/teacher" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(

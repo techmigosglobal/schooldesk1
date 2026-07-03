@@ -69,7 +69,6 @@ class _PrincipalEventApprovalScreenState
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
-  bool _changed = false;
 
   String get initialPostId => widget.args.initialPostId;
 
@@ -171,7 +170,6 @@ class _PrincipalEventApprovalScreenState
   }
 
   Future<void> _notifyAndReload({Map<String, dynamic>? keepPost}) async {
-    _changed = true;
     await BackendApiClient.instance.invalidateCachedReads();
     try {
       final service = await NotificationService.getInstance();
@@ -524,12 +522,45 @@ class _PrincipalEventApprovalScreenState
       },
     );
 
+    final editedPost = deleted
+        ? null
+        : <String, dynamic>{
+            ...post,
+            if (updatedPost != null) ...updatedPost!,
+            'id': id,
+            'title': titleController.text.trim(),
+            'description': descriptionController.text.trim(),
+            'body': descriptionController.text.trim(),
+            'event_date': dateController.text.trim().isEmpty
+                ? post['event_date']
+                : '${dateController.text.trim()}T00:00:00Z',
+            'destinations': selectedDestinations.toList(),
+            'approval_status': 'pending',
+            'status': 'pending',
+          };
+
     titleController.dispose();
     descriptionController.dispose();
     dateController.dispose();
 
     if (saved == true) {
-      await _notifyAndReload(keepPost: deleted ? null : updatedPost);
+      if (!deleted && editedPost != null && mounted) {
+        setState(() {
+          final index = _posts.indexWhere(
+            (item) => item['id']?.toString() == id,
+          );
+          if (index == -1) {
+            _posts.insert(0, editedPost);
+          } else {
+            _posts[index] = editedPost;
+          }
+          _selectedPost = editedPost;
+          _loading = false;
+          _refreshing = false;
+          _error = null;
+        });
+      }
+      await _notifyAndReload(keepPost: editedPost);
       if (!mounted) return;
       final message = deleted
           ? 'Event post deleted.'
@@ -542,36 +573,25 @@ class _PrincipalEventApprovalScreenState
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_changed,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _changed) {
-          _changed = false;
-          Navigator.of(context).pop(true);
-        }
-      },
-      child: SchoolDeskModuleScaffold(
-        title: 'Event Approvals',
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _refreshing
-                ? null
-                : () => _loadPosts(showSpinner: false),
-            icon: _refreshing
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded),
-          ),
-        ],
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-            ? _buildErrorState()
-            : _buildApprovalBody(),
-      ),
+    return SchoolDeskModuleScaffold(
+      title: 'Event Approvals',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _refreshing ? null : () => _loadPosts(showSpinner: false),
+          icon: _refreshing
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.refresh_rounded),
+        ),
+      ],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? _buildErrorState()
+          : _buildApprovalBody(),
     );
   }
 
