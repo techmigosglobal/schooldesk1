@@ -391,6 +391,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     badge: _data.pendingApprovals,
                   ),
                   _AcademicModuleItem(
+                    label: 'Gallery',
+                    route: AppRoutes.schoolGallery,
+                    illustration: SchoolDeskUiIllustrations.principalEvents,
+                    fallbackIcon: Icons.photo_library_rounded,
+                    accent: const Color(0xFF9333EA),
+                    cardColor: const Color(0xFFF5ECFF),
+                  ),
+                  _AcademicModuleItem(
                     label: 'Timetable',
                     route: AppRoutes.principalTimetable,
                     illustration: SchoolDeskUiIllustrations.calendar,

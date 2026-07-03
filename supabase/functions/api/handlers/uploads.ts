@@ -33,6 +33,16 @@ function normalizeDestinations(value: unknown, visibility: unknown): string[] {
   return ["PARENTS_HOME"];
 }
 
+function approvedEventDestinations(value: unknown, visibility: unknown): string[] {
+  return [
+    ...new Set([
+      ...normalizeDestinations(value, visibility),
+      "PARENTS_HOME",
+      "SCHOOL_GALLERY",
+    ]),
+  ];
+}
+
 function eventPostRow(row: Record<string, unknown>) {
   const description = `${row.description ?? row.body ?? ""}`;
   const approvalStatus = `${row.approval_status ?? row.status ?? "draft"}`;
@@ -146,6 +156,27 @@ async function ensureEventPostSchema() {
         `update public.event_posts
           set event_date = coalesce(event_date, created_at)
           where event_date is null`,
+        `update public.event_posts
+          set destinations = (
+            select to_jsonb(array_agg(distinct destination))
+            from (
+              select jsonb_array_elements_text(
+                case
+                  when jsonb_typeof(destinations) = 'array' then destinations
+                  else '[]'::jsonb
+                end
+              ) as destination
+              union select 'PARENTS_HOME'
+              union select 'SCHOOL_GALLERY'
+            ) published_destinations
+          )
+          where status in ('approved', 'published')
+            and (
+              destinations is null
+              or jsonb_typeof(destinations) is distinct from 'array'
+              or not destinations ? 'PARENTS_HOME'
+              or not destinations ? 'SCHOOL_GALLERY'
+            )`,
         `create index if not exists idx_event_posts_school_status
           on public.event_posts(school_id, status, created_at desc)`,
       ]);
@@ -428,6 +459,10 @@ export async function handleEvents(
     if (!existing) return fail("not found", 404);
     const { data, error } = await svc.from("event_posts").update({
       status: "approved",
+      destinations: approvedEventDestinations(
+        existing.destinations,
+        existing.visibility,
+      ),
       approved_by: user.id,
       approved_at: new Date().toISOString(),
       rejection_reason: null,

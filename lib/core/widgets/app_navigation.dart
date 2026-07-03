@@ -268,6 +268,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               label: SchoolDeskGlossary.calendar,
               route: AppRoutes.eventsCalendar,
             ),
+            SchoolDeskNavigationItem(
+              index: PrincipalNav.gallery,
+              icon: Icons.photo_library_outlined,
+              activeIcon: Icons.photo_library_rounded,
+              label: 'Gallery',
+              route: AppRoutes.schoolGallery,
+            ),
           ],
         ),
         SchoolDeskNavigationSection(

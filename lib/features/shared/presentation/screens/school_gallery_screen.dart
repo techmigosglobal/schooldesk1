@@ -81,13 +81,22 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
     if (_posts.isEmpty) {
       final role =
           BackendApiClient.instance.currentRoleName?.toLowerCase() ?? '';
-      final canCreate = role == 'teacher' || role == 'principal';
+      final actionLabel = role == 'teacher'
+          ? 'Create Event Post'
+          : role == 'principal'
+          ? 'Review Event Approvals'
+          : null;
+      final actionRoute = role == 'teacher'
+          ? AppRoutes.teacherEventPosts
+          : role == 'principal'
+          ? AppRoutes.principalEventApprovals
+          : null;
       return SchoolDeskStatusPanel.empty(
         title: 'No gallery posts yet',
         message: 'Approved school gallery posts will appear here.',
-        actionLabel: canCreate ? 'Create Event Post' : null,
-        onAction: canCreate
-            ? () => Navigator.pushNamed(context, AppRoutes.teacherEventPosts)
+        actionLabel: actionLabel,
+        onAction: actionRoute != null
+            ? () => Navigator.pushNamed(context, actionRoute)
             : null,
       );
     }

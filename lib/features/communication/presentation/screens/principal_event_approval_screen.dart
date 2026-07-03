@@ -480,6 +480,9 @@ class _PrincipalEventApprovalScreenState
                   onPressed: saving || deleting
                       ? null
                       : () => deletePost(setDialogState),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.appTheme.error,
+                  ),
                   child: deleting
                       ? const SizedBox.square(
                           dimension: 16,
@@ -491,12 +494,19 @@ class _PrincipalEventApprovalScreenState
                   onPressed: saving || deleting
                       ? null
                       : () => Navigator.pop(dialogContext, false),
+                  style: TextButton.styleFrom(
+                    foregroundColor: context.appTheme.primary,
+                  ),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
                   onPressed: saving || deleting
                       ? null
                       : () => saveChanges(setDialogState),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: context.appTheme.primary,
+                    foregroundColor: context.appTheme.onPrimary,
+                  ),
                   child: saving
                       ? const SizedBox.square(
                           dimension: 16,
@@ -768,16 +778,29 @@ class _PrincipalEventApprovalScreenState
       children: [
         OutlinedButton.icon(
           onPressed: id.isEmpty ? null : () => _editPost(post),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.appTheme.primary,
+            side: BorderSide(color: context.appTheme.primary),
+          ),
           icon: const Icon(Icons.edit_outlined),
           label: const Text('Edit'),
         ),
         OutlinedButton.icon(
           onPressed: id.isEmpty ? null : () => _rejectStatus(id),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: context.appTheme.error,
+            side: BorderSide(color: context.appTheme.error),
+          ),
           icon: const Icon(Icons.close_rounded),
           label: const Text('Reject'),
         ),
         FilledButton.icon(
           onPressed: id.isEmpty || !hasViewed ? null : () => _approveStatus(id),
+          style: FilledButton.styleFrom(
+            backgroundColor: context.appTheme.primary,
+            foregroundColor: context.appTheme.onPrimary,
+            disabledForegroundColor: context.appTheme.onSurfaceVariant,
+          ),
           icon: const Icon(Icons.check_rounded),
           label: const Text('Approve'),
         ),

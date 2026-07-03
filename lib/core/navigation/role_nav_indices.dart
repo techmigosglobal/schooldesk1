@@ -69,4 +69,5 @@ class PrincipalNav {
   static const reports = 22;
   static const analytics = 23;
   static const monitor = 24;
+  static const gallery = 25;
 }
