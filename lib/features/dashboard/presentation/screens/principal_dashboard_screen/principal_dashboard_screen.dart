@@ -1400,17 +1400,20 @@ class _AcademicModuleGrid extends StatelessWidget {
         final tileExtent = 94.0 + 10.0 + labelHeight + 8.0;
         final compact = constraints.maxWidth < 370;
         final columns = compact ? 2 : 3;
-        return GridView.count(
-          crossAxisCount: columns,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          mainAxisExtent: tileExtent,
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            mainAxisExtent: tileExtent,
+          ),
+          itemCount: items.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (final item in items)
-              _AcademicModuleTile(item: item, onTap: () => onTap(item)),
-          ],
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return _AcademicModuleTile(item: item, onTap: () => onTap(item));
+          },
         );
       },
     );

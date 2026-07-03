@@ -1840,14 +1840,17 @@ class SchoolDeskResponsiveGrid extends StatelessWidget {
             .toDouble();
         final effectiveMainAxisExtent =
             (mainAxisExtent ?? 156) * responsiveScale;
-        return GridView.count(
-          crossAxisCount: columns,
-          mainAxisSpacing: spacing,
-          crossAxisSpacing: spacing,
-          mainAxisExtent: effectiveMainAxisExtent,
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: effectiveMainAxisExtent,
+          ),
+          itemCount: children.length,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          children: children,
+          itemBuilder: (context, index) => children[index],
         );
       },
     );
