@@ -64,6 +64,104 @@ function uniqueText(values: unknown[]) {
   return [...new Set(values.map((value) => text(value)).filter(Boolean))];
 }
 
+async function teacherUserIdForStaff(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+) {
+  if (!staffId) return "";
+  const { data } = await svc.from("users").select("id").eq("school_id", school)
+    .eq("linked_id", staffId).maybeSingle();
+  return `${data?.id ?? ""}`;
+}
+
+async function principalUserIdForSchool(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const { data } = await svc.from("users").select("id").eq("school_id", school)
+    .ilike("role_name", "principal").limit(1);
+  return `${data?.[0]?.id ?? ""}`;
+}
+
+function canReadChatConversation(
+  conversation: Record<string, unknown>,
+  user: User,
+) {
+  if (canManageSchoolContent(user)) return true;
+  const userRole = role(user);
+  if (userRole === "parent") {
+    return text(conversation.parent_id) === user.id;
+  }
+  if (userRole === "teacher") {
+    return text(conversation.teacher_id) === linkedStaffId(user);
+  }
+  return false;
+}
+
+function canSendChatMessage(
+  conversation: Record<string, unknown>,
+  user: User,
+) {
+  const userRole = role(user);
+  const type = text(conversation.type) || "parent_teacher";
+  if (type === "parent_teacher") {
+    return canReadChatConversation(conversation, user) && userRole !== "principal";
+  }
+  if (canManageSchoolContent(user)) return true;
+  if (type === "principal_parent") {
+    return userRole === "parent" && text(conversation.parent_id) === user.id;
+  }
+  if (type === "principal_teacher") {
+    return userRole === "teacher" &&
+      text(conversation.teacher_id) === linkedStaffId(user);
+  }
+  return false;
+}
+
+async function resolveChatNotificationTarget(
+  svc: SupabaseClient,
+  school: string,
+  conversation: Record<string, unknown>,
+  user: User,
+) {
+  const type = text(conversation.type) || "parent_teacher";
+  const parentId = text(conversation.parent_id);
+  const teacherId = text(conversation.teacher_id);
+  const createdBy = text(conversation.created_by);
+  const teacherUserId = await teacherUserIdForStaff(svc, school, teacherId);
+
+  if (type === "parent_teacher") {
+    if (parentId && parentId !== user.id) return parentId;
+    if (teacherUserId && teacherUserId !== user.id) return teacherUserId;
+    return "";
+  }
+
+  if (createdBy && createdBy !== user.id) {
+    return createdBy;
+  }
+
+  if (type === "principal_parent") {
+    if (canManageSchoolContent(user)) {
+      return parentId && parentId !== user.id ? parentId : "";
+    }
+    const principalUserId = await principalUserIdForSchool(svc, school);
+    if (principalUserId && principalUserId !== user.id) return principalUserId;
+    return parentId && parentId !== user.id ? parentId : "";
+  }
+
+  if (type === "principal_teacher") {
+    if (canManageSchoolContent(user)) {
+      return teacherUserId && teacherUserId !== user.id ? teacherUserId : "";
+    }
+    const principalUserId = await principalUserIdForSchool(svc, school);
+    if (principalUserId && principalUserId !== user.id) return principalUserId;
+    return teacherUserId && teacherUserId !== user.id ? teacherUserId : "";
+  }
+
+  return "";
+}
+
 async function enrichChatConversations(
   svc: SupabaseClient,
   school: string,
@@ -292,6 +390,15 @@ export async function handleCommunications(
   );
   if (chatMessagesMatch && method === "GET") {
     const conversationId = chatMessagesMatch[1];
+    const { data: conversation, error: conversationError } = await svc.from(
+      "message_conversations",
+    ).select("*").eq("school_id", school).eq("id", conversationId)
+      .maybeSingle();
+    if (conversationError) return fail(conversationError.message);
+    if (!conversation) return fail("conversation not found", 404);
+    if (!canReadChatConversation(conversation, user)) {
+      return fail("forbidden", 403);
+    }
     const pageSize = Math.min(
       Number(url.searchParams.get("page_size") ?? 80),
       200,
@@ -309,6 +416,13 @@ export async function handleCommunications(
 
   if (chatMessagesMatch && method === "POST") {
     const conversationId = chatMessagesMatch[1];
+    const { data: conversation, error: conversationError } = await svc.from(
+      "message_conversations",
+    ).select("*").eq("id", conversationId).eq("school_id", school)
+      .maybeSingle();
+    if (conversationError) return fail(conversationError.message);
+    if (!conversation) return fail("conversation not found", 404);
+    if (!canSendChatMessage(conversation, user)) return fail("forbidden", 403);
     const messageText = text(body.body ?? body.message ?? body.message_body);
     if (!messageText && !text(body.attachment_url)) {
       return fail("message body required");
@@ -333,8 +447,6 @@ export async function handleCommunications(
       delivered_at: now,
     }).select("*").single();
     if (error) return fail(error.message);
-    const { data: conversation } = await svc.from("message_conversations")
-      .select("*").eq("id", conversationId).eq("school_id", school).single();
     await svc.from("message_conversations").update({
       last_message: messageText,
       last_message_at: now,
@@ -342,17 +454,13 @@ export async function handleCommunications(
       updated_at: now,
     }).eq("id", conversationId).eq("school_id", school);
     if (conversation) {
-      const parentId = `${conversation.parent_id ?? ""}`;
-      const teacherId = `${conversation.teacher_id ?? ""}`;
       const type = `${conversation.type ?? "parent_teacher"}`;
-      let targetUserId = "";
-      if (parentId && parentId != user.id) {
-        targetUserId = parentId;
-      } else if (teacherId) {
-        const { data: teacherUser } = await svc.from("users").select("id")
-          .eq("school_id", school).eq("linked_id", teacherId).maybeSingle();
-        targetUserId = `${teacherUser?.id ?? ""}`;
-      }
+      const targetUserId = await resolveChatNotificationTarget(
+        svc,
+        school,
+        conversation,
+        user,
+      );
       if (targetUserId && targetUserId != user.id) {
         await appendNotification(
           svc,
@@ -372,6 +480,15 @@ export async function handleCommunications(
   const chatReadMatch = path.match(/^\/chat\/conversations\/([^/]+)\/read$/);
   if (chatReadMatch && method === "POST") {
     const conversationId = chatReadMatch[1];
+    const { data: conversation, error: conversationError } = await svc.from(
+      "message_conversations",
+    ).select("*").eq("school_id", school).eq("id", conversationId)
+      .maybeSingle();
+    if (conversationError) return fail(conversationError.message);
+    if (!conversation) return fail("conversation not found", 404);
+    if (!canReadChatConversation(conversation, user)) {
+      return fail("forbidden", 403);
+    }
     const { data, error } = await svc.from("messages").select("*")
       .eq("school_id", school).eq("conversation_id", conversationId);
     if (error) return fail(error.message);

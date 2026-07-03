@@ -165,6 +165,51 @@ async function attachFeeCategories(
   });
 }
 
+async function attachPaymentRequestRelations(
+  svc: SupabaseClient,
+  school: string,
+  rows: Record<string, unknown>[],
+) {
+  const invoiceIds = [...new Set(rows.map((row) => text(row.invoice_id)).filter(Boolean))];
+  const studentIds = [...new Set(rows.map((row) => text(row.student_id)).filter(Boolean))];
+  const parentIds = [...new Set(rows.map((row) => text(row.parent_user_id)).filter(Boolean))];
+
+  const invoicesById = new Map<string, Record<string, unknown>>();
+  const studentsById = new Map<string, Record<string, unknown>>();
+  const parentsById = new Map<string, Record<string, unknown>>();
+
+  if (invoiceIds.length) {
+    const { data, error } = await svc.from("fee_invoices").select("*")
+      .eq("school_id", school)
+      .in("id", invoiceIds);
+    if (error) throw error;
+    for (const row of data ?? []) invoicesById.set(text(row.id), row);
+  }
+
+  if (studentIds.length) {
+    const { data, error } = await svc.from("students").select("*")
+      .eq("school_id", school)
+      .in("id", studentIds);
+    if (error) throw error;
+    for (const row of data ?? []) studentsById.set(text(row.id), row);
+  }
+
+  if (parentIds.length) {
+    const { data, error } = await svc.from("users").select("*")
+      .eq("school_id", school)
+      .in("id", parentIds);
+    if (error) throw error;
+    for (const row of data ?? []) parentsById.set(text(row.id), row);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    invoice: invoicesById.get(text(row.invoice_id)) ?? null,
+    student: studentsById.get(text(row.student_id)) ?? null,
+    parent_user: parentsById.get(text(row.parent_user_id)) ?? null,
+  }));
+}
+
 export async function handleFees(
   req: Request,
   path: string,
@@ -704,7 +749,11 @@ export async function handleFees(
         ? await svc.from("parent_payment_requests").update(payload).eq("id", existingRequest.id).eq("school_id", school).select().single()
         : await svc.from("parent_payment_requests").insert(payload).select().single();
       if (error) return fail(error.message);
-      return ok(data);
+      try {
+        return ok((await attachPaymentRequestRelations(svc, school, [data]))[0]);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load payment request details");
+      }
     }
 
     if (seg && normalized.endsWith("/resubmit") && method === "PATCH") {
@@ -723,13 +772,22 @@ export async function handleFees(
       }
       const paymentId = normalized.split("/").filter(Boolean)[0];
       const { data, error } = await svc.from("parent_payment_requests").update({
+        transaction_ref: text(form.get("transaction_ref") ?? form.get("transaction_id")),
+        transaction_id: text(form.get("transaction_ref") ?? form.get("transaction_id")),
         proof_url: proofUrl ?? undefined,
+        proof_file_name: screenshot?.name ?? undefined,
+        proof_content_type: screenshot?.type ?? undefined,
+        proof_size: screenshot?.size ?? undefined,
         remarks: `${form.get("remarks") ?? ""}`,
-        status: "pending",
+        status: "pending_verification",
         updated_at: new Date().toISOString(),
       }).eq("id", paymentId).eq("school_id", school).select().single();
       if (error) return fail(error.message);
-      return ok(data);
+      try {
+        return ok((await attachPaymentRequestRelations(svc, school, [data]))[0]);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load payment request details");
+      }
     }
 
     if (!seg && method === "POST") {
@@ -806,7 +864,11 @@ export async function handleFees(
       if (url.searchParams.get("status")) q = q.eq("status", url.searchParams.get("status")!);
       const { data, error } = await q.order("created_at", { ascending: false });
       if (error) return fail(error.message);
-      return ok(data ?? []);
+      try {
+        return ok(await attachPaymentRequestRelations(svc, school, data ?? []));
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load payment request details");
+      }
     }
     if (!seg && method === "POST") {
       const studentId = text((body as Record<string, unknown>).student_id);
@@ -823,7 +885,11 @@ export async function handleFees(
         parent_user_id: isAdminOrPrincipal(user) ? body.parent_user_id ?? null : user.id,
       }).select().single();
       if (error) return fail(error.message);
-      return ok(data);
+      try {
+        return ok((await attachPaymentRequestRelations(svc, school, [data]))[0]);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load payment request details");
+      }
     }
     if (seg && path.endsWith("/decision") && method === "PUT") {
       if (!isAdminOrPrincipal(user)) return fail("admin or principal access required", 403);
@@ -889,7 +955,11 @@ export async function handleFees(
         updated_at: new Date().toISOString(),
       }).eq("id", seg).eq("school_id", school).select().single();
       if (error) return fail(error.message);
-      return ok(data);
+      try {
+        return ok((await attachPaymentRequestRelations(svc, school, [data]))[0]);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : "failed to load payment request details");
+      }
     }
   }
 

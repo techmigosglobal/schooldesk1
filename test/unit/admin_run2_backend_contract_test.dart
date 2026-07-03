@@ -90,6 +90,7 @@ void main() {
       requestsScreen,
       contains('AppRoutes.principalPaymentRequestDecision'),
     );
+    expect(requestsScreen, contains('pushReplacementNamed(AppRoutes.feeMonitoring)'));
     expect(decisionScreen, contains('decideParentPaymentRequest('));
     expect(
       api,
@@ -159,6 +160,8 @@ void main() {
     ).readAsStringSync();
 
     expect(parentFees, contains('AppRoutes.parentPaymentSelection'));
+    expect(parentFees, contains('SingleChildScrollView('));
+    expect(parentFees, contains('scrollDirection: Axis.horizontal'));
     expect(parentFees, isNot(contains('_showPaymentDialog')));
     expect(parentFees, isNot(contains('showDialog(')));
     expect(paymentForm, contains('class ParentPaymentRequestFormScreen'));

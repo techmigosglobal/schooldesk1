@@ -60,7 +60,7 @@ class _TeacherCommunicationScreenState
       await RoleAccessService.initialize();
       final api = BackendApiClient.instance;
       final profile = await api.getProfile();
-      final conversations = await api.getUnifiedChatConversations(
+      final parentConversations = await api.getUnifiedChatConversations(
         type: 'parent_teacher',
         teacherId: RoleAccessService.teacherStaffId,
       );
@@ -68,10 +68,25 @@ class _TeacherCommunicationScreenState
         type: 'principal_teacher',
         teacherId: RoleAccessService.teacherStaffId,
       );
-      conversations.addAll(principalConversations);
-      conversations.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
+      final users = await api.getUsers(page: 1, pageSize: 200);
+      final conversations = _mergeConversationsWithContacts(
+        parentConversations: parentConversations,
+        principalConversations: principalConversations,
+        userContacts: users.data,
+      )..sort((a, b) {
+          final leftPlaceholder = _isContactPlaceholder(a);
+          final rightPlaceholder = _isContactPlaceholder(b);
+          if (leftPlaceholder != rightPlaceholder) {
+            return leftPlaceholder ? 1 : -1;
+          }
+          final timeCompare = _sortTime(b).compareTo(_sortTime(a));
+          if (timeCompare != 0) return timeCompare;
+          return _conversationTitle(a).compareTo(_conversationTitle(b));
+        });
       final selected = _selectConversation(conversations);
       final messages = selected == null
+          ? <Map<String, dynamic>>[]
+          : _isContactPlaceholder(selected)
           ? <Map<String, dynamic>>[]
           : await api.getUnifiedChatMessages(
               conversationId: _text(selected['id']),
@@ -85,7 +100,7 @@ class _TeacherCommunicationScreenState
         _loading = false;
       });
       _scrollToBottom();
-      if (selected != null) {
+      if (selected != null && !_isContactPlaceholder(selected)) {
         unawaited(api.markUnifiedChatConversationRead(_text(selected['id'])));
       }
     } catch (error) {
@@ -114,8 +129,19 @@ class _TeacherCommunicationScreenState
     if (conversation == null || body.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
+      var conversationId = _text(conversation['id']);
+      if (_isContactPlaceholder(conversation)) {
+        final created = await BackendApiClient.instance
+            .createUnifiedChatConversation(
+              type: _text(conversation['type'], fallback: 'parent_teacher'),
+              teacherId: RoleAccessService.teacherStaffId,
+              parentId: _text(conversation['parent_id']),
+              title: _conversationTitle(conversation),
+            );
+        conversationId = _text(created['id']);
+      }
       await BackendApiClient.instance.sendUnifiedChatMessage(
-        conversationId: _text(conversation['id']),
+        conversationId: conversationId,
         body: body,
       );
       _messageController.clear();
@@ -138,7 +164,7 @@ class _TeacherCommunicationScreenState
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 780;
           final list = _conversationList();
-          final chat = _chatPane();
+          final chat = _chatPane(showBackButton: !wide);
           if (wide) {
             return Row(
               children: [
@@ -162,9 +188,9 @@ class _TeacherCommunicationScreenState
       return const Center(
         child: TeacherFlowCard(
           icon: Icons.forum_rounded,
-          title: 'No parent chats yet',
+          title: 'No chat contacts yet',
           subtitle:
-              'Parent conversations for your assigned students appear here.',
+              'Parents and school leadership contacts for direct chat appear here.',
         ),
       );
     }
@@ -177,12 +203,7 @@ class _TeacherCommunicationScreenState
         final row = _conversations[index];
         final selected =
             _text(row['id']) == _text(_selectedConversation?['id']);
-        final parent = _map(row['parent']);
-        final student = _map(row['student']);
-        final isPrincipal = _text(row['type']) == 'principal_teacher';
-        final label = isPrincipal
-            ? 'Principal'
-            : _name(parent, fallback: 'Parent');
+        final label = _conversationTitle(row);
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
           selected: selected,
@@ -190,9 +211,7 @@ class _TeacherCommunicationScreenState
           title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             _text(row['last_message']).isEmpty
-                ? (isPrincipal
-                      ? 'School leadership'
-                      : _name(student, fallback: 'Student'))
+                ? _conversationSubtitle(row)
                 : _text(row['last_message']),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -231,25 +250,24 @@ class _TeacherCommunicationScreenState
     );
   }
 
-  Widget _chatPane() {
+  Widget _chatPane({required bool showBackButton}) {
     final conversation = _selectedConversation;
     if (conversation == null) {
-      return const Center(child: Text('Select a parent conversation.'));
+      return const Center(child: Text('Select a chat contact.'));
     }
-    final parent = _map(conversation['parent']);
-    final student = _map(conversation['student']);
-    final isPrincipal = _text(conversation['type']) == 'principal_teacher';
-    final label = isPrincipal ? 'Principal' : _name(parent, fallback: 'Parent');
+    final label = _conversationTitle(conversation);
     return Column(
       children: [
         ListTile(
-          leading: CircleAvatar(child: Text(_initials(label))),
+          leading: showBackButton
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  tooltip: 'Back to chats',
+                  onPressed: () => setState(() => _selectedConversation = null),
+                )
+              : CircleAvatar(child: Text(_initials(label))),
           title: Text(label),
-          subtitle: Text(
-            isPrincipal
-                ? 'Direct message with school leadership'
-                : '${_name(student, fallback: 'Student')} - Principal can monitor this chat',
-          ),
+          subtitle: Text(_conversationSubtitle(conversation)),
         ),
         Expanded(
           child: ChatWallpaperBackground(
@@ -277,7 +295,6 @@ class _TeacherCommunicationScreenState
         ChatInputBar(
           controller: _messageController,
           isSending: _sending,
-          onAttach: () {},
           onSend: _send,
           placeholder: 'Message $label',
         ),
@@ -291,6 +308,85 @@ class _TeacherCommunicationScreenState
       _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     });
   }
+}
+
+List<Map<String, dynamic>> _mergeConversationsWithContacts({
+  required List<Map<String, dynamic>> parentConversations,
+  required List<Map<String, dynamic>> principalConversations,
+  required List<UserAccountModel> userContacts,
+}) {
+  final merged = <String, Map<String, dynamic>>{
+    for (final row in [...parentConversations, ...principalConversations])
+      _text(row['id']): Map<String, dynamic>.from(row),
+  };
+
+  for (final user in userContacts) {
+    final role = user.roleName.trim().toLowerCase();
+    if (role == 'parent') {
+      final parentId = user.id.trim();
+      if (parentId.isEmpty) continue;
+      final exists = parentConversations.any(
+        (row) => _text(row['parent_id']) == parentId,
+      );
+      if (exists) continue;
+      merged['contact-parent-$parentId'] = {
+        'id': 'contact-parent-$parentId',
+        'type': 'parent_teacher',
+        'parent_id': parentId,
+        'parent': {
+          'id': parentId,
+          'name': user.name,
+          'username': user.username,
+        },
+        'last_message': '',
+        'last_message_at': null,
+        'unread_count': 0,
+        'is_contact_placeholder': true,
+      };
+    }
+
+    if (role == 'principal') {
+      final principalId = user.id.trim();
+      if (principalId.isEmpty) continue;
+      final exists = principalConversations.any(
+        (row) => _text(row['created_by']) == principalId,
+      );
+      if (exists) continue;
+      merged['contact-principal-$principalId'] = {
+        'id': 'contact-principal-$principalId',
+        'type': 'principal_teacher',
+        'principal_id': principalId,
+        'last_message': '',
+        'last_message_at': null,
+        'unread_count': 0,
+        'is_contact_placeholder': true,
+      };
+    }
+  }
+
+  return merged.values.toList();
+}
+
+bool _isContactPlaceholder(Map<String, dynamic> row) =>
+    row['is_contact_placeholder'] == true;
+
+String _conversationTitle(Map<String, dynamic> row) {
+  final type = _text(row['type']);
+  if (type == 'principal_teacher') return 'Principal';
+  return _name(_map(row['parent']), fallback: 'Parent');
+}
+
+String _conversationSubtitle(Map<String, dynamic> row) {
+  final type = _text(row['type']);
+  if (type == 'principal_teacher') {
+    return _isContactPlaceholder(row)
+        ? 'School leadership - tap to start direct chat'
+        : 'Direct message with school leadership';
+  }
+  final student = _name(_map(row['student']), fallback: 'Parent contact');
+  return _isContactPlaceholder(row)
+      ? 'Parent contact - tap to start direct chat'
+      : '$student - Principal can monitor this chat';
 }
 
 Map<String, dynamic> _map(Object? value) =>

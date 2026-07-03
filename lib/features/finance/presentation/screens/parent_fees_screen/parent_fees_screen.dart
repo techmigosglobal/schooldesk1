@@ -334,38 +334,44 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     return Container(
       color: context.appTheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: List.generate(_childrenData.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              setState(() {
-                _activeChildIndex = i;
-                _loading = true;
-              });
-              ParentChildSelectionService.saveIndex(_childrenData, i);
-              _loadData();
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                _studentName(_childrenData[i]).split(' ').first,
-                style: GoogleFonts.ibmPlexSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(_childrenData.length, (i) {
+            final isActive = i == _activeChildIndex;
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _activeChildIndex = i;
+                  _loading = true;
+                });
+                ParentChildSelectionService.saveIndex(_childrenData, i);
+                _loadData();
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  _studentName(_childrenData[i]).split(' ').first,
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? Colors.white : context.appTheme.onSurface,
+                  ),
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }

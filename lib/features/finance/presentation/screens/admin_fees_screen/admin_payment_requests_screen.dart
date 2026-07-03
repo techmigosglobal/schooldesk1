@@ -108,6 +108,14 @@ class _AdminPaymentRequestsScreenState
     );
   }
 
+  void _backToFees() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+      return;
+    }
+    Navigator.of(context).pushReplacementNamed(AppRoutes.feeMonitoring);
+  }
+
   List<Map<String, dynamic>> get _visibleRequests {
     if (_statusFilter == 'all') return _requests;
     if (_statusFilter == 'pending') {
@@ -327,7 +335,7 @@ class _AdminPaymentRequestsScreenState
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: _backToFees,
                   icon: const Icon(Icons.arrow_back_rounded, size: 16),
                   label: Text('Fees', style: GoogleFonts.dmSans(fontSize: 12)),
                 ),

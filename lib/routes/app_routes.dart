@@ -328,11 +328,17 @@ class AppRoutes {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
           {};
-      return HomeworkMessagingScreen(
-        role: args['role'] as String? ?? 'teacher',
-        userId: args['userId'] as String? ?? '',
-        userName: args['userName'] as String? ?? 'Teacher',
-      );
+      final role = (args['role'] as String? ?? 'teacher').toLowerCase();
+      switch (role) {
+        case 'parent':
+          return const ParentTeacherChatScreen();
+        case 'principal':
+        case 'admin':
+          return const PrincipalChatCommunicationsScreen();
+        case 'teacher':
+        default:
+          return const TeacherCommunicationScreen();
+      }
     },
   };
 

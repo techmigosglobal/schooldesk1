@@ -84,11 +84,32 @@ class _PrincipalChatCommunicationsScreenState
         type: 'principal_parent',
         monitor: true,
       );
-      final direct = [...directTeacher, ...directParent]
-        ..sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
+      final teacherContacts = await api.getStaff(page: 1, pageSize: 200);
+      final parentContacts = await api.getUsers(
+        role: 'Parent',
+        page: 1,
+        pageSize: 200,
+      );
+      final direct = _mergeDirectConversationsWithContacts(
+        directTeacher: directTeacher,
+        directParent: directParent,
+        teacherContacts: teacherContacts.data,
+        parentContacts: parentContacts.data,
+      )..sort((a, b) {
+          final leftPlaceholder = _isContactPlaceholder(a);
+          final rightPlaceholder = _isContactPlaceholder(b);
+          if (leftPlaceholder != rightPlaceholder) {
+            return leftPlaceholder ? 1 : -1;
+          }
+          final timeCompare = _sortTime(b).compareTo(_sortTime(a));
+          if (timeCompare != 0) return timeCompare;
+          return _directTitle(a).compareTo(_directTitle(b));
+        });
       monitor.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
       final selected = _selectConversation(monitor, direct);
       final messages = selected == null
+          ? <Map<String, dynamic>>[]
+          : _isContactPlaceholder(selected)
           ? <Map<String, dynamic>>[]
           : await api.getUnifiedChatMessages(
               conversationId: _text(selected['id']),
@@ -103,7 +124,9 @@ class _PrincipalChatCommunicationsScreenState
         _loading = false;
       });
       _scrollToBottom();
-      if (selected != null && _canSendIn(selected)) {
+      if (selected != null &&
+          _canSendIn(selected) &&
+          !_isContactPlaceholder(selected)) {
         unawaited(api.markUnifiedChatConversationRead(_text(selected['id'])));
       }
     } catch (error) {
@@ -187,8 +210,20 @@ class _PrincipalChatCommunicationsScreenState
     }
     setState(() => _sending = true);
     try {
+      var conversationId = _text(conversation['id']);
+      if (_isContactPlaceholder(conversation)) {
+        final created = await BackendApiClient.instance
+            .createUnifiedChatConversation(
+              type: _text(conversation['type'], fallback: 'principal_teacher'),
+              teacherId: _text(conversation['teacher_id']),
+              parentId: _text(conversation['parent_id']),
+              studentId: _text(conversation['student_id']),
+              title: _directTitle(conversation),
+            );
+        conversationId = _text(created['id']);
+      }
       await BackendApiClient.instance.sendUnifiedChatMessage(
-        conversationId: _text(conversation['id']),
+        conversationId: conversationId,
         body: body,
       );
       _messageController.clear();
@@ -272,7 +307,10 @@ class _PrincipalChatCommunicationsScreenState
             Expanded(child: _conversationList(conversations, monitorMode)),
           ],
         );
-        final chat = _chatPane(monitorMode: monitorMode);
+        final chat = _chatPane(
+          monitorMode: monitorMode,
+          showBackButton: !wide,
+        );
         if (wide) {
           return Row(
             children: [
@@ -428,6 +466,14 @@ class _PrincipalChatCommunicationsScreenState
         final title = monitorMode ? _monitorTitle(row) : _directTitle(row);
         final subtitle = monitorMode
             ? _studentLine(row)
+            : _isContactPlaceholder(row)
+            ? _text(
+                row['type'],
+                fallback: 'direct',
+              ) ==
+                    'principal_teacher'
+                ? 'Teacher contact - tap to start direct chat'
+                : 'Parent contact - tap to start direct chat'
             : _text(row['last_message'], fallback: 'Direct conversation');
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
@@ -468,14 +514,19 @@ class _PrincipalChatCommunicationsScreenState
           ),
           onTap: () {
             setState(() => _selectedConversation = row);
-            _load(background: true);
+            if (!_isContactPlaceholder(row)) {
+              _load(background: true);
+            }
           },
         );
       },
     );
   }
 
-  Widget _chatPane({required bool monitorMode}) {
+  Widget _chatPane({
+    required bool monitorMode,
+    required bool showBackButton,
+  }) {
     final conversation = _selectedConversation;
     if (conversation == null) {
       return const Center(child: Text('Select a conversation.'));
@@ -484,15 +535,21 @@ class _PrincipalChatCommunicationsScreenState
     return Column(
       children: [
         ListTile(
-          leading: CircleAvatar(
-            child: Text(
-              _initials(
-                monitorMode
-                    ? _monitorTitle(conversation)
-                    : _directTitle(conversation),
-              ),
-            ),
-          ),
+          leading: showBackButton
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  tooltip: 'Back to chats',
+                  onPressed: () => setState(() => _selectedConversation = null),
+                )
+              : CircleAvatar(
+                  child: Text(
+                    _initials(
+                      monitorMode
+                          ? _monitorTitle(conversation)
+                          : _directTitle(conversation),
+                    ),
+                  ),
+                ),
           title: Text(
             monitorMode
                 ? _monitorTitle(conversation)
@@ -558,7 +615,6 @@ class _PrincipalChatCommunicationsScreenState
           ChatInputBar(
             controller: _messageController,
             isSending: _sending,
-            onAttach: () {},
             onSend: _send,
             placeholder: 'Type a direct message',
           ),
@@ -568,6 +624,76 @@ class _PrincipalChatCommunicationsScreenState
 
   bool _canSendIn(Map<String, dynamic> conversation) =>
       _text(conversation['type']) != 'parent_teacher';
+
+  List<Map<String, dynamic>> _mergeDirectConversationsWithContacts({
+    required List<Map<String, dynamic>> directTeacher,
+    required List<Map<String, dynamic>> directParent,
+    required List<dynamic> teacherContacts,
+    required List<dynamic> parentContacts,
+  }) {
+    final rows = <Map<String, dynamic>>[
+      ...directTeacher.map((row) => Map<String, dynamic>.from(row)),
+      ...directParent.map((row) => Map<String, dynamic>.from(row)),
+    ];
+    final existingTeacherIds = rows
+        .where((row) => _text(row['type']) == 'principal_teacher')
+        .map((row) => _text(row['teacher_id']))
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final existingParentIds = rows
+        .where((row) => _text(row['type']) == 'principal_parent')
+        .map((row) => _text(row['parent_id']))
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    for (final contact in teacherContacts) {
+      final id = _text(contact.id);
+      if (id.isEmpty || existingTeacherIds.contains(id)) continue;
+      rows.add({
+        'id': 'contact-teacher-$id',
+        'type': 'principal_teacher',
+        'teacher_id': id,
+        'parent_id': '',
+        'student_id': '',
+        'last_message': '',
+        'last_message_at': '',
+        'unread_count': 0,
+        'teacher': {
+          'id': id,
+          'first_name': _text(contact.firstName),
+          'last_name': _text(contact.lastName),
+          'name': '${_text(contact.firstName)} ${_text(contact.lastName)}'
+              .trim(),
+        },
+        'is_contact_placeholder': true,
+      });
+    }
+
+    for (final contact in parentContacts) {
+      final id = _text(contact.id);
+      if (id.isEmpty || existingParentIds.contains(id)) continue;
+      rows.add({
+        'id': 'contact-parent-$id',
+        'type': 'principal_parent',
+        'teacher_id': '',
+        'parent_id': id,
+        'student_id': '',
+        'last_message': '',
+        'last_message_at': '',
+        'unread_count': 0,
+        'parent': {
+          'id': id,
+          'name': _text(contact.name, fallback: _text(contact.username)),
+          'full_name': _text(contact.name, fallback: _text(contact.username)),
+        },
+        'is_contact_placeholder': true,
+      });
+    }
+    return rows;
+  }
+
+  bool _isContactPlaceholder(Map<String, dynamic> row) =>
+      row['is_contact_placeholder'] == true;
 
   String _monitorTitle(Map<String, dynamic> row) {
     return [

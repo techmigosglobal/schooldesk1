@@ -73,7 +73,11 @@ void main() {
       expect(source, contains('fee_invoice_items'));
       expect(source, contains('monthly_amount'));
       expect(source, contains('parent_payment_requests'));
+      expect(source, contains('attachPaymentRequestRelations'));
+      expect(source, contains('parent_user: parentsById.get(text(row.parent_user_id))'));
       expect(source, contains('pending_verification'));
+      expect(source, contains('transaction_ref: text(form.get("transaction_ref")'));
+      expect(source, contains('proof_file_name: screenshot?.name'));
       expect(source, contains('fee_receipts'));
       expect(source, contains('payment_id'));
       expect(source, contains('receipt_id'));

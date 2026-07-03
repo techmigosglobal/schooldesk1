@@ -66,9 +66,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
   });
+
+  testWidgets('parent fees child selector stays scrollable for many children', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    _seedParentFeesRoutes(adapter, multiChild: true);
+
+    final flutterErrors = <FlutterErrorDetails>[];
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = flutterErrors.add;
+    addTearDown(() => FlutterError.onError = previousOnError);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const ParentFeesScreen(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+
+    final overflowErrors = flutterErrors
+        .where(
+          (error) => error.exceptionAsString().contains('A RenderFlex overflowed'),
+        )
+        .toList();
+
+    expect(find.byType(SingleChildScrollView), findsWidgets);
+    expect(find.text('Aarav'), findsOneWidget);
+    expect(find.text('Diya'), findsOneWidget);
+    expect(overflowErrors, isEmpty);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 }
 
-void _seedParentFeesRoutes(_FakeBackendAdapter adapter) {
+void _seedParentFeesRoutes(
+  _FakeBackendAdapter adapter, {
+  bool multiChild = false,
+}) {
   adapter.routes['GET /me/students'] = {
     'success': true,
     'data': [
@@ -83,6 +126,42 @@ void _seedParentFeesRoutes(_FakeBackendAdapter adapter) {
           'grade': {'grade_name': 'Class 5'},
         },
       },
+      if (multiChild)
+        {
+          'id': 'student-2',
+          'first_name': 'Diya',
+          'last_name': 'Sharma',
+          'admission_number': 'ADM-102',
+          'student_code': 'STU-102',
+          'current_section': {
+            'section_name': 'B',
+            'grade': {'grade_name': 'Class 3'},
+          },
+        },
+      if (multiChild)
+        {
+          'id': 'student-3',
+          'first_name': 'Kabir',
+          'last_name': 'Sharma',
+          'admission_number': 'ADM-103',
+          'student_code': 'STU-103',
+          'current_section': {
+            'section_name': 'C',
+            'grade': {'grade_name': 'Class 1'},
+          },
+        },
+      if (multiChild)
+        {
+          'id': 'student-4',
+          'first_name': 'Myra',
+          'last_name': 'Sharma',
+          'admission_number': 'ADM-104',
+          'student_code': 'STU-104',
+          'current_section': {
+            'section_name': 'D',
+            'grade': {'grade_name': 'KG'},
+          },
+        },
     ],
   };
   adapter.routes['GET /parent/students/student-1/fees'] = {
