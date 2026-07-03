@@ -106,7 +106,9 @@ class EnvConfig {
     final clean = _withoutTrailingSlash(value);
     if (clean.isEmpty) return _defaultSupabaseApiBaseUrl;
     if (_isSupabaseFunctionsApi(clean)) return clean;
+    if (_isLocalSupabaseFunctionsApi(clean)) return clean;
     if (_isSupabaseProjectUrl(clean)) return '$clean/functions/v1/api';
+    if (_isLocalSupabaseProjectUrl(clean)) return '$clean/functions/v1/api';
     return _defaultSupabaseApiBaseUrl;
   }
 
@@ -125,6 +127,16 @@ class EnvConfig {
 
   static bool _isSupabaseProjectUrl(String value) {
     return RegExp(r'^https://[a-z0-9-]+\.supabase\.co$').hasMatch(value);
+  }
+
+  static bool _isLocalSupabaseFunctionsApi(String value) {
+    return RegExp(
+      r'^http://(127\.0\.0\.1|localhost):54321/functions/v1/api$',
+    ).hasMatch(value);
+  }
+
+  static bool _isLocalSupabaseProjectUrl(String value) {
+    return RegExp(r'^http://(127\.0\.0\.1|localhost):54321$').hasMatch(value);
   }
 
   static String _withoutTrailingSlash(String value) {

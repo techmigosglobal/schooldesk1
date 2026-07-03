@@ -180,14 +180,6 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
                           AppRoutes.teacherLeave,
                         ),
                       ),
-                      TeacherFlowAction(
-                        label: 'Homework',
-                        icon: Icons.assignment_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherHomework,
-                        ),
-                      ),
                     ],
                   ),
                 ),

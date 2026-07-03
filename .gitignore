@@ -91,6 +91,7 @@ android/.kotlin/
 /qa-screenshots/
 /test-artifacts/
 /test-results/
+/coverage/
 
 # Local UI preview/reference exports
 /Parent_Module_UI/

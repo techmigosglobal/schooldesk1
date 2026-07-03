@@ -15,6 +15,17 @@ void main() {
     );
   });
 
+  test('local Supabase URLs are allowed for offline QA runs', () {
+    expect(
+      EnvConfig.v1BaseUrlFrom('http://127.0.0.1:54321'),
+      'http://127.0.0.1:54321/functions/v1/api',
+    );
+    expect(
+      EnvConfig.v1BaseUrlFrom('http://localhost:54321/functions/v1/api'),
+      'http://localhost:54321/functions/v1/api',
+    );
+  });
+
   test('asset origin strips Supabase Edge function suffix', () {
     expect(
       EnvConfig.apiOriginFromBaseUrl(

@@ -225,7 +225,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   }
 
   List<Widget> _compactToolbarActions() {
-    if (_role == 'parent') {
+    if (widget.actions.isEmpty && _role == 'parent') {
       return [
         _ToolbarIconButton(
           tooltip: SchoolDeskGlossary.notifications,
@@ -235,22 +235,22 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         ),
       ];
     }
-    if (_role == 'teacher') {
-      return const <Widget>[];
+    if (widget.actions.isEmpty && _role == 'principal') {
+      return [
+        _ToolbarIconButton(
+          tooltip: SchoolDeskGlossary.notifications,
+          icon: Icons.notifications_none_rounded,
+          badgeCount: _unreadCount,
+          onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
+        ),
+        _ToolbarIconButton(
+          tooltip: SchoolDeskGlossary.profile,
+          icon: Icons.account_circle_outlined,
+          onPressed: () => _navigateGlobal(AppRoutes.profileScreen),
+        ),
+      ];
     }
-    return [
-      _ToolbarIconButton(
-        tooltip: SchoolDeskGlossary.notifications,
-        icon: Icons.notifications_none_rounded,
-        badgeCount: _unreadCount,
-        onPressed: () => _navigateGlobal(AppRoutes.notificationCenter),
-      ),
-      _ToolbarIconButton(
-        tooltip: SchoolDeskGlossary.profile,
-        icon: Icons.account_circle_outlined,
-        onPressed: () => _navigateGlobal(AppRoutes.profileScreen),
-      ),
-    ];
+    return const <Widget>[];
   }
 
   void _navigateGlobal(String route, {Object? arguments}) {

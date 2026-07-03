@@ -58,6 +58,7 @@ dev_dependencies:
     sdk: flutter
   json_serializable: ^6.9.5
   retrofit_generator: ^10.2.6
+  patrol: ^4.6.1
 
 dependency_overrides:
   printing:

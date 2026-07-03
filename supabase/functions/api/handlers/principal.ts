@@ -1164,11 +1164,7 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(
-        svc,
-        school,
-        body.class_teacher_id,
-      );
+      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,
@@ -1252,11 +1248,7 @@ export async function handlePrincipal(
     try {
       const grade = await resolveGrade(svc, school, body);
       const room = await resolveRoom(svc, school, body);
-      const classTeacherId = await resolveStaffId(
-        svc,
-        school,
-        body.class_teacher_id,
-      );
+      const classTeacherId = await resolveStaffId(svc, school, body.class_teacher_id);
       const coTeacherId = await resolveStaffId(svc, school, body.co_teacher_id);
       const academicYearId = await resolveAcademicYearId(
         svc,

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
+import 'package:schooldesk1/core/services/push_notification_service.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -534,6 +535,12 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             unreadCount: _service?.getUnreadCountForRole(widget.role) ?? 0,
             categoryLabel: _categoryLabel(category),
             hasBackendIssue: _error != null,
+            runtimeStatus: PushNotificationService.instance.runtimeStatus,
+            onRetryPush: () async {
+              await PushNotificationService.instance
+                  .registerDeviceTokenIfPossible();
+              if (context.mounted) setState(() {});
+            },
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -851,6 +858,8 @@ class _NotificationSummaryPanel extends StatelessWidget {
   final int unreadCount;
   final String categoryLabel;
   final bool hasBackendIssue;
+  final PushNotificationRuntimeStatus runtimeStatus;
+  final Future<void> Function() onRetryPush;
 
   const _NotificationSummaryPanel({
     required this.allCount,
@@ -858,6 +867,8 @@ class _NotificationSummaryPanel extends StatelessWidget {
     required this.unreadCount,
     required this.categoryLabel,
     required this.hasBackendIssue,
+    required this.runtimeStatus,
+    required this.onRetryPush,
   });
 
   @override
@@ -903,6 +914,22 @@ class _NotificationSummaryPanel extends StatelessWidget {
             color: hasBackendIssue
                 ? context.appTheme.error
                 : context.appTheme.success,
+          ),
+          OutlinedButton.icon(
+            onPressed: runtimeStatus.deviceRegistrationSucceeded
+                ? null
+                : onRetryPush,
+            icon: Icon(
+              runtimeStatus.deviceRegistrationSucceeded
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_off_rounded,
+              size: 16,
+            ),
+            label: Text(
+              runtimeStatus.deviceRegistrationSucceeded
+                  ? 'Push Ready'
+                  : 'Enable Push',
+            ),
           ),
         ],
       ),

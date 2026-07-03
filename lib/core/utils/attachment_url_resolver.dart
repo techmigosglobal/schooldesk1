@@ -29,9 +29,11 @@ Uri? resolveAttachmentUrl(String value) {
 }
 
 Uri _apiUploadUri(Uri base, String uploadPath) {
-  final normalizedBase = base.path.endsWith('/')
-      ? base.path.substring(0, base.path.length - 1)
-      : base.path;
+  final normalizedBase = base.path.contains('/functions/v1/api')
+      ? '/api/v1'
+      : (base.path.endsWith('/')
+            ? base.path.substring(0, base.path.length - 1)
+            : base.path);
   final normalizedUploadPath = uploadPath.startsWith('/')
       ? uploadPath
       : '/$uploadPath';

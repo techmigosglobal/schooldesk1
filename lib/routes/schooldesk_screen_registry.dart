@@ -476,6 +476,12 @@ class SchoolDeskScreenRegistry {
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(
+      route: '/parent-health-screen',
+      title: 'Health Updates',
+      module: 'Child Health',
+      portal: 'parent',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/parent-notices-screen',
       title: 'School Notices',
       module: 'Communication',
