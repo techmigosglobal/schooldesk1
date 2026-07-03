@@ -115,5 +115,49 @@ void main() {
       expect(args['referenceId'], 'post-123');
       expect(args['initialTab'], 'event_posts');
     });
+
+    test('routes teacher feature notifications to actionable screens', () {
+      final approvedPost = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'event_post', 'action': 'approved'},
+        currentRole: 'teacher',
+      );
+      final circular = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'announcement'},
+        currentRole: 'teacher',
+      );
+      final homework = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'homework'},
+        currentRole: 'teacher',
+      );
+      final homeworkSubmission = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'homework', 'action': 'submission'},
+        currentRole: 'teacher',
+      );
+      final health = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'health_reminder'},
+        currentRole: 'teacher',
+      );
+      final birthday = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'birthday'},
+        currentRole: 'teacher',
+      );
+      final lessonPlan = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'lesson_planner'},
+        currentRole: 'teacher',
+      );
+      final leave = NotificationRouteResolver.resolve(
+        data: {'reference_type': 'leave'},
+        currentRole: 'teacher',
+      );
+
+      expect(approvedPost.route, AppRoutes.teacherEventPosts);
+      expect(circular.route, AppRoutes.teacherCommunication);
+      expect(homework.route, AppRoutes.teacherHomework);
+      expect(homeworkSubmission.route, AppRoutes.teacherHomeworkSubmissions);
+      expect(health.route, AppRoutes.teacherCommunication);
+      expect(birthday.route, AppRoutes.teacherCommunication);
+      expect(lessonPlan.route, AppRoutes.teacherLessonPlanner);
+      expect(leave.route, AppRoutes.teacherLeave);
+    });
   });
 }

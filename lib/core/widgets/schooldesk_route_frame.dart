@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
@@ -21,13 +22,31 @@ class SchoolDeskRouteFrame extends StatefulWidget {
 class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
   DateTime? _lastBackPressedAt;
 
+  bool get _isPortalHomeRoute {
+    switch (widget.metadata.route) {
+      case '/principal-dashboard-screen':
+      case '/teacher-dashboard-screen':
+      case '/parent-dashboard-screen':
+      case '/kiosk-qr-attendance-screen':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   bool get _canExitOnBack {
     if (widget.metadata.isPublic) return true;
+    if (_isPortalHomeRoute) return false;
     return Navigator.of(context).canPop();
   }
 
   void _handleBackWithoutPop() {
     if (widget.metadata.isPublic) return;
+    if (!_isPortalHomeRoute) {
+      _returnToPortalHome();
+      return;
+    }
+
     final now = DateTime.now();
     final last = _lastBackPressedAt;
     if (last != null && now.difference(last) <= const Duration(seconds: 2)) {
@@ -45,6 +64,45 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
           duration: Duration(seconds: 2),
         ),
       );
+  }
+
+  void _returnToPortalHome() {
+    final target = _homeRouteForCurrentContext();
+    if (target == null || target == widget.metadata.route) return;
+    Navigator.of(context).pushNamedAndRemoveUntil(target, (route) => false);
+  }
+
+  String? _homeRouteForCurrentContext() {
+    switch (widget.metadata.portal) {
+      case 'principal':
+        return '/principal-dashboard-screen';
+      case 'teacher':
+        return '/teacher-dashboard-screen';
+      case 'parent':
+        return '/parent-dashboard-screen';
+      case 'kiosk':
+        return '/kiosk-qr-attendance-screen';
+      case 'shared':
+        return _homeRouteForRole(BackendApiClient.instance.currentRoleName);
+      default:
+        return null;
+    }
+  }
+
+  String? _homeRouteForRole(String? role) {
+    switch ((role ?? '').trim().toLowerCase()) {
+      case 'principal':
+      case 'admin':
+        return '/principal-dashboard-screen';
+      case 'teacher':
+        return '/teacher-dashboard-screen';
+      case 'parent':
+        return '/parent-dashboard-screen';
+      case 'kiosk':
+        return '/kiosk-qr-attendance-screen';
+      default:
+        return null;
+    }
   }
 
   @override

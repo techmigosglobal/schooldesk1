@@ -71,7 +71,9 @@ class NotificationRouteResolver {
       'staff_attendance_daily_report' ||
       'staff_attendance_monthly_report' => _attendanceRouteFor(role),
       'lesson_planner_weekly_digest' => _lessonPlannerRouteFor(role),
-      'health' => AppRoutes.notificationCenter,
+      'lesson_planner' || 'lesson_plan' => _lessonPlannerRouteFor(role),
+      'health' || 'health_reminder' => _healthRouteFor(role),
+      'birthday' || 'birthday_reminder' => _birthdayRouteFor(role),
       _ => AppRoutes.notificationCenter,
     };
     return NotificationRouteTarget(
@@ -234,6 +236,24 @@ class NotificationRouteResolver {
       'principal' => AppRoutes.principalLessonPlanner,
       'teacher' => AppRoutes.teacherLessonPlanner,
       'parent' => AppRoutes.parentLessonPlanner,
+      _ => AppRoutes.notificationCenter,
+    };
+  }
+
+  static String _healthRouteFor(String role) {
+    return switch (role) {
+      'parent' => AppRoutes.parentHealth,
+      'teacher' => AppRoutes.teacherCommunication,
+      'principal' => AppRoutes.communicationCenter,
+      _ => AppRoutes.notificationCenter,
+    };
+  }
+
+  static String _birthdayRouteFor(String role) {
+    return switch (role) {
+      'parent' => AppRoutes.parentNotices,
+      'teacher' => AppRoutes.teacherCommunication,
+      'principal' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }

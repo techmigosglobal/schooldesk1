@@ -67,15 +67,19 @@ void main() {
     final dashboard = File(
       'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
     ).readAsStringSync();
+    final routeFrame = File(
+      'lib/core/widgets/schooldesk_route_frame.dart',
+    ).readAsStringSync();
 
     expect(dashboard, contains('PopScope('));
     expect(dashboard, contains('canPop: false'));
     expect(dashboard, contains('SystemNavigator.pop()'));
     expect(dashboard, contains('Press back again to exit Arish Ville'));
-    expect(
-      File('lib/core/widgets/schooldesk_route_frame.dart').readAsStringSync(),
-      contains('Press back again to exit Arish Ville'),
-    );
+    expect(routeFrame, contains('Press back again to exit Arish Ville'));
+    expect(routeFrame, contains('_isPortalHomeRoute'));
+    expect(routeFrame, contains('_returnToPortalHome'));
+    expect(routeFrame, contains("case '/teacher-dashboard-screen':"));
+    expect(routeFrame, contains("case 'teacher':"));
     expect(dashboard, isNot(contains('LogoutService')));
     expect(dashboard, isNot(contains('BackendApiClient.instance.logout')));
   });
