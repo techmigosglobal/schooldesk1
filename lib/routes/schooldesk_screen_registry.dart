@@ -228,7 +228,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/communication-center-screen',
-      title: SchoolDeskGlossary.communicationCenter,
+      title: 'Communications',
       module: 'Communication',
       portal: 'principal',
     ),
@@ -479,12 +479,6 @@ class SchoolDeskScreenRegistry {
       route: '/parent-health-screen',
       title: 'Health Updates',
       module: 'Child Health',
-      portal: 'parent',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-notices-screen',
-      title: 'School Notices',
-      module: 'Communication',
       portal: 'parent',
     ),
     SchoolDeskScreenMetadata(

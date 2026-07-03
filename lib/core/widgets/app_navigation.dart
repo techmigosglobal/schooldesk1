@@ -241,13 +241,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           label: 'Communication',
           items: [
             SchoolDeskNavigationItem(
-              index: PrincipalNav.broadcasts,
-              icon: Icons.campaign_outlined,
-              activeIcon: Icons.campaign_rounded,
-              label: 'Broadcasts & Notices',
-              route: AppRoutes.communicationCenter,
-            ),
-            SchoolDeskNavigationItem(
               index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,

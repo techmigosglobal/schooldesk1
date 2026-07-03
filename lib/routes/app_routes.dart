@@ -128,7 +128,6 @@ class AppRoutes {
   static const String parentAttendance = '/parent-attendance-screen';
   static const String parentHomework = '/parent-homework-screen';
   static const String parentHomeworkSubmit = '/parent-homework-screen/submit';
-  static const String parentNotices = '/parent-notices-screen';
   static const String parentTeacherChat = '/parent-teacher-chat-screen';
   static const String parentFees = '/parent-fees-screen';
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
@@ -182,7 +181,7 @@ class AppRoutes {
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
       args: _principalPaymentRecordFormArgs(context),
     ),
-    communicationCenter: (context) => const CommunicationCenterScreen(),
+    communicationCenter: (context) => const PrincipalChatCommunicationsScreen(),
     principalChatCommunications: (context) =>
         const PrincipalChatCommunicationsScreen(),
     complaintManagement: (context) => const ComplaintManagementScreen(),
@@ -283,7 +282,6 @@ class AppRoutes {
     parentHomeworkSubmit: (context) => ParentHomeworkSubmissionScreen(
       args: _parentHomeworkSubmissionArgs(context),
     ),
-    parentNotices: (context) => const ParentNoticesScreen(),
     parentTeacherChat: (context) => const ParentTeacherChatScreen(),
     parentFees: (context) => const ParentFeesScreen(),
     parentPaymentRequestForm: (context) =>

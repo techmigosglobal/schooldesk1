@@ -101,7 +101,6 @@ class RouteAccessGuard {
     AppRoutes.parentAttendance: {'parent'},
     AppRoutes.parentHomework: {'parent'},
     AppRoutes.parentHomeworkSubmit: {'parent'},
-    AppRoutes.parentNotices: {'parent'},
     AppRoutes.parentTeacherChat: {'parent'},
     AppRoutes.parentFees: {'parent'},
     AppRoutes.parentPaymentRequestForm: {'parent'},

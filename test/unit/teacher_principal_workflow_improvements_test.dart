@@ -44,7 +44,7 @@ void main() {
 
     expect(teacherNav, contains("label: 'Parent Messages'"));
     expect(teacherNav, contains("label: 'PTM Slots'"));
-    expect(principalNav, contains("label: 'Broadcasts & Notices'"));
+    expect(principalNav, isNot(contains("label: 'Broadcasts & Notices'")));
     expect(principalNav, contains("label: 'Communications'"));
     expect(principalDashboard, contains("label: 'Communications'"));
     expect(principalDashboard, isNot(contains("label: 'Chat Communications'")));

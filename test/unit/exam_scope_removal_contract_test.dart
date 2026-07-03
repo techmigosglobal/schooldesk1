@@ -7,8 +7,8 @@ void main() {
     final notificationCenter = File(
       'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
     ).readAsStringSync();
-    final parentNotices = File(
-      'lib/features/communication/presentation/screens/parent_notices_screen/parent_notices_screen.dart',
+    final parentChat = File(
+      'lib/features/communication/presentation/screens/parent_teacher_chat_screen/parent_teacher_chat_screen.dart',
     ).readAsStringSync();
     final settings = File(
       'lib/features/profile/presentation/screens/settings_screen/settings_screen.dart',
@@ -16,7 +16,7 @@ void main() {
 
     expect(notificationCenter, isNot(contains("Tab(text: 'Exams')")));
     expect(notificationCenter, isNot(contains("return 'Exams'")));
-    expect(parentNotices, isNot(contains("'Exams'")));
+    expect(parentChat, isNot(contains("'Exams'")));
     expect(settings, isNot(contains('Exam Reminders')));
     expect(settings, isNot(contains("exam_reminders")));
   });

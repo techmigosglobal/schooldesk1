@@ -9,7 +9,7 @@ void main() {
     final expectedTitles = <String, String>{
       '/student-oversight-screen': SchoolDeskGlossary.studentOversight,
       '/staff-management-screen': SchoolDeskGlossary.staffOversight,
-      '/communication-center-screen': SchoolDeskGlossary.communicationCenter,
+      '/communication-center-screen': 'Communications',
       '/complaint-management-screen': SchoolDeskGlossary.complaints,
       '/events-calendar-screen': SchoolDeskGlossary.calendar,
       '/reports-analytics-screen': SchoolDeskGlossary.reports,

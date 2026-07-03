@@ -154,7 +154,7 @@ class NotificationRouteResolver {
 
   static String _communicationRouteFor(String role) {
     return switch (role) {
-      'parent' => AppRoutes.parentNotices,
+      'parent' => AppRoutes.parentTeacherChat,
       'teacher' => AppRoutes.teacherCommunication,
       'principal' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,
@@ -251,7 +251,7 @@ class NotificationRouteResolver {
 
   static String _birthdayRouteFor(String role) {
     return switch (role) {
-      'parent' => AppRoutes.parentNotices,
+      'parent' => AppRoutes.parentTeacherChat,
       'teacher' => AppRoutes.teacherCommunication,
       'principal' => AppRoutes.communicationCenter,
       _ => AppRoutes.notificationCenter,

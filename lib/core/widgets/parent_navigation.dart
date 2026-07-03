@@ -171,19 +171,11 @@ class _ParentDrawerState extends State<ParentDrawer> {
         SchoolDeskNavigationSection(
           label: 'Communication',
           items: [
-            SchoolDeskNavigationItem(
-              index: ParentNav.notices,
-              icon: Icons.campaign_outlined,
-              activeIcon: Icons.campaign_rounded,
-              label: 'School Notices',
-              route: AppRoutes.parentNotices,
-              badgeCount: _unreadCount,
-            ),
             const SchoolDeskNavigationItem(
               index: ParentNav.chat,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
-              label: 'Teacher Chat / PTM',
+              label: 'Teacher Chat',
               route: AppRoutes.parentTeacherChat,
             ),
             const SchoolDeskNavigationItem(

@@ -1,6 +1,83 @@
 part of '../backend_api_client.dart';
 
 extension BackendCommunicationsApi on BackendApiClient {
+  // ─── Unified Chat ─────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getUnifiedChatConversations({
+    String? type,
+    String? teacherId,
+    String? parentId,
+    String? studentId,
+    bool monitor = false,
+  }) {
+    final params = <String, dynamic>{};
+    if (type != null && type.trim().isNotEmpty) params['type'] = type.trim();
+    if (teacherId != null && teacherId.trim().isNotEmpty) {
+      params['teacher_id'] = teacherId.trim();
+    }
+    if (parentId != null && parentId.trim().isNotEmpty) {
+      params['parent_id'] = parentId.trim();
+    }
+    if (studentId != null && studentId.trim().isNotEmpty) {
+      params['student_id'] = studentId.trim();
+    }
+    if (monitor) params['monitor'] = 'true';
+    return getRawList(
+      monitor ? '/chat/monitor' : '/chat/conversations',
+      queryParameters: params.isEmpty ? null : params,
+    );
+  }
+
+  Future<Map<String, dynamic>> createUnifiedChatConversation({
+    required String type,
+    String teacherId = '',
+    String parentId = '',
+    String studentId = '',
+    String title = '',
+  }) {
+    return createRaw('/chat/conversations', {
+      'type': type.trim().isEmpty ? 'parent_teacher' : type.trim(),
+      if (teacherId.trim().isNotEmpty) 'teacher_id': teacherId.trim(),
+      if (parentId.trim().isNotEmpty) 'parent_id': parentId.trim(),
+      if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+      if (title.trim().isNotEmpty) 'title': title.trim(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getUnifiedChatMessages({
+    required String conversationId,
+    int? pageSize,
+    DateTime? sentAfter,
+  }) {
+    final params = <String, dynamic>{};
+    if (pageSize != null) params['page_size'] = pageSize;
+    if (sentAfter != null) {
+      params['sent_after'] = sentAfter.toUtc().toIso8601String();
+    }
+    return getRawList(
+      '/chat/conversations/${conversationId.trim()}/messages',
+      queryParameters: params.isEmpty ? null : params,
+    );
+  }
+
+  Future<Map<String, dynamic>> sendUnifiedChatMessage({
+    required String conversationId,
+    required String body,
+    String messageType = 'text',
+    String attachmentUrl = '',
+  }) {
+    return createRaw('/chat/conversations/${conversationId.trim()}/messages', {
+      'body': body.trim(),
+      'message_type': messageType.trim().isEmpty ? 'text' : messageType.trim(),
+      if (attachmentUrl.trim().isNotEmpty)
+        'attachment_url': attachmentUrl.trim(),
+    });
+  }
+
+  Future<void> markUnifiedChatConversationRead(String conversationId) async {
+    await createRaw('/chat/conversations/${conversationId.trim()}/read', {});
+  }
+
   // ─── Announcements ──────────────────────────────────────────────────────────
 
   Future<List<AnnouncementModel>> getAnnouncements({String? schoolId}) async {

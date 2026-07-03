@@ -7,14 +7,14 @@ void main() {
     test('opens an explicitly allowed route for the logged-in role', () {
       final target = NotificationRouteResolver.resolve(
         data: {
-          'route': AppRoutes.parentNotices,
+          'route': AppRoutes.parentTeacherChat,
           'reference_type': 'announcement',
           'role': 'parent',
         },
         currentRole: 'parent',
       );
 
-      expect(target.route, AppRoutes.parentNotices);
+      expect(target.route, AppRoutes.parentTeacherChat);
       expect(target.arguments, isNull);
     });
 

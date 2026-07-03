@@ -289,6 +289,7 @@ Deno.serve(async (req: Request) => {
     return handleTimetable(req, path, method, url, client, svc, user);
   }
   if (
+    path.startsWith("/chat") ||
     path.startsWith("/announcements") || path.startsWith("/notices") ||
     path.startsWith("/notifications") || path.startsWith("/message") ||
     path.startsWith("/communications") ||
