@@ -74,6 +74,7 @@ async function notifyUsersByRole(
   const rows = userIds.map((userId) => ({
     school_id: school,
     user_id: userId,
+    target_role: roleName,
     title: payload.title,
     body: payload.body,
     type: payload.type,
@@ -100,6 +101,7 @@ async function notifyUser(
   const { error } = await svc.from("notification_logs").insert({
     school_id: school,
     user_id: userId,
+    target_role: "teacher",
     title: payload.title,
     body: payload.body,
     type: payload.type,
@@ -118,6 +120,10 @@ async function ensureEventPostSchema() {
   eventPostSchemaPromise = (async () => {
     try {
       await runDbStatements([
+        `alter table public.notification_logs
+          add column if not exists target_role text`,
+        `create index if not exists idx_notification_logs_target_role
+          on public.notification_logs(target_role, created_at desc)`,
         `alter table public.event_posts
           add column if not exists event_date timestamptz`,
         `alter table public.event_posts
@@ -357,7 +363,7 @@ export async function handleEvents(
         await notifyUsersByRole(svc, school, "principal", {
           title: "Event post pending approval",
           body: `${payload.title} was submitted for review.`,
-          type: "event_post",
+          type: "pending_approval",
           referenceType: "event_post",
           referenceId: `${data.id ?? ""}`,
         });
@@ -432,7 +438,7 @@ export async function handleEvents(
       await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
         title: "Event post approved",
         body: `${existing.title ?? "Your event post"} was approved by the principal.`,
-        type: "event_post",
+        type: "pending_approval",
         referenceType: "event_post",
         referenceId: seg,
       });
@@ -457,7 +463,7 @@ export async function handleEvents(
       await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
         title: "Event post rejected",
         body: textValue(body.reason, "Principal requested changes."),
-        type: "event_post",
+        type: "pending_approval",
         referenceType: "event_post",
         referenceId: seg,
       });

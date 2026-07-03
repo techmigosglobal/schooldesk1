@@ -501,6 +501,7 @@ export async function handleCommunications(
       notification_type: row.type ?? "general",
       reference_type: row.entity_type ?? "",
       reference_id: row.entity_id ?? "",
+      target_role: row.target_role ?? "all",
       target_user_id: row.user_id ?? "",
       sent_at: row.created_at ?? null,
     })));
@@ -522,6 +523,7 @@ export async function handleCommunications(
       notification_type: data?.type ?? "general",
       reference_type: data?.entity_type ?? "",
       reference_id: data?.entity_id ?? "",
+      target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
       sent_at: data?.created_at ?? null,
     });
@@ -545,6 +547,7 @@ export async function handleCommunications(
       notification_type: data?.type ?? "general",
       reference_type: data?.entity_type ?? "",
       reference_id: data?.entity_id ?? "",
+      target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
       sent_at: data?.created_at ?? null,
     });

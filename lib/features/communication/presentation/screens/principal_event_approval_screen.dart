@@ -62,6 +62,7 @@ class _PrincipalEventApprovalScreenState
     'SCHOOL_LANDING',
   ];
   final List<Map<String, dynamic>> _posts = [];
+  final Set<String> _viewedAttachmentPostIds = <String>{};
   Map<String, dynamic>? _selectedPost;
   NotificationService? _notificationService;
   Timer? _pollingTimer;
@@ -145,6 +146,9 @@ class _PrincipalEventApprovalScreenState
           ..clear()
           ..addAll(merged);
         _selectedPost = target;
+        _viewedAttachmentPostIds.removeWhere(
+          (postId) => !_posts.any((post) => post['id']?.toString() == postId),
+        );
         _loading = false;
         _refreshing = false;
         _error = null;
@@ -744,6 +748,9 @@ class _PrincipalEventApprovalScreenState
       return const SizedBox.shrink();
     }
     final id = (post['id'] ?? '').toString();
+    final attachments = EventPostMediaItem.parseList(post['media_urls']);
+    final requiresView = attachments.isNotEmpty;
+    final hasViewed = !requiresView || _viewedAttachmentPostIds.contains(id);
     return Wrap(
       alignment: WrapAlignment.end,
       spacing: 10,
@@ -760,16 +767,31 @@ class _PrincipalEventApprovalScreenState
           label: const Text('Reject'),
         ),
         FilledButton.icon(
-          onPressed: id.isEmpty ? null : () => _approveStatus(id),
+          onPressed: id.isEmpty || !hasViewed ? null : () => _approveStatus(id),
           icon: const Icon(Icons.check_rounded),
           label: const Text('Approve'),
         ),
+        if (requiresView && !hasViewed)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              'Open an attachment preview before approving.',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.appTheme.onSurfaceVariant,
+              ),
+            ),
+          ),
       ],
     );
   }
 
   Future<void> _openAttachmentPreview(EventPostMediaItem attachment) async {
     await openEventPostMediaPreview(context, attachment);
+    final postId = _selectedPost?['id']?.toString().trim();
+    if (postId != null && postId.isNotEmpty && mounted) {
+      setState(() => _viewedAttachmentPostIds.add(postId));
+    }
   }
 
   Widget _statusChip(String status) {
