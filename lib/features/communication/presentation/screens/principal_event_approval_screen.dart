@@ -109,7 +109,10 @@ class _PrincipalEventApprovalScreenState
     unawaited(_loadPosts(showSpinner: false));
   }
 
-  Future<void> _loadPosts({bool showSpinner = true}) async {
+  Future<void> _loadPosts({
+    bool showSpinner = true,
+    Map<String, dynamic>? keepPost,
+  }) async {
     if (showSpinner) {
       setState(() {
         _loading = true;
@@ -122,11 +125,15 @@ class _PrincipalEventApprovalScreenState
     try {
       final pending = await BackendApiClient.instance.getPendingEventPosts();
       Map<String, dynamic>? target;
-      if (initialPostId.isNotEmpty) {
+      final keepPostId = keepPost?['id']?.toString().trim() ?? '';
+      final targetPostId = initialPostId.isNotEmpty
+          ? initialPostId
+          : keepPostId;
+      if (targetPostId.isNotEmpty) {
         try {
-          target = await BackendApiClient.instance.getEventPost(initialPostId);
+          target = await BackendApiClient.instance.getEventPost(targetPostId);
         } catch (_) {
-          target = null;
+          target = keepPost;
         }
       }
 
@@ -163,7 +170,7 @@ class _PrincipalEventApprovalScreenState
     }
   }
 
-  Future<void> _notifyAndReload() async {
+  Future<void> _notifyAndReload({Map<String, dynamic>? keepPost}) async {
     _changed = true;
     await BackendApiClient.instance.invalidateCachedReads();
     try {
@@ -172,7 +179,7 @@ class _PrincipalEventApprovalScreenState
     } catch (_) {
       // Approval state reload below is the source of truth for this screen.
     }
-    await _loadPosts(showSpinner: false);
+    await _loadPosts(showSpinner: false, keepPost: keepPost);
   }
 
   Future<void> _approveStatus(String id) async {
@@ -274,11 +281,14 @@ class _PrincipalEventApprovalScreenState
     final descriptionController = TextEditingController(
       text: (post['description'] ?? '').toString(),
     );
-    final dateController = TextEditingController(text: _dateLabel(post['event_date']));
+    final dateController = TextEditingController(
+      text: _dateInputText(post['event_date']),
+    );
     final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
     final selectedDestinations = _labels(post['destinations']).toSet();
 
     bool deleted = false;
+    Map<String, dynamic>? updatedPost;
     final saved = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -309,7 +319,7 @@ class _PrincipalEventApprovalScreenState
             final eventDate = rawDate.isEmpty
                 ? DateTime.now().toIso8601String()
                 : '${rawDate}T00:00:00Z';
-            await BackendApiClient.instance.updateEventPost(
+            updatedPost = await BackendApiClient.instance.updateEventPost(
               id: id,
               title: titleController.text.trim(),
               description: descriptionController.text.trim(),
@@ -509,14 +519,14 @@ class _PrincipalEventApprovalScreenState
     dateController.dispose();
 
     if (saved == true) {
-      await _notifyAndReload();
+      await _notifyAndReload(keepPost: deleted ? null : updatedPost);
       if (!mounted) return;
       final message = deleted
           ? 'Event post deleted.'
           : 'Event post updated. You can approve it when ready.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -893,11 +903,13 @@ class _PrincipalEventApprovalScreenState
   }
 
   List<String> _labels(dynamic raw) {
+    if (raw == null) return const [];
     if (raw is List) {
       return raw.map((e) => e.toString()).where((e) => e.isNotEmpty).toList();
     }
-    return raw
-        .toString()
+    final text = raw.toString().trim();
+    if (text.isEmpty || text.toLowerCase() == 'null') return const [];
+    return text
         .split(',')
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
@@ -908,6 +920,11 @@ class _PrincipalEventApprovalScreenState
     final text = value?.toString() ?? '';
     if (text.length >= 10) return text.substring(0, 10);
     return text.isEmpty ? 'No date' : text;
+  }
+
+  String _dateInputText(dynamic value) {
+    final label = _dateLabel(value);
+    return label == 'No date' ? '' : label;
   }
 
   DateTime? _parseDate(String value) {

@@ -239,7 +239,7 @@ extension BackendEventsApi on BackendApiClient {
     }
   }
 
-  Future<void> updateEventPost({
+  Future<Map<String, dynamic>> updateEventPost({
     required String id,
     required String title,
     required String description,
@@ -273,6 +273,8 @@ extension BackendEventsApi on BackendApiClient {
           message: data['error'] ?? 'Failed to update event post',
         );
       }
+      final updated = _asMap(data['data']);
+      return updated.isNotEmpty ? updated : data;
     } on DioException catch (e) {
       throw _handleError(e);
     }
