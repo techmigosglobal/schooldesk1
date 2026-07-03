@@ -146,7 +146,14 @@ export async function handleCommunications(req: Request, path: string, method: s
   if (path === "/notifications" && method === "GET") {
     const { data, error } = await svc.from("notification_logs").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50);
     if (error) return fail(error.message);
-    return ok(data);
+    return ok((data ?? []).map((row: Record<string, unknown>) => ({
+      ...row,
+      notification_type: row.type ?? "general",
+      reference_type: row.entity_type ?? "",
+      reference_id: row.entity_id ?? "",
+      target_user_id: row.user_id ?? "",
+      sent_at: row.created_at ?? null,
+    })));
   }
   if (path === "/notifications" && method === "POST") {
     const { data, error } = await svc.from("notification_logs").insert({
@@ -155,12 +162,19 @@ export async function handleCommunications(req: Request, path: string, method: s
       title: body.title ?? body.subject ?? "Notification",
       body: body.body ?? body.message ?? "",
       type: body.type ?? body.notification_type ?? "general",
-      entity_type: body.entity_type ?? null,
-      entity_id: body.entity_id ?? null,
+      entity_type: body.entity_type ?? body.reference_type ?? null,
+      entity_id: body.entity_id ?? body.reference_id ?? null,
       is_read: body.is_read ?? false,
     }).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      notification_type: data?.type ?? "general",
+      reference_type: data?.entity_type ?? "",
+      reference_id: data?.entity_id ?? "",
+      target_user_id: data?.user_id ?? "",
+      sent_at: data?.created_at ?? null,
+    });
   }
   if (path === "/notifications/mark-read" && method === "POST") {
     await svc.from("notification_logs").update({ is_read: true }).eq("user_id", user.id);
@@ -170,7 +184,14 @@ export async function handleCommunications(req: Request, path: string, method: s
   if (notificationReadMatch && (method === "POST" || method === "PUT")) {
     const { data, error } = await svc.from("notification_logs").update({ is_read: true }).eq("id", notificationReadMatch[1]).eq("user_id", user.id).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok({
+      ...data,
+      notification_type: data?.type ?? "general",
+      reference_type: data?.entity_type ?? "",
+      reference_id: data?.entity_id ?? "",
+      target_user_id: data?.user_id ?? "",
+      sent_at: data?.created_at ?? null,
+    });
   }
   if (path === "/notifications/device-tokens" && method === "POST") {
     const { token, platform } = body;

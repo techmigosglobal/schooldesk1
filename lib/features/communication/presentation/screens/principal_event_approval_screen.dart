@@ -56,6 +56,11 @@ class PrincipalEventApprovalScreen extends StatefulWidget {
 class _PrincipalEventApprovalScreenState
     extends State<PrincipalEventApprovalScreen>
     with WidgetsBindingObserver {
+  static const List<String> _destinationOptions = <String>[
+    'PARENTS_HOME',
+    'SCHOOL_GALLERY',
+    'SCHOOL_LANDING',
+  ];
   final List<Map<String, dynamic>> _posts = [];
   Map<String, dynamic>? _selectedPost;
   NotificationService? _notificationService;
@@ -252,6 +257,262 @@ class _PrincipalEventApprovalScreenState
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to reject: $e')));
       }
+    }
+  }
+
+  Future<void> _editPost(Map<String, dynamic> post) async {
+    final id = (post['id'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+
+    final titleController = TextEditingController(
+      text: (post['title'] ?? '').toString(),
+    );
+    final descriptionController = TextEditingController(
+      text: (post['description'] ?? '').toString(),
+    );
+    final dateController = TextEditingController(text: _dateLabel(post['event_date']));
+    final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
+    final selectedDestinations = _labels(post['destinations']).toSet();
+
+    bool deleted = false;
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        String? validationError;
+        bool saving = false;
+        bool deleting = false;
+
+        Future<void> saveChanges(StateSetter setDialogState) async {
+          if (titleController.text.trim().isEmpty) {
+            setDialogState(() => validationError = 'Title is required.');
+            return;
+          }
+          if (selectedDestinations.isEmpty) {
+            setDialogState(
+              () => validationError = 'Select at least one destination.',
+            );
+            return;
+          }
+
+          setDialogState(() {
+            saving = true;
+            validationError = null;
+          });
+
+          try {
+            final rawDate = dateController.text.trim();
+            final eventDate = rawDate.isEmpty
+                ? DateTime.now().toIso8601String()
+                : '${rawDate}T00:00:00Z';
+            await BackendApiClient.instance.updateEventPost(
+              id: id,
+              title: titleController.text.trim(),
+              description: descriptionController.text.trim(),
+              eventDate: eventDate,
+              mediaUrls: mediaItems.map((item) => item.url).toList(),
+              media: mediaItems,
+              destinations: selectedDestinations.toList(),
+              isSubmit: true,
+              sectionId: post['section_id']?.toString(),
+            );
+            if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+          } catch (e) {
+            setDialogState(() {
+              saving = false;
+              validationError = 'Failed to save changes: $e';
+            });
+          }
+        }
+
+        Future<void> deletePost(StateSetter setDialogState) async {
+          final confirmed = await showDialog<bool>(
+            context: dialogContext,
+            builder: (confirmContext) => AlertDialog(
+              title: const Text('Delete Event Post'),
+              content: const Text(
+                'This will permanently remove the submitted post. Continue?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(confirmContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(confirmContext, true),
+                  child: const Text('Delete'),
+                ),
+              ],
+            ),
+          );
+          if (confirmed != true) return;
+
+          setDialogState(() {
+            deleting = true;
+            validationError = null;
+          });
+
+          try {
+            await BackendApiClient.instance.deleteEventPost(id);
+            deleted = true;
+            if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+          } catch (e) {
+            setDialogState(() {
+              deleting = false;
+              validationError = 'Failed to delete post: $e';
+            });
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Event Post'),
+              content: SizedBox(
+                width: 560,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (validationError != null) ...[
+                        Text(
+                          validationError!,
+                          style: TextStyle(color: context.appTheme.error),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      TextField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Title *',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(),
+                        ),
+                        minLines: 3,
+                        maxLines: 5,
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: dateController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Event Date',
+                          border: OutlineInputBorder(),
+                          suffixIcon: Icon(Icons.calendar_today_outlined),
+                        ),
+                        onTap: () async {
+                          final initial = _parseDate(dateController.text);
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: initial ?? DateTime.now(),
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2035),
+                          );
+                          if (picked != null) {
+                            dateController.text =
+                                '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                            setDialogState(() => validationError = null);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Destinations',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._destinationOptions.map(
+                        (option) => CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: selectedDestinations.contains(option),
+                          title: Text(_destinationLabel(option)),
+                          onChanged: saving || deleting
+                              ? null
+                              : (selected) {
+                                  setDialogState(() {
+                                    if (selected ?? false) {
+                                      selectedDestinations.add(option);
+                                    } else {
+                                      selectedDestinations.remove(option);
+                                    }
+                                    validationError = null;
+                                  });
+                                },
+                        ),
+                      ),
+                      if (mediaItems.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          'Existing attachments stay attached to this post.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving || deleting
+                      ? null
+                      : () => deletePost(setDialogState),
+                  child: deleting
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Delete'),
+                ),
+                TextButton(
+                  onPressed: saving || deleting
+                      ? null
+                      : () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving || deleting
+                      ? null
+                      : () => saveChanges(setDialogState),
+                  child: saving
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    titleController.dispose();
+    descriptionController.dispose();
+    dateController.dispose();
+
+    if (saved == true) {
+      await _notifyAndReload();
+      if (!mounted) return;
+      final message = deleted
+          ? 'Event post deleted.'
+          : 'Event post updated. You can approve it when ready.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
@@ -483,15 +744,21 @@ class _PrincipalEventApprovalScreenState
       return const SizedBox.shrink();
     }
     final id = (post['id'] ?? '').toString();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: 10,
+      runSpacing: 10,
       children: [
+        OutlinedButton.icon(
+          onPressed: id.isEmpty ? null : () => _editPost(post),
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Edit'),
+        ),
         OutlinedButton.icon(
           onPressed: id.isEmpty ? null : () => _rejectStatus(id),
           icon: const Icon(Icons.close_rounded),
           label: const Text('Reject'),
         ),
-        const SizedBox(width: 10),
         FilledButton.icon(
           onPressed: id.isEmpty ? null : () => _approveStatus(id),
           icon: const Icon(Icons.check_rounded),
@@ -619,5 +886,23 @@ class _PrincipalEventApprovalScreenState
     final text = value?.toString() ?? '';
     if (text.length >= 10) return text.substring(0, 10);
     return text.isEmpty ? 'No date' : text;
+  }
+
+  DateTime? _parseDate(String value) {
+    if (value.trim().isEmpty) return null;
+    return DateTime.tryParse(value.trim());
+  }
+
+  String _destinationLabel(String value) {
+    switch (value) {
+      case 'PARENTS_HOME':
+        return 'Parents Home';
+      case 'SCHOOL_GALLERY':
+        return 'School Gallery';
+      case 'SCHOOL_LANDING':
+        return 'Public Landing Page';
+      default:
+        return value;
+    }
   }
 }

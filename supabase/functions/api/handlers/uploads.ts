@@ -1,6 +1,6 @@
 // handlers/uploads.ts — multipart file upload → Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, runDbStatements } from "../index.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -12,6 +12,146 @@ function textValue(value: unknown, fallback = ""): string {
 
 function roleValue(user: User): string {
   return `${user.app_metadata?.role_name ?? ""}`.trim().toLowerCase();
+}
+
+function asStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => `${item ?? ""}`.trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeDestinations(value: unknown, visibility: unknown): string[] {
+  const destinations = asStringArray(value);
+  if (destinations.length > 0) return [...new Set(destinations)];
+  const normalizedVisibility = `${visibility ?? ""}`.trim().toLowerCase();
+  if (normalizedVisibility === "public") return ["SCHOOL_LANDING"];
+  if (normalizedVisibility === "gallery") return ["SCHOOL_GALLERY"];
+  return ["PARENTS_HOME"];
+}
+
+function eventPostRow(row: Record<string, unknown>) {
+  const description = `${row.description ?? row.body ?? ""}`;
+  const approvalStatus = `${row.approval_status ?? row.status ?? "draft"}`;
+  const destinations = normalizeDestinations(row.destinations, row.visibility);
+  return {
+    ...row,
+    description,
+    body: description,
+    approval_status: approvalStatus,
+    status: approvalStatus,
+    destinations,
+    visibility: `${row.visibility ?? "school"}`,
+    event_date: row.event_date ?? row.created_at ?? null,
+    rejection_reason: row.rejection_reason ?? "",
+  };
+}
+
+async function notifyUsersByRole(
+  svc: SupabaseClient,
+  school: string,
+  roleName: string,
+  payload: {
+    title: string;
+    body: string;
+    type: string;
+    referenceType: string;
+    referenceId: string;
+  },
+) {
+  const { data: users, error } = await svc.from("users").select("id").eq(
+    "school_id",
+    school,
+  ).eq("role_name", roleName);
+  if (error) throw error;
+  const userIds = (users ?? []).map((row: Record<string, unknown>) =>
+    `${row.id ?? ""}`.trim()
+  ).filter(Boolean);
+  if (userIds.length === 0) return;
+  const rows = userIds.map((userId) => ({
+    school_id: school,
+    user_id: userId,
+    title: payload.title,
+    body: payload.body,
+    type: payload.type,
+    entity_type: payload.referenceType,
+    entity_id: payload.referenceId,
+  }));
+  const { error: insertError } = await svc.from("notification_logs").insert(rows);
+  if (insertError) throw insertError;
+}
+
+async function notifyUser(
+  svc: SupabaseClient,
+  school: string,
+  userId: string,
+  payload: {
+    title: string;
+    body: string;
+    type: string;
+    referenceType: string;
+    referenceId: string;
+  },
+) {
+  if (!userId.trim()) return;
+  const { error } = await svc.from("notification_logs").insert({
+    school_id: school,
+    user_id: userId,
+    title: payload.title,
+    body: payload.body,
+    type: payload.type,
+    entity_type: payload.referenceType,
+    entity_id: payload.referenceId,
+  });
+  if (error) throw error;
+}
+
+let eventPostSchemaReady = false;
+let eventPostSchemaPromise: Promise<void> | null = null;
+
+async function ensureEventPostSchema() {
+  if (eventPostSchemaReady) return;
+  if (eventPostSchemaPromise) return eventPostSchemaPromise;
+  eventPostSchemaPromise = (async () => {
+    try {
+      await runDbStatements([
+        `alter table public.event_posts
+          add column if not exists event_date timestamptz`,
+        `alter table public.event_posts
+          add column if not exists destinations jsonb not null default '[]'::jsonb`,
+        `alter table public.event_posts
+          add column if not exists rejection_reason text`,
+        `alter table public.event_posts
+          add column if not exists approved_by uuid references public.users(id) on delete set null`,
+        `alter table public.event_posts
+          add column if not exists approved_at timestamptz`,
+        `update public.event_posts
+          set destinations = case
+            when visibility = 'public' then '["SCHOOL_LANDING"]'::jsonb
+            when visibility = 'gallery' then '["SCHOOL_GALLERY"]'::jsonb
+            else '["PARENTS_HOME"]'::jsonb
+          end
+          where destinations is null
+             or jsonb_typeof(destinations) is distinct from 'array'
+             or destinations = '[]'::jsonb`,
+        `update public.event_posts
+          set event_date = coalesce(event_date, created_at)
+          where event_date is null`,
+        `create index if not exists idx_event_posts_school_status
+          on public.event_posts(school_id, status, created_at desc)`,
+      ]);
+    } catch {
+      // Best-effort: if the schema is already current or direct SQL is unavailable,
+      // the handler still proceeds and PostgREST responses remain the source of truth.
+    } finally {
+      eventPostSchemaReady = true;
+      eventPostSchemaPromise = null;
+    }
+  })();
+  return eventPostSchemaPromise;
 }
 
 async function parentCanAccessStudent(
@@ -128,12 +268,14 @@ export async function handleEvents(
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {
+  await ensureEventPostSchema();
   const school = sid(user);
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
   const parts = path.slice("/event-posts".length).split("/").filter(Boolean);
   const seg = parts[0];
 
   if (path === "/event-posts/pending" && method === "GET") {
+    if (roleValue(user) !== "principal") return fail("forbidden", 403);
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
@@ -141,27 +283,31 @@ export async function handleEvents(
       ascending: false,
     });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
   }
   if (path === "/event-posts/gallery" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).order("created_at", {
+    ).in("status", ["approved", "published"]).contains("destinations", [
+      "SCHOOL_GALLERY",
+    ]).order("created_at", {
       ascending: false,
     }).limit(50);
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).order("created_at", {
+    ).in("status", ["approved", "published"]).contains("destinations", [
+      "PARENTS_HOME",
+    ]).order("created_at", {
       ascending: false,
     }).limit(20);
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
   }
   if (path === "/event-posts/teacher" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
@@ -169,7 +315,7 @@ export async function handleEvents(
       school,
     ).eq("created_by", user.id).order("created_at", { ascending: false });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
   }
   if (!seg && method === "GET") {
     let q = svc.from("event_posts").select("*, created_by:users(name)").eq(
@@ -182,23 +328,44 @@ export async function handleEvents(
     const { data, error } = await q.order("created_at", { ascending: false })
       .limit(50);
     if (error) return fail(error.message);
-    return ok(data);
+    return ok((data ?? []).map((row) => eventPostRow(row as Record<string, unknown>)));
   }
   if (!seg && method === "POST") {
+    const description = textValue(body.description ?? body.body);
+    const destinations = normalizeDestinations(
+      body.destinations,
+      body.visibility,
+    );
     const payload = {
       school_id: school,
-      title: body.title,
-      body: body.description ?? body.body ?? "",
+      title: textValue(body.title, "Untitled event post"),
+      body: description,
       media_urls: body.media ?? body.media_urls ?? [],
       visibility: textValue(body.visibility, "school"),
+      destinations,
+      event_date: body.event_date ?? new Date().toISOString(),
       status: body.is_submit === true ? "pending" : "draft",
       created_by: user.id,
       event_id: body.event_id ?? null,
+      rejection_reason: null,
     };
     const { data, error } = await svc.from("event_posts").insert(payload)
       .select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    if (body.is_submit === true) {
+      try {
+        await notifyUsersByRole(svc, school, "principal", {
+          title: "Event post pending approval",
+          body: `${payload.title} was submitted for review.`,
+          type: "event_post",
+          referenceType: "event_post",
+          referenceId: `${data.id ?? ""}`,
+        });
+      } catch {
+        // Keep the event post creation successful even if notification fan-out fails.
+      }
+    }
+    return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
@@ -207,48 +374,112 @@ export async function handleEvents(
     ).eq("school_id", school).maybeSingle();
     if (error) return fail(error.message);
     if (!data) return fail("not found", 404);
-    return ok(data);
+    return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && method === "PUT") {
+    const { data: existing, error: existingError } = await svc.from("event_posts")
+      .select("*").eq("id", seg).eq("school_id", school).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("not found", 404);
+    const userRole = roleValue(user);
+    if (userRole !== "principal" && `${existing.created_by ?? ""}` !== user.id) {
+      return fail("forbidden", 403);
+    }
+    const currentStatus = `${existing.status ?? "draft"}`.trim().toLowerCase();
+    const description = textValue(body.description ?? body.body);
+    const destinations = normalizeDestinations(
+      body.destinations ?? existing.destinations,
+      body.visibility ?? existing.visibility,
+    );
     const payload = {
-      title: body.title,
-      body: body.description ?? body.body ?? "",
+      title: textValue(body.title, `${existing.title ?? "Untitled event post"}`),
+      body: description,
       media_urls: body.media ?? body.media_urls ?? [],
       visibility: textValue(body.visibility, "school"),
+      destinations,
+      event_date: body.event_date ?? existing.event_date ?? new Date().toISOString(),
       status: body.is_submit === true
         ? "pending"
-        : textValue(body.status, "draft"),
+        : textValue(body.status, currentStatus),
       updated_at: new Date().toISOString(),
       event_id: body.event_id ?? null,
+      rejection_reason: body.is_submit === true
+        ? null
+        : body.rejection_reason ?? existing.rejection_reason ?? null,
     };
     const { data, error } = await svc.from("event_posts").update(payload).eq(
       "id",
       seg,
     ).eq("school_id", school).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "approve" && method === "POST") {
+    if (roleValue(user) !== "principal") return fail("forbidden", 403);
+    const { data: existing, error: existingError } = await svc.from("event_posts")
+      .select("*").eq("id", seg).eq("school_id", school).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("not found", 404);
     const { data, error } = await svc.from("event_posts").update({
       status: "approved",
+      approved_by: user.id,
+      approved_at: new Date().toISOString(),
+      rejection_reason: null,
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    try {
+      await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
+        title: "Event post approved",
+        body: `${existing.title ?? "Your event post"} was approved by the principal.`,
+        type: "event_post",
+        referenceType: "event_post",
+        referenceId: seg,
+      });
+    } catch {
+      // Approval itself is the source of truth; notification failures should not block it.
+    }
+    return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && parts[1] === "reject" && method === "POST") {
+    if (roleValue(user) !== "principal") return fail("forbidden", 403);
+    const { data: existing, error: existingError } = await svc.from("event_posts")
+      .select("*").eq("id", seg).eq("school_id", school).maybeSingle();
+    if (existingError) return fail(existingError.message);
+    if (!existing) return fail("not found", 404);
     const { data, error } = await svc.from("event_posts").update({
       status: "rejected",
+      rejection_reason: textValue(body.reason, "Principal requested changes."),
       updated_at: new Date().toISOString(),
     }).eq("id", seg).eq("school_id", school).select().single();
     if (error) return fail(error.message);
-    return ok(data);
+    try {
+      await notifyUser(svc, school, `${existing.created_by ?? ""}`, {
+        title: "Event post rejected",
+        body: textValue(body.reason, "Principal requested changes."),
+        type: "event_post",
+        referenceType: "event_post",
+        referenceId: seg,
+      });
+    } catch {
+      // Keep the rejection successful even if the notification insert fails.
+    }
+    return ok(eventPostRow(data as Record<string, unknown>));
   }
   if (seg && method === "DELETE") {
-    await svc.from("event_posts").delete().eq("id", seg).eq(
+    const userRole = roleValue(user);
+    if (!["principal", "teacher"].includes(userRole)) {
+      return fail("forbidden", 403);
+    }
+    let deleteQuery = svc.from("event_posts").delete().eq("id", seg).eq(
       "school_id",
       school,
     );
+    if (userRole !== "principal") {
+      deleteQuery = deleteQuery.eq("created_by", user.id);
+    }
+    const { error } = await deleteQuery;
+    if (error) return fail(error.message);
     return ok({ success: true });
   }
   return fail("not found", 404);

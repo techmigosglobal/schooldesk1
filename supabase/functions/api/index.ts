@@ -33,8 +33,32 @@ let schemaReloadPromise: Promise<void> | null = null;
 
 type DirectSql = {
   (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
+  unsafe: (query: string) => Promise<unknown[]>;
   end: (options?: { timeout?: number }) => Promise<void>;
 };
+
+async function withDirectSql<T>(
+  callback: (sql: DirectSql) => Promise<T>,
+): Promise<T | null> {
+  const dbUrl = Deno.env.get("SUPABASE_DB_URL");
+  if (!dbUrl) return null;
+
+  let sql: DirectSql | null = null;
+  try {
+    const postgresModule = await import("npm:postgres@3.4.5");
+    sql = postgresModule.default(dbUrl, {
+      prepare: false,
+      max: 1,
+      idle_timeout: 1,
+      connect_timeout: 5,
+    }) as DirectSql;
+    return await callback(sql);
+  } finally {
+    if (sql) {
+      await sql.end({ timeout: 1 }).catch(() => undefined);
+    }
+  }
+}
 
 // ── CORS ──────────────────────────────────────────────────────
 const CORS_HEADERS = {
@@ -78,31 +102,30 @@ async function ensureSchemaCacheReady() {
   }
 
   schemaReloadPromise = (async () => {
-    const dbUrl = Deno.env.get("SUPABASE_DB_URL");
-    if (!dbUrl) return;
-
-    let sql: DirectSql | null = null;
-
     try {
-      const postgresModule = await import("npm:postgres@3.4.5");
-      sql = postgresModule.default(dbUrl, {
-        prepare: false,
-        max: 1,
-        idle_timeout: 1,
-        connect_timeout: 5,
-      }) as DirectSql;
-      await sql`NOTIFY pgrst, 'reload schema'`;
-      await sql`NOTIFY pgrst, 'reload config'`;
+      await withDirectSql(async (sql) => {
+        await sql`NOTIFY pgrst, 'reload schema'`;
+        await sql`NOTIFY pgrst, 'reload config'`;
+      });
     } catch (_error) {
       // Best-effort: the API can still proceed, and health/ready will expose issues.
-    } finally {
-      if (sql) {
-        await sql.end({ timeout: 1 }).catch(() => undefined);
-      }
     }
   })();
 
   return schemaReloadPromise;
+}
+
+export async function runDbStatements(statements: string[]) {
+  if (statements.length === 0) return false;
+  const result = await withDirectSql(async (sql) => {
+    for (const statement of statements) {
+      await sql.unsafe(statement);
+    }
+    await sql`NOTIFY pgrst, 'reload schema'`;
+    await sql`NOTIFY pgrst, 'reload config'`;
+    return true;
+  });
+  return result === true;
 }
 
 export async function authedClient(req: Request) {

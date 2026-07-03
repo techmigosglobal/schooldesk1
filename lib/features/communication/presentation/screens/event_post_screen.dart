@@ -253,69 +253,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _destSchoolLanding = false;
   }
 
-  void _startEditingPost(Map<String, dynamic> post) {
-    final destinations = _labels(post['destinations']);
-    final media = EventPostMediaItem.parseList(post['media_urls']);
-    setState(() {
-      _editingPostId = post['id']?.toString();
-      _editingRejectedPost =
-          (post['approval_status'] ?? '').toString() == 'rejected';
-      _titleController.text = (post['title'] ?? '').toString();
-      _descController.text = (post['description'] ?? '').toString();
-      final dateText = (post['event_date'] ?? '').toString();
-      _dateController.text = dateText.length >= 10
-          ? dateText.substring(0, 10)
-          : '';
-      _destParentHome = destinations.contains('PARENTS_HOME');
-      _destSchoolGallery = destinations.contains('SCHOOL_GALLERY');
-      _destSchoolLanding = destinations.contains('SCHOOL_LANDING');
-      _uploadedMedia
-        ..clear()
-        ..addAll(media);
-      _uploadedUrls
-        ..clear()
-        ..addAll(media.map((item) => item.url));
-      _tabController.animateTo(0);
-    });
-  }
-
-  Future<void> _deletePost(Map<String, dynamic> post) async {
-    final id = (post['id'] ?? '').toString();
-    if (id.isEmpty) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete event post?'),
-        content: const Text(
-          'This removes the draft/rejected post from your event post history.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await BackendApiClient.instance.deleteEventPost(id);
-      await BackendApiClient.instance.invalidateCachedReads();
-      final service = await NotificationService.getInstance();
-      await service.refresh();
-      await _loadPosts(showSpinner: false);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
-    }
-  }
-
   // ── Build ───────────────────────────────────────────────────────────────────
 
   @override
@@ -556,7 +493,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         };
         final media = _labels(post['media_urls']);
         final mediaItems = EventPostMediaItem.parseList(post['media_urls']);
-        final canEdit = status == 'draft' || status == 'rejected';
         return Card(
           margin: const EdgeInsets.only(bottom: 14),
           child: Padding(
@@ -624,49 +560,6 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                     'Reason: ${post['rejection_reason']}',
                     style: const TextStyle(color: Colors.red),
                   ),
-                if (canEdit) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _startEditingPost(
-                          Map<String, dynamic>.from(post as Map),
-                        ),
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        label: const Text('Edit'),
-                      ),
-                      if (status == 'draft')
-                        FilledButton.icon(
-                          onPressed: () {
-                            _startEditingPost(
-                              Map<String, dynamic>.from(post as Map),
-                            );
-                            _submit(true);
-                          },
-                          icon: const Icon(Icons.upload_rounded, size: 18),
-                          label: const Text('Submit'),
-                        ),
-                      if (status == 'rejected')
-                        FilledButton.icon(
-                          onPressed: () {
-                            _startEditingPost(
-                              Map<String, dynamic>.from(post as Map),
-                            );
-                            _submit(true);
-                          },
-                          icon: const Icon(Icons.refresh_rounded, size: 18),
-                          label: const Text('Resubmit'),
-                        ),
-                      TextButton.icon(
-                        onPressed: () =>
-                            _deletePost(Map<String, dynamic>.from(post as Map)),
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),
