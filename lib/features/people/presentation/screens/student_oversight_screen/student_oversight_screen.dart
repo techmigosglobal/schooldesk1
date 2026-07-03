@@ -233,8 +233,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       );
       final academicYears = await api.BackendApiClient.instance
           .getAcademicYears(forceRefresh: true);
-      final feeStructures = await api.BackendApiClient.instance
-          .getFeeStructures();
+      final feeStructures = await _loadFeeStructuresSafely();
       final parents = await _loadParentAccounts();
       final sectionMap = {for (final s in sections) s.id: s};
       final gradeMap = {for (final g in grades) g.id: g};
@@ -335,6 +334,14 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       return result.data;
     } catch (_) {
       return const [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _loadFeeStructuresSafely() async {
+    try {
+      return await api.BackendApiClient.instance.getFeeStructures();
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
     }
   }
 
@@ -2869,8 +2876,9 @@ class _DropdownInput<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedValue = value == null || items.contains(value) ? value : null;
     return DropdownButtonFormField<T>(
-      initialValue: value,
+      initialValue: selectedValue,
       isExpanded: true,
       validator: validator,
       icon: Icon(suffixIcon ?? Icons.keyboard_arrow_down_rounded, size: 18),

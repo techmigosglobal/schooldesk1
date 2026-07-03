@@ -95,6 +95,19 @@ void main() {
     },
   );
 
+  test(
+    'student directory keeps class loading independent from fee structures',
+    () {
+      final source = File(
+        'lib/features/people/presentation/screens/student_oversight_screen/student_oversight_screen.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('_loadFeeStructuresSafely'));
+      expect(source, contains('return const <Map<String, dynamic>>[];'));
+      expect(source, contains('items.contains(value) ? value : null'));
+    },
+  );
+
   test('parent fee history datasource uses Supabase fee payment routes', () {
     final source = File(
       'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
