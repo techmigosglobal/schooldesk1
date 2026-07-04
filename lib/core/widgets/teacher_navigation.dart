@@ -214,6 +214,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               label: 'Documents',
               route: AppRoutes.teacherDocuments,
             ),
+            const SchoolDeskNavigationItem(
+              index: TeacherNav.complaints,
+              icon: Icons.support_agent_outlined,
+              activeIcon: Icons.support_agent_rounded,
+              label: 'Complaints',
+              route: AppRoutes.teacherComplaints,
+            ),
           ],
         ),
         const SchoolDeskNavigationSection(

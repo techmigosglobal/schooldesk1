@@ -42,6 +42,7 @@ void main() {
       expect(principal, contains('createTimetableSlot('));
       expect(principal, contains('Delete Extra Period Rows'));
       expect(principal, contains('Reflow Day'));
+      expect(principal, contains('Delete Whole Timetable'));
 
       expect(principal, isNot(contains('Manual Edit Today')));
       expect(principal, isNot(contains('Generate Time Table')));
@@ -59,6 +60,8 @@ void main() {
         contains('method === "PATCH" || method === "PUT"'),
       );
       expect(supabaseTimetable, contains('method === "DELETE"'));
+      expect(supabaseTimetable, contains('url.searchParams.get("section_id")'));
+      expect(supabaseTimetable, contains('url.searchParams.get("academic_year_id")'));
     },
   );
 

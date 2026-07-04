@@ -30,6 +30,7 @@ import { handleHomework } from "./handlers/homework.ts";
 import { handleMedical } from "./handlers/medical.ts";
 import { handleHealthReminders } from "./handlers/health_reminders.ts";
 import { handleBirthdayAlerts } from "./handlers/birthday_alerts.ts";
+import { handleNotifications } from "./handlers/notifications.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -227,22 +228,23 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  // ── All other routes require authentication ────────────────
+  const { user, client, svc } = await authedClient(req);
+  if (!user || !client) {
+    return cors({ success: false, error: "unauthorized" }, 401);
+  }
+
+  // ── Birthday alerts (authenticated principal/admin or job secret) ──
   if (path.startsWith("/jobs/birthday-alerts")) {
     return handleBirthdayAlerts(
       req,
       path,
       method,
       url,
-      null,
-      serviceClient(),
-      null,
+      client,
+      svc,
+      user,
     );
-  }
-
-  // ── All other routes require authentication ────────────────
-  const { user, client, svc } = await authedClient(req);
-  if (!user || !client) {
-    return cors({ success: false, error: "unauthorized" }, 401);
   }
 
   // Route dispatch
@@ -306,10 +308,13 @@ Deno.serve(async (req: Request) => {
   if (path.startsWith("/timetable")) {
     return handleTimetable(req, path, method, url, client, svc, user);
   }
+  if (path.startsWith("/notifications") && path.startsWith("/notifications/")) {
+    return handleNotifications(req, path, method, url, client, svc, user);
+  }
   if (
     path.startsWith("/chat") ||
     path.startsWith("/announcements") || path.startsWith("/notices") ||
-    path.startsWith("/notifications") || path.startsWith("/message") ||
+    path.startsWith("/message") ||
     path.startsWith("/communications") ||
     path.startsWith("/parent-teacher-meetings") ||
     path.startsWith("/teacher/ptm-slots") ||

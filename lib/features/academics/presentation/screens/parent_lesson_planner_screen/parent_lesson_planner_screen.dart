@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-import 'package:schooldesk1/core/utils/attachment_url_resolver.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 
 class ParentLessonPlannerScreen extends StatefulWidget {
   const ParentLessonPlannerScreen({super.key});
@@ -175,8 +175,11 @@ class _PlannerCard extends StatelessWidget {
                 children: [
                   for (final attachment in attachments)
                     OutlinedButton.icon(
-                      onPressed: () =>
-                          _openAttachment(context, _text(attachment['url'])),
+                      onPressed: () => _openAttachment(
+                      context,
+                      _text(attachment['url']),
+                      name: _text(attachment['name']),
+                    ),
                       icon: const Icon(Icons.attach_file_rounded, size: 18),
                       label: Text(
                         _text(attachment['name'], fallback: 'View Attachment'),
@@ -191,23 +194,20 @@ class _PlannerCard extends StatelessWidget {
     );
   }
 
-  Future<void> _openAttachment(
+  void _openAttachment(
     BuildContext context,
-    String attachmentUrl,
-  ) async {
-    final uri = resolveAttachmentUrl(attachmentUrl);
-    if (uri == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Attachment link is not available.')),
-      );
-      return;
-    }
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to open attachment.')),
-      );
-    }
+    String attachmentUrl, {
+    String name = '',
+  }) {
+    final item = EventPostMediaItem.fromUrl(attachmentUrl);
+    final namedItem = name.isNotEmpty && item.displayName.isEmpty
+        ? EventPostMediaItem(
+            url: item.url,
+            name: name,
+            kind: item.kind,
+          )
+        : item;
+    openEventPostMediaPreview(context, namedItem);
   }
 
   String? _nested(dynamic obj, String key) {

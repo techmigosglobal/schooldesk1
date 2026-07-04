@@ -160,6 +160,11 @@ extension BackendCommunicationsApi on BackendApiClient {
       throw ServerException(
         message: response.error ?? 'Failed to get notifications',
       );
+    } on AuthException catch (_) {
+      // Auth token may be expired or cleared by a concurrent request.
+      // Return empty list instead of crashing — the user will see the
+      // login screen shortly if the session is truly expired.
+      return const [];
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -431,6 +436,42 @@ extension BackendCommunicationsApi on BackendApiClient {
       );
     } on DioException catch (e) {
       throw _handleError(e);
+    }
+  }
+
+  // ─── Birthday Alerts ──────────────────────────────────────────────────────
+
+  /// Triggers the birthday alert job for today. Only principals/admins can
+  /// call this. The backend creates notification_logs entries for every
+  /// student whose date_of_birth matches today.
+  Future<Map<String, dynamic>> triggerBirthdayAlerts() async {
+    // Use a dedicated Dio instance without the auth-clearing error
+    // interceptor so a 403/401 from this fire-and-forget endpoint never
+    // wipes the shared TokenStorageService.
+    final token = _authToken;
+    if (token == null || token.isEmpty) {
+      return <String, dynamic>{};
+    }
+    try {
+      final safeDio = Dio(BaseOptions(
+        baseUrl: _dio.options.baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ));
+      final response = await safeDio.post(
+        '/jobs/birthday-alerts/run',
+        data: <String, dynamic>{},
+      );
+      final data = _asMap(response.data);
+      return Map<String, dynamic>.from(data['data'] as Map? ?? {});
+    } catch (_) {
+      // Fire-and-forget: never crash or clear shared auth state.
+      return <String, dynamic>{};
     }
   }
 

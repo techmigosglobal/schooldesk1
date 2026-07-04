@@ -26,6 +26,19 @@ function addMinutes(time: string, minutes: number): string {
   return `${`${hours}`.padStart(2, "0")}:${`${mins}`.padStart(2, "0")}`;
 }
 
+async function resolveSectionDefaultStaffId(
+  svc: SupabaseClient,
+  school: string,
+  sectionId: string,
+): Promise<string> {
+  if (!sectionId) return "";
+  const { data: section, error } = await svc.from("sections").select(
+    "class_teacher_id, co_teacher_id",
+  ).eq("id", sectionId).eq("school_id", school).maybeSingle();
+  if (error) throw error;
+  return textValue(section?.class_teacher_id) || textValue(section?.co_teacher_id);
+}
+
 type Assignment = {
   subject_id: string | null;
   subject_name: string;
@@ -132,6 +145,7 @@ async function generateSlots(
     : [intValue(body.day_of_week, 1)];
   const periodsPerDay = Math.max(1, intValue(body.periods_per_day, 7));
   const startTime = textValue(body.start_time, "08:30");
+  const defaultStaffId = await resolveSectionDefaultStaffId(svc, school, sectionId);
   const periodDuration = Math.max(
     20,
     intValue(body.period_duration_minutes, 40),
@@ -208,7 +222,7 @@ async function generateSlots(
         academic_year_id: academicYearId,
         term_id: textValue(body.term_id) || null,
         subject_id: assignment.subject_id,
-        staff_id: null,
+        staff_id: defaultStaffId || null,
         room_id: textValue(body.room_id) || null,
         day_of_week: day,
         period_number: period,
@@ -249,13 +263,29 @@ export async function handleTimetable(
       if (error) return fail(error.message);
       return ok(data ?? []);
     }
+    if (method === "DELETE") {
+      let q = svc.from("timetable_slots").delete().eq("school_id", school);
+      if (url.searchParams.get("section_id")) q = q.eq("section_id", url.searchParams.get("section_id")!);
+      if (url.searchParams.get("academic_year_id")) q = q.eq("academic_year_id", url.searchParams.get("academic_year_id")!);
+      const { error } = await q;
+      if (error) return fail(error.message);
+      return ok({ success: true });
+    }
     if (method === "POST") {
       const { term_id: _ignoredTermId, ...payload } = body as Record<
         string,
         unknown
       >;
+      const sectionId = textValue(payload.section_id);
+      const slotType = textValue(payload.slot_type, "regular");
+      const resolvedStaffId = textValue(payload.staff_id);
+      const defaultStaffId = await resolveSectionDefaultStaffId(svc, school, sectionId);
+      const finalStaffId = slotType === "break" || slotType === "free" || !textValue(payload.subject_id)
+        ? null
+        : resolvedStaffId || defaultStaffId || null;
       const { data, error } = await svc.from("timetable_slots").insert({
         ...payload,
+        staff_id: finalStaffId,
         school_id: school,
       }).select(
         "*, subject:subjects(*), staff:staff(*), section:sections(*, grade:grades(*)), room:rooms(*)",
@@ -272,8 +302,16 @@ export async function handleTimetable(
         string,
         unknown
       >;
+      const sectionId = textValue(payload.section_id);
+      const slotType = textValue(payload.slot_type, "regular");
+      const resolvedStaffId = textValue(payload.staff_id);
+      const defaultStaffId = await resolveSectionDefaultStaffId(svc, school, sectionId);
+      const finalStaffId = slotType === "break" || slotType === "free" || !textValue(payload.subject_id)
+        ? null
+        : resolvedStaffId || defaultStaffId || null;
       const { data, error } = await svc.from("timetable_slots").update({
         ...payload,
+        staff_id: finalStaffId,
         updated_at: new Date().toISOString(),
       }).eq("id", slotMatch[1]).eq("school_id", school).select(
         "*, subject:subjects(*), staff:staff(*), section:sections(*, grade:grades(*)), room:rooms(*)",

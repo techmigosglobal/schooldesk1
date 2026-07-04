@@ -8,6 +8,7 @@ class RouteAccessGuard {
     'teacher',
     'parent',
     'kiosk',
+    'super_admin',
   };
 
   static const Set<String> publicRoutes = {
@@ -73,6 +74,11 @@ class RouteAccessGuard {
     AppRoutes.principalParentChildAssignment: {'principal'},
     AppRoutes.principalSchoolProfile: {'principal'},
     AppRoutes.systemMonitor: {'principal'},
+    // Super Admin routes
+    AppRoutes.superAdminDashboard: {'super_admin'},
+    AppRoutes.superAdminAuditLogs: {'super_admin'},
+    AppRoutes.superAdminSystemMonitor: {'super_admin'},
+    AppRoutes.superAdminErrorReporting: {'super_admin'},
     // Teacher routes
     AppRoutes.teacherDashboard: {'teacher'},
     AppRoutes.teacherClasses: {'teacher'},
@@ -188,6 +194,8 @@ class RouteAccessGuard {
     switch (_normalizeRole(role)) {
       case 'principal':
         return AppRoutes.principalDashboard;
+      case 'super_admin':
+        return AppRoutes.superAdminDashboard;
       case 'teacher':
         return AppRoutes.teacherDashboard;
       case 'parent':

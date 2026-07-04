@@ -224,6 +224,29 @@ extension BackendTimetableApi on BackendApiClient {
     );
   }
 
+  Future<void> deleteTimetableSlotsForSection({
+    required String sectionId,
+    String academicYearId = '',
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{'section_id': sectionId.trim()};
+      if (academicYearId.trim().isNotEmpty) {
+        queryParams['academic_year_id'] = academicYearId.trim();
+      }
+      final response = await _dio.delete(
+        '/timetable/slots',
+        queryParameters: queryParams,
+      );
+      final data = _asMap(response.data);
+      if (data['success'] == true) return;
+      throw ServerException(
+        message: data['error'] ?? 'Failed to delete timetable slots',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Map<String, dynamic>> createTimetableSlot({
     required String sectionId,
     required String academicYearId,

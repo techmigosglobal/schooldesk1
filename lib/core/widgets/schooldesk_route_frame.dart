@@ -94,6 +94,8 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
       case 'principal':
       case 'admin':
         return '/principal-dashboard-screen';
+      case 'super_admin':
+        return '/super-admin-dashboard-screen';
       case 'teacher':
         return '/teacher-dashboard-screen';
       case 'parent':

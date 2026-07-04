@@ -288,20 +288,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               route: AppRoutes.principalDocuments,
             ),
             SchoolDeskNavigationItem(
-              index: PrincipalNav.idCards,
-              icon: Icons.badge_outlined,
-              activeIcon: Icons.badge_rounded,
-              label: SchoolDeskGlossary.idCards,
-              route: AppRoutes.idCardGeneration,
-            ),
-            SchoolDeskNavigationItem(
-              index: PrincipalNav.auditLogs,
-              icon: Icons.history_rounded,
-              activeIcon: Icons.history_rounded,
-              label: 'Audit Logs',
-              route: AppRoutes.principalAuditLogs,
-            ),
-            SchoolDeskNavigationItem(
               index: PrincipalNav.reports,
               icon: Icons.bar_chart_outlined,
               activeIcon: Icons.bar_chart_rounded,
@@ -314,13 +300,6 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               activeIcon: Icons.analytics_rounded,
               label: SchoolDeskGlossary.analytics,
               route: AppRoutes.principalAnalytics,
-            ),
-            SchoolDeskNavigationItem(
-              index: PrincipalNav.monitor,
-              icon: Icons.monitor_heart_outlined,
-              activeIcon: Icons.monitor_heart_rounded,
-              label: 'System Monitor',
-              route: AppRoutes.systemMonitor,
             ),
           ],
         ),
@@ -441,6 +420,306 @@ class _PrincipalShellDestination {
   final Object? arguments;
 
   const _PrincipalShellDestination({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+    required this.route,
+    this.arguments,
+  });
+}
+
+// ─── SuperAdmin Navigation ──────────────────────────────────────────────────
+
+class SuperAdminDrawer extends StatefulWidget {
+  final int? selectedIndex;
+  final Function(int) onDestinationSelected;
+
+  const SuperAdminDrawer({
+    super.key,
+    this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  @override
+  State<SuperAdminDrawer> createState() => _SuperAdminDrawerState();
+}
+
+class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
+  NotificationService? _notifService;
+  int _unreadCount = 0;
+  String _schoolName = 'School';
+  String _schoolSubtitle = 'Manage school details';
+  String _schoolLogo = '';
+  String _userName = 'Super Admin';
+  String _userSubtitle = 'Super Administrator';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+    _loadIdentity();
+  }
+
+  Future<void> _loadNotifications() async {
+    final svc = await NotificationService.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _notifService = svc;
+      _unreadCount = svc.getUnreadCountForRole('super_admin');
+    });
+    svc.addListener(_onNotifChanged);
+  }
+
+  Future<void> _loadIdentity() async {
+    final api = BackendApiClient.instance;
+    try {
+      final results = await Future.wait([
+        api.getCurrentSchool(),
+        api.getProfile(),
+      ]);
+      if (!mounted) return;
+      final school = results[0] as Map<String, dynamic>;
+      final profile = results[1] as UserResponse;
+      setState(() {
+        _schoolName = safeText(school['name'], fallback: 'School');
+        _schoolSubtitle = safeText(
+          school['affiliation_board'],
+          fallback: safeText(
+            school['school_type'],
+            fallback: 'Manage school details',
+          ),
+        );
+        _schoolLogo = safeText(school['logo_url'], fallback: '');
+        _userName = profile.name.trim().isEmpty
+            ? safeText(profile.username, fallback: 'Super Admin')
+            : profile.name.trim();
+        _userSubtitle = profile.roleName.trim().isEmpty
+            ? 'Super Administrator'
+            : profile.roleName.trim();
+      });
+    } catch (_) {
+      // Keep neutral labels if the backend is temporarily unavailable.
+    }
+  }
+
+  void _onNotifChanged() {
+    if (!mounted) return;
+    setState(() {
+      _unreadCount = _notifService?.getUnreadCountForRole('super_admin') ?? 0;
+    });
+  }
+
+  @override
+  void dispose() {
+    _notifService?.removeListener(_onNotifChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SchoolDeskNavigationDrawer(
+      role: SchoolDeskRole.principal,
+      portalLabel: 'Super Admin Portal',
+      organizationName: _schoolName,
+      organizationSubtitle: _schoolSubtitle,
+      organizationLogo: _schoolLogo.isEmpty
+          ? null
+          : Image.network(
+              _assetUrl(_schoolLogo),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  const Icon(Icons.security_rounded),
+            ),
+      userName: _userName,
+      userSubtitle: _userSubtitle,
+      initials: safeInitials(_userName, fallback: 'SA'),
+      portalIcon: Icons.security_rounded,
+      selectedIndex: widget.selectedIndex,
+      onDestinationSelected: widget.onDestinationSelected,
+      sections: const [
+        SchoolDeskNavigationSection(
+          label: 'System Administration',
+          items: [
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.auditLogs,
+              icon: Icons.history_rounded,
+              activeIcon: Icons.history_rounded,
+              label: 'Audit Logs',
+              route: AppRoutes.superAdminAuditLogs,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.systemMonitor,
+              icon: Icons.monitor_heart_outlined,
+              activeIcon: Icons.monitor_heart_rounded,
+              label: 'System Monitor',
+              route: AppRoutes.superAdminSystemMonitor,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.errorReporting,
+              icon: Icons.error_outline_rounded,
+              activeIcon: Icons.error_rounded,
+              label: 'Error Reporting',
+              route: AppRoutes.superAdminErrorReporting,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.idCards,
+              icon: Icons.badge_outlined,
+              activeIcon: Icons.badge_rounded,
+              label: SchoolDeskGlossary.idCards,
+              route: AppRoutes.idCardGeneration,
+            ),
+          ],
+        ),
+        SchoolDeskNavigationSection(
+          label: 'School Management',
+          items: [
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.schoolProfile,
+              icon: Icons.apartment_outlined,
+              activeIcon: Icons.apartment_rounded,
+              label: SchoolDeskGlossary.schoolProfile,
+              route: AppRoutes.principalSchoolProfile,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.access,
+              icon: Icons.manage_accounts_outlined,
+              activeIcon: Icons.manage_accounts_rounded,
+              label: SchoolDeskGlossary.accessPermissions,
+              route: AppRoutes.principalUserManagement,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.staff,
+              icon: Icons.people_outline_rounded,
+              activeIcon: Icons.people_rounded,
+              label: SchoolDeskGlossary.staff,
+              route: AppRoutes.staffManagement,
+            ),
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.students,
+              icon: Icons.school_outlined,
+              activeIcon: Icons.school_rounded,
+              label: SchoolDeskGlossary.studentOversight,
+              route: AppRoutes.studentOversight,
+            ),
+          ],
+        ),
+      ],
+      footerActions: [
+        const SchoolDeskNavigationFooterAction(
+          icon: Icons.search_rounded,
+          label: SchoolDeskGlossary.globalSearch,
+          route: AppRoutes.globalSearch,
+        ),
+        SchoolDeskNavigationFooterAction(
+          icon: Icons.notifications_outlined,
+          label: SchoolDeskGlossary.notifications,
+          route: AppRoutes.notificationCenter,
+          arguments: 'super_admin',
+          badgeCount: _unreadCount,
+        ),
+        const SchoolDeskNavigationFooterAction(
+          icon: Icons.account_circle_outlined,
+          label: SchoolDeskGlossary.profile,
+          route: AppRoutes.profileScreen,
+          arguments: 'super_admin',
+        ),
+        const SchoolDeskNavigationFooterAction(
+          icon: Icons.settings_outlined,
+          label: SchoolDeskGlossary.settings,
+          route: AppRoutes.settingsScreen,
+          arguments: 'super_admin',
+        ),
+        SchoolDeskNavigationFooterAction(
+          icon: Icons.logout_rounded,
+          label: SchoolDeskGlossary.signOut,
+          color: Theme.of(context).colorScheme.error,
+          onPressed: (context) => LogoutService.confirmAndSignOut(
+            context,
+            portalName: 'Super Admin portal',
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _assetUrl(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    return '${EnvConfig.apiOrigin}$path';
+  }
+}
+
+class SuperAdminShellBottomBar extends StatelessWidget {
+  const SuperAdminShellBottomBar({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    final destinations = const [
+      _SuperAdminShellDestination(
+        label: 'Home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        route: AppRoutes.principalDashboard,
+      ),
+      _SuperAdminShellDestination(
+        label: SchoolDeskGlossary.search,
+        icon: Icons.search_rounded,
+        activeIcon: Icons.manage_search_rounded,
+        route: AppRoutes.globalSearch,
+        arguments: 'super_admin',
+      ),
+      _SuperAdminShellDestination(
+        label: SchoolDeskGlossary.notifications,
+        icon: Icons.notifications_none_rounded,
+        activeIcon: Icons.notifications_rounded,
+        route: AppRoutes.notificationCenter,
+        arguments: 'super_admin',
+      ),
+      _SuperAdminShellDestination(
+        label: SchoolDeskGlossary.profile,
+        icon: Icons.account_circle_outlined,
+        activeIcon: Icons.account_circle_rounded,
+        route: AppRoutes.profileScreen,
+        arguments: 'super_admin',
+      ),
+    ];
+
+    return SchoolDeskBottomNavigationBar(
+      items: [
+        for (final destination in destinations)
+          SchoolDeskBottomNavItem(
+            label: destination.label,
+            icon: destination.icon,
+            activeIcon: destination.activeIcon,
+            selected: currentRoute == destination.route,
+            onTap: () => _navigate(context, destination),
+          ),
+      ],
+    );
+  }
+
+  void _navigate(BuildContext context, _SuperAdminShellDestination destination) {
+    final navigator = Navigator.of(context);
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    if (currentRoute == destination.route) return;
+    if (destination.route == AppRoutes.principalDashboard) {
+      navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
+      return;
+    }
+    navigator.pushNamed(destination.route, arguments: destination.arguments);
+  }
+}
+
+class _SuperAdminShellDestination {
+  final String label;
+  final IconData icon;
+  final IconData activeIcon;
+  final String route;
+  final Object? arguments;
+
+  const _SuperAdminShellDestination({
     required this.label,
     required this.icon,
     required this.activeIcon,

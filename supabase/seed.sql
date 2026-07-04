@@ -21,6 +21,7 @@ declare
   v_parent_user uuid := '00000000-0000-4000-8000-000000000104';
   v_student_user uuid := '00000000-0000-4000-8000-000000000105';
   v_kiosk_user uuid := '00000000-0000-4000-8000-000000000106';
+  v_superadmin_user uuid := '00000000-0000-4000-8000-000000000107';
   v_attendance_session uuid := '00000000-0000-4000-8000-000000000060';
   v_fee_category uuid := '00000000-0000-4000-8000-000000000070';
   v_fee_structure uuid := '00000000-0000-4000-8000-000000000071';
@@ -102,7 +103,8 @@ begin
     ('00000000-0000-0000-0000-000000000000', v_teacher_user, 'authenticated', 'authenticated', 'teacher@schooldesk.local', crypt('Teacher@12345', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','teacher'), '{"name":"Tara Teacher"}', now(), now(), '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_parent_user, 'authenticated', 'authenticated', 'parent@schooldesk.local', crypt('Parent@12345', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','parent'), '{"name":"Priya Parent"}', now(), now(), '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_student_user, 'authenticated', 'authenticated', 'student@schooldesk.local', crypt('Student@12345', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','student'), '{"name":"Sam Student"}', now(), now(), '', '', '', ''),
-    ('00000000-0000-0000-0000-000000000000', v_kiosk_user, 'authenticated', 'authenticated', 'kiosk@schooldesk.local', crypt('Kiosk@12345', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','kiosk'), '{"name":"Attendance Kiosk"}', now(), now(), '', '', '', '')
+    ('00000000-0000-0000-0000-000000000000', v_kiosk_user, 'authenticated', 'authenticated', 'kiosk@schooldesk.local', crypt('Kiosk@12345', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','kiosk'), '{"name":"Attendance Kiosk"}', now(), now(), '', '', '', ''),
+    ('00000000-0000-0000-0000-000000000000', v_superadmin_user, 'authenticated', 'authenticated', 'vinay@schooldesk.local', crypt('Vinay@098', gen_salt('bf')), now(), jsonb_build_object('provider','email','providers',array['email'],'school_id',v_school,'role_name','super_admin'), '{"name":"Vinay SuperAdmin"}', now(), now(), '', '', '', '')
   on conflict (id) do update
   set encrypted_password = excluded.encrypted_password,
       raw_app_meta_data = excluded.raw_app_meta_data,
@@ -111,7 +113,7 @@ begin
   insert into auth.identities (id, provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
   select id, id, id, jsonb_build_object('sub', id, 'email', email), 'email', now(), now(), now()
   from auth.users
-  where id in (v_principal_user, v_admin_user, v_teacher_user, v_parent_user, v_student_user, v_kiosk_user)
+  where id in (v_principal_user, v_admin_user, v_teacher_user, v_parent_user, v_student_user, v_kiosk_user, v_superadmin_user)
   on conflict (provider, provider_id) do nothing;
 
   insert into public.users (id, school_id, username, name, email, phone, role_name, linked_type, linked_id, is_active, is_verified)
@@ -121,7 +123,8 @@ begin
     (v_teacher_user, v_school, 'teacher', 'Tara Teacher', 'teacher@schooldesk.local', '9000000003', 'teacher', 'staff', v_teacher_staff, true, true),
     (v_parent_user, v_school, 'parent', 'Priya Parent', 'parent@schooldesk.local', '9000000004', 'parent', 'guardian', v_guardian, true, true),
     (v_student_user, v_school, 'student', 'Sam Student', 'student@schooldesk.local', '9000000005', 'student', 'student', v_student, true, true),
-    (v_kiosk_user, v_school, 'kiosk', 'Attendance Kiosk', 'kiosk@schooldesk.local', '9000000006', 'kiosk', null, null, true, true)
+    (v_kiosk_user, v_school, 'kiosk', 'Attendance Kiosk', 'kiosk@schooldesk.local', '9000000006', 'kiosk', null, null, true, true),
+    (v_superadmin_user, v_school, 'vinay', 'Vinay SuperAdmin', 'vinay@schooldesk.local', '9000000007', 'super_admin', null, null, true, true)
   on conflict (id) do update
   set username = excluded.username,
       role_name = excluded.role_name,
@@ -137,7 +140,8 @@ begin
     ('teacher', v_teacher_user, v_school),
     ('parent', v_parent_user, v_school),
     ('student', v_student_user, v_school),
-    ('kiosk', v_kiosk_user, v_school)
+    ('kiosk', v_kiosk_user, v_school),
+    ('vinay', v_superadmin_user, v_school)
   on conflict (username) do update set auth_user_id = excluded.auth_user_id;
 
   insert into public.parent_student_links (school_id, parent_user_id, student_id)

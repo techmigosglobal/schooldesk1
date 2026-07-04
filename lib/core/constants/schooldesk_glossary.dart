@@ -3,6 +3,7 @@ class SchoolDeskGlossary {
 
   static const principal = 'Principal';
   static const admin = 'Admin';
+  static const superAdmin = 'Super Admin';
   static const teacher = 'Teacher';
   static const parent = 'Parent';
 
@@ -46,6 +47,8 @@ class SchoolDeskGlossary {
       case 'principal':
       case 'principle':
         return principal;
+      case 'super_admin':
+        return superAdmin;
       case 'admin':
         return admin;
       case 'teacher':

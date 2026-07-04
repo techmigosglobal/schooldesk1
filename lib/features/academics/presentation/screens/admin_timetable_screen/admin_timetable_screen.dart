@@ -306,6 +306,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             ],
             buttonLabel: 'View / Edit Timetable',
             onPressed: _openExistingTimetable,
+            secondaryButtonLabel: 'Delete Whole Timetable',
+            onSecondaryPressed: _deleteWholeTimetable,
           ),
       ],
     );
@@ -541,6 +543,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       children: [
         _buildEditorActions(preview: false),
         const SizedBox(height: 12),
+        _hintText(
+          'Subjects use the class teacher or co-teacher for this class, so every regular slot is assigned to the class team.',
+        ),
+        const SizedBox(height: 10),
         _buildTimingQuickControls(),
         const SizedBox(height: 12),
         _buildDayWiseEditor(subjectOptions),
@@ -628,6 +634,13 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               icon: const Icon(Icons.visibility_outlined, size: 18),
               label: const Text('Preview'),
             ),
+          OutlinedButton.icon(
+            onPressed: _saving || _selectedSectionId.isEmpty
+                ? null
+                : _deleteWholeTimetable,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Delete Whole Timetable'),
+          ),
           FilledButton.icon(
             onPressed: _saving || _draftCells.isEmpty
                 ? null
@@ -778,10 +791,35 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       runSpacing: 8,
       children: [
         for (final day in visibleDays)
-          ChoiceChip(
-            label: Text(_dayShortLabels[day - 1]),
-            selected: _selectedEditorDay == day,
-            onSelected: (_) => setState(() => _selectedEditorDay = day),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => setState(() => _selectedEditorDay = day),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: _selectedEditorDay == day
+                      ? _accent
+                      : const Color(0xFFEBF0F7),
+                  border: Border.all(
+                    color: _selectedEditorDay == day
+                        ? _accent
+                        : const Color(0xFF9BACC0),
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _dayShortLabels[day - 1],
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: _selectedEditorDay == day ? Colors.white : _ink,
+                  ),
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -892,17 +930,67 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           _sectionTitle('Delete Extra Period Rows'),
           const SizedBox(height: 8),
           _hintText('Remove P1, P2, P3, or any extra period from every day.'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 10,
+            runSpacing: 10,
             children: [
               for (final column in columns)
-                InputChip(
-                  label: Text('P${column.periodNumber}'),
-                  avatar: const Icon(Icons.view_week_outlined, size: 16),
-                  onDeleted: () => _deletePeriodColumn(column.periodNumber),
-                  deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                Material(
+                  color: Colors.transparent,
+                  child: Tooltip(
+                    message: 'Delete P${column.periodNumber}',
+                    child: InkWell(
+                      onTap: () => _deletePeriodColumn(column.periodNumber),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFDD7D1),
+                          border: Border.all(
+                            color: const Color(0xFFE53935),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFE53935).withOpacity(0.15),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.view_week_outlined,
+                              size: 20,
+                              color: const Color(0xFFC62828),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'P${column.periodNumber}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                                color: Color(0xFFC62828),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: const Color(0xFFC62828),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
             ],
           ),
@@ -1096,6 +1184,8 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     required List<String> lines,
     required String buttonLabel,
     required VoidCallback onPressed,
+    String? secondaryButtonLabel,
+    VoidCallback? onSecondaryPressed,
   }) {
     return _panel(
       child: Column(
@@ -1139,7 +1229,20 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: FilledButton(onPressed: onPressed, child: Text(buttonLabel)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilledButton(onPressed: onPressed, child: Text(buttonLabel)),
+                if (secondaryButtonLabel != null &&
+                    onSecondaryPressed != null) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: onSecondaryPressed,
+                    child: Text(secondaryButtonLabel),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -1432,6 +1535,55 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     }).toList();
   }
 
+  Future<void> _deleteWholeTimetable() async {
+    if (_selectedSectionId.isEmpty) {
+      _showSnack('Select a class before deleting its timetable.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete whole timetable?'),
+        content: Text(
+          'This will remove every timetable slot for $_selectedClassLabel.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _saving = true);
+    try {
+      final api = BackendApiClient.instance;
+      await api.deleteTimetableSlotsForSection(
+        sectionId: _selectedSectionId,
+        academicYearId: _currentAcademicYear?.id ?? '',
+      );
+      await _loadData();
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _draftCells = [];
+        _settings = _TimetableSettings.defaults();
+        _stage = _ManualTimetableStage.selectClass;
+      });
+      _showSnack('Whole timetable deleted.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      _showSnack('Unable to delete timetable. $error');
+    }
+  }
+
   Future<void> _saveManualTimetable() async {
     if (_selectedSectionId.isEmpty || _currentAcademicYear == null) {
       _showSnack('Select class and academic year before saving.');
@@ -1643,6 +1795,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     if (subjectId.trim().isEmpty) return '';
     final section = _selectedSection;
     if (section == null) return '';
+    if (section.classTeacherId.trim().isNotEmpty) {
+      return section.classTeacherId.trim();
+    }
+    if (section.coTeacherId.trim().isNotEmpty) {
+      return section.coTeacherId.trim();
+    }
     for (final row in _staffSubjects) {
       if (_text(row['subject_id'] ?? _map(row['subject'])['id']) != subjectId) {
         continue;

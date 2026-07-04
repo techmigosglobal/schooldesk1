@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -29,6 +30,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   String _selectedSectionId = '';
   String _selectedStudentId = '';
   late final PageController _pageController;
+  Timer? _staffAttendancePollingTimer;
 
   List<StaffAttendanceModel> _staffAttendance = [];
   List<StaffModel> _staff = [];
@@ -46,12 +48,35 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     super.initState();
     _pageController = PageController();
     _load();
+    _startStaffAttendancePolling();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _staffAttendancePollingTimer?.cancel();
     super.dispose();
+  }
+
+  void _startStaffAttendancePolling() {
+    _staffAttendancePollingTimer?.cancel();
+    _staffAttendancePollingTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _pollStaffAttendance(),
+    );
+  }
+
+  Future<void> _pollStaffAttendance() async {
+    try {
+      final staffAttendance = await BackendApiClient.instance
+          .getStaffAttendanceForDate(date: _todayText);
+      if (!mounted) return;
+      setState(() {
+        _staffAttendance = staffAttendance;
+      });
+    } catch (error) {
+      // Silently ignore polling errors
+    }
   }
 
   Future<void> _load() async {

@@ -195,7 +195,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
       title: 'ID Cards',
       subtitle: 'Generate and print student ID cards',
       drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.idCards,
+        selectedIndex: PrincipalNav.dashboard,
         onDestinationSelected: (_) {},
       ),
       floatingActionButton: const DashboardFabWidget(

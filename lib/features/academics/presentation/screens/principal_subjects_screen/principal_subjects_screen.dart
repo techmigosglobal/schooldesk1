@@ -10,6 +10,16 @@ import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
+extension _FirstWhereOrNullExt<T> on List<T> {
+  T? firstWhereOrNull(bool Function(T) test) {
+    try {
+      return firstWhere(test);
+    } catch (_) {
+      return null;
+    }
+  }
+}
+
 class PrincipalSubjectsScreen extends StatefulWidget {
   const PrincipalSubjectsScreen({super.key});
 
@@ -1360,7 +1370,7 @@ class _ClassSelectField extends StatelessWidget {
         ? selectedGradeId
         : (grades.isEmpty ? null : grades.first.id);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -1374,32 +1384,48 @@ class _ClassSelectField extends StatelessWidget {
             Icons.keyboard_arrow_down_rounded,
             color: Color(0xFF526079),
           ),
-          items: [
+          selectedItemBuilder: (context) => [
             for (final grade in grades)
-              DropdownMenuItem(
-                value: grade.id,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
                       'Select Class',
                       style: GoogleFonts.dmSans(
                         color: const Color(0xFF6C4CFF),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 3),
                     Text(
                       grade.gradeName,
                       style: GoogleFonts.dmSans(
                         color: const Color(0xFF111827),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                   ],
+                ),
+              ),
+          ],
+          items: [
+            for (final grade in grades)
+              DropdownMenuItem(
+                value: grade.id,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Text(
+                    grade.gradeName,
+                    style: GoogleFonts.dmSans(
+                      color: const Color(0xFF111827),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
           ],

@@ -10,7 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
-
+import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -32,6 +32,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   int _selectedTab = 0;
   DateTime? _lastBackPressedAt;
   _PrincipalHomeData _data = _PrincipalHomeData.empty();
+  final Set<String> _birthdayFiredKeys = {};
 
   @override
   void initState() {
@@ -105,6 +106,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     UserResponse profile,
   ) async {
     try {
+      // Fire-and-forget: trigger birthday alerts for today (once per day).
+      _fireBirthdayAlerts(api);
+
       final optionalResults = await Future.wait<Object>([
         _loadOptional(
           label: 'academic years',
@@ -195,6 +199,16 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     }
   }
 
+  /// Triggers the birthday alert job once per day (fire-and-forget).
+  void _fireBirthdayAlerts(BackendApiClient api) {
+    final todayKey = 'birthday_alerts_fired_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}';
+    // Use a simple in-memory guard to avoid calling the endpoint
+    // multiple times within the same app session.
+    if (_birthdayFiredKeys.contains(todayKey)) return;
+    _birthdayFiredKeys.add(todayKey);
+    api.triggerBirthdayAlerts().catchError((_) => <String, dynamic>{}); // ignore errors
+  }
+
   Future<T> _loadOptional<T>({
     required String label,
     required Future<T> request,
@@ -217,6 +231,9 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final currentRole = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final isSuperAdmin = currentRole == 'super_admin';
+    
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -224,6 +241,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       },
       child: Scaffold(
         backgroundColor: const Color(0xFFF3F7FC),
+        drawer: isSuperAdmin
+            ? SuperAdminDrawer(
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+              )
+            : PrincipalDrawer(
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+              ),
         body: SafeArea(
           bottom: false,
           child: Align(

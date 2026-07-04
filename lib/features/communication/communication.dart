@@ -1,4 +1,6 @@
 export 'presentation/screens/complaint_management_screen/complaint_management_screen.dart';
+export 'presentation/screens/parent_complaint_screen/parent_complaint_screen.dart';
+export 'presentation/screens/teacher_complaint_screen/teacher_complaint_screen.dart';
 export 'presentation/screens/homework_messaging_screen/homework_messaging_screen.dart';
 export 'presentation/screens/notification_center_screen/notification_center_screen.dart';
 export 'presentation/screens/parent_ptm_booking_screen/parent_ptm_booking_screen.dart';

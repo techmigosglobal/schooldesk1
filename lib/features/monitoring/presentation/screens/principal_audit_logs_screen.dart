@@ -64,7 +64,7 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
       title: 'Audit Logs',
       subtitle: 'Recent principal-visible system activity',
       drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.auditLogs,
+        selectedIndex: PrincipalNav.dashboard,
         onDestinationSelected: (_) {},
       ),
       actions: [

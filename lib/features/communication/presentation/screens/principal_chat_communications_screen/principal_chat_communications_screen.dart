@@ -85,28 +85,37 @@ class _PrincipalChatCommunicationsScreenState
     }
     try {
       final api = BackendApiClient.instance;
-      final profile = await api.getProfile();
-      final monitor = await _safeChatRows(
-        () => api.getUnifiedChatConversations(
-          type: 'parent_teacher',
-          monitor: true,
+      // Fire all independent network calls in parallel to avoid
+      // sequential await chains that block the main thread.
+      final results = await Future.wait<Object>([
+        api.getProfile(),
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'parent_teacher',
+            monitor: true,
+          ),
         ),
-      );
-      final directTeacher = await _safeChatRows(
-        () => api.getUnifiedChatConversations(
-          type: 'principal_teacher',
-          monitor: true,
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'principal_teacher',
+            monitor: true,
+          ),
         ),
-      );
-      final directParent = await _safeChatRows(
-        () => api.getUnifiedChatConversations(
-          type: 'principal_parent',
-          monitor: true,
+        _safeChatRows(
+          () => api.getUnifiedChatConversations(
+            type: 'principal_parent',
+            monitor: true,
+          ),
         ),
-      );
-      final contacts = await _safeChatRows(
-        () => api.getUnifiedChatContacts(role: 'principal'),
-      );
+        _safeChatRows(
+          () => api.getUnifiedChatContacts(role: 'principal'),
+        ),
+      ]);
+      final profile = results[0] as dynamic;
+      final monitor = results[1] as List<Map<String, dynamic>>;
+      final directTeacher = results[2] as List<Map<String, dynamic>>;
+      final directParent = results[3] as List<Map<String, dynamic>>;
+      final contacts = results[4] as List<Map<String, dynamic>>;
       List<dynamic> teacherContacts = contacts
           .where((row) => _text(row['role']).toLowerCase() == 'teacher')
           .toList();

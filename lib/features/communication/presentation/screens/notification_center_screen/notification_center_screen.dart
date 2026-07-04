@@ -488,6 +488,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     switch (widget.role.trim().toLowerCase()) {
       case 'principal':
         return PrincipalDrawer(onDestinationSelected: (_) {});
+      case 'super_admin':
+        return SuperAdminDrawer(onDestinationSelected: (_) {});
       case 'teacher':
         return TeacherDrawer(onDestinationSelected: (_) {});
       case 'parent':
@@ -505,6 +507,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     switch (role.trim().toLowerCase()) {
       case 'principal':
         return 'Principal';
+      case 'super_admin':
+        return 'Super Admin';
       case 'teacher':
         return 'Teacher';
       case 'parent':

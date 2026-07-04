@@ -252,6 +252,12 @@ class _ErrorInterceptor extends Interceptor {
 }
 
 extension BackendClientHelpers on BackendApiClient {
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return <String, dynamic>{};
+  }
+
   List<Map<String, dynamic>> _asListMap(dynamic value) {
     if (value is! List) return [];
     return value
@@ -285,12 +291,6 @@ extension BackendClientHelpers on BackendApiClient {
     return NetworkException(message: e.message ?? 'Network error occurred.');
   }
 
-  Map<String, dynamic> _asMap(dynamic value) {
-    if (value is Map<String, dynamic>) return value;
-    if (value is Map) return Map<String, dynamic>.from(value);
-    return <String, dynamic>{};
-  }
-
   int _asInt(dynamic value, {int fallback = 0}) {
     if (value is int) return value;
     if (value is num) return value.toInt();
@@ -298,6 +298,7 @@ extension BackendClientHelpers on BackendApiClient {
   }
 
   double _asDouble(dynamic value, {double fallback = 0}) {
+    if (value is double) return value;
     if (value is num) return value.toDouble();
     return double.tryParse('${value ?? ''}') ?? fallback;
   }

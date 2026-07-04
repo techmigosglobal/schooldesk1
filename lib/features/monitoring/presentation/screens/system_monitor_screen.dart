@@ -56,7 +56,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     return Scaffold(
       key: _scaffoldKey,
       drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.monitor,
+        selectedIndex: PrincipalNav.dashboard,
         onDestinationSelected: (_) {},
       ),
       bottomNavigationBar: const PrincipalShellBottomBar(),

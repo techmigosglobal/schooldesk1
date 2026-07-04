@@ -376,8 +376,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _view == _FeeView.home,
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
+        // Always use internal _goBack() navigation instead of native pop.
+        // This ensures back button stays within the fees module view hierarchy.
         if (!didPop) _goBack();
       },
       child: Scaffold(
@@ -2817,6 +2819,16 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         await api.deleteFeeStructure(structureId, removePending: true);
       }
       if (!mounted) return;
+      setState(() {
+        _feeStructures = const [];
+        _invoices = const [];
+        _recentPayments = const [];
+        _paymentRequests = const [];
+        _concessions = const [];
+        _selectedStructure = null;
+        _selectedAccount = null;
+        _selectedInvoice = null;
+      });
       _snack('Fee structure deleted.', success: true);
       // Go back to list view and refresh
       if (_view == _FeeView.structureDetails) {
@@ -4181,6 +4193,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     return _invoices.firstWhereOrNull((row) => _textValue(row['id']) == id);
   }
 
+  Map<String, dynamic>? _invoiceById(String invoiceId) {
+    return _invoices.firstWhereOrNull((row) => _textValue(row['id']) == invoiceId);
+  }
+
   Map<String, dynamic> _normalizeFeeStructure(Map<String, dynamic> row) {
     final category = _mapValue(row['fee_category']);
     final grade = _mapValue(row['grade']);
@@ -4338,11 +4354,36 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     return 'Term';
   }
 
-  double get _totalDue =>
-      _invoices.fold(0, (sum, row) => sum + _numValue(row['balance']));
+  double get _totalDue {
+    final structureIds = _feeStructures
+        .map((s) => _textValue(s['id']))
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (structureIds.isEmpty) return 0;
+    return _invoices
+        .where((row) =>
+            structureIds.contains(_textValue(row['fee_structure_id'])))
+        .fold(0, (sum, row) => sum + _numValue(row['balance']));
+  }
 
-  double get _totalCollected =>
-      _recentPayments.fold(0, (sum, row) => sum + _numValue(row['amount']));
+  double get _totalCollected {
+    final structureIds = _feeStructures
+        .map((s) => _textValue(s['id']))
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (structureIds.isEmpty) return 0;
+    return _recentPayments
+        .where((row) {
+          final invoiceId = _textValue(row['invoice_id']);
+          if (invoiceId.isEmpty) return false;
+          final invoice = _invoiceById(invoiceId);
+          return invoice != null &&
+              structureIds.contains(
+                _textValue(invoice['fee_structure_id']),
+              );
+        })
+        .fold(0, (sum, row) => sum + _numValue(row['amount']));
+  }
 
   double get _totalExpected => _totalCollected + _totalDue;
 

@@ -36,6 +36,7 @@ part 'api_modules/homework_api.dart';
 part 'api_modules/tables_raw_api.dart';
 part 'api_modules/approval_requests_api.dart';
 part 'api_modules/monitoring_api.dart';
+part 'api_modules/notifications_api.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
 

@@ -18,6 +18,7 @@ class ParentNav {
   static const documents = 14;
   static const gallery = 15;
   static const health = 16;
+  static const complaints = 17;
 }
 
 class TeacherNav {
@@ -39,6 +40,7 @@ class TeacherNav {
   static const ptm = 13;
   static const leave = 14;
   static const documents = 15;
+  static const complaints = 16;
 }
 
 class PrincipalNav {
@@ -64,10 +66,39 @@ class PrincipalNav {
   static const complaints = 17;
   static const calendar = 18;
   static const documents = 19;
-  static const idCards = 20;
-  static const auditLogs = 21;
-  static const reports = 22;
-  static const analytics = 23;
-  static const monitor = 24;
-  static const gallery = 25;
+  static const reports = 20;
+  static const analytics = 21;
+  static const gallery = 22;
+}
+
+class SuperAdminNav {
+  SuperAdminNav._();
+
+  static const dashboard = 0;
+  static const auditLogs = 1;
+  static const systemMonitor = 2;
+  static const errorReporting = 3;
+  static const idCards = 4;
+  static const schoolProfile = 5;
+  static const access = 6;
+  static const staff = 7;
+  static const students = 8;
+  static const guardians = 9;
+  static const approvals = 10;
+  static const attendance = 11;
+  static const classes = 12;
+  static const subjects = 13;
+  static const academics = 14;
+  static const timetable = 15;
+  static const lessonPlanner = 16;
+  static const fees = 17;
+  static const broadcasts = 18;
+  static const messages = 19;
+  static const eventApprovals = 20;
+  static const complaints = 21;
+  static const calendar = 22;
+  static const documents = 23;
+  static const reports = 24;
+  static const analytics = 25;
+  static const gallery = 26;
 }

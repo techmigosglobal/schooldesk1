@@ -219,7 +219,16 @@ extension BackendFeesApi on BackendApiClient {
         queryParameters: {'remove_pending': removePending},
       );
       final data = response.data as Map<String, dynamic>;
-      if (data['success'] == true) return;
+      if (data['success'] == true) {
+        // Invalidate fee-related cache so _loadData() sees fresh totals.
+        await _deleteCachedPaths([
+          r'/fees/structures',
+          r'/fees/invoices',
+          r'/fees/concessions',
+          r'/dashboard/',
+        ]);
+        return;
+      }
       throw ServerException(
         message: data['error'] ?? 'Failed to delete fee structure',
       );

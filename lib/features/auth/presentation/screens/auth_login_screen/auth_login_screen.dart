@@ -11,6 +11,8 @@ import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/notification_topic_manager.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
 class AuthLoginScreen extends StatefulWidget {
@@ -59,6 +61,12 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
+      
+      // Set up notification topics for the user's role
+      final role = _roleFromRoleName(response.user.roleName);
+      if (role != null) {
+        unawaited(NotificationTopicManager().setupTopicsForRole(role));
+      }
 
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
@@ -88,6 +96,8 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       case AppConstants.rolePrincipal:
       case AppConstants.roleAdmin:
         return AppRoutes.principalDashboard;
+      case 'super_admin':
+        return AppRoutes.superAdminDashboard;
       case AppConstants.roleTeacher:
         return AppRoutes.teacherDashboard;
       case AppConstants.roleParent:
@@ -96,6 +106,26 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         return AppRoutes.kioskQrAttendance;
       default:
         throw StateError('Unsupported role returned by backend: $roleName');
+    }
+  }
+
+  SchoolDeskRole? _roleFromRoleName(String roleName) {
+    final lower = roleName.trim().toLowerCase();
+    switch (lower) {
+      case AppConstants.rolePrincipal:
+      case AppConstants.roleAdmin:
+      case 'super_admin':
+        return SchoolDeskRole.principal;
+      case AppConstants.roleTeacher:
+        return SchoolDeskRole.teacher;
+      case AppConstants.roleParent:
+        return SchoolDeskRole.parent;
+      case 'student':
+        return SchoolDeskRole.student;
+      case 'kiosk':
+        return SchoolDeskRole.student; // Map kiosk to student for notification purposes
+      default:
+        return null;
     }
   }
 

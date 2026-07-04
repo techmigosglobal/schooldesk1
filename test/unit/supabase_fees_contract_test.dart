@@ -102,6 +102,7 @@ void main() {
     expect(source, contains('deleteInvoiceWorkflowRows'));
     expect(source, contains('url.searchParams.get("remove_pending")'));
     expect(source, contains('svc.from("fee_receipts").delete()'));
+    expect(source, contains('svc.from("fee_receipts").delete().in("payment_id"'));
     expect(source, contains('svc.from("parent_payment_requests").delete()'));
     expect(source, contains('svc.from("payments").delete()'));
     expect(source, contains('svc.from("fee_invoices").delete()'));

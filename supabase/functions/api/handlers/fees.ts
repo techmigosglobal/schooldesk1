@@ -530,39 +530,71 @@ async function deleteInvoiceWorkflowRows(
   school: string,
   invoiceIds: string[],
 ) {
-  if (invoiceIds.length === 0) return 0;
+  if (invoiceIds.length === 0) return { 
+    deleted_invoices: 0,
+    deleted_receipts: 0, 
+    deleted_payments: 0,
+    deleted_requests: 0,
+  };
   const scoped = await svc.from("fee_invoices").select("id").eq(
     "school_id",
     school,
   ).in("id", invoiceIds);
   if (scoped.error) throw new Error(scoped.error.message);
   const ids = (scoped.data ?? []).map((row) => text(row.id)).filter(Boolean);
-  if (ids.length === 0) return 0;
+  if (ids.length === 0) return { 
+    deleted_invoices: 0,
+    deleted_receipts: 0, 
+    deleted_payments: 0,
+    deleted_requests: 0,
+  };
 
-  const receiptDelete = await svc.from("fee_receipts").delete().eq(
+  // Delete receipts by payment IDs, since fee_receipts are linked to payments.
+  const paymentIds = await svc.from("payments").select("id").eq(
     "school_id",
     school,
   ).in("invoice_id", ids);
+  if (paymentIds.error) throw new Error(paymentIds.error.message);
+  const paymentIdList = (paymentIds.data ?? []).map((row) => text(row.id)).filter(Boolean);
+
+  const receiptDelete = paymentIdList.length === 0
+    ? { error: null, count: 0 }
+    : await svc.from("fee_receipts").delete().in("payment_id", paymentIdList);
   if (receiptDelete.error) throw new Error(receiptDelete.error.message);
 
+  // Delete parent payment requests
   const requestDelete = await svc.from("parent_payment_requests").delete().eq(
     "school_id",
     school,
   ).in("invoice_id", ids);
   if (requestDelete.error) throw new Error(requestDelete.error.message);
 
+  // Delete payments (cascades to receipts via ON DELETE CASCADE)
   const paymentDelete = await svc.from("payments").delete().eq(
     "school_id",
     school,
   ).in("invoice_id", ids);
   if (paymentDelete.error) throw new Error(paymentDelete.error.message);
 
+  // Delete invoice items (normally cascades from invoices via ON DELETE CASCADE)
+  const invoiceItemsDelete = await svc.from("fee_invoice_items").delete().in(
+    "invoice_id",
+    ids,
+  );
+  if (invoiceItemsDelete.error) throw new Error(invoiceItemsDelete.error.message);
+  // Delete invoices themselves
   const invoiceDelete = await svc.from("fee_invoices").delete().eq(
     "school_id",
     school,
   ).in("id", ids);
   if (invoiceDelete.error) throw new Error(invoiceDelete.error.message);
-  return ids.length;
+
+  return {
+    deleted_invoices: ids.length,
+    deleted_receipts: receiptDelete.count ?? 0,
+    deleted_payments: paymentDelete.count ?? 0,
+    deleted_requests: requestDelete.count ?? 0,
+  };
 }
 
 async function deleteFeeStructureWorkflowRows(
@@ -570,18 +602,38 @@ async function deleteFeeStructureWorkflowRows(
   school: string,
   structureId: string,
 ) {
+  // 1. Get all invoice IDs related to this fee structure
   const invoiceIds = await invoiceIdsForFeeStructure(svc, school, structureId);
-  const deletedInvoices = await deleteInvoiceWorkflowRows(
+  
+  // 2. Delete invoice-related workflow (payments, receipts, requests, invoices, items)
+  const invoiceDeletionStats = await deleteInvoiceWorkflowRows(
     svc,
     school,
     invoiceIds,
   );
+
+  // 3. Delete fee_installments (linked to this structure)
+  const installmentsDelete = await svc.from("fee_installments").delete().eq(
+    "fee_structure_id",
+    structureId,
+  );
+  if (installmentsDelete.error) throw new Error(installmentsDelete.error.message);
+
+  // 4. Delete fee_concessions (linked to this structure)
   const concessionDelete = await svc.from("fee_concessions").delete().eq(
     "school_id",
     school,
   ).eq("fee_structure_id", structureId);
   if (concessionDelete.error) throw new Error(concessionDelete.error.message);
-  return { deleted_invoices: deletedInvoices };
+
+  return { 
+    deleted_invoices: invoiceDeletionStats.deleted_invoices,
+    deleted_receipts: invoiceDeletionStats.deleted_receipts,
+    deleted_payments: invoiceDeletionStats.deleted_payments,
+    deleted_requests: invoiceDeletionStats.deleted_requests,
+    deleted_installments: installmentsDelete.count ?? 0,
+    deleted_concessions: concessionDelete.count ?? 0,
+  };
 }
 
 export async function handleFees(

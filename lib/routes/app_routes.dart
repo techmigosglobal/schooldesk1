@@ -96,6 +96,12 @@ class AppRoutes {
 
   static const String idCardGeneration = '/id-card-generation-screen';
 
+  // Super Admin Module Routes
+  static const String superAdminDashboard = '/super-admin-dashboard-screen';
+  static const String superAdminAuditLogs = '/super-admin-audit-logs-screen';
+  static const String superAdminSystemMonitor = '/super-admin-system-monitor-screen';
+  static const String superAdminErrorReporting = '/super-admin-error-reporting-screen';
+
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
   static const String teacherDashboard = '/teacher-dashboard-screen';
@@ -106,6 +112,7 @@ class AppRoutes {
       '/teacher-attendance-history-screen';
   static const String teacherMyAttendance = '/teacher-my-attendance-screen';
   static const String teacherCommunication = '/teacher-communication-screen';
+  static const String teacherComplaints = '/teacher-complaints-screen';
   static const String teacherParentInteraction =
       '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
@@ -128,6 +135,7 @@ class AppRoutes {
   static const String parentHomework = '/parent-homework-screen';
   static const String parentHomeworkSubmit = '/parent-homework-screen/submit';
   static const String parentTeacherChat = '/parent-teacher-chat-screen';
+  static const String parentComplaints = '/parent-complaints-screen';
   static const String parentFees = '/parent-fees-screen';
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
   static const String parentPaymentSelection =
@@ -241,6 +249,12 @@ class AppRoutes {
 
     idCardGeneration: (context) => const IdCardGenerationScreen(),
 
+    // Super Admin
+    superAdminDashboard: (context) => const PrincipalDashboardScreen(),
+    superAdminAuditLogs: (context) => const PrincipalAuditLogsScreen(),
+    superAdminSystemMonitor: (context) => const SystemMonitorScreen(),
+    superAdminErrorReporting: (context) => const SystemMonitorScreen(),
+
     // Teacher
     teacherLogin: (context) => const AuthLoginScreen(),
     teacherDashboard: (context) => const TeacherDashboardScreen(),
@@ -251,6 +265,7 @@ class AppRoutes {
         const TeacherAttendanceHistoryScreen(),
     teacherMyAttendance: (context) => const TeacherMyAttendanceScreen(),
     teacherCommunication: (context) => const TeacherCommunicationScreen(),
+    teacherComplaints: (context) => const TeacherComplaintScreen(),
     teacherParentInteraction: (context) =>
         const TeacherParentInteractionScreen(),
     teacherLeave: (context) => const TeacherLeaveScreen(),
@@ -280,6 +295,7 @@ class AppRoutes {
       args: _parentHomeworkSubmissionArgs(context),
     ),
     parentTeacherChat: (context) => const ParentTeacherChatScreen(),
+    parentComplaints: (context) => const ParentComplaintScreen(),
     parentFees: (context) => const ParentFeesScreen(),
     parentPaymentRequestForm: (context) =>
         ParentPaymentRequestFormScreen(args: _parentPaymentFormArgs(context)),

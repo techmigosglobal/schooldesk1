@@ -1861,11 +1861,13 @@ bool _isCurrent(Map<String, dynamic> year) =>
     year['is_current'] == true || '${year['status']}'.toLowerCase() == 'active';
 
 String _yearStatus(Map<String, dynamic> year) {
+  // A year explicitly marked as current always shows as active,
+  // regardless of the stored status string.
+  if (_isCurrent(year)) return 'active';
   final status = '${year['status'] ?? ''}'.toLowerCase();
   if (status == 'closed' || status == 'upcoming' || status == 'active') {
     return status;
   }
-  if (_isCurrent(year)) return 'active';
   final start = _dateValue(year['start_date']);
   final end = _dateValue(year['end_date']);
   final now = DateTime.now();
@@ -1970,36 +1972,22 @@ Future<bool?> _confirmAcademicYearDelete(
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      scrollable: true,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       title: const Text('Delete academic year?'),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.45,
-        ),
-        child: SingleChildScrollView(
-          child: Text(
-            'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, or events still use this academic year.',
-          ),
+      content: SingleChildScrollView(
+        child: Text(
+          'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, or events still use this academic year.',
+          style: GoogleFonts.dmSans(fontSize: 14),
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       actions: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
-          alignment: WrapAlignment.end,
-          children: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () => Navigator.pop(context, true),
-              icon: const Icon(Icons.warning_amber_rounded),
-              label: const Text('Continue'),
-            ),
-          ],
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: () => Navigator.pop(context, true),
+          icon: const Icon(Icons.warning_amber_rounded),
+          label: const Text('Continue'),
         ),
       ],
     ),
@@ -2009,74 +1997,81 @@ Future<bool?> _confirmAcademicYearDelete(
 Future<bool?> _confirmAcademicYearFinalDelete(
   BuildContext context,
   Map<String, dynamic> year,
-) async {
-  final controller = TextEditingController();
-  try {
-    return showDialog<bool>(
-      context: context,
-      builder: (context) {
-        var canDelete = false;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            scrollable: true,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-            title: const Text('Final confirmation'),
-            content: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+) {
+  return showDialog<bool>(
+    context: context,
+    builder: (context) => _FinalDeleteDialog(year: year),
+  );
+}
+
+class _FinalDeleteDialog extends StatefulWidget {
+  final Map<String, dynamic> year;
+
+  const _FinalDeleteDialog({required this.year});
+
+  @override
+  State<_FinalDeleteDialog> createState() => _FinalDeleteDialogState();
+}
+
+class _FinalDeleteDialogState extends State<_FinalDeleteDialog> {
+  late final TextEditingController _controller;
+  bool _canDelete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Final confirmation'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Type DELETE to confirm deleting ${_yearLabel(widget.year)}.',
+              style: GoogleFonts.dmSans(fontSize: 14),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Confirmation',
+                border: OutlineInputBorder(),
               ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Type DELETE to confirm deleting ${_yearLabel(year)}.'),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Confirmation',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) => setDialogState(
-                        () => canDelete = value.trim().toUpperCase() == 'DELETE',
-                      ),
-                    ),
-                  ],
-                ),
+              onChanged: (value) => setState(
+                () => _canDelete = value.trim().toUpperCase() == 'DELETE',
               ),
             ),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            actions: [
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                alignment: WrapAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    onPressed: canDelete
-                        ? () => Navigator.pop(context, true)
-                        : null,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.red.shade700,
-                    ),
-                    child: const Text('Delete'),
-                  ),
-                ],
-              ),
-            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _canDelete ? () => Navigator.pop(context, true) : null,
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red.shade700,
           ),
-        );
-      },
+          child: const Text('Delete'),
+        ),
+      ],
     );
-  } finally {
-    controller.dispose();
   }
 }
 

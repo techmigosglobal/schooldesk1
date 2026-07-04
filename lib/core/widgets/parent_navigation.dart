@@ -191,6 +191,13 @@ class _ParentDrawerState extends State<ParentDrawer> {
                 'userName': _userName,
               },
             ),
+            const SchoolDeskNavigationItem(
+              index: ParentNav.complaints,
+              icon: Icons.support_agent_outlined,
+              activeIcon: Icons.support_agent_rounded,
+              label: 'Complaints',
+              route: AppRoutes.parentComplaints,
+            ),
           ],
         ),
         const SchoolDeskNavigationSection(
