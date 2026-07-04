@@ -7,6 +7,9 @@ void main() {
     final service = File(
       'lib/core/services/push_notification_service.dart',
     ).readAsStringSync();
+    final communicationsApi = File(
+      'lib/core/network/api_modules/communications_api.dart',
+    ).readAsStringSync();
     final center = File(
       'lib/features/communication/presentation/screens/notification_center_screen/notification_center_screen.dart',
     ).readAsStringSync();
@@ -21,6 +24,9 @@ void main() {
     expect(center, contains('PushNotificationService.instance.runtimeStatus'));
     expect(center, contains('Enable Push'));
     expect(center, contains('registerDeviceTokenIfPossible()'));
+    expect(communicationsApi, contains("'/notifications/register-token'"));
+    expect(communicationsApi, contains("'fcm_token': token"));
+    expect(communicationsApi, contains("'/notifications/revoke-token'"));
   });
 
   test('android push notifications are bound to the Firebase Android app', () {

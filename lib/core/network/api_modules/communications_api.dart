@@ -11,10 +11,7 @@ extension BackendCommunicationsApi on BackendApiClient {
       'role': role.trim().toLowerCase(),
       if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
     };
-    return getRawList(
-      '/chat/contacts',
-      queryParameters: params,
-    );
+    return getRawList('/chat/contacts', queryParameters: params);
   }
 
   Future<List<Map<String, dynamic>>> getUnifiedChatConversations({
@@ -310,10 +307,10 @@ extension BackendCommunicationsApi on BackendApiClient {
   }) async {
     try {
       final response = await _dio.post(
-        '/notifications/device-tokens',
+        '/notifications/register-token',
         data: {
-          'token': token,
-          'platform': platform,
+          'fcm_token': token,
+          'device_type': platform,
           if (deviceId.trim().isNotEmpty) 'device_id': deviceId.trim(),
           if (appVersion.trim().isNotEmpty) 'app_version': appVersion.trim(),
         },
@@ -332,9 +329,9 @@ extension BackendCommunicationsApi on BackendApiClient {
 
   Future<void> revokeNotificationDeviceToken({required String token}) async {
     try {
-      final response = await _dio.delete(
-        '/notifications/device-tokens',
-        data: {'token': token},
+      final response = await _dio.post(
+        '/notifications/revoke-token',
+        data: {'fcm_token': token},
       );
       final data = _asMap(response.data);
       if (data['success'] != true) {
@@ -453,16 +450,18 @@ extension BackendCommunicationsApi on BackendApiClient {
       return <String, dynamic>{};
     }
     try {
-      final safeDio = Dio(BaseOptions(
-        baseUrl: _dio.options.baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      ));
+      final safeDio = Dio(
+        BaseOptions(
+          baseUrl: _dio.options.baseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        ),
+      );
       final response = await safeDio.post(
         '/jobs/birthday-alerts/run',
         data: <String, dynamic>{},
