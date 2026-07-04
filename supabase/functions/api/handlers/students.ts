@@ -195,7 +195,11 @@ export async function handleStudents(
     }
     const { data, error } = await q.order("created_at", { ascending: false });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    const mapped = (data ?? []).map((row: any) => ({
+      ...row,
+      marked_at: row.created_at || row.updated_at,
+    }));
+    return ok(mapped);
   }
 
   if (id && sub === "parent" && method === "PUT") {

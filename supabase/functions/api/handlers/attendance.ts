@@ -237,7 +237,16 @@ export async function handleAttendance(
     }
     const { data, error } = await q.order("date", { ascending: false });
     if (error) return fail(error.message);
-    return ok(data ?? []);
+    const mapped = (data ?? []).map((sess: any) => {
+      if (Array.isArray(sess.student_attendances)) {
+        sess.student_attendances = sess.student_attendances.map((row: any) => ({
+          ...row,
+          marked_at: row.created_at || row.updated_at,
+        }));
+      }
+      return sess;
+    });
+    return ok(mapped);
   }
 
   if (path === "/attendance/sessions" && method === "POST") {
@@ -277,6 +286,12 @@ export async function handleAttendance(
       "*, student_attendances(*, student:students(*)), section:sections(*, grade:grades(*)), staff:staff(*)",
     ).eq("id", sessionMatch[1]).single();
     if (error) return fail(error.message);
+    if (data && Array.isArray(data.student_attendances)) {
+      data.student_attendances = data.student_attendances.map((row: any) => ({
+        ...row,
+        marked_at: row.created_at || row.updated_at,
+      }));
+    }
     return ok(data);
   }
 

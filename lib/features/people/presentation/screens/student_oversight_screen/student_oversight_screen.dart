@@ -216,7 +216,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       var page = 1;
       while (true) {
         final res = await api.BackendApiClient.instance.getStudents(
-          sectionId: _scopedSectionId.isEmpty ? null : _scopedSectionId,
+          sectionId: null,
           page: page,
           pageSize: 100,
         );
@@ -832,27 +832,6 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
                         ),
                       ),
                     ),
-                ...[
-                  'Present',
-                  'Absent',
-                  'Late',
-                  'Not marked',
-                  'Needs attention',
-                ].map(
-                  (value) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _DirectoryChip(
-                      label: 'Status: $value',
-                      selected: _selectedStatus == value,
-                      onTap: () {
-                        _selectedStatus = _selectedStatus == value
-                            ? 'All'
-                            : value;
-                        _applyFilters();
-                      },
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1426,7 +1405,7 @@ class _StudentDirectoryCard extends StatelessWidget {
                       color: Color(0xFF0887F2),
                       size: 24,
                     )
-                  : _StatusBadge(label: student.directoryStatusLabel),
+                  : const SizedBox.shrink(),
             ],
           ),
         ),
@@ -3020,7 +2999,9 @@ class _StudentDetailPage extends StatelessWidget {
                 ),
                 _DetailRow(
                   label: 'Status',
-                  value: student.directoryStatusLabel,
+                  value: student.status.trim().isNotEmpty
+                      ? student.status.trim()[0].toUpperCase() + student.status.trim().substring(1)
+                      : 'Active',
                 ),
                 _DetailRow(
                   label: 'Date of Birth',
@@ -3048,16 +3029,7 @@ class _StudentDetailPage extends StatelessWidget {
               children: [
                 _ResponsiveMetricGrid(
                   children: [
-                    _SignalTile(
-                      icon: Icons.fact_check_outlined,
-                      label: 'Attendance',
-                      value: student.attendancePercent <= 0
-                          ? student.directoryStatusLabel
-                          : '${student.attendancePercent.toStringAsFixed(0)}%',
-                      color: student.hasAttendanceAlert
-                          ? const Color(0xFFFFF2CE)
-                          : const Color(0xFFE6F6ED),
-                    ),
+
                     _SignalTile(
                       icon: Icons.account_balance_wallet_outlined,
                       label: 'Fees',

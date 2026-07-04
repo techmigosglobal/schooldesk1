@@ -1651,14 +1651,16 @@ class _ClassesDirectoryClassCard extends StatelessWidget {
                             letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(height: 5),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: _ClassesStatusPill(
-                            label: healthLabel,
-                            color: healthColor,
+                        if (healthLabel != 'Healthy') ...[
+                          const SizedBox(height: 5),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _ClassesStatusPill(
+                              label: healthLabel,
+                              color: healthColor,
+                            ),
                           ),
-                        ),
+                        ],
                         const SizedBox(height: 5),
                         Text(
                           '${_classText(row['class_teacher'], fallback: 'Teacher pending')}  •  $students/$capacity students',

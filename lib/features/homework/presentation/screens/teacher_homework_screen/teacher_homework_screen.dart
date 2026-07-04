@@ -358,8 +358,12 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
 
   List<String> get _subjectOptions {
     final classes = RoleAccessService.teacherAssignedClasses;
+    final targetClassId = RoleAccessService.teacherClassId;
     if (classes.isNotEmpty) {
-      final row = classes.first;
+      final row = classes.firstWhere(
+        (c) => c['section_id'] == targetClassId,
+        orElse: () => classes.first,
+      );
       final subjects = row['subjects'];
       if (subjects is List && subjects.isNotEmpty) {
         final list = subjects

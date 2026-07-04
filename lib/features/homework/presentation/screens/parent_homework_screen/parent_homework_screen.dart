@@ -121,7 +121,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       'id': _homeworkId(h),
       'homework_id': h['homework_id'],
       'title': h['title'] ?? '',
-      'subject': h['subject'] ?? h['subject_name'] ?? '',
+      'subject': h['subject'] ?? h['subject_name'] ?? h['subject_id'] ?? '',
       'class': h['class'] ?? h['class_name'] ?? '',
       'deadline': dueDate == null
           ? '${h['deadline'] ?? ''}'

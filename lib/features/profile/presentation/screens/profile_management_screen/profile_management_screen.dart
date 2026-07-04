@@ -562,30 +562,6 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
           Row(
             children: [
               Expanded(
-                child: FilledButton.icon(
-                  onPressed: _saving
-                      ? null
-                      : _isEditing
-                      ? _save
-                      : () => setState(() => _isEditing = true),
-                  icon: Icon(
-                    _isEditing ? Icons.check_rounded : Icons.edit_rounded,
-                  ),
-                  label: Text(_isEditing ? 'Save changes' : 'Edit profile'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              IconButton.filledTonal(
-                tooltip: 'Refresh profile',
-                onPressed: _saving ? null : _load,
-                icon: const Icon(Icons.refresh_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => Navigator.pushNamed(
                     context,

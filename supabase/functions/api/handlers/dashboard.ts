@@ -20,6 +20,9 @@ function buildTeacherAssignments(
   subjectRows: Array<Record<string, unknown>>,
   classTeacherSections: Array<Record<string, unknown>>,
   coTeacherSections: Array<Record<string, unknown>>,
+  gradeSubjects: Array<Record<string, unknown>>,
+  staffSubjects: Array<Record<string, unknown>>,
+  timetableSlots: Array<Record<string, unknown>>,
 ) {
   const assignments = new Map<string, Record<string, unknown>>();
 
@@ -37,6 +40,7 @@ function buildTeacherAssignments(
       grade_id: text(section?.grade_id ?? fallback.grade_id),
       grade_name: text(grade?.grade_name ?? fallback.grade_name),
       section_name: text(section?.section_name ?? fallback.section_name),
+      academic_year_id: text(section?.academic_year_id ?? fallback.academic_year_id),
       subject_id: "",
       subject_name: "",
       teacher_role: role,
@@ -96,6 +100,82 @@ function buildTeacherAssignments(
     }
     if (!text(entry.subject_name)) {
       entry.subject_name = "Co-Teacher";
+    }
+  }
+
+  // Populate all matching subjects from grade_subjects, staff_subjects, and timetable_slots tables
+  for (const entry of assignments.values()) {
+    const sectionId = text(entry.section_id);
+    const gradeId = text(entry.grade_id);
+    const sectionYear = text(entry.academic_year_id);
+    const subjects = entry.subjects as Array<Record<string, unknown>>;
+    // 1. Match from grade_subjects — match by section_id OR grade_id
+    const matchingGradeSubjects = gradeSubjects.filter((gs) => {
+      const gsSectionId = text(gs.section_id);
+      const gsGradeId = text(gs.grade_id);
+      return gsSectionId === sectionId || (gradeId !== "" && gsGradeId === gradeId);
+    });
+
+    for (const gs of matchingGradeSubjects) {
+      const subject = asRecord(gs.subject);
+      const subjectId = text(subject?.id ?? gs.subject_id);
+      const subjectName = text(subject?.subject_name ?? gs.subject_name);
+      if (
+        subjectId &&
+        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
+      ) {
+        subjects.push({
+          id: subjectId,
+          subject_id: subjectId,
+          subject_name: subjectName,
+        });
+      }
+    }
+
+    // 2. Match from staff_subjects — match by section_id OR grade_id
+    const matchingStaffSubjects = staffSubjects.filter((ss) => {
+      const ssSectionId = text(ss.section_id);
+      const ssGradeId = text(ss.grade_id);
+      return ssSectionId === sectionId || (gradeId !== "" && ssGradeId === gradeId);
+    });
+
+    for (const ss of matchingStaffSubjects) {
+      const subject = asRecord(ss.subject);
+      const subjectId = text(subject?.id ?? ss.subject_id);
+      const subjectName = text(subject?.subject_name ?? ss.subject_name);
+      if (
+        subjectId &&
+        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
+      ) {
+        subjects.push({
+          id: subjectId,
+          subject_id: subjectId,
+          subject_name: subjectName,
+        });
+      }
+    }
+
+    // 3. Match from timetable_slots — match by section_id OR grade_id
+    const matchingTimetableSlots = timetableSlots.filter((ts) => {
+      const tsSectionId = text(ts.section_id);
+      const tsGradeId = text(ts.grade_id);
+      return tsSectionId === sectionId || (gradeId !== "" && tsGradeId === gradeId);
+    });
+
+    for (const ts of matchingTimetableSlots) {
+      const subject = asRecord(ts.subject);
+      const subjectId = text(subject?.id ?? ts.subject_id);
+      const subjectName = text(subject?.subject_name ?? ts.subject_name);
+      if (
+        subjectId &&
+        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
+      ) {
+        subjects.push({
+          id: subjectId,
+          subject_id: subjectId,
+          subject_name: subjectName,
+        });
+      }
     }
   }
 
@@ -169,6 +249,9 @@ export async function handleDashboard(
           staffSubjectsResult,
           classTeacherSectionsResult,
           coTeacherSectionsResult,
+          gradeSubjectsResult,
+          allStaffSubjectsResult,
+          timetableSlotsResult,
         ] = await Promise.all([
           svc.from("staff_subjects").select(
             "*, section:sections(*, grade:grades(*)), subject:subjects(*), grade:grades(*)",
@@ -181,6 +264,15 @@ export async function handleDashboard(
             "co_teacher_id",
             staffId,
           ).eq("school_id", school),
+          svc.from("grade_subjects").select(
+            "*, subject:subjects(*)",
+          ).eq("school_id", school),
+          svc.from("staff_subjects").select(
+            "*, subject:subjects(*)",
+          ).eq("school_id", school),
+          svc.from("timetable_slots").select(
+            "*, subject:subjects(*)",
+          ).eq("school_id", school),
         ]);
         assigned = buildTeacherAssignments(
           (staffSubjectsResult.data ?? []) as Array<Record<string, unknown>>,
@@ -188,6 +280,15 @@ export async function handleDashboard(
             Record<string, unknown>
           >,
           (coTeacherSectionsResult.data ?? []) as Array<
+            Record<string, unknown>
+          >,
+          (gradeSubjectsResult.data ?? []) as Array<
+            Record<string, unknown>
+          >,
+          (allStaffSubjectsResult.data ?? []) as Array<
+            Record<string, unknown>
+          >,
+          (timetableSlotsResult.data ?? []) as Array<
             Record<string, unknown>
           >,
         );

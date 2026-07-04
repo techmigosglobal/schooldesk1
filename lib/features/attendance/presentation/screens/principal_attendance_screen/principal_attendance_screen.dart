@@ -1066,7 +1066,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   DateTime _recordDateTime(Map<String, dynamic> row) {
-    final marked = DateTime.tryParse(_text(row['marked_at']));
+    final marked = DateTime.tryParse(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
     if (marked != null) return marked;
     final session = row['session'] is Map
         ? Map<String, dynamic>.from(row['session'] as Map)
@@ -1079,12 +1079,12 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ? Map<String, dynamic>.from(row['session'] as Map)
         : const <String, dynamic>{};
     final raw = _text(session['date'], fallback: _text(row['date']));
-    if (raw.isEmpty) return _dateOnly(_text(row['marked_at']));
+    if (raw.isEmpty) return _dateOnly(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
     return raw.split('T').first;
   }
 
   String _recordTime(Map<String, dynamic> row) {
-    final markedAt = DateTime.tryParse(_text(row['marked_at']));
+    final markedAt = DateTime.tryParse(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
     if (markedAt == null) return 'Time not recorded';
     return DateFormat('hh:mm a').format(markedAt.toLocal());
   }
@@ -1570,7 +1570,7 @@ class _StudentDetailPage extends StatelessWidget {
       fallback: _detailText(row['date']),
     );
     if (raw.isNotEmpty) return raw.split('T').first;
-    return _detailText(row['marked_at']).split('T').first;
+    return _detailText(row['marked_at'] ?? row['created_at'] ?? row['updated_at']).split('T').first;
   }
 
   static String _detailText(Object? value, {String fallback = ''}) {
@@ -1933,7 +1933,7 @@ class _AttendanceHistoryLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = _StudentDetailPage._detailRecordDate(record);
     final markedAt = DateTime.tryParse(
-      _StudentDetailPage._detailText(record['marked_at']),
+      _StudentDetailPage._detailText(record['marked_at'] ?? record['created_at'] ?? record['updated_at']),
     );
     final time = markedAt == null
         ? 'Time not recorded'

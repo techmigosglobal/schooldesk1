@@ -198,17 +198,13 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
     }
     setState(() => _saving = true);
     try {
-      final missing = _students.where((student) => student.enrollmentMissing);
-      if (missing.isNotEmpty) {
-        throw Exception('Enrollment record missing for ${missing.first.name}');
-      }
       final session = await _ensureSessionForSave();
       final rowsForSave = finalize ? _students : _markedStudents;
       final attendances = rowsForSave.map((student) {
         final enrollmentId = student.enrollmentId;
         return {
           'student_id': student.id,
-          'enrollment_id': enrollmentId,
+          'enrollment_id': enrollmentId.isEmpty ? null : enrollmentId,
           'status': student.status,
           'reason': '',
           'enrollment_missing': enrollmentId.isEmpty,
