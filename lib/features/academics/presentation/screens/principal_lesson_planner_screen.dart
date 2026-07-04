@@ -246,7 +246,7 @@ class _LessonPlannerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = _text(planner['status'], fallback: 'uploaded');
     final note = _text(planner['note']);
-    final attachment = _text(planner['attachment_url']);
+    final attachments = _lessonPlannerAttachments(planner);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
@@ -285,12 +285,22 @@ class _LessonPlannerCard extends StatelessWidget {
               'Week: ${_shortDate(planner['week_start_date'])} to ${_shortDate(planner['week_end_date'])}',
             ),
             if (note.isNotEmpty) ...[const SizedBox(height: 8), Text(note)],
-            if (attachment.isNotEmpty) ...[
+            if (attachments.isNotEmpty) ...[
               const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: () => _openAttachment(context, attachment),
-                icon: const Icon(Icons.attach_file_rounded, size: 18),
-                label: const Text('Open attachment'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final attachment in attachments)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _openAttachment(context, _text(attachment['url'])),
+                      icon: const Icon(Icons.attach_file_rounded, size: 18),
+                      label: Text(
+                        _text(attachment['name'], fallback: 'Open attachment'),
+                      ),
+                    ),
+                ],
               ),
             ],
           ],
@@ -314,6 +324,24 @@ class _LessonPlannerCard extends StatelessWidget {
       );
     }
   }
+}
+
+List<Map<String, dynamic>> _lessonPlannerAttachments(
+  Map<String, dynamic> planner,
+) {
+  final attachments = planner['attachments'];
+  if (attachments is List) {
+    return attachments
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _text(row['url']).isNotEmpty)
+        .toList();
+  }
+  final url = _text(planner['attachment_url']);
+  if (url.isEmpty) return const [];
+  return [
+    {'url': url, 'name': 'Open attachment'},
+  ];
 }
 
 class _StatePanel extends StatelessWidget {
@@ -361,16 +389,23 @@ String _classLabel(Map<String, dynamic> planner) {
   String gradeName = '';
   final grade = planner['grade'];
   if (grade is Map) {
-    gradeName = _text(grade['grade_name'] ?? grade['name'] ?? grade['gradeName']);
+    gradeName = _text(
+      grade['grade_name'] ?? grade['name'] ?? grade['gradeName'],
+    );
   }
   if (gradeName.isEmpty) {
-    gradeName = _text(planner['grade_name'] ?? planner['class_name'], fallback: 'Class');
+    gradeName = _text(
+      planner['grade_name'] ?? planner['class_name'],
+      fallback: 'Class',
+    );
   }
 
   String sectionName = '';
   final section = planner['section'];
   if (section is Map) {
-    sectionName = _text(section['section_name'] ?? section['name'] ?? section['sectionName']);
+    sectionName = _text(
+      section['section_name'] ?? section['name'] ?? section['sectionName'],
+    );
   }
   if (sectionName.isEmpty) {
     sectionName = _text(planner['section_name'] ?? planner['section']);
@@ -388,10 +423,15 @@ String _teacherName(Map<String, dynamic> planner) {
     final last = _text(teacherMap['last_name'] ?? teacherMap['lastName']);
     final full = '$first $last'.trim();
     if (full.isNotEmpty) return full;
-    final explicit = _text(teacherMap['full_name'] ?? teacherMap['name'] ?? teacherMap['fullName']);
+    final explicit = _text(
+      teacherMap['full_name'] ?? teacherMap['name'] ?? teacherMap['fullName'],
+    );
     if (explicit.isNotEmpty) return explicit;
   }
-  return _text(planner['teacher_name'] ?? planner['staff_name'], fallback: 'Teacher');
+  return _text(
+    planner['teacher_name'] ?? planner['staff_name'],
+    fallback: 'Teacher',
+  );
 }
 
 String _shortDate(Object? raw) {

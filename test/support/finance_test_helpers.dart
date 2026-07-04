@@ -52,9 +52,9 @@ Future<File> createTestProofImage() async {
   const pngBase64 =
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WmF0X0AAAAASUVORK5CYII=';
   final bytes = base64Decode(pngBase64);
-  final directory = await Directory.systemTemp.createTemp('fees-proof-');
+  final directory = Directory.systemTemp.createTempSync('fees-proof-');
   final file = File('${directory.path}/proof.png');
-  await file.writeAsBytes(bytes);
+  file.writeAsBytesSync(bytes);
   return file;
 }
 

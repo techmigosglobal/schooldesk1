@@ -28,12 +28,17 @@ function addMinutes(time: string, minutes: number): string {
 
 type Assignment = {
   subject_id: string | null;
-  staff_id: string | null;
   subject_name: string;
-  teacher_name: string;
 };
 
-async function buildAssignments(
+type BreakDraft = {
+  name: string;
+  start_time: string;
+  end_time: string;
+  days: number[];
+};
+
+async function buildClassSubjectAssignments(
   svc: SupabaseClient,
   school: string,
   sectionId: string,
@@ -44,53 +49,69 @@ async function buildAssignments(
     .maybeSingle();
   if (sectionError) throw sectionError;
 
-  const { data: staffSubjectRows, error: staffSubjectError } = await svc.from(
-    "staff_subjects",
-  ).select(
-    "subject_id, staff_id, subject:subjects(subject_name), staff:staff(first_name,last_name)",
-  ).eq("school_id", school).eq("academic_year_id", academicYearId).or(
-    `section_id.eq.${sectionId},section_id.is.null`,
-  );
-  if (staffSubjectError) throw staffSubjectError;
-
-  const directAssignments = (staffSubjectRows ?? []).map(
-    (row: any) => {
-      const subject = row.subject && typeof row.subject === "object"
-        ? row.subject as Record<string, unknown>
-        : {};
-      const staff = row.staff && typeof row.staff === "object"
-        ? row.staff as Record<string, unknown>
-        : {};
-      return {
-        subject_id: textValue(row.subject_id) || null,
-        staff_id: textValue(row.staff_id) || null,
-        subject_name: textValue(subject.subject_name, "General"),
-        teacher_name: `${textValue(staff.first_name)} ${textValue(staff.last_name)}`.trim(),
-      };
-    },
-  ).filter((row: any) => row.subject_id || row.staff_id);
-  if (directAssignments.length > 0) return directAssignments;
-
   const gradeId = textValue(section?.grade_id);
   if (!gradeId) return [];
 
   const { data: gradeSubjectRows, error: gradeSubjectError } = await svc.from(
     "grade_subjects",
   ).select("subject_id, subject:subjects(subject_name)").eq("school_id", school)
-    .eq("grade_id", gradeId).or(`academic_year_id.eq.${academicYearId},academic_year_id.is.null`);
+    .eq("grade_id", gradeId).or(`section_id.eq.${sectionId},section_id.is.null`)
+    .or(`academic_year_id.eq.${academicYearId},academic_year_id.is.null`);
   if (gradeSubjectError) throw gradeSubjectError;
 
+  const seen = new Set<string>();
   return (gradeSubjectRows ?? []).map((row: Record<string, unknown>) => {
     const subject = row.subject && typeof row.subject === "object"
       ? row.subject as Record<string, unknown>
       : {};
+    const subjectId = textValue(row.subject_id);
+    if (!subjectId || seen.has(subjectId)) return null;
+    seen.add(subjectId);
     return {
-      subject_id: textValue(row.subject_id) || null,
-      staff_id: null,
+      subject_id: subjectId,
       subject_name: textValue(subject.subject_name, "General"),
-      teacher_name: "",
     };
-  }).filter((row: any) => row.subject_id);
+  }).filter(Boolean) as Assignment[];
+}
+
+function parseBreaks(value: unknown, defaultDays: number[]): BreakDraft[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((raw) => {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const days = Array.isArray(row.days) && row.days.length > 0
+      ? row.days.map((day) => intValue(day, 0)).filter((day) =>
+        day >= 1 && day <= 7
+      )
+      : defaultDays;
+    return {
+      name: textValue(row.name || row.label, "Break"),
+      start_time: textValue(row.start_time),
+      end_time: textValue(row.end_time),
+      days,
+    };
+  }).filter((row) => row.start_time && row.end_time);
+}
+
+function minutesOf(time: string): number | null {
+  const match = textValue(time).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hours = intValue(match[1], -1);
+  const mins = intValue(match[2], -1);
+  if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null;
+  return hours * 60 + mins;
+}
+
+function distributeSubjectsBalancedWeekly(
+  assignments: Assignment[],
+  index: number,
+): Assignment {
+  if (assignments.length === 0) {
+    return {
+      subject_id: null,
+      subject_name: "Study Period",
+    };
+  }
+  return assignments[index % assignments.length];
 }
 
 async function generateSlots(
@@ -116,42 +137,89 @@ async function generateSlots(
     intValue(body.period_duration_minutes, 40),
   );
   const gapMinutes = Math.max(0, intValue(body.gap_minutes, 5));
-  const assignments = await buildAssignments(svc, school, sectionId, academicYearId);
-  const fallbackStaffId = textValue(body.staff_id) || null;
+  const assignments = await buildClassSubjectAssignments(svc, school, sectionId, academicYearId);
+  const endTime = textValue(body.end_time);
+  const breaks = parseBreaks(body.breaks, days);
+  const startMinutes = minutesOf(startTime);
+  const endMinutes = minutesOf(endTime);
+  const useEndBound = startMinutes !== null && endMinutes !== null &&
+    endMinutes > startMinutes;
+  const breaksByDay = new Map<number, BreakDraft[]>();
+  for (const day of days) breaksByDay.set(day, []);
+  for (const item of breaks) {
+    for (const day of item.days) {
+      if (!breaksByDay.has(day)) continue;
+      breaksByDay.get(day)!.push(item);
+    }
+  }
+  for (const dayBreaks of breaksByDay.values()) {
+    dayBreaks.sort((a, b) =>
+      (minutesOf(a.start_time) ?? 0) - (minutesOf(b.start_time) ?? 0)
+    );
+  }
 
   const generated = [];
   let assignmentIndex = 0;
   for (const day of days) {
-    for (let period = 1; period <= periodsPerDay; period++) {
-      const start = addMinutes(
-        startTime,
-        (period - 1) * (periodDuration + gapMinutes),
-      );
-      const end = addMinutes(start, periodDuration);
-      const assignment = assignments.length > 0
-        ? assignments[assignmentIndex % assignments.length]
-        : {
+    let cursor = startTime;
+    let period = 1;
+    const dayBreaks = breaksByDay.get(day) ?? [];
+    let breakIndex = 0;
+    while (period <= periodsPerDay) {
+      const cursorMinutes = minutesOf(cursor);
+      const nextBreak = dayBreaks[breakIndex];
+      const nextBreakStart = nextBreak ? minutesOf(nextBreak.start_time) : null;
+      if (
+        nextBreak &&
+        cursorMinutes !== null &&
+        nextBreakStart !== null &&
+        cursorMinutes >= nextBreakStart
+      ) {
+        generated.push({
+          school_id: school,
+          section_id: sectionId,
+          academic_year_id: academicYearId,
+          term_id: textValue(body.term_id) || null,
           subject_id: null,
-          staff_id: fallbackStaffId,
-          subject_name: "Study Period",
-          teacher_name: "",
-        };
-      assignmentIndex += 1;
+          staff_id: null,
+          room_id: textValue(body.room_id) || null,
+          day_of_week: day,
+          period_number: period,
+          start_time: nextBreak.start_time,
+          end_time: nextBreak.end_time,
+          slot_type: "break",
+          subject_name: nextBreak.name,
+        });
+        cursor = addMinutes(nextBreak.end_time, gapMinutes);
+        period += 1;
+        breakIndex += 1;
+        continue;
+      }
+      const start = cursor;
+      const end = addMinutes(start, periodDuration);
+      const endMinutesForSlot = minutesOf(end);
+      if (useEndBound && endMinutesForSlot !== null && endMinutesForSlot > endMinutes!) {
+        break;
+      }
+      const assignment = distributeSubjectsBalancedWeekly(assignments, assignmentIndex);
       generated.push({
         school_id: school,
         section_id: sectionId,
         academic_year_id: academicYearId,
         term_id: textValue(body.term_id) || null,
         subject_id: assignment.subject_id,
-        staff_id: assignment.staff_id ?? fallbackStaffId,
+        staff_id: null,
         room_id: textValue(body.room_id) || null,
         day_of_week: day,
         period_number: period,
         start_time: start,
         end_time: end,
+        slot_type: "regular",
         subject_name: assignment.subject_name,
-        teacher_name: assignment.teacher_name,
       });
+      assignmentIndex += 1;
+      cursor = addMinutes(end, gapMinutes);
+      period += 1;
     }
   }
   return generated;
@@ -304,7 +372,6 @@ export async function handleTimetable(
         const rows = generated.map(
           ({
             subject_name: _ignoredSubject,
-            teacher_name: _ignoredTeacher,
             term_id: _ignoredTerm,
             ...slot
           }) => slot,
@@ -352,8 +419,7 @@ export async function handleTimetable(
       ).eq("academic_year_id", academicYearId).in("day_of_week", [1, 2, 3, 4, 5]);
       const rows = generated.map(
         ({
-          subject_name: _ignoredSubject,
-          teacher_name: _ignoredTeacher,
+           subject_name: _ignoredSubject,
           term_id: _ignoredTerm,
           ...slot
         }) => slot,

@@ -51,9 +51,16 @@ void main() {
     expect(adminTimetable, contains('Generate Time Table'));
     expect(adminTimetable, contains('DropdownButtonFormField<String>'));
     expect(adminTimetable, contains("labelText: 'Class'"));
-    expect(adminTimetable, contains("value: 'smart'"));
     expect(adminTimetable, contains('generateSmartTimetable('));
-    expect(adminTimetable, contains('applyPrePrimaryClassSchedule('));
+    expect(adminTimetable, isNot(contains('applyPrePrimaryClassSchedule(')));
+    expect(adminTimetable, isNot(contains("value: 'preschool'")));
+    expect(adminTimetable, isNot(contains("value: 'smart'")));
+    expect(adminTimetable, contains("labelText: 'End time'"));
+    expect(adminTimetable, contains("labelText: 'Break name'"));
+    expect(adminTimetable, isNot(contains('Create a term for this academic year')));
+    expect(adminTimetable, contains('_TimetableBreakDraft'));
+    expect(adminTimetable, contains('_buildGeneratedWeekEditor'));
+    expect(adminTimetable, contains('_publishGeneratedWeek'));
     expect(adminTimetable, isNot(contains('Add single period')));
     expect(adminTimetable, isNot(contains('Add substitution')));
     expect(adminTimetable, isNot(contains('Single Period Modification')));
@@ -69,7 +76,13 @@ void main() {
     expect(adminTimetableForms, contains("'room_id': _roomId"));
     expect(timetableHandler, contains('timetable_slots'));
     expect(timetableHandler, contains('room_id'));
+    expect(timetableHandler, contains('buildClassSubjectAssignments'));
+    expect(timetableHandler, contains('staff_id: null'));
+    expect(timetableHandler, isNot(contains('staff_subjects')));
+    expect(timetableHandler, contains('body.end_time'));
     expect(timetableApi, contains("'breaks': breaks"));
+    expect(timetableApi, contains("'end_time': endTime.trim()"));
+    expect(timetableApi, contains("if (termId.trim().isNotEmpty) 'term_id'"));
 
     expect(principalClasses, contains('BulkCsvImportTarget.classes'));
     expect(principalClasses, contains("label: 'Room Number'"));
@@ -118,6 +131,28 @@ void main() {
       contains('staffId: RoleAccessService.teacherStaffId'),
     );
     expect(teacherTimetable, contains('_weeklySubjects'));
+  });
+
+  test('principal timetable generation publishes class-owned weekly slots', () {
+    final adminTimetable = File(
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
+    ).readAsStringSync();
+    final timetableApi = File(
+      'lib/core/network/api_modules/timetable_api.dart',
+    ).readAsStringSync();
+    final timetableHandler = File(
+      'supabase/functions/api/handlers/timetable.ts',
+    ).readAsStringSync();
+
+    expect(adminTimetable, contains('var endTimeText'));
+    expect(adminTimetable, contains('var generatedWeekDrafts'));
+    expect(adminTimetable, contains('Balanced weekly'));
+    expect(adminTimetable, contains('Save Week Timetable'));
+    expect(adminTimetable, contains('staffId: draft.staffId'));
+    expect(timetableApi, contains('String staffId = \'\''));
+    expect(timetableApi, contains("'staff_id': null"));
+    expect(timetableHandler, contains('breaksByDay'));
+    expect(timetableHandler, contains('distributeSubjectsBalancedWeekly'));
   });
 
   test('teacher timetable falls back to assigned class slots', () {

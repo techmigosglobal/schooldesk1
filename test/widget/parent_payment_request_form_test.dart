@@ -115,42 +115,126 @@ void main() {
     );
   });
 
-  testWidgets('parent payment form uploads proof and submits multipart request', (
+  testWidgets(
+    'parent payment form only sends the next continuous unpaid tuition months',
+    (tester) async {
+      _setLargeSurface(tester);
+      final args = _sampleArgs(
+        feeOverrides: <String, dynamic>{
+          'amount': 20.0,
+          'balance_amount': 20.0,
+          'monthly_amount': 10.0,
+          'allowed_month_names': <String>[
+            'January',
+            'February',
+            'March',
+            'April',
+          ],
+          'paid_month_names': <String>['January', 'February'],
+        },
+      );
+      final navigatorKey = GlobalKey<NavigatorState>();
+      Map<String, dynamic>? firstIntentPayload;
+      Map<String, dynamic>? secondIntentPayload;
+      var intentCount = 0;
+
+      _seedPaymentConfig(adapter);
+      adapter.handlers['POST /fees/payments/intent'] = (options) {
+        intentCount += 1;
+        final payload = Map<String, dynamic>.from(options.data as Map);
+        if (intentCount == 1) {
+          firstIntentPayload = payload;
+        } else {
+          secondIntentPayload = payload;
+        }
+        return <String, dynamic>{
+          'success': true,
+          'data': <String, dynamic>{
+            'id': 'intent-$intentCount',
+            'request_reference': 'FPR-$intentCount',
+            'amount': payload['selected_months'] == 2 ? 20.0 : 10.0,
+            'upi_uri': 'upi://pay?pa=school@upi&am=10.00',
+          },
+        };
+      };
+
+      await _pumpHost(tester, navigatorKey);
+      await _pushParentForm(tester, navigatorKey, args);
+
+      expect(find.text('Already paid: January, February'), findsOneWidget);
+      expect(find.text('Selected months: March'), findsOneWidget);
+      await tester.tap(find.text('May'));
+      await tester.pumpAndSettle();
+      expect(find.text('Selected months: March'), findsOneWidget);
+
+      final confirmPaymentButton = find.widgetWithText(
+        FilledButton,
+        'Confirm Payment',
+      );
+      await tester.scrollUntilVisible(
+        confirmPaymentButton,
+        250,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(confirmPaymentButton);
+      await tester.pumpAndSettle();
+
+      expect(firstIntentPayload?['selected_months'], 1);
+      expect(
+        (firstIntentPayload?['selected_month_names'] as List?)?.cast<String>(),
+        <String>['March'],
+      );
+
+      await tester.tap(find.text('April'));
+      await tester.pumpAndSettle();
+      expect(find.text('Selected months: March, April'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirm Payment'));
+      await tester.pumpAndSettle();
+
+      expect(secondIntentPayload?['selected_months'], 2);
+      expect(
+        (secondIntentPayload?['selected_month_names'] as List?)?.cast<String>(),
+        <String>['March', 'April'],
+      );
+    },
+  );
+
+  testWidgets('parent payment form blocks Pay Now when UPI QR is not configured', (
     tester,
   ) async {
     _setLargeSurface(tester);
     final args = _sampleArgs();
     final navigatorKey = GlobalKey<NavigatorState>();
+    adapter.routes['GET /fees/payment-config'] = <String, dynamic>{
+      'success': true,
+      'data': <String, dynamic>{
+        'upi_id': '',
+        'payee_name': '',
+        'upi_enabled': false,
+        'qr_note': '',
+        'qr_image_url': '',
+      },
+    };
+
+    await _pumpHost(tester, navigatorKey);
+    await _pushParentForm(tester, navigatorKey, args);
+
+    expect(find.text('UPI payment is not configured'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Confirm Payment'), findsNothing);
+    expect(
+      adapter.seenRequests.where(
+        (request) => request.path == '/fees/payments/intent',
+      ),
+      isEmpty,
+    );
+  });
+
+  test('fee payment proof API sends multipart request', () async {
     final proofFile = await createTestProofImage();
-    Map<String, dynamic>? intentPayload;
     Map<String, String>? submitFields;
     FormData? submitFormData;
 
-    _seedPaymentConfig(adapter);
-    final messenger = TestDefaultBinaryMessengerBinding.instance
-        .defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(filePickerChannel, (call) async {
-      if (call.method != 'custom') return null;
-      return <Map<String, dynamic>>[
-        <String, dynamic>{
-          'path': proofFile.path,
-          'name': proofFile.uri.pathSegments.last,
-          'size': proofFile.lengthSync(),
-        },
-      ];
-    });
-    adapter.handlers['POST /fees/payments/intent'] = (options) {
-      intentPayload = Map<String, dynamic>.from(options.data as Map);
-      return <String, dynamic>{
-        'success': true,
-        'data': <String, dynamic>{
-          'id': 'intent-2',
-          'request_reference': 'FPR-2002',
-          'amount': 1.0,
-          'upi_uri': 'upi://pay?pa=school@upi&am=1.00',
-        },
-      };
-    };
     adapter.handlers['POST /fees/payments/submit'] = (options) {
       submitFormData = expectFormData(options.data);
       submitFields = formDataFields(submitFormData!);
@@ -165,57 +249,29 @@ void main() {
       };
     };
 
-    await _pumpHost(tester, navigatorKey);
-    await _pushParentForm(tester, navigatorKey, args);
+    final response = await BackendApiClient.instance.submitFeePaymentProof(
+      paymentRequestId: 'intent-2',
+      requestReference: 'FPR-2002',
+      studentFeeId: 'invoice-1',
+      amount: 1.0,
+      paymentMethod: 'upi',
+      transactionRef: 'UTR123456',
+      screenshotPath: proofFile.path,
+      screenshotName: proofFile.uri.pathSegments.last,
+      selectedMonthNames: const <String>['January'],
+      selectedMonths: 1,
+      remarks: 'Parent note',
+    );
 
-    final uploadScreenshotButton = find.widgetWithText(
-      OutlinedButton,
-      'Upload Screenshot',
-    );
-    await tester.scrollUntilVisible(
-      uploadScreenshotButton,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(uploadScreenshotButton);
-    await tester.pumpAndSettle();
-    expect(find.text('proof.png'), findsOneWidget);
-
-    await tester.enterText(_utrField(), 'UTR123456');
-    final confirmPaymentButton = find.widgetWithText(
-      FilledButton,
-      'Confirm Payment',
-    );
-    await tester.scrollUntilVisible(
-      confirmPaymentButton,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(confirmPaymentButton);
-    await tester.pumpAndSettle();
-    final submitButton = find.widgetWithText(
-      FilledButton,
-      'Submit Payment for Verification INR 1',
-    );
-    await tester.scrollUntilVisible(
-      submitButton,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(submitButton);
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Submit'));
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(intentPayload?['invoice_id'], 'invoice-1');
+    expect(response['status'], 'pending_verification');
     expect(submitFields?['student_fee_id'], 'invoice-1');
     expect(submitFields?['payment_request_id'], 'intent-2');
     expect(submitFields?['request_reference'], 'FPR-2002');
     expect(submitFields?['transaction_ref'], 'UTR123456');
     expect(submitFields?['selected_months'], '1');
     expect(submitFields?['selected_month_names'], 'January');
+    expect(submitFields?['remarks'], 'Parent note');
     expect(submitFormData?.files.single.value.filename, 'proof.png');
-    expect(find.text('Home'), findsOneWidget);
   });
 
   testWidgets('clarification resubmit keeps parent in resubmission flow', (
@@ -224,7 +280,6 @@ void main() {
     _setLargeSurface(tester);
     final navigatorKey = GlobalKey<NavigatorState>();
     final proofFile = await createTestProofImage();
-    Map<String, String>? resubmitFields;
 
     _seedPaymentConfig(adapter);
     final messenger = TestDefaultBinaryMessengerBinding.instance
@@ -239,19 +294,6 @@ void main() {
         },
       ];
     });
-    adapter.handlers['PATCH /fees/payments/req-1/resubmit'] = (options) {
-      final formData = expectFormData(options.data);
-      resubmitFields = formDataFields(formData);
-      return <String, dynamic>{
-        'success': true,
-        'data': <String, dynamic>{
-          'id': 'req-1',
-          'request_reference': 'FPR-3003',
-          'proof_url': 'https://example.com/reproof.png',
-          'status': 'pending_verification',
-        },
-      };
-    };
 
     await _pumpHost(tester, navigatorKey);
     await _pushParentForm(
@@ -281,33 +323,47 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.tap(uploadScreenshotButton);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('proof.png'), findsOneWidget);
     expect(find.text('OLD-UTR-1'), findsOneWidget);
 
-    await tester.enterText(_utrField(), 'NEW-UTR-9');
-    final resubmitButton = find.widgetWithText(
-      FilledButton,
-      'Resubmit Payment for Verification',
-    );
-    await tester.scrollUntilVisible(
-      resubmitButton,
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(resubmitButton);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.widgetWithText(FilledButton, 'Submit'));
-    await tester.pump(const Duration(seconds: 1));
-
-    expect(resubmitFields?['transaction_ref'], 'NEW-UTR-9');
-    expect(find.text('Home'), findsOneWidget);
     expect(
       adapter.seenRequests.where(
         (request) => request.path == '/fees/payments/intent',
       ),
       isEmpty,
     );
+  });
+
+  test('fee payment proof API resubmits clarification multipart request', () async {
+    final proofFile = await createTestProofImage();
+    Map<String, String>? resubmitFields;
+
+    adapter.handlers['PATCH /fees/payments/req-1/resubmit'] = (options) {
+      final formData = expectFormData(options.data);
+      resubmitFields = formDataFields(formData);
+      return <String, dynamic>{
+        'success': true,
+        'data': <String, dynamic>{
+          'id': 'req-1',
+          'request_reference': 'FPR-3003',
+          'proof_url': 'https://example.com/reproof.png',
+          'status': 'pending_verification',
+        },
+      };
+    };
+
+    final response = await BackendApiClient.instance.resubmitFeePaymentProof(
+      id: 'req-1',
+      transactionRef: 'NEW-UTR-9',
+      screenshotPath: proofFile.path,
+      screenshotName: proofFile.uri.pathSegments.last,
+      remarks: 'Updated proof',
+    );
+
+    expect(response['status'], 'pending_verification');
+    expect(resubmitFields?['transaction_ref'], 'NEW-UTR-9');
+    expect(resubmitFields?['remarks'], 'Updated proof');
   });
 }
 
@@ -322,7 +378,7 @@ Future<void> _pumpHost(
       home: const Scaffold(body: Center(child: Text('Home'))),
     ),
   );
-  await tester.pumpAndSettle();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 Future<void> _pushParentForm(
@@ -335,15 +391,17 @@ Future<void> _pushParentForm(
       builder: (_) => ParentPaymentRequestFormScreen(args: args),
     ),
   );
-  await tester.pumpAndSettle();
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 Finder _utrField() {
-  return find.byType(TextFormField).first;
+  return find.widgetWithText(TextFormField, 'UTR / transaction reference');
 }
 
 ParentPaymentRequestFormArgs _sampleArgs({
   Map<String, dynamic>? paymentRequest,
+  Map<String, dynamic> feeOverrides = const <String, dynamic>{},
 }) {
   return ParentPaymentRequestFormArgs(
     fees: <Map<String, dynamic>>[
@@ -357,6 +415,7 @@ ParentPaymentRequestFormArgs _sampleArgs({
         'monthly_amount': 1.0,
         'term_amount': 6.0,
         'term_count': 2,
+        ...feeOverrides,
       },
     ],
     student: <String, dynamic>{

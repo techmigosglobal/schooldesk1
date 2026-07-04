@@ -116,7 +116,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             .where((s) => s.isNotEmpty)
             .toList()
         : <String>[];
-    final allAttachments = [...fromUrl, ...fromList].toSet().toList();
+    final allAttachments = {...fromUrl, ...fromList}.toList();
     return {
       'id': _homeworkId(h),
       'homework_id': h['homework_id'],

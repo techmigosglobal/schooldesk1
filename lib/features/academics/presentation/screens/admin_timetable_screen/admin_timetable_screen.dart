@@ -560,7 +560,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           _ActionChipButton(
             icon: Icons.auto_awesome_rounded,
             label: 'Generate Time Table',
-            onTap: _openPrePrimaryScheduleSheet,
+            onTap: _openGenerateTimetableSheet,
           ),
           _ActionChipButton(
             icon: Icons.upload_file_rounded,
@@ -777,7 +777,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               ),
         const SizedBox(height: 14),
         OutlinedButton.icon(
-          onPressed: _openPrePrimaryScheduleSheet,
+          onPressed: _openGenerateTimetableSheet,
           icon: const Icon(Icons.auto_awesome_rounded),
           label: const Text('Generate Time Table'),
         ),
@@ -1142,6 +1142,345 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildBreakDraftsEditor({
+    required List<_TimetableBreakDraft> breaks,
+    required Set<int> workingDays,
+    required bool saving,
+    required StateSetter setSheetState,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: _softDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Breaks / Lunch',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: saving
+                    ? null
+                    : () => setSheetState(
+                        () => breaks.add(
+                          _TimetableBreakDraft(
+                            name: 'Short Break',
+                            startTime: '10:30',
+                            endTime: '10:45',
+                            days: workingDays,
+                          ),
+                        ),
+                      ),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Add'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (breaks.isEmpty)
+            const Text('No named breaks added.')
+          else
+            for (final item in breaks)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: item.name,
+                            enabled: !saving,
+                            decoration: const InputDecoration(
+                              labelText: 'Break name',
+                            ),
+                            onChanged: (value) => item.name = value,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove break',
+                          onPressed: saving
+                              ? null
+                              : () => setSheetState(() => breaks.remove(item)),
+                          icon: const Icon(Icons.delete_outline_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: item.startTime,
+                            enabled: !saving,
+                            decoration: const InputDecoration(
+                              labelText: 'Start time',
+                            ),
+                            onChanged: (value) => item.startTime = value,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextFormField(
+                            initialValue: item.endTime,
+                            enabled: !saving,
+                            decoration: const InputDecoration(
+                              labelText: 'End time',
+                            ),
+                            onChanged: (value) => item.endTime = value,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final day in workingDays.toList()..sort())
+                          FilterChip(
+                            label: Text(_dayShortLabels[day - 1]),
+                            selected: item.days.contains(day),
+                            onSelected: saving
+                                ? null
+                                : (selected) => setSheetState(() {
+                                    if (selected) {
+                                      item.days.add(day);
+                                    } else if (item.days.length > 1) {
+                                      item.days.remove(day);
+                                    }
+                                  }),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _buildGeneratedWeekEditor(
+    List<_TimetableSlotDraft> generatedWeekDrafts,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final drafts = generatedWeekDrafts
+              ..sort((a, b) {
+                final day = a.dayOfWeek.compareTo(b.dayOfWeek);
+                if (day != 0) return day;
+                return a.periodNumber.compareTo(b.periodNumber);
+              });
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  18,
+                  8,
+                  18,
+                  18 + MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Review Generated Week',
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Balanced weekly draft for $_selectedClassLabel',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF667989),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (final day in drafts
+                              .map((draft) => draft.dayOfWeek)
+                              .toSet()
+                              .toList()
+                            ..sort()) ...[
+                            _sectionTitle(_dayLabel(day)),
+                            const SizedBox(height: 8),
+                            for (final draft in drafts.where(
+                              (item) => item.dayOfWeek == day,
+                            ))
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _editableGeneratedDraftCard(
+                                  draft,
+                                  setSheetState,
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          await _publishGeneratedWeek(drafts);
+                          if (sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
+                          }
+                        },
+                        icon: const Icon(Icons.save_rounded),
+                        label: const Text('Save Week Timetable'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _editableGeneratedDraftCard(
+    _TimetableSlotDraft draft,
+    StateSetter setSheetState,
+  ) {
+    final subjectOptions = _subjectOptions;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FBFF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2EAF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Period ${draft.periodNumber} - ${draft.startTime} to ${draft.endTime}',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue:
+                subjectOptions.any(
+                  (item) => _text(item['id']) == draft.subjectId,
+                )
+                ? draft.subjectId
+                : '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Subject'),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Break / free')),
+              for (final subject in subjectOptions)
+                DropdownMenuItem(
+                  value: _text(subject['id']),
+                  child: Text(
+                    _text(subject['name'], fallback: _text(subject['id'])),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) =>
+                setSheetState(() => draft.subjectId = (value ?? '').trim()),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  initialValue: draft.startTime,
+                  decoration: const InputDecoration(labelText: 'Start time'),
+                  onChanged: (value) => draft.startTime = value,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  initialValue: draft.endTime,
+                  decoration: const InputDecoration(labelText: 'End time'),
+                  onChanged: (value) => draft.endTime = value,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _publishGeneratedWeek(
+    List<_TimetableSlotDraft> generatedWeekDrafts,
+  ) async {
+    final validation = _validateDrafts(generatedWeekDrafts);
+    if (validation != null) {
+      _showSnack(validation);
+      return;
+    }
+    setState(() => _savingTimetable = true);
+    try {
+      final api = BackendApiClient.instance;
+      for (final draft in generatedWeekDrafts) {
+        await api.updateTimetableSlot(
+          id: draft.id,
+          sectionId: draft.sectionId,
+          academicYearId: draft.academicYearId,
+          termId: draft.termId,
+          dayOfWeek: draft.dayOfWeek,
+          periodNumber: draft.periodNumber,
+          subjectId: draft.subjectId,
+          staffId: draft.staffId,
+          startTime: draft.startTime,
+          endTime: draft.endTime,
+          roomId: draft.roomId,
+          slotType: draft.slotType,
+        );
+      }
+      await _loadBackendTimetable();
+      if (!mounted) return;
+      setState(() {
+        _savingTimetable = false;
+        _detailMode = _AdminTimetableDetailMode.classWeek;
+      });
+      _showSnack('Week timetable saved.');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _savingTimetable = false);
+      _showSnack('Unable to save week timetable. $error');
+    }
   }
 
   Widget _editableSlotCard(Map<String, dynamic> row) {
@@ -1581,7 +1920,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: _openPrePrimaryScheduleSheet,
+            onPressed: _openGenerateTimetableSheet,
             icon: const Icon(Icons.auto_awesome_rounded),
             label: const Text('Generate Time Table'),
           ),
@@ -1613,7 +1952,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _buildInfoCard() {
     return InkWell(
       borderRadius: BorderRadius.circular(8),
-      onTap: _openPrePrimaryScheduleSheet,
+      onTap: _openGenerateTimetableSheet,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -1661,7 +2000,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         _deleteSelectedClassTimetable();
         break;
       case 'pre_primary':
-        _openPrePrimaryScheduleSheet();
+        _openGenerateTimetableSheet();
         break;
       case 'import':
         _importTimetableCsv();
@@ -1758,12 +2097,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         .toList();
     if (editable.isEmpty) {
       _showSnack('No editable periods found for this day.');
-      return;
-    }
-    if (_selectedClassTeacherId.isEmpty) {
-      _showSnack(
-        'Class teacher is not assigned for $_selectedClassLabel. Assign a class teacher in Class Setup before publishing timetable changes.',
-      );
       return;
     }
     setState(() {
@@ -1924,7 +2257,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     setState(() => _savingTimetable = true);
     try {
       final api = BackendApiClient.instance;
-      final teacherId = _selectedClassTeacherId;
       for (final draft in drafts) {
         await api.updateTimetableSlot(
           id: draft.id,
@@ -1934,7 +2266,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           dayOfWeek: draft.dayOfWeek,
           periodNumber: draft.periodNumber,
           subjectId: draft.subjectId,
-          staffId: teacherId,
+          staffId: draft.staffId,
           startTime: draft.startTime,
           endTime: draft.endTime,
           roomId: draft.roomId,
@@ -1961,12 +2293,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     final sectionId = _selectedSectionId.trim();
     if (sectionId.isEmpty || _selectedClassRow == null) {
       _showSnack('Select a class timetable before copying a day.');
-      return;
-    }
-    if (_selectedClassTeacherId.isEmpty) {
-      _showSnack(
-        'Class teacher is not assigned for $_selectedClassLabel. Assign a class teacher in Class Setup before copying timetable changes.',
-      );
       return;
     }
     final sourceRows =
@@ -2100,7 +2426,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     setState(() => _savingTimetable = true);
     try {
       final api = BackendApiClient.instance;
-      final teacherId = _selectedClassTeacherId;
       for (final targetDay in targetDays) {
         final existing = _periodsForClass(
           sectionId,
@@ -2121,7 +2446,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
             dayOfWeek: targetDay,
             periodNumber: _int(source['period_number']),
             subjectId: slotType == 'regular' ? _text(source['subject_id']) : '',
-            staffId: teacherId,
+            staffId: _text(source['staff_id']),
             startTime: _text(source['start_time']),
             endTime: _text(source['end_time']),
             roomId: _text(source['room_id']),
@@ -2347,40 +2672,29 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     }
   }
 
-  Future<void> _openPrePrimaryScheduleSheet() async {
+  Future<void> _openGenerateTimetableSheet() async {
     final section = _selectedSection;
     final year = _currentAcademicYear;
     if (section == null || year == null) {
       _showSnack('Select a class and academic year before applying schedule.');
       return;
     }
-    if (_currentTermId.isEmpty) {
-      _showSnack(
-        'Create a term for this academic year before applying schedule.',
-      );
-      return;
-    }
-    if (_staff.isEmpty) {
-      _showSnack('Create an active teacher before applying schedule.');
-      return;
-    }
-
-    var generationMode = 'preschool';
-    var scheduleType = _defaultPrePrimaryScheduleType(section);
-    var teacherId = section.classTeacherId.trim();
-    if (teacherId.isEmpty) {
-      _showSnack(
-        'Class teacher is not assigned for $_selectedClassLabel. Assign a class teacher in Class Setup before generating.',
-      );
-      return;
-    }
     var workingDays = <int>{1, 2, 3, 4, 5};
-    var periodsPerDayText = '7';
     var startTimeText = '09:00';
+    var endTimeText = '15:30';
     var durationText = '35';
     var gapText = '5';
     var regenerateScope = true;
     var saving = false;
+    var generatedWeekDrafts = <_TimetableSlotDraft>[];
+    final breaks = <_TimetableBreakDraft>[
+      _TimetableBreakDraft(
+        name: 'Lunch Break',
+        startTime: '12:30',
+        endTime: '13:00',
+        days: workingDays,
+      ),
+    ];
 
     final result = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
@@ -2392,7 +2706,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
-            final preset = _prePrimaryPresetPreview(scheduleType);
             return SafeArea(
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
@@ -2432,158 +2745,116 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      DropdownButtonFormField<String>(
-                        initialValue: generationMode,
-                        decoration: const InputDecoration(
-                          labelText: 'Generation mode',
-                          prefixIcon: Icon(Icons.tune_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'preschool',
-                            child: Text('Preschool activity preset'),
+                      _lockedClassTeacherPanel(),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Working days',
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (
+                            var index = 0;
+                            index < _dayShortLabels.length;
+                            index++
+                          )
+                            FilterChip(
+                              label: Text(_dayShortLabels[index]),
+                              selected: workingDays.contains(index + 1),
+                              onSelected: saving
+                                  ? null
+                                  : (selected) => setSheetState(() {
+                                      if (selected) {
+                                        workingDays.add(index + 1);
+                                      } else if (workingDays.length > 1) {
+                                        workingDays.remove(index + 1);
+                                      }
+                                      for (final item in breaks) {
+                                        item.keepDaysInside(workingDays);
+                                      }
+                                    }),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: startTimeText,
+                              enabled: !saving,
+                              decoration: const InputDecoration(
+                                labelText: 'Start time',
+                                helperText: 'HH:MM',
+                              ),
+                              onChanged: (value) => startTimeText = value,
+                            ),
                           ),
-                          DropdownMenuItem(
-                            value: 'smart',
-                            child: Text('Custom smart timetable'),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: endTimeText,
+                              enabled: !saving,
+                              decoration: const InputDecoration(
+                                labelText: 'End time',
+                                helperText: 'HH:MM',
+                              ),
+                              onChanged: (value) => endTimeText = value,
+                            ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: durationText,
+                              enabled: !saving,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Period minutes',
+                              ),
+                              onChanged: (value) => durationText = value,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextFormField(
+                              initialValue: gapText,
+                              enabled: !saving,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Gap minutes',
+                              ),
+                              onChanged: (value) => gapText = value,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      _buildBreakDraftsEditor(
+                        breaks: breaks,
+                        workingDays: workingDays,
+                        saving: saving,
+                        setSheetState: setSheetState,
+                      ),
+                      const SizedBox(height: 4),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Replace existing class timetable'),
+                        value: regenerateScope,
                         onChanged: saving
                             ? null
                             : (value) => setSheetState(
-                                () => generationMode = value ?? generationMode,
+                                () => regenerateScope = value,
                               ),
                       ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: scheduleType,
-                        decoration: const InputDecoration(
-                          labelText: 'Preschool preset',
-                          prefixIcon: Icon(Icons.child_care_rounded),
-                        ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'playgroup',
-                            child: Text('Playgroup'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'nursery',
-                            child: Text('Nursery'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'junior_kg',
-                            child: Text('Junior KG'),
-                          ),
-                        ],
-                        onChanged: saving || generationMode != 'preschool'
-                            ? null
-                            : (value) => setSheetState(
-                                () => scheduleType = value ?? scheduleType,
-                              ),
-                      ),
-                      const SizedBox(height: 12),
-                      _lockedClassTeacherPanel(),
-                      const SizedBox(height: 14),
-                      if (generationMode == 'smart') ...[
-                        Text(
-                          'Working days',
-                          style: Theme.of(context).textTheme.labelLarge
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (
-                              var index = 0;
-                              index < _dayShortLabels.length;
-                              index++
-                            )
-                              FilterChip(
-                                label: Text(_dayShortLabels[index]),
-                                selected: workingDays.contains(index + 1),
-                                onSelected: saving
-                                    ? null
-                                    : (selected) => setSheetState(() {
-                                        if (selected) {
-                                          workingDays.add(index + 1);
-                                        } else if (workingDays.length > 1) {
-                                          workingDays.remove(index + 1);
-                                        }
-                                      }),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: periodsPerDayText,
-                                enabled: !saving,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Periods / day',
-                                ),
-                                onChanged: (value) => periodsPerDayText = value,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: startTimeText,
-                                enabled: !saving,
-                                decoration: const InputDecoration(
-                                  labelText: 'Start time',
-                                  helperText: 'HH:MM',
-                                ),
-                                onChanged: (value) => startTimeText = value,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: durationText,
-                                enabled: !saving,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Period minutes',
-                                ),
-                                onChanged: (value) => durationText = value,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextFormField(
-                                initialValue: gapText,
-                                enabled: !saving,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Gap minutes',
-                                ),
-                                onChanged: (value) => gapText = value,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        SwitchListTile.adaptive(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Replace existing class timetable'),
-                          value: regenerateScope,
-                          onChanged: saving
-                              ? null
-                              : (value) => setSheetState(
-                                  () => regenerateScope = value,
-                                ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
+                      const SizedBox(height: 10),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -2595,62 +2866,22 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              generationMode == 'preschool'
-                                  ? 'Monday-Friday preview'
-                                  : 'Custom backend generation preview',
+                              'Balanced weekly generation preview',
                               style: Theme.of(context).textTheme.labelLarge
                                   ?.copyWith(fontWeight: FontWeight.w900),
                             ),
                             const SizedBox(height: 8),
-                            if (generationMode == 'preschool')
-                              for (final slot in preset)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 3,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 92,
-                                        child: Text(
-                                          '${slot.$1}-${slot.$2}',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelSmall
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                                color: const Color(0xFF667989),
-                                              ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: Text(
-                                          slot.$3,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .labelMedium
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )
-                            else
-                              Text(
-                                '${workingDays.length} day(s), ${_safePositiveInt(periodsPerDayText, 7)} periods/day, ${startTimeText.trim()} start, ${_safePositiveInt(durationText, 35)} min periods, ${_safeNonNegativeInt(gapText, 5)} min gaps.',
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800),
-                              ),
+                            Text(
+                              '${workingDays.length} day(s), ${startTimeText.trim()}-${endTimeText.trim()}, ${_safePositiveInt(durationText, 35)} min periods, ${_safeNonNegativeInt(gapText, 5)} min gaps, ${breaks.length} named break(s).',
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        generationMode == 'preschool'
-                            ? 'This replaces existing Monday-Friday periods for this class and maps every activity to the selected teacher.'
-                            : 'This uses the backend smart timetable generator for the selected class, term, working days, and timing pattern.',
+                        'This uses Class Hub subjects and distributes them evenly across the selected week. Generated slots do not require staff assignment.',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: const Color(0xFF667989),
                           fontWeight: FontWeight.w700,
@@ -2664,42 +2895,42 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                             : () async {
                                 setSheetState(() => saving = true);
                                 try {
-                                  final data = generationMode == 'preschool'
-                                      ? await BackendApiClient.instance
-                                            .applyPrePrimaryClassSchedule(
-                                              sectionId: section.id,
-                                              academicYearId: year.id,
-                                              termId: _currentTermId,
-                                              staffId: teacherId,
-                                              scheduleType: scheduleType,
-                                            )
-                                      : await BackendApiClient.instance
-                                            .generateSmartTimetable(
-                                              sectionId: section.id,
-                                              academicYearId: year.id,
-                                              termId: _currentTermId,
-                                              days: workingDays.toList()
-                                                ..sort(),
-                                              periodsPerDay: _safePositiveInt(
-                                                periodsPerDayText,
-                                                7,
-                                              ),
-                                              startTime: startTimeText.trim(),
-                                              periodDurationMinutes:
-                                                  _safePositiveInt(
-                                                    durationText,
-                                                    35,
-                                                  ),
-                                              gapMinutes: _safeNonNegativeInt(
-                                                gapText,
-                                                5,
-                                              ),
-                                              regenerateScope: regenerateScope,
-                                            );
+                                  final data = await BackendApiClient.instance
+                                      .generateSmartTimetable(
+                                    sectionId: section.id,
+                                    academicYearId: year.id,
+                                    termId: _currentTermId,
+                                    days: workingDays.toList()..sort(),
+                                    periodsPerDay: 60,
+                                    startTime: startTimeText.trim(),
+                                    endTime: endTimeText.trim(),
+                                    periodDurationMinutes: _safePositiveInt(
+                                      durationText,
+                                      35,
+                                    ),
+                                    gapMinutes: _safeNonNegativeInt(
+                                      gapText,
+                                      5,
+                                    ),
+                                    breaks: breaks
+                                        .map((item) => item.toJson())
+                                        .toList(),
+                                    regenerateScope: regenerateScope,
+                                  );
+                                  generatedWeekDrafts = _asListMap(
+                                    data['slots'],
+                                  )
+                                      .map(
+                                        (row) => _TimetableSlotDraft.fromRow(
+                                          row,
+                                          fallbackTermId: _currentTermId,
+                                        ),
+                                      )
+                                      .toList();
                                   if (sheetContext.mounted) {
                                     Navigator.pop(sheetContext, {
                                       ...data,
-                                      'generation_mode': generationMode,
+                                      'generation_mode': 'smart',
                                     });
                                   }
                                 } catch (error) {
@@ -2743,15 +2974,14 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     if (result == null || !mounted) return;
     await _loadBackendTimetable();
     if (!mounted) return;
+    if (generatedWeekDrafts.isNotEmpty) {
+      await _buildGeneratedWeekEditor(generatedWeekDrafts);
+      if (!mounted) return;
+    }
     final slots = _int(result['total_slots'] ?? result['created']);
-    final mode = _text(result['generation_mode']);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          mode == 'smart'
-              ? 'Time table generated: $slots periods created for class.'
-              : 'Time table generated: $slots periods linked to teacher and class.',
-        ),
+        content: Text('Time table generated: $slots periods created.'),
         backgroundColor: context.appTheme.success,
       ),
     );
@@ -3042,7 +3272,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         id,
         () => _TimetableSlotDraft.fromRow(
           row,
-          classTeacherId: _selectedClassTeacherId,
           fallbackTermId: _currentTermId,
         ),
       );
@@ -3059,9 +3288,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   String? _validateDrafts(List<_TimetableSlotDraft> drafts) {
-    if (_selectedClassTeacherId.isEmpty) {
-      return 'Class teacher is not assigned for $_selectedClassLabel. Assign a class teacher in Class Setup before publishing timetable changes.';
-    }
     for (final draft in drafts) {
       final start = _clockMinutes(draft.startTime);
       final end = _clockMinutes(draft.endTime);
@@ -3600,60 +3826,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     return parsed < 0 ? fallback : parsed;
   }
 
-  String _defaultPrePrimaryScheduleType(SectionModel section) {
-    final label = '${section.gradeName} ${section.sectionName}'.toLowerCase();
-    if (label.contains('nursery')) return 'nursery';
-    if (label.contains('junior') ||
-        label.contains('kg') ||
-        label.contains('lkg')) {
-      return 'junior_kg';
-    }
-    if (label.contains('play')) return 'playgroup';
-    return 'playgroup';
-  }
-
-  List<(String, String, String)> _prePrimaryPresetPreview(String scheduleType) {
-    switch (scheduleType) {
-      case 'nursery':
-        return const [
-          ('09:00', '09:20', 'Welcome'),
-          ('09:20', '09:50', 'Circle Time'),
-          ('09:50', '10:10', 'IGNITE Activity Room'),
-          ('10:10', '10:30', 'Snack Time'),
-          ('10:30', '11:00', 'Story Time'),
-          ('11:00', '11:20', 'IGNITE Math'),
-          ('11:20', '11:50', 'Fit & Fabulous'),
-          ('11:50', '12:10', 'IGNITE Lang'),
-          ('12:10', '12:30', 'Recall & Dispersal'),
-        ];
-      case 'junior_kg':
-        return const [
-          ('09:00', '09:20', 'Welcome'),
-          ('09:20', '09:50', 'Circle Time'),
-          ('09:50', '10:10', 'IGNITE Lang'),
-          ('10:10', '10:30', 'Snack Time'),
-          ('10:30', '11:00', 'IGNITE Activity Room'),
-          ('11:00', '11:20', 'IGNITE Life Skill'),
-          ('11:20', '11:50', 'Fit & Fabulous'),
-          ('11:50', '12:10', 'IGNITE Math'),
-          ('12:10', '12:30', 'Recall & Dispersal'),
-        ];
-      case 'playgroup':
-      default:
-        return const [
-          ('09:00', '09:20', 'Welcome'),
-          ('09:20', '09:50', 'Circle Time'),
-          ('09:50', '10:10', 'Snack Time'),
-          ('10:10', '10:30', 'IGNITE Math'),
-          ('10:30', '11:00', 'Fit & Fabulous'),
-          ('11:00', '11:20', 'IGNITE Activity Room'),
-          ('11:20', '11:50', 'IGNITE Lang'),
-          ('11:50', '12:10', 'Story Time / Rhymes'),
-          ('12:10', '12:30', 'Recall & Dispersal'),
-        ];
-    }
-  }
-
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -3695,6 +3867,16 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   static String _text(Object? value, {String fallback = ''}) {
     final text = '${value ?? ''}'.trim();
     return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
+  static List<Map<String, dynamic>> _asListMap(Object? value) {
+    if (value is List) {
+      return value
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+    return const [];
   }
 }
 
@@ -3841,7 +4023,6 @@ class _TimetableSlotDraft {
 
   factory _TimetableSlotDraft.fromRow(
     Map<String, dynamic> row, {
-    required String classTeacherId,
     required String fallbackTermId,
   }) {
     final subjectId = _textValue(row['subject_id']);
@@ -3864,9 +4045,7 @@ class _TimetableSlotDraft {
       originalEndTime: endTime,
       originalSlotType: slotType,
       subjectId: subjectId,
-      staffId: classTeacherId.trim().isNotEmpty
-          ? classTeacherId.trim()
-          : _textValue(row['staff_id']),
+      staffId: _textValue(row['staff_id']),
       roomId: roomId,
       startTime: startTime,
       endTime: endTime,
@@ -3888,11 +4067,9 @@ class _TimetableSlotDraft {
     return id.trim().isNotEmpty &&
         sectionId.trim().isNotEmpty &&
         academicYearId.trim().isNotEmpty &&
-        termId.trim().isNotEmpty &&
         dayOfWeek > 0 &&
         periodNumber > 0 &&
         (!requiresSubject || subjectId.trim().isNotEmpty) &&
-        staffId.trim().isNotEmpty &&
         startTime.trim().isNotEmpty &&
         endTime.trim().isNotEmpty;
   }
@@ -3918,6 +4095,36 @@ class _TimetableSlotDraft {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(_textValue(value)) ?? 0;
+  }
+}
+
+class _TimetableBreakDraft {
+  String name;
+  String startTime;
+  String endTime;
+  Set<int> days;
+
+  _TimetableBreakDraft({
+    required this.name,
+    required this.startTime,
+    required this.endTime,
+    required Set<int> days,
+  }) : days = {...days};
+
+  void keepDaysInside(Set<int> workingDays) {
+    days = days.where(workingDays.contains).toSet();
+    if (days.isEmpty && workingDays.isNotEmpty) {
+      days.add(workingDays.first);
+    }
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name.trim().isEmpty ? 'Break' : name.trim(),
+      'start_time': startTime.trim(),
+      'end_time': endTime.trim(),
+      'days': days.toList()..sort(),
+    };
   }
 }
 

@@ -345,8 +345,6 @@ class _ParentPaymentRequestFormScreenState
       (!_loadingConfig || _isClarificationResubmit) &&
       _fees.isNotEmpty &&
       (_isClarificationResubmit || !_isUpiMode || _upiEnabled) &&
-      _isIsoDate(_paymentDateController.text.trim()) &&
-      (!_requiresReference || _utrController.text.trim().length >= 6) &&
       (!_isTuition || _selectedMonthNames.isNotEmpty) &&
       (!_requiresProof || (_proofPath?.isNotEmpty ?? false));
 

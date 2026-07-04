@@ -188,4 +188,39 @@ void main() {
       );
     },
   );
+
+  test('class hub subject assignment persists only class-subject mappings', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final addSelectSubject = screen.substring(
+      screen.indexOf('class _AddSelectSubjectSetupPage'),
+      screen.indexOf('class _CreateSubjectSetupPage'),
+    );
+    final createSubject = screen.substring(
+      screen.indexOf('class _CreateSubjectSetupPage'),
+      screen.indexOf('class _EditSubjectSetupSheet'),
+    );
+
+    for (final subjectFlow in [addSelectSubject, createSubject]) {
+      expect(subjectFlow, contains('savePrincipalSubjectMapping('));
+      expect(subjectFlow, contains('periodsPerWeek: 0'));
+      expect(subjectFlow, isNot(contains('teacherId:')));
+      expect(subjectFlow, isNot(contains('assignmentId:')));
+    }
+  });
+
+  test('principal subjects stays overview-only and routes setup to class hub', () {
+    final subjects = File(
+      'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
+    ).readAsStringSync();
+
+    expect(subjects, contains("title: 'Subjects'"));
+    expect(subjects, contains('AppRoutes.principalClasses'));
+    expect(subjects, contains("'source': 'principal_subjects'"));
+    expect(subjects, contains('await _loadData();'));
+    expect(subjects, isNot(contains('savePrincipalSubjectMapping(')));
+    expect(subjects, isNot(contains('createPrincipalSubjectAction(')));
+    expect(subjects, isNot(contains('Teacher Load')));
+  });
 }

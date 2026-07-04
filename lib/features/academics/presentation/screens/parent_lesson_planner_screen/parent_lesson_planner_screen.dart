@@ -109,19 +109,22 @@ class _PlannerCard extends StatelessWidget {
     String teacher = 'Teacher';
     if (planner['teacher'] is Map) {
       final t = Map<String, dynamic>.from(planner['teacher']);
-      final first = t['first_name']?.toString() ?? t['firstName']?.toString() ?? '';
-      final last = t['last_name']?.toString() ?? t['lastName']?.toString() ?? '';
+      final first =
+          t['first_name']?.toString() ?? t['firstName']?.toString() ?? '';
+      final last =
+          t['last_name']?.toString() ?? t['lastName']?.toString() ?? '';
       final full = '$first $last'.trim();
       if (full.isNotEmpty) {
         teacher = full;
       } else {
-        teacher = t['full_name']?.toString() ?? t['name']?.toString() ?? 'Teacher';
+        teacher =
+            t['full_name']?.toString() ?? t['name']?.toString() ?? 'Teacher';
       }
     }
     final weekStart = _shortDate(planner['week_start_date']);
     final weekEnd = _shortDate(planner['week_end_date']);
     final note = planner['note']?.toString() ?? '';
-    final attachmentUrl = planner['attachment_url']?.toString() ?? '';
+    final attachments = _lessonPlannerAttachments(planner);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -164,12 +167,22 @@ class _PlannerCard extends StatelessWidget {
             _InfoRow(icon: Icons.person_outlined, text: 'Teacher: $teacher'),
             if (note.isNotEmpty)
               _InfoRow(icon: Icons.notes_outlined, text: note),
-            if (attachmentUrl.isNotEmpty) ...[
+            if (attachments.isNotEmpty) ...[
               const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: () => _openAttachment(context, attachmentUrl),
-                icon: const Icon(Icons.attach_file_rounded, size: 18),
-                label: const Text('View Attachment'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final attachment in attachments)
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _openAttachment(context, _text(attachment['url'])),
+                      icon: const Icon(Icons.attach_file_rounded, size: 18),
+                      label: Text(
+                        _text(attachment['name'], fallback: 'View Attachment'),
+                      ),
+                    ),
+                ],
               ),
             ],
           ],
@@ -211,6 +224,28 @@ class _PlannerCard extends StatelessWidget {
       return raw.toString();
     }
   }
+}
+
+List<Map<String, dynamic>> _lessonPlannerAttachments(dynamic planner) {
+  if (planner is! Map) return const [];
+  final attachments = planner['attachments'];
+  if (attachments is List) {
+    return attachments
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .where((row) => _text(row['url']).isNotEmpty)
+        .toList();
+  }
+  final url = _text(planner['attachment_url']);
+  if (url.isEmpty) return const [];
+  return [
+    {'url': url, 'name': 'View Attachment'},
+  ];
+}
+
+String _text(Object? value, {String fallback = ''}) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? fallback : text;
 }
 
 class _InfoRow extends StatelessWidget {

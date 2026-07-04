@@ -98,10 +98,21 @@ class _PaymentHistoryTile extends StatelessWidget {
     final receiptId = _text(payment['receipt_id']);
     final receiptNo = _text(payment['receipt_no'], fallback: receiptId);
     final status = _text(payment['status'], fallback: 'success');
-    final amount = _amountFromPaise(payment['amount']);
+    final amount = _amount(payment['amount']);
     final paidAt = _formatDate(_text(payment['paid_at']));
     final mode = _text(payment['payment_mode'], fallback: 'UPI');
-    final isSuccess = status.toLowerCase() == 'success';
+    final invoiceNo = _text(payment['invoice_number']);
+    final studentName = _text(payment['student_name']);
+    final reference = _text(
+      payment['reference_number'] ?? payment['transaction_ref'],
+    );
+    final selectedMonths = _selectedMonthsLabel(payment['selected_month_names']);
+    final normalizedStatus = status.toLowerCase();
+    final isSuccess =
+        normalizedStatus == 'success' ||
+        normalizedStatus == 'completed' ||
+        normalizedStatus == 'approved' ||
+        normalizedStatus == 'paid';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -152,6 +163,37 @@ class _PaymentHistoryTile extends StatelessWidget {
                   color: context.appTheme.muted,
                 ),
               ),
+              if (invoiceNo.isNotEmpty || studentName.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (invoiceNo.isNotEmpty) _InfoChip(label: invoiceNo),
+                    if (studentName.isNotEmpty) _InfoChip(label: studentName),
+                  ],
+                ),
+              ],
+              if (selectedMonths.isNotEmpty || reference.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                if (selectedMonths.isNotEmpty)
+                  Text(
+                    selectedMonths,
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: context.appTheme.onSurface,
+                    ),
+                  ),
+                if (reference.isNotEmpty)
+                  Text(
+                    reference,
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 12,
+                      color: context.appTheme.muted,
+                    ),
+                  ),
+              ],
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -176,6 +218,33 @@ class _PaymentHistoryTile extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.appTheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Text(
+          label,
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: context.appTheme.primary,
           ),
         ),
       ),
@@ -268,9 +337,19 @@ String _text(Object? value, {String fallback = ''}) {
   return text.isEmpty ? fallback : text;
 }
 
-double _amountFromPaise(Object? value) {
-  if (value is num) return value.toDouble() / 100;
+double _amount(Object? value) {
+  if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _selectedMonthsLabel(Object? value) {
+  if (value is List) {
+    return value
+        .map((month) => month.toString().trim())
+        .where((month) => month.isNotEmpty)
+        .join(', ');
+  }
+  return value?.toString().trim() ?? '';
 }
 
 String _formatDate(String raw) {

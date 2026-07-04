@@ -368,6 +368,7 @@ extension BackendEventsApi on BackendApiClient {
     required String weekStartDate,
     required String weekEndDate,
     required String attachmentUrl,
+    List<Map<String, dynamic>> attachments = const [],
     required String note,
   }) async {
     try {
@@ -379,6 +380,7 @@ extension BackendEventsApi on BackendApiClient {
           'week_start_date': weekStartDate,
           'week_end_date': weekEndDate,
           'attachment_url': attachmentUrl,
+          'attachments': attachments,
           'note': note,
         },
       );

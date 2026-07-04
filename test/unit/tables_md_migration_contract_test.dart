@@ -97,8 +97,8 @@ void main() {
       expect(appRoutes, isNot(contains('/teacher-resources-screen')));
       expect(teacherNavigation, contains('AppRoutes.teacherLessonPlanner'));
       expect(teacherNavigation, isNot(contains('/teacher-resources-screen')));
-      expect(main, contains('lessonPlanners.GET("/principal"'));
-      expect(main, contains('lessonPlanners.GET("/teacher"'));
+      expect(main, contains('path === "/lesson-planners/principal"'));
+      expect(main, contains('path === "/lesson-planners/teacher"'));
       expect(main, isNot(contains('api.Group("/transport")')));
       expect(main, isNot(contains('api.Group("/library")')));
     },

@@ -52,7 +52,7 @@ void main() {
     expect(dashboard, contains('route: AppRoutes.principalLessonPlanner'));
     expect(drawer, contains('route: AppRoutes.principalLessonPlanner'));
     expect(academics, contains('principal_lesson_planner_screen.dart'));
-    expect(backendRoutes, contains('lessonPlanners.GET("/principal"'));
+    expect(backendRoutes, contains('path === "/lesson-planners/principal"'));
   });
 
   test('principal lesson planner review filters match backend statuses', () {

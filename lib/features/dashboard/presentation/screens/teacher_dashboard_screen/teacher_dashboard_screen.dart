@@ -35,7 +35,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _homeworkDue = 0;
   int _homeworkTotal = 0;
   int _homeworkToday = 0;
-  String _homeworkReminderStatus = 'pending';
   int _unreadMessages = 0;
   int _unreadNotifications = 0;
   int _attendancePending = 0;
@@ -69,7 +68,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         api.getDashboard('teacher'),
         api.getAnnouncements(),
         _loadMyAttendanceSafely(api),
-        _loadHomeworkReminderSafely(api),
         _loadUnreadNotificationsCount(),
       ]);
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
@@ -91,11 +89,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
         _homeworkToday = teacherFlowInt(metrics['homework_today']);
-        final reminder = Map<String, dynamic>.from(results[3] as Map);
-        _homeworkReminderStatus = teacherFlowText(
-          reminder['status'] ?? metrics['homework_reminder_status'],
-          fallback: _homeworkToday > 0 ? 'assigned' : 'pending',
-        ).toLowerCase();
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
         _attendancePending = _timetable
             .where(
@@ -108,7 +101,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
             .toList();
-        _unreadNotifications = results[4] as int? ?? 0;
+        _unreadNotifications = results[3] as int? ?? 0;
         _loading = false;
       });
 
@@ -131,18 +124,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       return await api.getMyStaffAttendanceToday();
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<Map<String, dynamic>> _loadHomeworkReminderSafely(
-    BackendApiClient api,
-  ) async {
-    try {
-      return await api.getTodayHomeworkReminderStatus(
-        sectionId: RoleAccessService.teacherClassId,
-      );
-    } catch (_) {
-      return const {};
     }
   }
 

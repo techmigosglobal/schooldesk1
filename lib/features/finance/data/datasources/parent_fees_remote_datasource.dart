@@ -83,6 +83,8 @@ class ParentFeesRemoteDataSourceImpl implements ParentFeesRemoteDataSource {
           payment['student_name'] ??
           '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim(),
       'invoice_id': payment['invoice_id'] ?? invoice['id'],
+      'invoice_number': invoice['invoice_number'] ?? payment['invoice_number'],
+      'fee_type': invoice['fee_type'] ?? payment['fee_type'],
     };
   }
 }

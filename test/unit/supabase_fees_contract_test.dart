@@ -227,4 +227,72 @@ void main() {
       expect(section, isNot(contains('remarks: body.remarks')));
     },
   );
+
+  test(
+    'parent proof submission remains pending only until principal approval',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf('if (seg === "submit" && method === "POST")');
+      final end = source.indexOf(
+        'if (seg && normalized.endsWith("/resubmit") && method === "PATCH")',
+      );
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('status: "pending_verification"'));
+      expect(section, contains('"parent_payment_requests"'));
+      expect(section, contains('proof_url'));
+      expect(section, contains('proof_file_name'));
+      expect(section, isNot(contains('"payments"')));
+      expect(section, isNot(contains('"fee_receipts"')));
+      expect(section, isNot(contains('applyInvoiceAllocationUpdate(')));
+    },
+  );
+
+  test(
+    'tuition selection validation enforces continuous unpaid months and one-time book kit',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf('function validateInvoiceSelection');
+      final end = source.indexOf('async function applyInvoiceAllocationUpdate');
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('Book & Kit Fee is one-time only'));
+      expect(section, contains('Select at least one continuous tuition month'));
+      expect(
+        section,
+        contains('Tuition months must be paid in continuous order without skipping'),
+      );
+      expect(section, contains('selected_months cannot exceed 12'));
+      expect(
+        section,
+        contains('selected_terms cannot exceed configured academic terms'),
+      );
+    },
+  );
+
+  test('parent payment history keeps receipt and invoice context', () {
+    final datasource = File(
+      'lib/features/finance/data/datasources/parent_fees_remote_datasource.dart',
+    ).readAsStringSync();
+    final history = File(
+      'lib/features/finance/presentation/screens/parent_payment_screens/parent_payment_history_screen.dart',
+    ).readAsStringSync();
+
+    expect(datasource, contains("'receipt_id'"));
+    expect(datasource, contains("'receipt_no'"));
+    expect(datasource, contains("'invoice_number'"));
+    expect(datasource, contains("'fee_type'"));
+    expect(history, contains("payment['selected_month_names']"));
+    expect(history, contains("payment['reference_number']"));
+    expect(history, contains("normalizedStatus == 'completed'"));
+    expect(history, isNot(contains('value.toDouble() / 100')));
+  });
 }

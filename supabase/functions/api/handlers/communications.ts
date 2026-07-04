@@ -13,8 +13,9 @@ function role(u: User) {
 function canManageSchoolContent(u: User) {
   return ["admin", "principal", "super_admin"].includes(role(u));
 }
-function text(v: unknown) {
-  return `${v ?? ""}`.trim();
+function text(v: unknown, fallback = "") {
+  const value = `${v ?? ""}`.trim();
+  return value || fallback;
 }
 
 function readByList(value: unknown): string[] {
@@ -602,10 +603,48 @@ function normalizeAnnouncementPayload(
   };
 }
 
+function normalizeLessonPlannerAttachments(source: Record<string, unknown>) {
+  const rawAttachments = Array.isArray(source.attachments)
+    ? source.attachments
+    : [];
+  const attachments = rawAttachments
+    .filter((item) => item && typeof item === "object")
+    .map((item) => {
+      const row = item as Record<string, unknown>;
+      const url = text(row.url ?? row.attachment_url);
+      if (!url) return null;
+      return {
+        url,
+        name: text(row.name ?? row.file_name, "Open attachment"),
+        mime_type: text(row.mime_type ?? row.mimeType),
+        size: Number(row.size ?? 0),
+      };
+    })
+    .filter((item) => item !== null);
+
+  if (attachments.length > 0) return attachments;
+
+  const fallbackUrl = text(source.attachment_url);
+  if (!fallbackUrl) return [];
+  return [{
+    url: fallbackUrl,
+    name: text(source.attachment_name, "Open attachment"),
+    mime_type: text(source.mime_type ?? source.mimeType),
+    size: Number(source.size ?? 0),
+  }];
+}
+
+function firstLessonPlannerAttachmentUrl(
+  attachments: Array<Record<string, unknown>>,
+) {
+  return text(attachments[0]?.url);
+}
+
 function normalizeLessonPlannerRow(row: Record<string, unknown>) {
   const payload = typeof row.data === "object" && row.data !== null
     ? row.data as Record<string, unknown>
     : row;
+  const attachments = normalizeLessonPlannerAttachments(payload);
   const teacher = row.teacher && typeof row.teacher === "object"
     ? row.teacher as Record<string, unknown>
     : {};
@@ -620,6 +659,8 @@ function normalizeLessonPlannerRow(row: Record<string, unknown>) {
     id: payload.id ?? row.record_id ?? row.id,
     status: payload.status ?? "uploaded",
     staff_id: payload.staff_id ?? "",
+    section_id: payload.section_id ?? section.id ?? "",
+    grade_id: payload.grade_id ?? grade.id ?? "",
     teacher: {
       first_name: payload.teacher_first_name ?? teacher.first_name ?? "",
       last_name: payload.teacher_last_name ?? teacher.last_name ?? "",
@@ -636,12 +677,89 @@ function normalizeLessonPlannerRow(row: Record<string, unknown>) {
     },
     subject_name: payload.subject_name ?? "",
     note: payload.note ?? payload.content ?? "",
-    attachment_url: payload.attachment_url ?? "",
+    attachments: normalizeLessonPlannerAttachments(payload),
+    attachment_url: firstLessonPlannerAttachmentUrl(attachments),
     week_start_date: payload.week_start_date ?? payload.date ?? null,
     week_end_date: payload.week_end_date ?? payload.date ?? null,
     teacher_name: payload.teacher_name ??
       [teacher.first_name, teacher.last_name].filter(Boolean).join(" ").trim(),
   };
+}
+
+async function lessonPlannerAssignedSectionIds(
+  svc: SupabaseClient,
+  school: string,
+  teacherId: string,
+) {
+  const sectionIds = new Set<string>();
+  if (!teacherId) return sectionIds;
+
+  const { data: classSections } = await svc.from("sections")
+    .select("id, class_teacher_id, co_teacher_id")
+    .eq("school_id", school)
+    .or(`class_teacher_id.eq.${teacherId},co_teacher_id.eq.${teacherId}`);
+
+  for (const section of classSections ?? []) {
+    const id = text((section as Record<string, unknown>).id);
+    if (id) sectionIds.add(id);
+  }
+
+  const { data: subjectSections } = await svc.from("staff_subjects")
+    .select("section_id")
+    .eq("school_id", school)
+    .eq("staff_id", teacherId);
+
+  for (const section of subjectSections ?? []) {
+    const id = text((section as Record<string, unknown>).section_id);
+    if (id) sectionIds.add(id);
+  }
+
+  return sectionIds;
+}
+
+async function lessonPlannerParentSectionIds(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+) {
+  const sectionIds = new Set<string>();
+  const { data: links } = await svc.from("parent_student_links")
+    .select("student_id, students(current_section_id)")
+    .eq("parent_user_id", user.id)
+    .eq("school_id", school);
+
+  for (const link of links ?? []) {
+    const record = link as unknown as {
+      student?: Record<string, unknown>;
+      students?: Record<string, unknown> | Record<string, unknown>[];
+    };
+    const student = Array.isArray(record.students)
+      ? record.students[0]
+      : record.students ?? record.student;
+    const sectionId = text(student?.current_section_id);
+    if (sectionId) sectionIds.add(sectionId);
+  }
+
+  return sectionIds;
+}
+
+async function ensureLessonPlannerTeacherCanPost(
+  svc: SupabaseClient,
+  school: string,
+  teacherId: string,
+  sectionId: string,
+) {
+  if (!teacherId) return "teacher profile is not linked";
+  if (!sectionId) return "section is required";
+  const sectionIds = await lessonPlannerAssignedSectionIds(
+    svc,
+    school,
+    teacherId,
+  );
+  if (!sectionIds.has(sectionId)) {
+    return "teacher is not assigned to this class section";
+  }
+  return null;
 }
 
 export async function handleCommunications(
@@ -1336,6 +1454,11 @@ export async function handleCommunications(
   // ── Lesson planners ───────────────────────────────────────
   if (path === "/lesson-planners/teacher" && method === "GET") {
     const teacherId = linkedStaffId(user);
+    const sectionIds = await lessonPlannerAssignedSectionIds(
+      svc,
+      school,
+      teacherId,
+    );
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -1344,7 +1467,10 @@ export async function handleCommunications(
     });
     if (error) return fail(error.message);
     const rows = (data ?? []).map((row) => normalizeLessonPlannerRow(row))
-      .filter((row) => !teacherId || `${row.staff_id ?? ""}` === teacherId);
+      .filter((row) =>
+        `${row.staff_id ?? ""}` === teacherId ||
+        sectionIds.has(`${row.section_id ?? ""}`)
+      );
     return ok(rows);
   }
 
@@ -1361,6 +1487,7 @@ export async function handleCommunications(
   }
 
   if (path === "/lesson-planners/parent" && method === "GET") {
+    const sectionIds = await lessonPlannerParentSectionIds(svc, school, user);
     const { data, error } = await svc.from("frontend_records").select("*").eq(
       "school_id",
       school,
@@ -1369,20 +1496,36 @@ export async function handleCommunications(
     });
     if (error) return fail(error.message);
     const rows = (data ?? []).map((row) => normalizeLessonPlannerRow(row))
-      .filter((row) => `${row.status ?? ""}`.toLowerCase() != "draft");
+      .filter((row) => {
+        const status = `${row.status ?? ""}`.toLowerCase();
+        return status !== "draft" &&
+          sectionIds.has(`${row.section_id ?? ""}`);
+      });
     return ok(rows);
   }
 
   if (path === "/lesson-planners" && method === "POST") {
-    const teacherId = `${body.staff_id ?? linkedStaffId(user)}`.trim();
+    const teacherId = linkedStaffId(user);
     const sectionId = `${body.section_id ?? ""}`.trim();
+    const scopeError = await ensureLessonPlannerTeacherCanPost(
+      svc,
+      school,
+      teacherId,
+      sectionId,
+    );
+    if (scopeError) return fail(scopeError, 403);
+    const attachments = normalizeLessonPlannerAttachments(body);
+    if (attachments.length === 0) {
+      return fail("at least one lesson plan attachment is required", 422);
+    }
     const payload = {
       ...body,
       id: crypto.randomUUID(),
       staff_id: teacherId,
       section_id: sectionId,
       note: `${body.note ?? body.content ?? ""}`.trim(),
-      attachment_url: `${body.attachment_url ?? ""}`.trim(),
+      attachments,
+      attachment_url: firstLessonPlannerAttachmentUrl(attachments),
       week_start_date: `${body.week_start_date ?? ""}`.trim(),
       week_end_date: `${body.week_end_date ?? ""}`.trim(),
       status: `${body.status ?? "uploaded"}`.trim() || "uploaded",
@@ -1393,7 +1536,7 @@ export async function handleCommunications(
     const { data, error } = await svc.from("frontend_records").insert({
       school_id: school,
       table_name: "lesson_planners",
-      record_id: teacherId || payload.id,
+      record_id: payload.id,
       data: payload,
     }).select().single();
     if (error) return fail(error.message);
