@@ -156,7 +156,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: TeacherNav.diary,
               icon: Icons.menu_book_outlined,
               activeIcon: Icons.menu_book_rounded,
-              label: 'Diary',
+              label: 'Homework',
               route: AppRoutes.teacherDiary,
             ),
             const SchoolDeskNavigationItem(

@@ -98,10 +98,10 @@ const List<SchoolDeskModuleBottomAction> teacherFlowBottomActions = [
     route: AppRoutes.teacherAttendance,
   ),
   SchoolDeskModuleBottomAction(
-    label: 'Diary',
+    label: 'Homework',
     icon: Icons.menu_book_outlined,
     activeIcon: Icons.menu_book_rounded,
-    route: AppRoutes.teacherDiary,
+    route: AppRoutes.teacherHomework,
   ),
   SchoolDeskModuleBottomAction(
     label: 'Profile',
@@ -715,6 +715,19 @@ String teacherFlowDateOnly(Object? value) {
   final text = teacherFlowText(value);
   if (text.isEmpty) return '';
   return text.split('T').first;
+}
+
+String teacherFlowTimeOnly(Object? value) {
+  final text = teacherFlowText(value);
+  if (text.isEmpty) return '';
+  final parts = text.split('T');
+  if (parts.length < 2) return '';
+  final timeStr = parts[1].split('.').first; // remove milliseconds
+  final timeParts = timeStr.split(':');
+  if (timeParts.length >= 2) {
+    return '${timeParts[0]}:${timeParts[1]}';
+  }
+  return timeStr;
 }
 
 String teacherFlowTitleCase(String value) {

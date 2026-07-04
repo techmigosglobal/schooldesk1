@@ -658,10 +658,12 @@ class _TeacherHomeworkSubmissionsScreenState
 
   Future<void> _review(Map<String, dynamic> submission, String status) async {
     final normalizedStatus = _normalizeReviewStatus(status);
+    final isApproval = normalizedStatus == 'reviewed';
     final comment = await _askForFeedback(
-      defaultComment: normalizedStatus == 'reviewed'
-          ? 'Reviewed by teacher'
+      defaultComment: isApproval
+          ? 'Well done! Homework reviewed and approved.'
           : 'Please revise and resubmit',
+      isApproval: isApproval,
     );
     if (comment == null) return;
     final submissionId = teacherFlowText(
@@ -720,33 +722,81 @@ class _TeacherHomeworkSubmissionsScreenState
     }
   }
 
-  Future<String?> _askForFeedback({required String defaultComment}) {
+  Future<String?> _askForFeedback({
+    required String defaultComment,
+    required bool isApproval,
+  }) {
     final controller = TextEditingController(text: defaultComment);
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Homework Feedback'),
-        content: TextField(
-          controller: controller,
-          minLines: 3,
-          maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: 'Comment for parent',
-            alignLabelWithHint: true,
-            border: OutlineInputBorder(),
-          ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              isApproval ? Icons.check_circle_rounded : Icons.replay_rounded,
+              color: isApproval ? Colors.green : Colors.orange,
+              size: 22,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isApproval ? 'Approve Homework' : 'Request Revision',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isApproval
+                  ? 'Write a feedback comment for the parent (optional)'
+                  : 'Explain what the student needs to improve',
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              minLines: 3,
+              maxLines: 5,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: isApproval
+                    ? 'Great work! Well done.'
+                    : 'Please revise and resubmit the assignment.',
+                alignLabelWithHint: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isApproval ? Colors.green : Colors.orange,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                    color: isApproval ? Colors.green : Colors.orange,
+                    width: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () {
               final value = controller.text.trim();
-              Navigator.pop(context, value.isEmpty ? defaultComment : value);
+              Navigator.pop(ctx, value.isEmpty ? defaultComment : value);
             },
-            child: const Text('Send Feedback'),
+            style: FilledButton.styleFrom(
+              backgroundColor: isApproval ? Colors.green : Colors.orange,
+            ),
+            child: Text(isApproval ? 'Approve & Notify' : 'Send for Revision'),
           ),
         ],
       ),
@@ -797,26 +847,61 @@ class _TeacherHomeworkSubmissionsScreenState
 
   Widget _submissionCard(Map<String, dynamic> submission) {
     final attachments = _submissionAttachmentUrls(submission);
+    final studentName = teacherFlowText(
+      submission['student_name'] ?? submission['student_id'],
+      fallback: 'Student',
+    );
+    final answerText = teacherFlowText(
+      submission['answer_text'] ?? submission['remarks'],
+      fallback: '',
+    );
+    final status = teacherFlowText(submission['status'], fallback: 'submitted');
+    final submittedRaw = teacherFlowText(
+      submission['submitted_at'] ?? submission['created_at'],
+    );
+    final submittedDate = submittedRaw.isNotEmpty
+        ? (() {
+            final dt = DateTime.tryParse(submittedRaw);
+            if (dt == null) return '';
+            final local = dt.toLocal();
+            return '${local.day}/${local.month}/${local.year} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+          })()
+        : '';
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: TeacherFlowCard(
         icon: Icons.file_present_rounded,
-        title: teacherFlowText(
-          submission['student_name'] ?? submission['student_id'],
-          fallback: 'Student',
-        ),
-        subtitle: teacherFlowText(
-          submission['answer_text'] ?? submission['remarks'],
-          fallback: 'No answer text',
-        ),
-        status: teacherFlowTitleCase(
-          teacherFlowText(submission['status'], fallback: 'submitted'),
-        ),
+        title: studentName,
+        subtitle: answerText.isEmpty ? 'No written answer' : answerText,
+        status: teacherFlowTitleCase(status),
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (submittedDate.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.access_time_rounded, size: 13, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Submitted: $submittedDate',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             if (attachments.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
+              Text(
+                'Attachments (${attachments.length}):',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 6),
               ...attachments.map((url) {
                 final item = EventPostMediaItem.fromUrl(url);
                 return Padding(
@@ -838,19 +923,28 @@ class _TeacherHomeworkSubmissionsScreenState
                 );
               }),
             ],
+            const SizedBox(height: 4),
             TeacherFlowActionWrap(
               actions: [
-                TeacherFlowAction(
-                  label: 'Approve',
-                  icon: Icons.check_rounded,
-                  filled: true,
-                  onTap: () => _review(submission, 'reviewed'),
-                ),
-                TeacherFlowAction(
-                  label: 'Needs Revision',
-                  icon: Icons.replay_rounded,
-                  onTap: () => _review(submission, 'needs_revision'),
-                ),
+                if (status != 'reviewed')
+                  TeacherFlowAction(
+                    label: 'Approve',
+                    icon: Icons.check_rounded,
+                    filled: true,
+                    onTap: () => _review(submission, 'reviewed'),
+                  ),
+                if (status != 'reviewed')
+                  TeacherFlowAction(
+                    label: 'Needs Revision',
+                    icon: Icons.replay_rounded,
+                    onTap: () => _review(submission, 'needs_revision'),
+                  ),
+                if (status == 'reviewed')
+                  TeacherFlowAction(
+                    label: 'Re-review',
+                    icon: Icons.rate_review_rounded,
+                    onTap: () => _review(submission, 'needs_revision'),
+                  ),
               ],
             ),
           ],

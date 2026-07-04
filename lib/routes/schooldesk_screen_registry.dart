@@ -417,7 +417,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-diary-screen',
-      title: 'Class Diary',
+      title: 'Homework',
       module: 'Classroom',
       portal: 'teacher',
     ),

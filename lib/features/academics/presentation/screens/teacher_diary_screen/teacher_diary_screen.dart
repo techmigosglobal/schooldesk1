@@ -58,7 +58,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     if (period > 0) _periodNumber = period;
     final subject = teacherFlowText(args['subject']);
     if (subject.isNotEmpty && _noteController.text.trim().isEmpty) {
-      _noteController.text = 'Diary for $subject';
+      _noteController.text = 'Homework for $subject';
     }
   }
 
@@ -124,7 +124,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         fallback: RoleAccessService.teacherSubject,
       ),
       'period_number': teacherFlowInt(row['period_number']),
-      'title': teacherFlowText(row['title'], fallback: 'Class diary'),
+      'title': teacherFlowText(row['title'], fallback: 'Homework'),
       'classwork': teacherFlowText(row['classwork'] ?? row['work_done']),
       'practice': teacherFlowText(
         row['homework'],
@@ -171,7 +171,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
         'period_number': _periodNumber,
         'title': noPractice
             ? 'No practice work'
-            : 'Period $_periodNumber class diary',
+            : 'Period $_periodNumber homework',
         'classwork': classwork,
         'homework': practice,
         'schedule': nextClass,
@@ -199,7 +199,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(editingId.isEmpty ? 'Diary saved' : 'Diary updated'),
+          content: Text(
+            editingId.isEmpty ? 'Homework saved' : 'Homework updated',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -243,7 +245,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
-      title: 'Class Diary',
+      title: 'Homework',
       subtitle: 'Record classwork, next plans, and teacher notes',
       selectedIndex: TeacherNav.diary,
       loading: _loading,
@@ -252,7 +254,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _saving ? null : () => _saveDiaryEntry(),
         icon: const Icon(Icons.save_rounded),
-        label: const Text('Save Diary'),
+        label: const Text('Save Homework'),
       ),
       child: TeacherFlowScrollView(
         children: [
@@ -284,12 +286,12 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
           const SizedBox(height: 18),
           _buildQuickEntry(),
           const SizedBox(height: 18),
-          const TeacherFlowSectionHeader(title: "Today's Diary Entries"),
+          const TeacherFlowSectionHeader(title: "Today's Homework Entries"),
           const SizedBox(height: 10),
           if (_todayEntries.isEmpty)
             const TeacherFlowCard(
               icon: Icons.menu_book_outlined,
-              title: 'No diary for today',
+              title: 'No homework for today',
               subtitle: 'Record each completed period before the day ends.',
             )
           else
@@ -301,7 +303,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
             ),
           if (_archivedEntries.isNotEmpty) ...[
             const SizedBox(height: 18),
-            const TeacherFlowSectionHeader(title: 'Archived Diary Entries'),
+            const TeacherFlowSectionHeader(title: 'Archived Homework Entries'),
             const SizedBox(height: 10),
             ..._archivedEntries.map(
               (entry) => Padding(
@@ -326,7 +328,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
           DropdownButtonFormField<String>(
             value: _entryType,
             decoration: const InputDecoration(
-              labelText: 'Diary type',
+              labelText: 'Homework type',
               prefixIcon: Icon(Icons.category_rounded),
             ),
             items: const [
@@ -404,9 +406,9 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Diary Entry'),
+        title: const Text('Delete Homework Entry'),
         content: Text(
-          'Are you sure you want to delete "${teacherFlowText(entry['title'], fallback: 'Class diary')}"?',
+          'Are you sure you want to delete "${teacherFlowText(entry['title'], fallback: 'Homework')}"?',
         ),
         actions: [
           TextButton(
@@ -427,19 +429,19 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     try {
       final id = teacherFlowText(entry['id'] ?? entry['diary_entry_id']);
       if (id.isEmpty) {
-        throw Exception('Diary entry is missing its server id.');
+        throw Exception('Homework entry is missing its server id.');
       }
       await BackendApiClient.instance.deleteRaw('/diary-entries/$id');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Diary entry deleted successfully')),
+        const SnackBar(content: Text('Homework entry deleted successfully')),
       );
       await _loadDiary();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to delete diary entry: $error'),
+          content: Text('Failed to delete homework entry: $error'),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -456,7 +458,7 @@ class _TeacherDiaryScreenState extends State<TeacherDiaryScreen> {
     final editable = _isTodayEntry(entry);
     return TeacherFlowCard(
       icon: Icons.menu_book_rounded,
-      title: teacherFlowText(entry['title'], fallback: 'Class diary'),
+      title: teacherFlowText(entry['title'], fallback: 'Homework'),
       subtitle:
           '${teacherFlowText(entry['subject'])} · ${teacherFlowText(entry['class'])}${period > 0 ? ' · Period $period' : ''}',
       status: teacherFlowText(entry['date'], fallback: 'Today'),

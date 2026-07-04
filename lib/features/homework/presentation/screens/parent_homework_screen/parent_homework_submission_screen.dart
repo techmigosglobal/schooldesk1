@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-
+import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
-
 @immutable
 class ParentHomeworkSubmissionArgs {
   final Map<String, dynamic> homework;
   final String studentId;
   final String studentName;
-
   const ParentHomeworkSubmissionArgs({
     required this.homework,
     required this.studentId,
@@ -25,15 +26,12 @@ class ParentHomeworkSubmissionArgs {
 @immutable
 class ParentHomeworkSubmissionResult {
   final String message;
-
   const ParentHomeworkSubmissionResult(this.message);
 }
 
 class ParentHomeworkSubmissionScreen extends StatefulWidget {
   final ParentHomeworkSubmissionArgs args;
-
   const ParentHomeworkSubmissionScreen({super.key, required this.args});
-
   @override
   State<ParentHomeworkSubmissionScreen> createState() =>
       _ParentHomeworkSubmissionScreenState();
@@ -43,36 +41,53 @@ class _ParentHomeworkSubmissionScreenState
     extends State<ParentHomeworkSubmissionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _answerController = TextEditingController();
-  final _attachmentController = TextEditingController();
   final List<String> _attachmentUrls = [];
   final List<String> _attachmentNames = [];
   bool _saving = false;
   bool _uploading = false;
 
-  String get _homeworkId =>
-      _text(widget.args.homework['homework_id'] ?? widget.args.homework['id']);
+  static const _accentColor = Color(0xFF1A6B4A);
+
+  String get _homeworkId => _hwText(
+      widget.args.homework['homework_id'] ?? widget.args.homework['id']);
+  String get _submissionStatus =>
+      _hwText(widget.args.homework['submission_status']);
+  String get _submissionRemarks =>
+      _hwText(widget.args.homework['submission_remarks']);
+  bool get _hasFeedback => _submissionStatus.isNotEmpty;
+  bool get _needsRevision => _submissionStatus == 'needs_revision';
+  bool get _isApproved => _submissionStatus == 'reviewed';
+
+  List<String> get _homeworkAttachments {
+    final attachments = widget.args.homework['attachments'];
+    if (attachments is List) {
+      return attachments
+          .map((e) => e?.toString().trim() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    final url = _hwText(widget.args.homework['attachment_url'] ??
+        widget.args.homework['attachmentUrl']);
+    if (url.isEmpty) return [];
+    return url.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  }
 
   @override
   void dispose() {
     _answerController.dispose();
-    _attachmentController.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
-    final ready =
-        _homeworkId.isNotEmpty && widget.args.studentId.trim().isNotEmpty;
+    final ready = _homeworkId.isNotEmpty && widget.args.studentId.trim().isNotEmpty;
     return SchoolDeskModuleScaffold(
       title: 'Submit Homework',
-      subtitle: _text(widget.args.homework['title'], fallback: 'Homework'),
+      subtitle: _hwText(widget.args.homework['title'], fallback: 'Homework'),
       drawer: ParentDrawer(
         selectedIndex: ParentNav.homework,
         onDestinationSelected: (_) {},
       ),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.parent,
-      ),
+      floatingActionButton: const DashboardFabWidget(role: DashboardRole.parent),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -83,58 +98,251 @@ class _ParentHomeworkSubmissionScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _homeworkContext(),
+                  _homeworkContextCard(),
                   const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _answerController,
-                    enabled: !_saving,
-                    minLines: 5,
-                    maxLines: 8,
-                    decoration: const InputDecoration(
-                      labelText: 'Answer / completion note',
-                      alignLabelWithHint: true,
+                  if (_hasFeedback) ...[
+                    _feedbackCard(),
+                    const SizedBox(height: 14),
+                  ],
+                  if (!_isApproved) ...[
+                    _sectionHeader(
+                      icon: Icons.edit_note_rounded,
+                      label: _needsRevision ? 'Resubmit Your Answer' : 'Your Answer',
                     ),
-                    validator: (value) {
-                      final answer = (value ?? '').trim();
-                      final attachment = _attachmentController.text.trim();
-                      if (answer.isEmpty &&
-                          attachment.isEmpty &&
-                          _attachmentUrls.isEmpty) {
-                        return 'Enter an answer or add an attachment.';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  _attachmentsBlock(),
-                  const SizedBox(height: 20),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _submit,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.upload_file_rounded, size: 18),
-                    label: Text(_saving ? 'Submitting...' : 'Submit Homework'),
-                  ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: _saving ? null : () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                    label: const Text('Back to Homework'),
-                  ),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _answerController,
+                      enabled: !_saving,
+                      minLines: 5,
+                      maxLines: 8,
+                      style: GoogleFonts.dmSans(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Write your answer or completion note here...',
+                        hintStyle: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+                        filled: true,
+                        fillColor: context.appTheme.surface,
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: context.appTheme.outlineVariant),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: context.appTheme.outlineVariant),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: _accentColor, width: 1.5),
+                        ),
+                      ),
+                      validator: (value) {
+                        if ((value ?? '').trim().isEmpty && _attachmentUrls.isEmpty) {
+                          return 'Enter an answer or add an attachment.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _attachmentsBlock(),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _accentColor,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.upload_file_rounded, size: 18),
+                        label: Text(
+                          _saving
+                              ? 'Submitting...'
+                              : _needsRevision
+                                  ? 'Resubmit Homework'
+                                  : 'Submit Homework',
+                          style: GoogleFonts.dmSans(fontWeight: FontWeight.w700, fontSize: 15),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _saving ? null : () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: Text('Back to Homework', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ] else ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: context.appTheme.successContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: context.appTheme.success),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'This homework has been approved by your teacher.',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: context.appTheme.success,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                        label: Text('Back to Homework', style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             )
           else
             const SchoolDeskStatusPanel.empty(
               title: 'Homework selection required',
-              message:
-                  'Open this screen from a linked child homework item before submitting.',
+              message: 'Open this screen from a linked child homework item before submitting.',
             ),
           const SizedBox(height: 84),
+        ],
+      ),
+    );
+  }
+
+  Widget _homeworkContextCard() {
+    final subject = _hwText(widget.args.homework['subject']);
+    final deadline = _hwText(widget.args.homework['deadline']);
+    final instructions = _hwText(widget.args.homework['instructions']);
+    final attachments = _homeworkAttachments;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFE3FAF5), borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.assignment_rounded, color: _accentColor, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _hwText(widget.args.homework['title'], fallback: 'Homework'),
+                  style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _infoRow(Icons.person_outline_rounded, 'Student: ${widget.args.studentName}'),
+          if (subject.isNotEmpty) _infoRow(Icons.menu_book_rounded, 'Subject: $subject'),
+          if (deadline.isNotEmpty) _infoRow(Icons.event_rounded, 'Due: $deadline'),
+          if (instructions.isNotEmpty) ...[
+            const Divider(height: 18),
+            Text(
+              'Instructions',
+              style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: context.appTheme.muted),
+            ),
+            const SizedBox(height: 4),
+            Text(instructions, style: GoogleFonts.dmSans(fontSize: 13)),
+          ],
+          if (attachments.isNotEmpty) ...[
+            const Divider(height: 18),
+            Text(
+              'Teacher Attachments',
+              style: GoogleFonts.dmSans(fontSize: 12, fontWeight: FontWeight.w700, color: context.appTheme.muted),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: attachments.map((url) {
+                final item = EventPostMediaItem.fromUrl(url);
+                return OutlinedButton.icon(
+                  onPressed: () => openEventPostMediaPreview(context, item),
+                  icon: Icon(
+                    item.isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                    size: 14,
+                    color: item.isPdf ? Colors.red : _accentColor,
+                  ),
+                  label: Text(item.isPdf ? 'View PDF' : 'View Image', style: GoogleFonts.dmSans(fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _accentColor,
+                    side: const BorderSide(color: _accentColor),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  Widget _feedbackCard() {
+    final isRevision = _needsRevision;
+    final color = isRevision ? context.appTheme.warning : context.appTheme.success;
+    final bgColor = isRevision ? context.appTheme.warning.withAlpha(15) : context.appTheme.success.withAlpha(15);
+    final borderColor = isRevision ? context.appTheme.warning.withAlpha(80) : context.appTheme.success.withAlpha(80);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(isRevision ? Icons.replay_rounded : Icons.check_circle_outline_rounded, color: color, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                "Teacher Feedback — ${isRevision ? 'Needs Revision' : 'Approved'}",
+                style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+              ),
+            ],
+          ),
+          if (_submissionRemarks.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(_submissionRemarks, style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.onSurface)),
+          ],
+          if (isRevision) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Please update your submission and resubmit below.",
+              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted, fontStyle: FontStyle.italic),
+            ),
+          ],
         ],
       ),
     );
@@ -145,7 +353,7 @@ class _ParentHomeworkSubmissionScreenState
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Column(
@@ -153,73 +361,93 @@ class _ParentHomeworkSubmissionScreenState
         children: [
           Row(
             children: [
-              Icon(
-                Icons.attach_file_rounded,
-                color: context.appTheme.primary,
-                size: 20,
-              ),
+              const Icon(Icons.attach_file_rounded, color: _accentColor, size: 20),
               const SizedBox(width: 8),
-              const Expanded(
-                child: Text(
-                  'Attachments',
-                  style: TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
+              Expanded(child: Text("Attachments (Images / PDF)", style: GoogleFonts.dmSans(fontWeight: FontWeight.w700))),
               OutlinedButton.icon(
                 onPressed: _saving || _uploading ? null : _pickAttachments,
+                style: OutlinedButton.styleFrom(foregroundColor: _accentColor, side: const BorderSide(color: _accentColor)),
                 icon: _uploading
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.upload_file_rounded, size: 16),
-                label: Text(_uploading ? 'Uploading' : 'Add'),
+                label: Text(_uploading ? "Uploading..." : "Add", style: GoogleFonts.dmSans(fontWeight: FontWeight.w600)),
               ),
             ],
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _attachmentController,
-            enabled: !_saving,
-            keyboardType: TextInputType.url,
-            decoration: const InputDecoration(
-              labelText: 'Attachment URL',
-              prefixIcon: Icon(Icons.link_rounded),
-            ),
           ),
           if (_attachmentUrls.isNotEmpty) ...[
             const SizedBox(height: 10),
             ..._attachmentUrls.asMap().entries.map((entry) {
               final index = entry.key;
-              final name = index < _attachmentNames.length
-                  ? _attachmentNames[index]
-                  : entry.value.split('/').last;
+              final name = index < _attachmentNames.length ? _attachmentNames[index] : entry.value.split("/").last;
+              final item = EventPostMediaItem.fromUrl(entry.value);
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(
-                  _isPdf(name) ? Icons.picture_as_pdf_rounded : Icons.image,
-                  color: context.appTheme.primary,
+                  item.isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                  color: item.isPdf ? Colors.red : _accentColor,
                 ),
-                title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: IconButton(
-                  tooltip: 'Remove attachment',
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          setState(() {
-                            _attachmentUrls.removeAt(index);
-                            if (index < _attachmentNames.length) {
-                              _attachmentNames.removeAt(index);
-                            }
-                          });
-                        },
-                  icon: const Icon(Icons.close_rounded),
+                title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.dmSans(fontSize: 13)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: "Preview",
+                      icon: const Icon(Icons.visibility_rounded, size: 18),
+                      onPressed: () => openEventPostMediaPreview(context, item),
+                    ),
+                    IconButton(
+                      tooltip: "Remove",
+                      onPressed: _saving
+                          ? null
+                          : () {
+                              setState(() {
+                                _attachmentUrls.removeAt(index);
+                                if (index < _attachmentNames.length) _attachmentNames.removeAt(index);
+                              });
+                            },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
                 ),
               );
             }),
-          ],
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                "No attachments yet. Tap Add to upload images or PDFs.",
+                style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader({required IconData icon, required String label}) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: _accentColor),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF183037)),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: context.appTheme.muted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(label, style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.onSurfaceVariant)),
+          ),
         ],
       ),
     );
@@ -229,7 +457,7 @@ class _ParentHomeworkSubmissionScreenState
     final result = await FilePicker.pickFiles(
       allowMultiple: true,
       type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+      allowedExtensions: const ["pdf", "jpg", "jpeg", "png", "webp"],
     );
     if (result == null || result.files.isEmpty) return;
     setState(() => _uploading = true);
@@ -237,10 +465,7 @@ class _ParentHomeworkSubmissionScreenState
       for (final file in result.files) {
         final path = file.path;
         if (path == null || path.trim().isEmpty) continue;
-        final url = await BackendApiClient.instance.uploadFile(
-          path,
-          filename: file.name,
-        );
+        final url = await BackendApiClient.instance.uploadFile(path, filename: file.name);
         if (url.trim().isEmpty) continue;
         if (!mounted) return;
         setState(() {
@@ -252,7 +477,7 @@ class _ParentHomeworkSubmissionScreenState
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Attachment upload failed: ${_cleanError(error)}'),
+          content: Text("Upload failed: ${_cleanErr(error)}"),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -260,39 +485,6 @@ class _ParentHomeworkSubmissionScreenState
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
-  }
-
-  Widget _homeworkContext() {
-    final subject = _text(widget.args.homework['subject']);
-    final deadline = _text(widget.args.homework['deadline']);
-    final instructions = _text(widget.args.homework['instructions']);
-    // Backend integration: homework metadata is shown only when the API-backed
-    // homework item supplies it. Empty fields are intentionally hidden.
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _text(widget.args.homework['title'], fallback: 'Homework'),
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 6),
-          Text('Student: ${widget.args.studentName}'),
-          if (subject.isNotEmpty) Text('Subject: $subject'),
-          if (deadline.isNotEmpty) Text('Due: $deadline'),
-          if (instructions.isNotEmpty) ...[
-            const Divider(height: 18),
-            Text(instructions),
-          ],
-        ],
-      ),
-    );
   }
 
   Future<void> _submit() async {
@@ -303,19 +495,30 @@ class _ParentHomeworkSubmissionScreenState
         _homeworkId,
         studentId: widget.args.studentId,
         answerText: _answerController.text.trim(),
-        attachmentUrl: _attachmentController.text.trim(),
+        attachmentUrl: "",
         attachmentUrls: _attachmentUrls,
       );
+      try {
+        final svc = await NotificationService.getInstance();
+        await svc.triggerHomeworkSubmittedAlert(
+          homeworkId: _homeworkId,
+          homeworkTitle: _hwText(widget.args.homework['title'], fallback: 'Homework'),
+          studentName: widget.args.studentName,
+          hasAttachment: _attachmentUrls.isNotEmpty,
+        );
+      } catch (_) {}
       if (!mounted) return;
       Navigator.pop(
         context,
-        const ParentHomeworkSubmissionResult('Homework submitted successfully'),
+        ParentHomeworkSubmissionResult(
+          _needsRevision ? "Homework resubmitted successfully" : "Homework submitted successfully",
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Homework submit failed: ${_cleanError(error)}'),
+          content: Text("Submit failed: ${_cleanErr(error)}"),
           backgroundColor: context.appTheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -326,16 +529,14 @@ class _ParentHomeworkSubmissionScreenState
   }
 }
 
-bool _isPdf(String name) => name.toLowerCase().endsWith('.pdf');
-
-String _text(dynamic value, {String fallback = ''}) {
-  final text = value?.toString().trim() ?? '';
-  return text.isEmpty ? fallback : text;
+String _hwText(dynamic value, {String fallback = ""}) {
+  final t = value?.toString().trim() ?? "";
+  return t.isEmpty ? fallback : t;
 }
 
-String _cleanError(Object error) {
+String _cleanErr(Object error) {
   final raw = error.toString();
-  final marker = raw.indexOf('message:');
-  if (marker >= 0) return raw.substring(marker + 8).trim();
-  return raw.replaceFirst('Exception:', '').trim();
+  final idx = raw.indexOf("message:");
+  if (idx >= 0) return raw.substring(idx + 8).trim();
+  return raw.replaceFirst("Exception:", "").trim();
 }

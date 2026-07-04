@@ -153,6 +153,43 @@ export async function handleHomework(
         data: record,
       }).select().single();
       if (error) return fail(error.message);
+
+      // Notify parents linked to students in this section
+      const sectionId = text(body.section_id);
+      if (sectionId) {
+        const { data: students } = await svc.from("students")
+          .select("id")
+          .eq("school_id", school)
+          .eq("current_section_id", sectionId);
+
+        if (students && students.length > 0) {
+          const studentIds = students.map((s: { id: string }) => s.id);
+          const { data: links } = await svc.from("parent_student_links")
+            .select("parent_user_id")
+            .in("student_id", studentIds);
+
+          if (links && links.length > 0) {
+            const parentIds = [...new Set(links.map((l: { parent_user_id: string }) => l.parent_user_id).filter(Boolean))];
+            
+            if (parentIds.length > 0) {
+              const notifications = parentIds.map((pid: string) => ({
+                school_id: school,
+                user_id: pid,
+                target_role: "parent",
+                title: `New Homework: ${text(body.title, "Assignment")}`,
+                body: `Homework assigned for ${text(body.subject_id, "your child's class")}.`,
+                type: "homework",
+                entity_type: "homework",
+                entity_id: id,
+                is_read: false,
+              }));
+              // Background insert (do not block response)
+              svc.from("notification_logs").insert(notifications).then();
+            }
+          }
+        }
+      }
+
       return ok(payload(data as Record<string, unknown>));
     }
   }
@@ -262,22 +299,102 @@ export async function handleHomework(
       : svc.from("homework_submissions").insert(submission).select().single();
     const { data, error } = await write;
     if (error) return fail(error.message);
+
+    // Notify the teacher who assigned this homework
+    const hw = await loadHomework(svc, school, homeworkId);
+    if (hw) {
+      const staffId = text(hw.staff_id ?? hw.teacher_id);
+      const hwTitle = text(hw.title, "Homework");
+      const hasAttachment = fileUrls.length > 0;
+      const notifBody = `${text(body.student_name ?? studentId)} submitted${hasAttachment ? " (with attachment)" : ""}: ${hwTitle}`;
+
+      // Lookup teacher user_id from staff record
+      const { data: staffRows } = await svc.from("staff")
+        .select("user_id")
+        .eq("id", staffId)
+        .eq("school_id", school)
+        .limit(1)
+        .maybeSingle();
+      const teacherUserId = text(staffRows?.user_id);
+
+      const notifBase = {
+        school_id: school,
+        target_role: "teacher",
+        title: `Homework Submitted: ${hwTitle}`,
+        body: notifBody,
+        type: "homework",
+        entity_type: "homework",
+        entity_id: homeworkId,
+        is_read: false,
+        reference_type: "homework",
+        reference_id: homeworkId,
+        action: "submission",
+      };
+      if (teacherUserId) {
+        svc.from("notification_logs").insert({
+          ...notifBase,
+          user_id: teacherUserId,
+        }).then();
+      } else if (staffId) {
+        // Fallback: broadcast to all teachers in the school
+        svc.from("notification_logs").insert(notifBase).then();
+      }
+    }
+
     return ok(submissionPayload(data as Record<string, unknown>));
   }
 
-  const reviewMatch = suffix.match(/^submissions\/([^/]+)\/review$/);
+  const reviewMatch = suffix.match(/^\/submissions\/([^/]+)\/review$/);
   if (reviewMatch && (method === "PUT" || method === "PATCH")) {
+    const reviewStatus = text(body.status, "reviewed");
+    const reviewRemarks = text(body.remarks);
     const { data, error } = await svc.from("homework_submissions").update({
-      status: text(body.status, "reviewed"),
+      status: reviewStatus,
       grade: text(body.grade),
-      remarks: text(body.remarks),
+      remarks: reviewRemarks,
       updated_at: new Date().toISOString(),
     }).eq("id", reviewMatch[1]).eq("school_id", school).eq(
       "homework_id",
       homeworkId,
     ).select().single();
     if (error) return fail(error.message);
-    return ok(submissionPayload(data as Record<string, unknown>));
+
+    // Notify the parent of the reviewed student
+    const submissionRow = data as Record<string, unknown>;
+    const studentId = text(submissionRow.student_id);
+    const hw = await loadHomework(svc, school, homeworkId);
+    const hwTitle = text(hw?.title, "Homework");
+    if (studentId) {
+      const { data: linkRows } = await svc.from("parent_student_links")
+        .select("parent_user_id")
+        .eq("student_id", studentId);
+      if (linkRows && linkRows.length > 0) {
+        const feedbackTitle = reviewStatus === "reviewed"
+          ? `Homework Approved: ${hwTitle}`
+          : `Homework Needs Revision: ${hwTitle}`;
+        const feedbackBody = reviewRemarks.length > 0
+          ? reviewRemarks
+          : (reviewStatus === "reviewed" ? "Your child's homework has been approved by the teacher." : "Your child's homework needs revision. Please check the feedback.");
+        const parentNotifs = linkRows.map((l: { parent_user_id: string }) => ({
+          school_id: school,
+          user_id: l.parent_user_id,
+          target_role: "parent",
+          title: feedbackTitle,
+          body: feedbackBody,
+          type: "homework",
+          entity_type: "homework",
+          entity_id: homeworkId,
+          is_read: false,
+          reference_type: "homework",
+          reference_id: homeworkId,
+          action: reviewStatus === "reviewed" ? "feedback" : "needs_revision",
+          student_id: studentId,
+        }));
+        svc.from("notification_logs").insert(parentNotifs).then();
+      }
+    }
+
+    return ok(submissionPayload(submissionRow));
   }
 
   if (suffix === "attachment-requests" && method === "POST") {

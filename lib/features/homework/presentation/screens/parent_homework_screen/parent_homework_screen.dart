@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
+import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 
 class ParentHomeworkScreen extends StatefulWidget {
   const ParentHomeworkScreen({super.key});
@@ -37,14 +39,14 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   List<Map<String, dynamic>> get _pending => _homework
       .where(
         (h) =>
-            h['status'] == 'pending' &&
+            (h['status'] == 'pending') &&
             h['student_id'].toString() == _activeStudentId,
       )
       .toList();
   List<Map<String, dynamic>> get _submitted => _homework
       .where(
         (h) =>
-            h['status'] == 'submitted' &&
+            (h['status'] == 'submitted' || h['submission_status']?.toString().isNotEmpty == true) &&
             h['student_id'].toString() == _activeStudentId,
       )
       .toList();
@@ -101,8 +103,20 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   Map<String, dynamic> _mapHomeworkFromApi(Map<String, dynamic> h) {
     final dueDate = DateTime.tryParse('${h['due_date'] ?? ''}');
     final status = '${h['status'] ?? 'pending'}'.toLowerCase();
-    // Backend integration: subject and teacher labels should come from the
-    // homework API. Keep them empty here when absent; do not invent defaults.
+    // Build the full list of attachments from both the comma-separated
+    // attachment_url field and the attachment_urls array if present.
+    final fromUrl = '${h['attachment_url'] ?? h['attachmentUrl'] ?? ''}'
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final fromList = (h['attachment_urls'] is List)
+        ? (h['attachment_urls'] as List)
+            .map((e) => e?.toString().trim() ?? '')
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : <String>[];
+    final allAttachments = [...fromUrl, ...fromList].toSet().toList();
     return {
       'id': _homeworkId(h),
       'homework_id': h['homework_id'],
@@ -127,8 +141,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       'urgent':
           dueDate != null && dueDate.difference(DateTime.now()).inDays <= 1,
       'attachmentUrl': h['attachment_url'] ?? h['attachmentUrl'],
-      'hasAttachment':
-          '${h['attachment_url'] ?? h['attachmentUrl'] ?? ''}'.isNotEmpty,
+      'hasAttachment': allAttachments.isNotEmpty,
+      'attachments': allAttachments,
     };
   }
 
@@ -482,39 +496,101 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               ),
             ),
           ],
+          if (hw['attachments'] != null && (hw['attachments'] as List).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Homework Attachments:',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: (hw['attachments'] as List).map((url) {
+                final urlStr = url.toString();
+                final item = EventPostMediaItem.fromUrl(urlStr);
+                final isPdf = item.isPdf;
+                return OutlinedButton.icon(
+                  onPressed: () => openEventPostMediaPreview(context, item),
+                  icon: Icon(
+                    isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                    size: 14,
+                    color: isPdf ? Colors.red : context.appTheme.primary,
+                  ),
+                  label: Text(
+                    isPdf ? 'View PDF' : 'View Image',
+                    style: GoogleFonts.dmSans(fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    side: BorderSide(color: context.appTheme.primary),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
           if ('${hw['submission_status'] ?? ''}'.isNotEmpty) ...[
             const SizedBox(height: 10),
             _submissionStatusChip(hw),
           ],
           if ('${hw['submission_remarks'] ?? ''}'.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              'Teacher remarks: ${hw['submission_remarks']}',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: context.appTheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-          if (hw['hasAttachment'] == true) ...[
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () => _requestAttachment(hw),
-              icon: const Icon(Icons.attach_file_rounded, size: 14),
-              label: Text(
-                'Download Worksheet',
-                style: GoogleFonts.dmSans(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: context.appTheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _text(hw['submission_status']) == 'needs_revision'
+                      ? context.appTheme.warning.withAlpha(100)
+                      : context.appTheme.success.withAlpha(80),
                 ),
-                side: BorderSide(color: context.appTheme.primary),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.rate_review_rounded,
+                        size: 14,
+                        color: _text(hw['submission_status']) == 'needs_revision'
+                            ? context.appTheme.warning
+                            : context.appTheme.success,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Teacher Feedback',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: _text(hw['submission_status']) == 'needs_revision'
+                              ? context.appTheme.warning
+                              : context.appTheme.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${hw['submission_remarks']}',
+                    style: GoogleFonts.dmSans(
+                      fontSize: 12,
+                      color: context.appTheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-          if (isPending) ...[
+          if (isPending || _text(hw['submission_status']) == 'needs_revision') ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -622,26 +698,6 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
     }
   }
 
-  Future<void> _requestAttachment(Map<String, dynamic> homework) async {
-    try {
-      await BackendApiClient.instance.createRaw(
-        '/homework/${homework['id']}/attachment-requests',
-        {'student_id': _activeStudentId},
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Attachment request sent to backend')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Attachment is not available: $e'),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-    }
-  }
 
   String _studentName(Map<String, dynamic> child) {
     final name = _text(child['name']);

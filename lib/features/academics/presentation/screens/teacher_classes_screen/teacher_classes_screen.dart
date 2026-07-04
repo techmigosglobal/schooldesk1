@@ -124,68 +124,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          const TeacherFlowSectionHeader(title: 'My Class (Class Teacher)'),
-          const SizedBox(height: 10),
-          if (_classes.isEmpty)
-            const TeacherFlowCard(
-              icon: Icons.class_outlined,
-              title: 'No classes assigned yet.',
-              subtitle:
-                  'Classes appear here after Admin/Principal assigns sections.',
-            )
-          else
-            ..._classes.map(
-              (row) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: TeacherFlowCard(
-                  icon: Icons.class_rounded,
-                  title: teacherFlowText(row['label'], fallback: 'Class'),
-                  subtitle:
-                      '${teacherFlowText(row['section_name'], fallback: 'Section')} · ${teacherFlowText(row['subject_name'] ?? row['subject'], fallback: RoleAccessService.teacherSubject)}',
-                  status: row['is_class_teacher'] == true
-                      ? 'Class Teacher'
-                      : teacherFlowText(
-                          row['student_count'] ?? row['strength'],
-                          fallback: 'View students',
-                        ),
-                  statusColor: row['is_class_teacher'] == true
-                      ? Colors.green
-                      : teacherFlowAccent,
-                  body: TeacherFlowActionWrap(
-                    actions: [
-                      if (row['is_class_teacher'] == true)
-                        TeacherFlowAction(
-                          label: 'Attendance',
-                          icon: Icons.how_to_reg_rounded,
-                          filled: true,
-                          onTap: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.teacherAttendance,
-                          ),
-                        ),
-                      TeacherFlowAction(
-                        label: 'Diary',
-                        icon: Icons.menu_book_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherDiary,
-                        ),
-                      ),
-                      TeacherFlowAction(
-                        label: 'Track Leave',
-                        icon: Icons.event_busy_rounded,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.teacherLeave,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           const TeacherFlowSectionHeader(title: 'Primary Class Roll'),
           const SizedBox(height: 10),
           if (_students.isEmpty)

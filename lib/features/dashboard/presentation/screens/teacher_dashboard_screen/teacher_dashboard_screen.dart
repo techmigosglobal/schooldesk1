@@ -111,7 +111,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _unreadNotifications = results[4] as int? ?? 0;
         _loading = false;
       });
-      _checkEndOfDayReminder();
+
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -122,40 +122,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
   }
 
-  Future<void> _checkEndOfDayReminder() async {
-    // Only show a reminder after 3 PM if no homework has been assigned today.
-    // Route the reminder into the teacher's permanent Diary workflow.
-    final now = DateTime.now();
-    if (now.hour >= 15 &&
-        _homeworkToday == 0 &&
-        _homeworkReminderStatus == 'pending') {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('End of Day Reminder'),
-            content: const Text(
-              'You have not updated today\'s class diary. Would you like to add the class summary now?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Dismiss'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamed(context, AppRoutes.teacherDiary);
-                },
-                child: const Text('Open Diary'),
-              ),
-            ],
-          ),
-        );
-      });
-    }
-  }
+
 
   Future<StaffAttendanceModel?> _loadMyAttendanceSafely(
     BackendApiClient api,
@@ -509,7 +476,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       _teacherActionItem(
         context,
         time: 'After class',
-        title: 'Record Class Diary',
+        title: 'Record Homework',
         subtitle: 'Capture what was taught and the next class plan.',
         icon: Icons.bookmarks_rounded,
         color: teacherFlowAccent,
@@ -518,9 +485,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       _teacherActionItem(
         context,
         time: 'Today',
-        title: 'Update Diary',
+        title: 'Update Homework',
         subtitle: _homeworkToday > 0
-            ? 'Today\'s diary practice is recorded.'
+            ? 'Today\'s homework practice is recorded.'
             : 'Capture today\'s class work before end of day.',
         icon: Icons.menu_book_rounded,
         color: Colors.orange,
@@ -603,7 +570,7 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         AppRoutes.teacherAttendance,
       ),
       _QuickAction(
-        'Diary',
+        'Homework',
         'Today and practice',
         SchoolDeskUiIllustrations.resources,
         AppRoutes.teacherDiary,

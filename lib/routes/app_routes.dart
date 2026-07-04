@@ -448,6 +448,28 @@ class AppRoutes {
   ) {
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ParentHomeworkSubmissionArgs) return args;
+    // Handle Map args — e.g. when navigated from a notification
+    if (args is Map) {
+      final argMap = Map<String, dynamic>.from(args);
+      // The notification resolver passes {'homework': {'homework_id': id}, ...}
+      final hwRaw = argMap['homework'];
+      final hw = hwRaw is Map
+          ? Map<String, dynamic>.from(hwRaw)
+          : <String, dynamic>{};
+      // Merge top-level keys into hw if homework_id is missing
+      if (hw['homework_id'] == null || hw['homework_id'].toString().isEmpty) {
+        final rid = argMap['reference_id'] ?? argMap['id'];
+        if (rid != null) {
+          hw['homework_id'] = rid;
+          hw['id'] = rid;
+        }
+      }
+      return ParentHomeworkSubmissionArgs(
+        homework: hw,
+        studentId: argMap['student_id']?.toString() ?? '',
+        studentName: argMap['student_name']?.toString() ?? 'Student',
+      );
+    }
     return const ParentHomeworkSubmissionArgs(
       homework: {},
       studentId: '',
