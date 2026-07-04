@@ -609,7 +609,6 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       ),
     );
   }
-
   Widget _submissionStatusChip(Map<String, dynamic> hw) {
     final status = _text(hw['submission_status']);
     final color = status == 'reviewed'

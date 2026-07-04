@@ -110,7 +110,6 @@ class AppRoutes {
       '/teacher-parent-interaction-screen';
   static const String teacherLeave = '/teacher-leave-screen';
   static const String teacherLeaveRequestForm = '/teacher-leave-screen/request';
-  static const String teacherDiary = '/teacher-diary-screen';
   static const String teacherHomework = '/teacher-homework-screen';
   static const String teacherHomeworkForm = '/teacher-homework-screen/form';
   static const String teacherHomeworkSubmissions =
@@ -138,7 +137,6 @@ class AppRoutes {
   static const String parentCalendar = '/parent-calendar-screen';
   static const String teacherCalendar = '/teacher-calendar-screen';
   static const String parentDocuments = '/parent-documents-screen';
-  static const String parentDiary = '/parent-diary-screen';
   static const String parentTimetable = '/parent-timetable-screen';
   static const String parentPTMBooking = '/parent-ptm-booking-screen';
   static const String parentHealth = '/parent-health-screen';
@@ -258,7 +256,6 @@ class AppRoutes {
     teacherLeave: (context) => const TeacherLeaveScreen(),
     teacherLeaveRequestForm: (context) =>
         TeacherLeaveRequestFormScreen(args: _teacherLeaveFormArgs(context)),
-    teacherDiary: (context) => const TeacherDiaryScreen(),
     teacherHomework: (context) => const TeacherHomeworkScreen(),
     teacherHomeworkForm: (context) =>
         TeacherHomeworkFormScreen(args: _teacherHomeworkFormArgs(context)),
@@ -300,7 +297,6 @@ class AppRoutes {
     parentCalendar: (context) =>
         const EventsCalendarScreen(portal: SchoolCalendarPortal.parent),
     parentDocuments: (context) => const ParentDocumentsScreen(),
-    parentDiary: (context) => const ParentDiaryScreen(),
     parentTimetable: (context) => const ParentTimetableScreen(),
     parentPTMBooking: (context) => const ParentPTMBookingScreen(),
     parentHealth: (context) => const ParentHealthUpdateScreen(),

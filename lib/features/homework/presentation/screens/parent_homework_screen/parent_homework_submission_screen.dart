@@ -45,31 +45,151 @@ class _ParentHomeworkSubmissionScreenState
   final List<String> _attachmentNames = [];
   bool _saving = false;
   bool _uploading = false;
+  bool _loading = false;
+  String? _error;
+  late Map<String, dynamic> _homeworkDetails;
 
   static const _accentColor = Color(0xFF1A6B4A);
 
   String get _homeworkId => _hwText(
-      widget.args.homework['homework_id'] ?? widget.args.homework['id']);
+      _homeworkDetails['homework_id'] ?? _homeworkDetails['id']);
   String get _submissionStatus =>
-      _hwText(widget.args.homework['submission_status']);
+      _hwText(_homeworkDetails['submission_status']);
   String get _submissionRemarks =>
-      _hwText(widget.args.homework['submission_remarks']);
+      _hwText(_homeworkDetails['submission_remarks'] ?? _homeworkDetails['remarks']);
   bool get _hasFeedback => _submissionStatus.isNotEmpty;
   bool get _needsRevision => _submissionStatus == 'needs_revision';
   bool get _isApproved => _submissionStatus == 'reviewed';
 
   List<String> get _homeworkAttachments {
-    final attachments = widget.args.homework['attachments'];
+    final attachments = _homeworkDetails['attachments'];
     if (attachments is List) {
       return attachments
           .map((e) => e?.toString().trim() ?? '')
           .where((s) => s.isNotEmpty)
           .toList();
     }
-    final url = _hwText(widget.args.homework['attachment_url'] ??
-        widget.args.homework['attachmentUrl']);
+    final url = _hwText(_homeworkDetails['attachment_url'] ??
+        _homeworkDetails['attachmentUrl']);
     if (url.isEmpty) return [];
     return url.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _homeworkDetails = Map<String, dynamic>.from(widget.args.homework);
+    
+    // Set initial text if details already has remarks
+    final initialRemarks = _submissionRemarks.isNotEmpty
+        ? _submissionRemarks
+        : _hwText(_homeworkDetails['answer_text'] ?? _homeworkDetails['remarks']);
+    if (initialRemarks.isNotEmpty) {
+      _answerController.text = initialRemarks;
+    }
+    
+    // Always trigger refresh if title is empty (from notification click)
+    final isFromNotification = _hwText(_homeworkDetails['title']).isEmpty;
+    if (isFromNotification || _homeworkDetails['submission_status'] == null) {
+      _loadDetails();
+    }
+  }
+
+  Future<void> _loadDetails() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final studentId = widget.args.studentId.trim();
+      if (studentId.isEmpty) {
+        throw Exception('Student link not found');
+      }
+
+      // 1. Fetch child's homework list
+      final childRows = await BackendApiClient.instance.getHomework(
+        studentId: studentId,
+      );
+      final rawHw = childRows.firstWhere(
+        (row) => _hwText(row['id'] ?? row['homework_id']) == _homeworkId,
+        orElse: () => throw Exception('Homework item not found'),
+      );
+
+      // 2. Fetch submission state
+      final response = await BackendApiClient.instance.getHomeworkSubmissions(
+        _homeworkId,
+        studentId: studentId,
+      );
+      final submissions = response['submissions'];
+      Map<String, dynamic> sub = {};
+      if (submissions is List && submissions.isNotEmpty) {
+        sub = Map<String, dynamic>.from(submissions.first as Map);
+      }
+
+      // 3. Construct mapped details
+      final submissionStatus = _hwText(sub['status']);
+      final submissionRemarks = _hwText(sub['remarks']);
+      
+      final fromUrl = _hwText(rawHw['attachment_url'] ?? rawHw['attachmentUrl'])
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      final fromList = (rawHw['attachment_urls'] is List)
+          ? (rawHw['attachment_urls'] as List)
+              .map((e) => e?.toString().trim() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : <String>[];
+      final allAttachments = {...fromUrl, ...fromList}.toList();
+
+      final mappedHw = {
+        ...rawHw,
+        'homework_id': _homeworkId,
+        'title': rawHw['title'] ?? '',
+        'subject': rawHw['subject'] ?? rawHw['subject_name'] ?? '',
+        'class': rawHw['class'] ?? rawHw['class_name'] ?? '',
+        'deadline': rawHw['due_date'] ?? rawHw['deadline'] ?? '',
+        'instructions': rawHw['description'] ?? rawHw['instructions'] ?? '',
+        'submission_id': _hwText(sub['id']),
+        'submission_status': submissionStatus,
+        'submission_remarks': submissionRemarks,
+        'submission_attachment_url': _hwText(sub['attachment_url']),
+        'submission_attachment_urls': sub['attachment_urls'] ?? const [],
+        'attachments': allAttachments,
+      };
+
+      if (!mounted) return;
+      setState(() {
+        _homeworkDetails = mappedHw;
+        if (submissionRemarks.isNotEmpty) {
+          _answerController.text = submissionRemarks;
+        }
+        
+        // Also populate existing submission files to attachments block
+        final submissionFiles = sub['attachment_urls'] as List?;
+        if (submissionFiles != null) {
+          _attachmentUrls.clear();
+          _attachmentNames.clear();
+          for (final fileUrl in submissionFiles) {
+            final fUrl = _hwText(fileUrl);
+            if (fUrl.isNotEmpty) {
+              _attachmentUrls.add(fUrl);
+              _attachmentNames.add(fUrl.split('/').last);
+            }
+          }
+        }
+        
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load details: ${e.toString().replaceAll("Exception:", "").trim()}';
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -82,18 +202,37 @@ class _ParentHomeworkSubmissionScreenState
     final ready = _homeworkId.isNotEmpty && widget.args.studentId.trim().isNotEmpty;
     return SchoolDeskModuleScaffold(
       title: 'Submit Homework',
-      subtitle: _hwText(widget.args.homework['title'], fallback: 'Homework'),
+      subtitle: _hwText(_homeworkDetails['title'], fallback: 'Homework'),
       drawer: ParentDrawer(
         selectedIndex: ParentNav.homework,
         onDestinationSelected: (_) {},
       ),
       floatingActionButton: const DashboardFabWidget(role: DashboardRole.parent),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (ready)
-            Form(
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!, textAlign: TextAlign.center, style: GoogleFonts.dmSans(fontSize: 14)),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: _loadDetails,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    if (ready)
+                      Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,9 +369,9 @@ class _ParentHomeworkSubmissionScreenState
   }
 
   Widget _homeworkContextCard() {
-    final subject = _hwText(widget.args.homework['subject']);
-    final deadline = _hwText(widget.args.homework['deadline']);
-    final instructions = _hwText(widget.args.homework['instructions']);
+    final subject = _hwText(_homeworkDetails['subject']);
+    final deadline = _hwText(_homeworkDetails['deadline']);
+    final instructions = _hwText(_homeworkDetails['instructions']);
     final attachments = _homeworkAttachments;
     return Container(
       padding: const EdgeInsets.all(14),
@@ -254,7 +393,7 @@ class _ParentHomeworkSubmissionScreenState
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _hwText(widget.args.homework['title'], fallback: 'Homework'),
+                  _hwText(_homeworkDetails['title'], fallback: 'Homework'),
                   style: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
               ),
@@ -502,7 +641,7 @@ class _ParentHomeworkSubmissionScreenState
         final svc = await NotificationService.getInstance();
         await svc.triggerHomeworkSubmittedAlert(
           homeworkId: _homeworkId,
-          homeworkTitle: _hwText(widget.args.homework['title'], fallback: 'Homework'),
+          homeworkTitle: _hwText(_homeworkDetails['title'], fallback: 'Homework'),
           studentName: widget.args.studentName,
           hasAttachment: _attachmentUrls.isNotEmpty,
         );

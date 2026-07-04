@@ -493,6 +493,21 @@ class AppNotification {
     final studentId = '${json['student_id'] ?? json['studentId'] ?? ''}';
     final sectionId = '${json['section_id'] ?? json['sectionId'] ?? ''}';
     final teacherId = '${json['teacher_id'] ?? json['teacherId'] ?? ''}';
+
+    final sentAtRaw = '${json['sent_at'] ?? json['created_at'] ?? ''}';
+    var parsedTimestamp = DateTime.now();
+    if (sentAtRaw.trim().isNotEmpty) {
+      var normalized = sentAtRaw.trim();
+      normalized = normalized.replaceAll(' ', 'T');
+      if (normalized.contains('T') &&
+          !normalized.endsWith('Z') &&
+          !normalized.contains('+') &&
+          !RegExp(r'-\d{2}:?\d{2}$').hasMatch(normalized)) {
+        normalized = '${normalized}Z';
+      }
+      parsedTimestamp = DateTime.tryParse(normalized)?.toLocal() ?? DateTime.now();
+    }
+
     return AppNotification(
       id: '${json['id']}',
       title: '${json['title'] ?? 'Notification'}',
@@ -501,9 +516,7 @@ class AppNotification {
           ? NotificationCategory.general
           : categoryRaw,
       role: '${json['role'] ?? json['target_role'] ?? 'all'}'.toLowerCase(),
-      timestamp:
-          DateTime.tryParse('${json['sent_at'] ?? json['created_at'] ?? ''}') ??
-          DateTime.now(),
+      timestamp: parsedTimestamp,
       isRead: json['is_read'] == true || json['isRead'] == true,
       priority: priorityRaw == 'high'
           ? NotificationPriority.high

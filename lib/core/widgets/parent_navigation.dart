@@ -138,13 +138,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
               label: 'Homework',
               route: AppRoutes.parentHomework,
             ),
-            SchoolDeskNavigationItem(
-              index: ParentNav.diary,
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book_rounded,
-              label: 'Class Diary',
-              route: AppRoutes.parentDiary,
-            ),
+
             SchoolDeskNavigationItem(
               index: ParentNav.timetable,
               icon: Icons.calendar_view_week_outlined,

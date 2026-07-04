@@ -34,7 +34,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   int _assignedClasses = 0;
   int _homeworkDue = 0;
   int _homeworkTotal = 0;
-  int _homeworkToday = 0;
   int _unreadMessages = 0;
   int _unreadNotifications = 0;
   int _attendancePending = 0;
@@ -88,7 +87,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             RoleAccessService.teacherClassTeacherClasses.isNotEmpty ? 1 : 0;
         _homeworkDue = teacherFlowInt(metrics['homework_due']);
         _homeworkTotal = teacherFlowInt(metrics['homework_total']);
-        _homeworkToday = teacherFlowInt(metrics['homework_today']);
         _unreadMessages = teacherFlowInt(metrics['unread_messages']);
         _attendancePending = _timetable
             .where(
@@ -430,9 +428,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             child: TeacherTimelineItem(
               time: time,
               title: '$subject - $classLabel',
-              subtitle: 'Attendance, diary, and notes ready.',
+              subtitle: 'Manage homework and class details.',
               icon: Icons.auto_stories_rounded,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.teacherDiary),
+              onTap: () => Navigator.pushNamed(context, AppRoutes.teacherHomework),
             ),
           ),
         );
@@ -453,26 +451,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         icon: Icons.how_to_reg_rounded,
         color: Colors.indigo,
         route: AppRoutes.teacherAttendance,
-      ),
-      _teacherActionItem(
-        context,
-        time: 'After class',
-        title: 'Record Homework',
-        subtitle: 'Capture what was taught and the next class plan.',
-        icon: Icons.bookmarks_rounded,
-        color: teacherFlowAccent,
-        route: AppRoutes.teacherDiary,
-      ),
-      _teacherActionItem(
-        context,
-        time: 'Today',
-        title: 'Update Homework',
-        subtitle: _homeworkToday > 0
-            ? 'Today\'s homework practice is recorded.'
-            : 'Capture today\'s class work before end of day.',
-        icon: Icons.menu_book_rounded,
-        color: Colors.orange,
-        route: AppRoutes.teacherDiary,
       ),
       _teacherActionItem(
         context,
@@ -554,7 +532,7 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         'Homework',
         'Today and practice',
         SchoolDeskUiIllustrations.resources,
-        AppRoutes.teacherDiary,
+        AppRoutes.teacherHomework,
       ),
       _QuickAction(
         'Lesson Planner',

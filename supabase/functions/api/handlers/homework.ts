@@ -106,6 +106,32 @@ export async function handleHomework(
       let rows = (data ?? []).map((row) =>
         payload(row as Record<string, unknown>)
       );
+
+      // Resolve teacher UUIDs to names
+      const staffIds = [...new Set(rows.map((row) => text(row.staff_id)).filter(Boolean))];
+      if (staffIds.length > 0) {
+        const { data: staffMembers } = await svc.from("staff")
+          .select("id, first_name, last_name")
+          .in("id", staffIds);
+        
+        if (staffMembers) {
+          const staffNameMap = new Map(
+            staffMembers.map((s) => [
+              text(s.id),
+              `${text(s.first_name)} ${text(s.last_name)}`.trim(),
+            ]),
+          );
+          rows = rows.map((row) => {
+            const name = staffNameMap.get(text(row.staff_id));
+            return {
+              ...row,
+              teacher_name: name || text(row.staff_id),
+              created_by_name: name || text(row.staff_id),
+            };
+          });
+        }
+      }
+
       const sectionId = text(url.searchParams.get("section_id"));
       const linkedSectionId = studentId
         ? await studentSectionId(svc, school, studentId)
@@ -183,8 +209,8 @@ export async function handleHomework(
                 entity_id: id,
                 is_read: false,
               }));
-              // Background insert (do not block response)
-              svc.from("notification_logs").insert(notifications).then();
+              // Insert notifications
+              await svc.from("notification_logs").insert(notifications);
             }
           }
         }
@@ -243,7 +269,7 @@ export async function handleHomework(
   }
 
   if (suffix === "submissions" && method === "GET") {
-    let query = svc.from("homework_submissions").select("*").eq(
+    let query = svc.from("homework_submissions").select("*, students (first_name, last_name)").eq(
       "school_id",
       school,
     ).eq("homework_id", homeworkId);
@@ -258,9 +284,16 @@ export async function handleHomework(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const submissions = (data ?? []).map((row) =>
-      submissionPayload(row as Record<string, unknown>)
-    );
+    const submissions = (data ?? []).map((row) => {
+      const studentObj = row.students as Record<string, unknown> | null;
+      const firstName = studentObj ? text(studentObj.first_name) : "";
+      const lastName = studentObj ? text(studentObj.last_name) : "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      return {
+        ...submissionPayload(row as Record<string, unknown>),
+        student_name: fullName || text(row.student_id),
+      };
+    });
     return ok({ submissions, total: submissions.length });
   }
 
@@ -331,20 +364,20 @@ export async function handleHomework(
         action: "submission",
       };
       if (teacherUserId) {
-        svc.from("notification_logs").insert({
+        await svc.from("notification_logs").insert({
           ...notifBase,
           user_id: teacherUserId,
-        }).then();
+        });
       } else if (staffId) {
         // Fallback: broadcast to all teachers in the school
-        svc.from("notification_logs").insert(notifBase).then();
+        await svc.from("notification_logs").insert(notifBase);
       }
     }
 
     return ok(submissionPayload(data as Record<string, unknown>));
   }
 
-  const reviewMatch = suffix.match(/^\/submissions\/([^/]+)\/review$/);
+  const reviewMatch = suffix.match(/^submissions\/([^/]+)\/review$/);
   if (reviewMatch && (method === "PUT" || method === "PATCH")) {
     const reviewStatus = text(body.status, "reviewed");
     const reviewRemarks = text(body.remarks);
@@ -390,7 +423,7 @@ export async function handleHomework(
           action: reviewStatus === "reviewed" ? "feedback" : "needs_revision",
           student_id: studentId,
         }));
-        svc.from("notification_logs").insert(parentNotifs).then();
+        await svc.from("notification_logs").insert(parentNotifs);
       }
     }
 
