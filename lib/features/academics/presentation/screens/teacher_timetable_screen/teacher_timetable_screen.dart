@@ -54,17 +54,20 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
     final staffScopedSlots = await BackendApiClient.instance.getTimetableSlots(
       staffId: RoleAccessService.teacherStaffId,
     );
-    if (staffScopedSlots.isNotEmpty ||
-        RoleAccessService.teacherClassId.trim().isEmpty) {
+    final assignedSectionIds = RoleAccessService.teacherSectionIds;
+    if (staffScopedSlots.isNotEmpty || assignedSectionIds.isEmpty) {
       return _TeacherTimetableLoadResult(
         rows: staffScopedSlots,
         usedClassFallback: false,
       );
     }
 
-    final classScopedSlots = await BackendApiClient.instance.getTimetableSlots(
-      sectionId: RoleAccessService.teacherClassId,
-    );
+    final classScopedSlots = <Map<String, dynamic>>[];
+    for (final sectionId in assignedSectionIds) {
+      classScopedSlots.addAll(
+        await BackendApiClient.instance.getTimetableSlots(sectionId: sectionId),
+      );
+    }
     return _TeacherTimetableLoadResult(
       rows: classScopedSlots,
       usedClassFallback: classScopedSlots.isNotEmpty,
@@ -381,24 +384,27 @@ class _DayScheduleCard extends StatelessWidget {
             : Column(
                 children: slots
                     .map(
-                      (slot) => ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: teacherFlowAccent.withValues(
-                            alpha: 0.12,
-                          ),
-                          child: Text(
-                            '${teacherFlowInt(slot['period_number'])}',
-                            style: const TextStyle(
-                              color: teacherFlowAccent,
-                              fontWeight: FontWeight.w700,
+                      (slot) => Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: teacherFlowAccent.withValues(
+                              alpha: 0.12,
+                            ),
+                            child: Text(
+                              '${teacherFlowInt(slot['period_number'])}',
+                              style: const TextStyle(
+                                color: teacherFlowAccent,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                          title: Text(slotSubject(slot)),
+                          subtitle: Text(slotTime(slot)),
                         ),
-                        title: Text(slotSubject(slot)),
-                        subtitle: Text(slotTime(slot)),
                       ),
                     )
                     .toList(),

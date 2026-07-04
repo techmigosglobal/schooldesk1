@@ -204,6 +204,45 @@ void main() {
     expect(principalScreen, isNot(contains('orElse: () => source.first')));
   });
 
+  test(
+    'principal communication screen labels participant roles and clears unread state on open',
+    () {
+      final principalScreen = File(
+        'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
+      ).readAsStringSync();
+      final bubble = File(
+        'lib/features/communication/presentation/widgets/chat_shared_widgets.dart',
+      ).readAsStringSync();
+
+      expect(principalScreen, contains('_directRoleLabel('));
+      expect(principalScreen, contains('_messageRole('));
+      expect(principalScreen, contains('_messageSenderName('));
+      expect(principalScreen, contains('_markConversationRead('));
+      expect(principalScreen, contains('_zeroUnreadFor('));
+      expect(principalScreen, contains("'unread_count': 0"));
+      expect(principalScreen, contains(r'Chatting with ${_directRoleLabel'));
+      expect(bubble, contains('final String senderLabel;'));
+      expect(bubble, contains('final String senderRoleLabel;'));
+    },
+  );
+
+  test(
+    'chat notifications target recipients and principal monitor inboxes with route metadata',
+    () {
+      final handler = File(
+        'supabase/functions/api/handlers/communications.ts',
+      ).readAsStringSync();
+
+      expect(handler, contains('async function principalUserIdsForSchool'));
+      expect(handler, contains('target_role: targetRole'));
+      expect(handler, contains('route: "/communication-center-screen"'));
+      expect(handler, contains('priority: "medium"'));
+      expect(handler, contains('if (type == "parent_teacher")'));
+      expect(handler, contains('"Parent-teacher chat updated"'));
+      expect(handler, contains('targetUserId == conversationParentId'));
+    },
+  );
+
   test('principal monitor filters stay readable in narrow side panels', () {
     final principalScreen = File(
       'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',

@@ -25,6 +25,29 @@ void main() {
     expect(api, contains('EnvConfig.apiOrigin'));
   });
 
+  test('academic year delete clears linked finance workflow rows first', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/academic_management_screen/academic_management_screen.dart',
+    ).readAsStringSync();
+    final academics = File(
+      'supabase/functions/api/handlers/academics.ts',
+    ).readAsStringSync();
+
+    expect(screen, contains('scrollable: true'));
+    expect(screen, contains('SingleChildScrollView'));
+    expect(screen, contains('maxHeight: MediaQuery.sizeOf(ctx).height * 0.45'));
+    expect(screen, contains('Wrap('));
+
+    expect(academics, contains('deleteAcademicYearWorkflowRows'));
+    expect(academics, contains('deleteInvoiceWorkflowRows'));
+    expect(academics, contains('svc.from("fee_receipts").delete()'));
+    expect(academics, contains('svc.from("parent_payment_requests").delete()'));
+    expect(academics, contains('svc.from("payments").delete()'));
+    expect(academics, contains('svc.from("fee_invoices").delete()'));
+    expect(academics, contains('svc.from("fee_concessions").delete()'));
+    expect(academics, contains('deleted_invoices'));
+  });
+
   test('principal academic year screens use adaptive text sizing', () {
     final source = File(
       'lib/features/academics/presentation/screens/academic_management_screen/principal_academic_years_screen.dart',

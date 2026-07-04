@@ -116,6 +116,8 @@ class ChatBubbleWidget extends StatelessWidget {
   final bool isRead;
   final String type; // 'text', 'file', 'image'
   final Widget? attachmentWidget;
+  final String senderLabel;
+  final String senderRoleLabel;
 
   const ChatBubbleWidget({
     super.key,
@@ -125,6 +127,8 @@ class ChatBubbleWidget extends StatelessWidget {
     required this.isRead,
     this.type = 'text',
     this.attachmentWidget,
+    this.senderLabel = '',
+    this.senderRoleLabel = '',
   });
 
   @override
@@ -174,6 +178,34 @@ class ChatBubbleWidget extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (senderLabel.trim().isNotEmpty ||
+                      senderRoleLabel.trim().isNotEmpty) ...[
+                    Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (senderLabel.trim().isNotEmpty)
+                          Text(
+                            senderLabel,
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: textColor.withAlpha(210),
+                            ),
+                          ),
+                        if (senderRoleLabel.trim().isNotEmpty)
+                          Text(
+                            senderRoleLabel,
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: textColor.withAlpha(170),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                  ],
                   if (type != 'text' && attachmentWidget != null) ...[
                     attachmentWidget!,
                     if (messageText.isNotEmpty) const SizedBox(height: 6),

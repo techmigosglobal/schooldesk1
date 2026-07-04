@@ -3151,23 +3151,40 @@ Future<bool?> _confirmAcademicDelete(
   return showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       title: Text(
         title,
         style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
       ),
-      content: Text(message, style: GoogleFonts.dmSans(fontSize: 14)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, false),
-          child: const Text('Cancel'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(ctx).height * 0.45,
         ),
-        FilledButton.icon(
-          onPressed: () => Navigator.pop(ctx, true),
-          style: FilledButton.styleFrom(
-            backgroundColor: context.appTheme.error,
-          ),
-          icon: const Icon(Icons.delete_outline_rounded, size: 18),
-          label: const Text('Delete'),
+        child: SingleChildScrollView(
+          child: Text(message, style: GoogleFonts.dmSans(fontSize: 14)),
+        ),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(
+                backgroundColor: context.appTheme.error,
+              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: const Text('Delete'),
+            ),
+          ],
         ),
       ],
     ),

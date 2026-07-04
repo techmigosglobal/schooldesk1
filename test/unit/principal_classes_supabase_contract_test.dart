@@ -74,6 +74,24 @@ void main() {
     },
   );
 
+  test('principal classes overview includes live class-hub fee dues', () {
+    final principal = File(
+      'supabase/functions/api/handlers/principal.ts',
+    ).readAsStringSync();
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+
+    expect(principal, contains('feeDuesBySection'));
+    expect(principal, contains('svc.from("fee_invoices").select('));
+    expect(principal, contains('student:students(current_section_id)'));
+    expect(principal, contains('.gt("balance", 0)'));
+    expect(principal, contains('fees_due_amount: feeDues.amount'));
+    expect(principal, contains('fees_due_students: feeDues.students'));
+    expect(screen, contains("row['fees_due_amount']"));
+    expect(screen, contains("row['fees_due_students']"));
+  });
+
   test('staff subject assignments have a direct class name relationship', () {
     final migrations = Directory('supabase/migrations')
         .listSync()
@@ -210,17 +228,20 @@ void main() {
     }
   });
 
-  test('principal subjects stays overview-only and routes setup to class hub', () {
-    final subjects = File(
-      'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
-    ).readAsStringSync();
+  test(
+    'principal subjects stays overview-only and routes setup to class hub',
+    () {
+      final subjects = File(
+        'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
+      ).readAsStringSync();
 
-    expect(subjects, contains("title: 'Subjects'"));
-    expect(subjects, contains('AppRoutes.principalClasses'));
-    expect(subjects, contains("'source': 'principal_subjects'"));
-    expect(subjects, contains('await _loadData();'));
-    expect(subjects, isNot(contains('savePrincipalSubjectMapping(')));
-    expect(subjects, isNot(contains('createPrincipalSubjectAction(')));
-    expect(subjects, isNot(contains('Teacher Load')));
-  });
+      expect(subjects, contains("title: 'Subjects'"));
+      expect(subjects, contains('AppRoutes.principalClasses'));
+      expect(subjects, contains("'source': 'principal_subjects'"));
+      expect(subjects, contains('await _loadData();'));
+      expect(subjects, isNot(contains('savePrincipalSubjectMapping(')));
+      expect(subjects, isNot(contains('createPrincipalSubjectAction(')));
+      expect(subjects, isNot(contains('Teacher Load')));
+    },
+  );
 }

@@ -500,6 +500,90 @@ async function attachPaymentRequestRelations(
   }));
 }
 
+async function invoiceIdsForFeeStructure(
+  svc: SupabaseClient,
+  school: string,
+  structureId: string,
+) {
+  const ids = new Set<string>();
+  const direct = await svc.from("fee_invoices").select("id").eq(
+    "school_id",
+    school,
+  ).eq("fee_structure_id", structureId);
+  if (direct.error) throw new Error(direct.error.message);
+  for (const row of direct.data ?? []) ids.add(text(row.id));
+
+  const items = await svc.from("fee_invoice_items").select("invoice_id").eq(
+    "fee_structure_id",
+    structureId,
+  );
+  if (items.error) throw new Error(items.error.message);
+  for (const row of items.data ?? []) {
+    const invoiceId = text(row.invoice_id);
+    if (invoiceId) ids.add(invoiceId);
+  }
+  return [...ids].filter(Boolean);
+}
+
+async function deleteInvoiceWorkflowRows(
+  svc: SupabaseClient,
+  school: string,
+  invoiceIds: string[],
+) {
+  if (invoiceIds.length === 0) return 0;
+  const scoped = await svc.from("fee_invoices").select("id").eq(
+    "school_id",
+    school,
+  ).in("id", invoiceIds);
+  if (scoped.error) throw new Error(scoped.error.message);
+  const ids = (scoped.data ?? []).map((row) => text(row.id)).filter(Boolean);
+  if (ids.length === 0) return 0;
+
+  const receiptDelete = await svc.from("fee_receipts").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (receiptDelete.error) throw new Error(receiptDelete.error.message);
+
+  const requestDelete = await svc.from("parent_payment_requests").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (requestDelete.error) throw new Error(requestDelete.error.message);
+
+  const paymentDelete = await svc.from("payments").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (paymentDelete.error) throw new Error(paymentDelete.error.message);
+
+  const invoiceDelete = await svc.from("fee_invoices").delete().eq(
+    "school_id",
+    school,
+  ).in("id", ids);
+  if (invoiceDelete.error) throw new Error(invoiceDelete.error.message);
+  return ids.length;
+}
+
+async function deleteFeeStructureWorkflowRows(
+  svc: SupabaseClient,
+  school: string,
+  structureId: string,
+) {
+  const invoiceIds = await invoiceIdsForFeeStructure(svc, school, structureId);
+  const deletedInvoices = await deleteInvoiceWorkflowRows(
+    svc,
+    school,
+    invoiceIds,
+  );
+  const concessionDelete = await svc.from("fee_concessions").delete().eq(
+    "school_id",
+    school,
+  ).eq("fee_structure_id", structureId);
+  if (concessionDelete.error) throw new Error(concessionDelete.error.message);
+  return { deleted_invoices: deletedInvoices };
+}
+
 export async function handleFees(
   req: Request,
   path: string,
@@ -731,12 +815,25 @@ export async function handleFees(
     }
 
     if (seg && method === "DELETE") {
+      const removePending = url.searchParams.get("remove_pending") !== "false";
+      let cleanup = { deleted_invoices: 0 };
+      if (removePending) {
+        try {
+          cleanup = await deleteFeeStructureWorkflowRows(svc, school, seg);
+        } catch (error) {
+          return fail(
+            error instanceof Error
+              ? error.message
+              : "failed to clear fee structure dues",
+          );
+        }
+      }
       const { error } = await svc.from("fee_structures").delete().eq(
         "id",
         seg,
       ).eq("school_id", school);
       if (error) return fail(error.message);
-      return ok({ success: true });
+      return ok({ success: true, ...cleanup });
     }
   }
 

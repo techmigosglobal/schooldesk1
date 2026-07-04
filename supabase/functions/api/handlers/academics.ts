@@ -29,6 +29,76 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+async function deleteInvoiceWorkflowRows(
+  svc: SupabaseClient,
+  school: string,
+  invoiceIds: string[],
+) {
+  const ids = [...new Set(invoiceIds.map(text).filter(Boolean))];
+  if (ids.length === 0) return 0;
+
+  const receiptDelete = await svc.from("fee_receipts").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (receiptDelete.error) throw new Error(receiptDelete.error.message);
+
+  const requestDelete = await svc.from("parent_payment_requests").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (requestDelete.error) throw new Error(requestDelete.error.message);
+
+  const paymentDelete = await svc.from("payments").delete().eq(
+    "school_id",
+    school,
+  ).in("invoice_id", ids);
+  if (paymentDelete.error) throw new Error(paymentDelete.error.message);
+
+  const invoiceDelete = await svc.from("fee_invoices").delete().eq(
+    "school_id",
+    school,
+  ).in("id", ids);
+  if (invoiceDelete.error) throw new Error(invoiceDelete.error.message);
+  return ids.length;
+}
+
+async function deleteAcademicYearWorkflowRows(
+  svc: SupabaseClient,
+  school: string,
+  academicYearId: string,
+) {
+  const invoices = await svc.from("fee_invoices").select("id").eq(
+    "school_id",
+    school,
+  ).eq("academic_year_id", academicYearId);
+  if (invoices.error) throw new Error(invoices.error.message);
+  const deletedInvoices = await deleteInvoiceWorkflowRows(
+    svc,
+    school,
+    (invoices.data ?? []).map((row) => text(row.id)),
+  );
+
+  const structures = await svc.from("fee_structures").select("id").eq(
+    "school_id",
+    school,
+  ).eq("academic_year_id", academicYearId);
+  if (structures.error) throw new Error(structures.error.message);
+  const structureIds = (structures.data ?? []).map((row) => text(row.id))
+    .filter(Boolean);
+  if (structureIds.length > 0) {
+    const concessionDelete = await svc.from("fee_concessions").delete().eq(
+      "school_id",
+      school,
+    ).in("fee_structure_id", structureIds);
+    if (concessionDelete.error) {
+      throw new Error(concessionDelete.error.message);
+    }
+  }
+
+  return { deleted_invoices: deletedInvoices };
+}
+
 async function staffSubjectPayloadWithGrade(
   svc: SupabaseClient,
   schoolId: string,
@@ -104,9 +174,19 @@ export async function handleAcademics(
       return ok(data);
     }
     if (id && method === "DELETE") {
+      let cleanup = { deleted_invoices: 0 };
+      try {
+        cleanup = await deleteAcademicYearWorkflowRows(svc, sid, id);
+      } catch (error) {
+        return fail(
+          error instanceof Error
+            ? error.message
+            : "failed to clear academic year finance rows",
+        );
+      }
       const { error } = await svc.from("academic_years").delete().eq("id", id).eq("school_id", sid);
       if (error) return fail(error.message);
-      return ok({ success: true });
+      return ok({ success: true, ...cleanup });
     }
   }
 

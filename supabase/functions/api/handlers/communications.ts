@@ -85,6 +85,15 @@ async function principalUserIdForSchool(
   return `${data?.[0]?.id ?? ""}`;
 }
 
+async function principalUserIdsForSchool(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const { data } = await svc.from("users").select("id").eq("school_id", school)
+    .ilike("role_name", "principal");
+  return uniqueText((data ?? []).map((row) => row.id));
+}
+
 async function validateChatConversationScope(
   svc: SupabaseClient,
   school: string,
@@ -567,16 +576,20 @@ async function appendNotification(
   title: string,
   body: string,
   entityId: string,
+  targetRole = "all",
 ) {
   if (!userId) return;
   await svc.from("notification_logs").insert({
     school_id: school,
     user_id: userId,
+    target_role: targetRole,
     title,
     body,
     type: "message",
     entity_type: "message",
     entity_id: entityId,
+    route: "/communication-center-screen",
+    priority: "medium",
     is_read: false,
   });
 }
@@ -640,10 +653,37 @@ function firstLessonPlannerAttachmentUrl(
   return text(attachments[0]?.url);
 }
 
-function normalizeLessonPlannerRow(row: Record<string, unknown>) {
-  const payload = typeof row.data === "object" && row.data !== null
+function lessonPlannerPayload(row: Record<string, unknown>) {
+  return typeof row.data === "object" && row.data !== null
     ? row.data as Record<string, unknown>
     : row;
+}
+
+function lessonPlannerDisplayText(...values: unknown[]) {
+  for (const value of values) {
+    const display = text(value);
+    if (display && !lessonPlannerIsUuidLike(display)) return display;
+  }
+  return "";
+}
+
+function lessonPlannerIsUuidLike(value: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+    .test(value.trim());
+}
+
+function lessonPlannerStaffName(staff: Record<string, unknown>) {
+  return lessonPlannerDisplayText(
+    [text(staff.first_name), text(staff.last_name)].filter(Boolean).join(" "),
+    staff.full_name,
+    staff.name,
+    staff.staff_code,
+    staff.email,
+  );
+}
+
+function normalizeLessonPlannerRow(row: Record<string, unknown>) {
+  const payload = lessonPlannerPayload(row);
   const attachments = normalizeLessonPlannerAttachments(payload);
   const teacher = row.teacher && typeof row.teacher === "object"
     ? row.teacher as Record<string, unknown>
@@ -654,6 +694,27 @@ function normalizeLessonPlannerRow(row: Record<string, unknown>) {
   const grade = section.grade && typeof section.grade === "object"
     ? section.grade as Record<string, unknown>
     : {};
+  const gradeName = lessonPlannerDisplayText(
+    payload.grade_name,
+    grade.grade_name,
+    grade.name,
+  );
+  const sectionName = lessonPlannerDisplayText(
+    payload.section_name,
+    section.section_name,
+    section.name,
+  );
+  const className = lessonPlannerDisplayText(
+    payload.class_name,
+    [gradeName, sectionName].filter(Boolean).join(" - "),
+    gradeName,
+  );
+  const teacherName = lessonPlannerDisplayText(
+    payload.teacher_name,
+    [text(payload.teacher_first_name), text(payload.teacher_last_name)]
+      .filter(Boolean).join(" "),
+    lessonPlannerStaffName(teacher),
+  );
   return {
     ...payload,
     id: payload.id ?? row.record_id ?? row.id,
@@ -664,26 +725,79 @@ function normalizeLessonPlannerRow(row: Record<string, unknown>) {
     teacher: {
       first_name: payload.teacher_first_name ?? teacher.first_name ?? "",
       last_name: payload.teacher_last_name ?? teacher.last_name ?? "",
-      name: payload.teacher_name ??
-        [teacher.first_name, teacher.last_name].filter(Boolean).join(" "),
+      name: teacherName,
     },
     section: {
       id: payload.section_id ?? section.id ?? "",
-      section_name: payload.section_name ?? section.section_name ?? "",
+      section_name: sectionName,
     },
     grade: {
       id: payload.grade_id ?? grade.id ?? "",
-      grade_name: payload.grade_name ?? grade.grade_name ?? "",
+      grade_name: gradeName,
     },
+    class_name: className,
+    grade_name: gradeName,
+    section_name: sectionName,
     subject_name: payload.subject_name ?? "",
     note: payload.note ?? payload.content ?? "",
     attachments: normalizeLessonPlannerAttachments(payload),
     attachment_url: firstLessonPlannerAttachmentUrl(attachments),
     week_start_date: payload.week_start_date ?? payload.date ?? null,
     week_end_date: payload.week_end_date ?? payload.date ?? null,
-    teacher_name: payload.teacher_name ??
-      [teacher.first_name, teacher.last_name].filter(Boolean).join(" ").trim(),
+    teacher_name: teacherName,
   };
+}
+
+async function enrichLessonPlannerRows(
+  svc: SupabaseClient,
+  school: string,
+  rows: Array<Record<string, unknown>>,
+) {
+  const sectionIds = uniqueText(
+    rows.map((row) => lessonPlannerPayload(row).section_id ?? row.section_id),
+  );
+  const staffIds = uniqueText(
+    rows.map((row) => lessonPlannerPayload(row).staff_id ?? row.staff_id),
+  );
+
+  const sectionsById = new Map<string, Record<string, unknown>>();
+  if (sectionIds.length > 0) {
+    const { data: sections } = await svc.from("sections")
+      .select("id, section_name, grade_id, grade:grades(*)")
+      .eq("school_id", school)
+      .in("id", sectionIds);
+    for (const section of sections ?? []) {
+      const sectionRow = section as Record<string, unknown>;
+      const id = text(sectionRow.id);
+      if (id) sectionsById.set(id, sectionRow);
+    }
+  }
+
+  const staffById = new Map<string, Record<string, unknown>>();
+  if (staffIds.length > 0) {
+    const { data: staffRows } = await svc.from("staff")
+      .select("*")
+      .eq("school_id", school)
+      .in("id", staffIds);
+    for (const staff of staffRows ?? []) {
+      const staffRow = staff as Record<string, unknown>;
+      const id = text(staffRow.id);
+      if (id) staffById.set(id, staffRow);
+    }
+  }
+
+  return rows.map((row) => {
+    const payload = lessonPlannerPayload(row);
+    const section = sectionsById.get(
+      text(payload.section_id ?? row.section_id),
+    );
+    const teacher = staffById.get(text(payload.staff_id ?? row.staff_id));
+    return normalizeLessonPlannerRow({
+      ...row,
+      ...(section ? { section } : {}),
+      ...(teacher ? { teacher } : {}),
+    });
+  });
 }
 
 async function lessonPlannerAssignedSectionIds(
@@ -975,6 +1089,14 @@ export async function handleCommunications(
         user,
       );
       if (targetUserId && targetUserId != user.id) {
+        const conversationParentId = text(conversation.parent_id);
+        const targetRole = type == "principal_parent"
+          ? "parent"
+          : type == "principal_teacher"
+          ? "teacher"
+          : targetUserId == conversationParentId
+          ? "parent"
+          : "teacher";
         await appendNotification(
           svc,
           school,
@@ -984,7 +1106,23 @@ export async function handleCommunications(
             : "New message",
           messageText,
           conversationId,
+          targetRole,
         );
+      }
+      if (type == "parent_teacher") {
+        const principalIds = await principalUserIdsForSchool(svc, school);
+        for (const principalId of principalIds) {
+          if (principalId == user.id || principalId == targetUserId) continue;
+          await appendNotification(
+            svc,
+            school,
+            principalId,
+            "Parent-teacher chat updated",
+            messageText,
+            conversationId,
+            "principal",
+          );
+        }
       }
     }
     return ok(normalizeChatMessage(message, user.id));
@@ -1466,7 +1604,7 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = (data ?? []).map((row) => normalizeLessonPlannerRow(row))
+    const rows = (await enrichLessonPlannerRows(svc, school, data ?? []))
       .filter((row) =>
         `${row.staff_id ?? ""}` === teacherId ||
         sectionIds.has(`${row.section_id ?? ""}`)
@@ -1482,7 +1620,7 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = (data ?? []).map((row) => normalizeLessonPlannerRow(row));
+    const rows = await enrichLessonPlannerRows(svc, school, data ?? []);
     return ok(rows);
   }
 
@@ -1495,7 +1633,7 @@ export async function handleCommunications(
       ascending: false,
     });
     if (error) return fail(error.message);
-    const rows = (data ?? []).map((row) => normalizeLessonPlannerRow(row))
+    const rows = (await enrichLessonPlannerRows(svc, school, data ?? []))
       .filter((row) => {
         const status = `${row.status ?? ""}`.toLowerCase();
         return status !== "draft" &&

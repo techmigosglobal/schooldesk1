@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('class CSV timetable generation stays on the Admin timetable path', () {
+  test('class timetable management stays on the manual Principal path', () {
     final importer = File(
       'lib/core/services/bulk_csv_import_service.dart',
     ).readAsStringSync();
@@ -45,30 +45,42 @@ void main() {
     expect(importer, contains('conflicts'));
     expect(importer, contains('logs'));
 
-    expect(adminTimetable, contains('BulkCsvImportService.importCsv'));
-    expect(adminTimetable, contains('BulkCsvImportTarget.classTimetables'));
-    expect(adminTimetable, contains('Import CSV'));
-    expect(adminTimetable, contains('Generate Time Table'));
+    expect(adminTimetable, contains('Timetable Management'));
+    expect(adminTimetable, contains('Create Editable Timetable'));
+    expect(adminTimetable, contains('Day-wise Timetable'));
+    expect(adminTimetable, contains('Week-wise Timetable'));
+    expect(adminTimetable, contains('Delete Extra Period Rows'));
     expect(adminTimetable, contains('DropdownButtonFormField<String>'));
-    expect(adminTimetable, contains("labelText: 'Class'"));
-    expect(adminTimetable, contains('generateSmartTimetable('));
+    expect(adminTimetable, contains("labelText: 'Select Class'"));
+    expect(adminTimetable, contains('createTimetableSlot('));
+    expect(adminTimetable, contains('deleteTimetableSlot('));
+    expect(adminTimetable, isNot(contains('BulkCsvImportService.importCsv')));
+    expect(
+      adminTimetable,
+      isNot(contains('BulkCsvImportTarget.classTimetables')),
+    );
+    expect(adminTimetable, isNot(contains('Import CSV')));
+    expect(adminTimetable, isNot(contains('Generate Time Table')));
+    expect(adminTimetable, isNot(contains('generateSmartTimetable(')));
     expect(adminTimetable, isNot(contains('applyPrePrimaryClassSchedule(')));
     expect(adminTimetable, isNot(contains("value: 'preschool'")));
     expect(adminTimetable, isNot(contains("value: 'smart'")));
-    expect(adminTimetable, contains("labelText: 'End time'"));
-    expect(adminTimetable, contains("labelText: 'Break name'"));
-    expect(adminTimetable, isNot(contains('Create a term for this academic year')));
+    expect(adminTimetable, contains("label: 'End Time'"));
+    expect(adminTimetable, contains("labelText: 'Break Name'"));
+    expect(
+      adminTimetable,
+      isNot(contains('Create a term for this academic year')),
+    );
     expect(adminTimetable, contains('_TimetableBreakDraft'));
-    expect(adminTimetable, contains('_buildGeneratedWeekEditor'));
-    expect(adminTimetable, contains('_publishGeneratedWeek'));
+    expect(adminTimetable, contains('_buildManualEditor'));
+    expect(adminTimetable, contains('_saveManualTimetable'));
     expect(adminTimetable, isNot(contains('Add single period')));
     expect(adminTimetable, isNot(contains('Add substitution')));
     expect(adminTimetable, isNot(contains('Single Period Modification')));
     expect(adminTimetable, isNot(contains('Preschool Schedule')));
     expect(adminTimetable, isNot(contains('Apply preschool schedule')));
-    expect(adminTimetable, contains('await _loadBackendTimetable();'));
-    expect(adminTimetable, contains('api.getRooms()'));
-    expect(adminTimetable, contains('_buildClassDropdown'));
+    expect(adminTimetable, contains('await _loadData();'));
+    expect(adminTimetable, isNot(contains('api.getRooms()')));
     expect(
       adminTimetableForms,
       contains("decoration: const InputDecoration(labelText: 'Room')"),
@@ -133,7 +145,7 @@ void main() {
     expect(teacherTimetable, contains('_weeklySubjects'));
   });
 
-  test('principal timetable generation publishes class-owned weekly slots', () {
+  test('principal manual timetable publishes class-owned weekly slots', () {
     final adminTimetable = File(
       'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
     ).readAsStringSync();
@@ -144,11 +156,12 @@ void main() {
       'supabase/functions/api/handlers/timetable.ts',
     ).readAsStringSync();
 
-    expect(adminTimetable, contains('var endTimeText'));
-    expect(adminTimetable, contains('var generatedWeekDrafts'));
-    expect(adminTimetable, contains('Balanced weekly'));
-    expect(adminTimetable, contains('Save Week Timetable'));
-    expect(adminTimetable, contains('staffId: draft.staffId'));
+    expect(adminTimetable, contains('_buildDraftFromSettings'));
+    expect(adminTimetable, contains('_buildDayWiseEditor'));
+    expect(adminTimetable, contains('_deleteDayCell'));
+    expect(adminTimetable, contains('_deletePeriodColumn'));
+    expect(adminTimetable, contains('_reflowSelectedDay'));
+    expect(adminTimetable, contains('staffId: cell.staffId'));
     expect(timetableApi, contains('String staffId = \'\''));
     expect(timetableApi, contains("'staff_id': null"));
     expect(timetableHandler, contains('breaksByDay'));
@@ -163,10 +176,10 @@ void main() {
     expect(teacherTimetable, contains('_loadTeacherTimetableSlots'));
     expect(teacherTimetable, contains('staffScopedSlots'));
     expect(teacherTimetable, contains('classScopedSlots'));
-    expect(teacherTimetable, contains('RoleAccessService.teacherClassId'));
+    expect(teacherTimetable, contains('RoleAccessService.teacherSectionIds'));
     expect(
       teacherTimetable,
-      contains('sectionId: RoleAccessService.teacherClassId'),
+      contains('getTimetableSlots(sectionId: sectionId)'),
     );
     expect(teacherTimetable, contains('Timetable source: assigned class'));
   });

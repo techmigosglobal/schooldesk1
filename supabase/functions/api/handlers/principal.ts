@@ -613,6 +613,7 @@ function serializeClassRow(
   grade: Record<string, any> | null,
   room: Record<string, any> | null,
   studentCount = 0,
+  feeDues: { amount: number; students: number } = { amount: 0, students: 0 },
 ) {
   const sectionName = text(section["section_name"]);
   const gradeName = text(grade?.["grade_name"]);
@@ -633,6 +634,8 @@ function serializeClassRow(
     academic_year_id: text(section["academic_year_id"]),
     student_count: studentCount,
     total_students: studentCount,
+    fees_due_amount: feeDues.amount,
+    fees_due_students: feeDues.students,
   };
 }
 
@@ -651,6 +654,38 @@ async function studentCountsBySection(
     counts.set(sectionId, (counts.get(sectionId) ?? 0) + 1);
   }
   return counts;
+}
+
+async function feeDuesBySection(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const { data, error } = await svc.from("fee_invoices").select(
+    "student_id, balance, student:students(current_section_id)",
+  ).eq("school_id", school).gt("balance", 0);
+  if (error) throw new Error(error.message);
+  const totals = new Map<string, { amount: number; studentIds: Set<string> }>();
+  for (const row of data ?? []) {
+    const student = row.student as Record<string, any> | null;
+    const sectionId = text(student?.current_section_id);
+    if (!sectionId) continue;
+    const current = totals.get(sectionId) ?? {
+      amount: 0,
+      studentIds: new Set<string>(),
+    };
+    current.amount += Number(row.balance ?? 0);
+    const studentId = text(row.student_id);
+    if (studentId) current.studentIds.add(studentId);
+    totals.set(sectionId, current);
+  }
+  const result = new Map<string, { amount: number; students: number }>();
+  for (const [sectionId, total] of totals.entries()) {
+    result.set(sectionId, {
+      amount: Math.round(total.amount * 100) / 100,
+      students: total.studentIds.size,
+    });
+  }
+  return result;
 }
 
 function staffDisplayName(staff: Record<string, any> | null) {
@@ -1132,12 +1167,14 @@ export async function handlePrincipal(
       ).eq("school_id", school).order("created_at", { ascending: true });
       if (error) return fail(error.message);
       const counts = await studentCountsBySection(svc, school);
+      const dues = await feeDuesBySection(svc, school);
       const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
           row as Record<string, any>,
           (row["grade"] ?? null) as Record<string, any> | null,
           (row["room"] ?? null) as Record<string, any> | null,
           counts.get(text(row["id"])) ?? 0,
+          dues.get(text(row["id"])),
         )
       );
       const totalStudents = classes.reduce(

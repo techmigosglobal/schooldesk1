@@ -386,33 +386,53 @@ class _StatePanel extends StatelessWidget {
 }
 
 String _classLabel(Map<String, dynamic> planner) {
+  final displayName = _classDisplayName(planner);
+  return 'Class Name: $displayName';
+}
+
+String _classDisplayName(Map<String, dynamic> planner) {
+  final className = _readDisplayText(planner['class_name']);
+  final gradeName = _gradeDisplayName(planner);
+  final sectionName = _sectionDisplayName(planner);
+
+  if (className.isNotEmpty && sectionName.isNotEmpty) {
+    return className.contains(sectionName)
+        ? className
+        : '$className - $sectionName';
+  }
+  if (className.isNotEmpty) return className;
+  if (sectionName.isEmpty) return gradeName.isEmpty ? 'Class' : gradeName;
+  return '${gradeName.isEmpty ? 'Class' : gradeName} - $sectionName';
+}
+
+String _gradeDisplayName(Map<String, dynamic> planner) {
   String gradeName = '';
   final grade = planner['grade'];
   if (grade is Map) {
-    gradeName = _text(
+    gradeName = _readDisplayText(
       grade['grade_name'] ?? grade['name'] ?? grade['gradeName'],
     );
   }
   if (gradeName.isEmpty) {
-    gradeName = _text(
-      planner['grade_name'] ?? planner['class_name'],
-      fallback: 'Class',
-    );
+    gradeName = _readDisplayText(planner['grade_name']);
   }
+  return gradeName;
+}
 
+String _sectionDisplayName(Map<String, dynamic> planner) {
   String sectionName = '';
   final section = planner['section'];
   if (section is Map) {
-    sectionName = _text(
+    sectionName = _readDisplayText(
       section['section_name'] ?? section['name'] ?? section['sectionName'],
     );
   }
   if (sectionName.isEmpty) {
-    sectionName = _text(planner['section_name'] ?? planner['section']);
+    sectionName = _readDisplayText(
+      planner['section_name'] ?? planner['section'],
+    );
   }
-
-  if (sectionName.isEmpty) return gradeName;
-  return '$gradeName - $sectionName';
+  return sectionName;
 }
 
 String _teacherName(Map<String, dynamic> planner) {
@@ -422,16 +442,17 @@ String _teacherName(Map<String, dynamic> planner) {
     final first = _text(teacherMap['first_name'] ?? teacherMap['firstName']);
     final last = _text(teacherMap['last_name'] ?? teacherMap['lastName']);
     final full = '$first $last'.trim();
-    if (full.isNotEmpty) return full;
+    if (full.isNotEmpty && !_isGenericTeacherName(full)) return full;
     final explicit = _text(
       teacherMap['full_name'] ?? teacherMap['name'] ?? teacherMap['fullName'],
     );
-    if (explicit.isNotEmpty) return explicit;
+    if (explicit.isNotEmpty && !_isGenericTeacherName(explicit)) {
+      return explicit;
+    }
   }
-  return _text(
-    planner['teacher_name'] ?? planner['staff_name'],
-    fallback: 'Teacher',
-  );
+  final explicit = _text(planner['teacher_name'] ?? planner['staff_name']);
+  if (explicit.isNotEmpty && !_isGenericTeacherName(explicit)) return explicit;
+  return 'Teacher';
 }
 
 String _shortDate(Object? raw) {
@@ -447,4 +468,19 @@ String _shortDate(Object? raw) {
 String _text(Object? value, {String fallback = ''}) {
   final text = value?.toString().trim() ?? '';
   return text.isEmpty ? fallback : text;
+}
+
+String _readDisplayText(Object? value) {
+  final display = _text(value);
+  return _isUuidLike(display) ? '' : display;
+}
+
+bool _isUuidLike(String value) {
+  return RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  ).hasMatch(value.trim());
+}
+
+bool _isGenericTeacherName(String value) {
+  return value.trim().toLowerCase() == 'teacher';
 }

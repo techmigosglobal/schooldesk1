@@ -178,7 +178,7 @@ class _PrincipalChatCommunicationsScreenState
       if (selected != null &&
           _canSendIn(selected) &&
           !_isContactPlaceholder(selected)) {
-        unawaited(api.markUnifiedChatConversationRead(_text(selected['id'])));
+        unawaited(_markConversationRead(selected, monitorMode));
       }
     } catch (error) {
       if (!mounted) return;
@@ -241,6 +241,56 @@ class _PrincipalChatCommunicationsScreenState
     } else {
       _directMessages = const [];
     }
+  }
+
+  void _zeroUnreadFor(bool monitorMode, String conversationId) {
+    List<Map<String, dynamic>> updateRows(List<Map<String, dynamic>> rows) {
+      return rows
+          .map(
+            (row) => _text(row['id']) == conversationId
+                ? {...row, 'unread_count': 0, 'unread_for_current_user': 0}
+                : row,
+          )
+          .toList();
+    }
+
+    if (monitorMode) {
+      _monitorConversations = updateRows(_monitorConversations);
+      if (_text(_selectedMonitorConversation?['id']) == conversationId) {
+        _selectedMonitorConversation = {
+          ...?_selectedMonitorConversation,
+          'unread_count': 0,
+          'unread_for_current_user': 0,
+        };
+      }
+    } else {
+      _directConversations = updateRows(_directConversations);
+      if (_text(_selectedDirectConversation?['id']) == conversationId) {
+        _selectedDirectConversation = {
+          ...?_selectedDirectConversation,
+          'unread_count': 0,
+          'unread_for_current_user': 0,
+        };
+      }
+    }
+  }
+
+  Future<void> _markConversationRead(
+    Map<String, dynamic> conversation,
+    bool monitorMode,
+  ) async {
+    if (_isContactPlaceholder(conversation)) return;
+    final conversationId = _text(conversation['id']);
+    if (conversationId.isEmpty) return;
+    try {
+      await BackendApiClient.instance.markUnifiedChatConversationRead(
+        conversationId,
+      );
+    } catch (_) {
+      // Keep the UI responsive; the next refresh can retry the backend state.
+    }
+    if (!mounted) return;
+    setState(() => _zeroUnreadFor(monitorMode, conversationId));
   }
 
   List<Map<String, dynamic>> _filteredMonitor([
@@ -621,11 +671,15 @@ class _PrincipalChatCommunicationsScreenState
         return ListTile(
           selected: selected,
           leading: CircleAvatar(child: Text(_initials(title))),
-          title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+          title: Text(
+            monitorMode ? title : '${_directRoleLabel(row)}: $title',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           subtitle: Text(
-            _text(row['last_message']).isEmpty
-                ? subtitle
-                : _text(row['last_message']),
+            monitorMode
+                ? '${_studentLine(row)} - ${_text(row['last_message']).isEmpty ? 'Parent-teacher chat' : _text(row['last_message'])}'
+                : '${_directRoleLabel(row)} - ${_text(row['last_message']).isEmpty ? subtitle : _text(row['last_message'])}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -654,13 +708,20 @@ class _PrincipalChatCommunicationsScreenState
                 ),
             ],
           ),
-          onTap: () {
+          onTap: () async {
+            final conversationId = _text(row['id']);
             setState(() {
-              _selectFor(monitorMode, row);
+              _selectFor(monitorMode, {
+                ...row,
+                'unread_count': 0,
+                'unread_for_current_user': 0,
+              });
+              _zeroUnreadFor(monitorMode, conversationId);
               _clearMessagesFor(monitorMode);
             });
             if (!_isContactPlaceholder(row)) {
-              _load(background: true);
+              await _markConversationRead(row, monitorMode);
+              await _load(background: true);
             }
           },
         );
@@ -703,8 +764,8 @@ class _PrincipalChatCommunicationsScreenState
           ),
           subtitle: Text(
             monitorMode
-                ? 'Principal monitoring view - read only'
-                : 'Principal direct message',
+                ? 'Teacher and parent messages - read only'
+                : 'Chatting with ${_directRoleLabel(conversation)}',
           ),
           trailing: monitorMode
               ? Wrap(
@@ -742,16 +803,21 @@ class _PrincipalChatCommunicationsScreenState
               itemCount: messages.length,
               itemBuilder: (context, index) {
                 final message = messages[index];
+                final senderRole = _messageRole(message, conversation);
+                final senderName = _messageSenderName(message, conversation);
                 final mine =
+                    !monitorMode &&
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
-                    _principalUserId;
+                        _principalUserId;
                 return ChatBubbleWidget(
                   messageText: _text(message['body'] ?? message['message']),
                   time: _time(
                     _date(message['sent_at'] ?? message['created_at']),
                   ),
-                  isMe: mine,
+                  isMe: monitorMode ? senderRole == 'teacher' : mine,
                   isRead: message['is_read'] == true,
+                  senderLabel: monitorMode ? senderName : '',
+                  senderRoleLabel: monitorMode ? _roleTitle(senderRole) : '',
                 );
               },
             ),
@@ -898,6 +964,44 @@ class _PrincipalChatCommunicationsScreenState
       return _name(_map(row['teacher']), fallback: 'Teacher');
     }
     return _name(_map(row['parent']), fallback: 'Parent');
+  }
+
+  String _directRoleLabel(Map<String, dynamic> row) {
+    return _text(row['type']) == 'principal_teacher' ? 'Teacher' : 'Parent';
+  }
+
+  String _messageRole(
+    Map<String, dynamic> message,
+    Map<String, dynamic> conversation,
+  ) {
+    final role = _text(message['sender_role']).toLowerCase();
+    if (role.contains('teacher')) return 'teacher';
+    if (role.contains('parent')) return 'parent';
+    final senderId = _text(message['sender_user_id'] ?? message['sender_id']);
+    if (senderId == _text(conversation['parent_id'])) return 'parent';
+    return 'teacher';
+  }
+
+  String _messageSenderName(
+    Map<String, dynamic> message,
+    Map<String, dynamic> conversation,
+  ) {
+    final explicit = _text(message['sender_name']);
+    if (explicit.isNotEmpty && !explicit.contains('@')) return explicit;
+    final role = _messageRole(message, conversation);
+    if (role == 'parent') {
+      return _name(_map(conversation['parent']), fallback: 'Parent');
+    }
+    return _name(_map(conversation['teacher']), fallback: 'Teacher');
+  }
+
+  String _roleTitle(String role) {
+    return switch (role) {
+      'teacher' => 'Teacher',
+      'parent' => 'Parent',
+      'principal' => 'Principal',
+      _ => 'Sender',
+    };
   }
 
   String _studentLine(Map<String, dynamic> row) {

@@ -59,6 +59,7 @@ void main() {
     final screen = File(
       'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',
     ).readAsStringSync();
+    final backendRoutes = readBackendRouteSources();
 
     expect(screen, contains("_statusFilter = 'all'"));
     expect(screen, contains("value: 'uploaded'"));
@@ -69,5 +70,16 @@ void main() {
     expect(screen, isNot(contains("value: 'planned'")));
     expect(screen, contains("teacherMap['first_name']"));
     expect(screen, contains("teacherMap['last_name']"));
+    expect(screen, contains("return 'Class Name: \$displayName';"));
+    expect(screen, contains('_classDisplayName(planner)'));
+    expect(screen, contains('_isGenericTeacherName'));
+    expect(backendRoutes, contains('function lessonPlannerDisplayText'));
+    expect(backendRoutes, contains('async function enrichLessonPlannerRows'));
+    expect(backendRoutes, contains('section:sections(*, grade:grades(*))'));
+    expect(backendRoutes, contains('svc.from("staff")'));
+    expect(backendRoutes, contains('class_name: className'));
+    expect(backendRoutes, contains('grade_name: gradeName'));
+    expect(backendRoutes, contains('section_name: sectionName'));
+    expect(backendRoutes, contains('teacher_name: teacherName'));
   });
 }

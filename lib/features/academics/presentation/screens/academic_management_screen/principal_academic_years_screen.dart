@@ -1970,19 +1970,36 @@ Future<bool?> _confirmAcademicYearDelete(
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
+      scrollable: true,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       title: const Text('Delete academic year?'),
-      content: Text(
-        'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, or events still use this academic year.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.45,
         ),
-        FilledButton.tonalIcon(
-          onPressed: () => Navigator.pop(context, true),
-          icon: const Icon(Icons.warning_amber_rounded),
-          label: const Text('Continue'),
+        child: SingleChildScrollView(
+          child: Text(
+            'This will permanently delete ${_yearLabel(year)}. The backend will block deletion if classes, terms, fees, attendance, or events still use this academic year.',
+          ),
+        ),
+      ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      actions: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.warning_amber_rounded),
+              label: const Text('Continue'),
+            ),
+          ],
         ),
       ],
     ),
@@ -2001,40 +2018,57 @@ Future<bool?> _confirmAcademicYearFinalDelete(
         var canDelete = false;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
+            scrollable: true,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             title: const Text('Final confirmation'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Type DELETE to confirm deleting ${_yearLabel(year)}.'),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirmation',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (value) => setDialogState(
-                    () => canDelete = value.trim().toUpperCase() == 'DELETE',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+            content: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.45,
               ),
-              FilledButton(
-                onPressed: canDelete
-                    ? () => Navigator.pop(context, true)
-                    : null,
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red.shade700,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Type DELETE to confirm deleting ${_yearLabel(year)}.'),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirmation',
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setDialogState(
+                        () => canDelete = value.trim().toUpperCase() == 'DELETE',
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Text('Delete'),
+              ),
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            actions: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                alignment: WrapAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: canDelete
+                        ? () => Navigator.pop(context, true)
+                        : null,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.red.shade700,
+                    ),
+                    child: const Text('Delete'),
+                  ),
+                ],
               ),
             ],
           ),

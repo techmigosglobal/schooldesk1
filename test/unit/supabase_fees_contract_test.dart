@@ -92,6 +92,23 @@ void main() {
     },
   );
 
+  test('fee structure delete clears generated dues and collection rows', () {
+    final source = File(
+      'supabase/functions/api/handlers/fees.ts',
+    ).readAsStringSync();
+
+    expect(source, contains('deleteFeeStructureWorkflowRows'));
+    expect(source, contains('invoiceIdsForFeeStructure'));
+    expect(source, contains('deleteInvoiceWorkflowRows'));
+    expect(source, contains('url.searchParams.get("remove_pending")'));
+    expect(source, contains('svc.from("fee_receipts").delete()'));
+    expect(source, contains('svc.from("parent_payment_requests").delete()'));
+    expect(source, contains('svc.from("payments").delete()'));
+    expect(source, contains('svc.from("fee_invoices").delete()'));
+    expect(source, contains('svc.from("fee_concessions").delete()'));
+    expect(source, contains('deleted_invoices'));
+  });
+
   test(
     'students handler exposes student fees route and avoids Dart string helpers',
     () {
@@ -234,7 +251,9 @@ void main() {
       final source = File(
         'supabase/functions/api/handlers/fees.ts',
       ).readAsStringSync();
-      final start = source.indexOf('if (seg === "submit" && method === "POST")');
+      final start = source.indexOf(
+        'if (seg === "submit" && method === "POST")',
+      );
       final end = source.indexOf(
         'if (seg && normalized.endsWith("/resubmit") && method === "PATCH")',
       );
@@ -268,7 +287,9 @@ void main() {
       expect(section, contains('Select at least one continuous tuition month'));
       expect(
         section,
-        contains('Tuition months must be paid in continuous order without skipping'),
+        contains(
+          'Tuition months must be paid in continuous order without skipping',
+        ),
       );
       expect(section, contains('selected_months cannot exceed 12'));
       expect(

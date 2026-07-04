@@ -6,7 +6,7 @@ import 'backend_api_sources.dart';
 
 void main() {
   test(
-    'teacher timetable remains view-only while principal manages via overflow',
+    'principal timetable is manual-only while teacher and parent remain read-only',
     () {
       final teacher = File(
         'lib/features/academics/presentation/screens/teacher_timetable_screen/teacher_timetable_screen.dart',
@@ -28,16 +28,29 @@ void main() {
       expect(teacher, isNot(contains('updateTimetableSlot')));
       expect(teacher, isNot(contains('deleteTimetableSlot')));
 
-      expect(principal, contains("value: 'edit_timetable'"));
-      expect(principal, contains("value: 'delete_timetable'"));
-      expect(principal, contains('Manual Edit Today'));
-      expect(principal, contains('Delete Timetable'));
-      expect(principal, contains('_editingTimetable'));
-      expect(principal, contains('_editableSchedulePanel'));
-      expect(principal, contains('_saveEditedTimetable'));
-      expect(principal, contains('_deleteSelectedClassTimetable'));
-      expect(principal, contains('updateTimetableSlot('));
+      expect(principal, contains('Timetable Management'));
+      expect(principal, contains('Select class to continue'));
+      expect(principal, contains('Create Timetable'));
+      expect(principal, contains('Create Editable Timetable'));
+      expect(principal, contains('Timetable Preview'));
+      expect(principal, contains('Save Timetable'));
+      expect(principal, contains('_buildManualEditor'));
+      expect(principal, contains('_buildDayWiseEditor'));
+      expect(principal, contains('_buildPeriodManagement'));
+      expect(principal, contains('_saveManualTimetable'));
       expect(principal, contains('deleteTimetableSlot('));
+      expect(principal, contains('createTimetableSlot('));
+      expect(principal, contains('Delete Extra Period Rows'));
+      expect(principal, contains('Reflow Day'));
+
+      expect(principal, isNot(contains('Manual Edit Today')));
+      expect(principal, isNot(contains('Generate Time Table')));
+      expect(principal, isNot(contains('generateSmartTimetable(')));
+      expect(principal, isNot(contains('applyPrePrimaryClassSchedule(')));
+      expect(principal, isNot(contains('Import CSV')));
+      expect(principal, isNot(contains('Export PDF')));
+      expect(principal, isNot(contains('Teacher Timetable')));
+      expect(principal, isNot(contains('Room Timetable')));
 
       expect(api, contains('Future<Map<String, dynamic>> updateTimetableSlot'));
       expect(api, contains('Future<void> deleteTimetableSlot'));
@@ -46,6 +59,44 @@ void main() {
         contains('method === "PATCH" || method === "PUT"'),
       );
       expect(supabaseTimetable, contains('method === "DELETE"'));
+    },
+  );
+
+  test('principal manual editor loads class subjects from mappings', () {
+    final principal = File(
+      'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
+    ).readAsStringSync();
+
+    expect(principal, contains("api.getRawList('/subjects'"));
+    expect(principal, contains("'/grade-subjects'"));
+    expect(principal, contains("'/staff-subjects'"));
+    expect(principal, contains('_subjectOptionsForSelectedClass'));
+    expect(principal, contains('_teacherIdForSubject'));
+    expect(principal, contains('Free Period'));
+    expect(principal, isNot(contains('for (final slot in _slots)')));
+  });
+
+  test(
+    'principal save replaces class timetable with regular free and break cells',
+    () {
+      final principal = File(
+        'lib/features/academics/presentation/screens/admin_timetable_screen/admin_timetable_screen.dart',
+      ).readAsStringSync();
+
+      expect(principal, contains('_buildDraftFromSettings'));
+      expect(principal, contains('_breakCellsForDay'));
+      expect(principal, contains('_deleteDayCell'));
+      expect(principal, contains('_deletePeriodColumn'));
+      expect(principal, contains('_reflowSelectedDay'));
+      expect(
+        principal,
+        contains("cell.slotType = cell.subjectId.isEmpty ? 'free' : 'regular'"),
+      );
+      expect(principal, contains("slotType: 'free'"));
+      expect(principal, contains("slotType: 'break'"));
+      expect(principal, contains('existingSlots'));
+      expect(principal, contains("deleteTimetableSlot(_text(slot['id']))"));
+      expect(principal, contains('staffId: cell.staffId'));
     },
   );
 }
