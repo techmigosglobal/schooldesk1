@@ -103,11 +103,11 @@ function buildTeacherAssignments(
 }
 
 export async function handleDashboard(
-  req: Request,
+  _req: Request,
   path: string,
-  method: string,
+  _method: string,
   url: URL,
-  client: SupabaseClient,
+  _client: SupabaseClient,
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {

@@ -466,9 +466,9 @@ class _AdminFeeStructureFormScreenState
     final parentBehavior = switch (_selectedFrequency) {
       'one_time' => 'Parents pay this once. It is not split.',
       'yearly' =>
-        'One annual invoice is created; parents can choose named months against the tuition balance.',
+        'One annual tuition invoice is created; parents can pay only the next continuous unpaid months.',
       'monthly' => 'Parents pay this as monthly dues.',
-      'term' => 'Parents pay this term-wise when terms are generated.',
+      'term' => 'Use monthly tuition for the parent workflow; term plans are not used in this flow.',
       _ => 'Parents pay according to the saved frequency.',
     };
     return Container(
@@ -731,7 +731,7 @@ class _AdminInvoiceGenerationFormScreenState
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Generate Invoices',
-      subtitle: 'Prepare term-wise invoices for a class, section, or student',
+      subtitle: 'Prepare class, section, or student invoices for the fees workflow',
       drawer: _financeDrawer(widget.args.ownerRole),
       floatingActionButton: DashboardFabWidget(
         role: _dashboardRole(widget.args.ownerRole),

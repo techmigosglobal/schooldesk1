@@ -62,6 +62,7 @@ class TeacherFlowScaffold extends StatelessWidget {
       mobileBottomActions: mobileBottomActions ?? teacherFlowBottomActions,
       floatingActionButton: floatingActionButton,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      showBackButton: false,
       bodyIsScrollable: false,
       body: Container(
         color: teacherFlowBackground,

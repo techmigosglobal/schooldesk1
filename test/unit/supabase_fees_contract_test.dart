@@ -74,9 +74,16 @@ void main() {
       expect(source, contains('monthly_amount'));
       expect(source, contains('parent_payment_requests'));
       expect(source, contains('attachPaymentRequestRelations'));
-      expect(source, contains('parent_user: parentsById.get(text(row.parent_user_id))'));
+      expect(
+        source,
+        contains('parent_user: parentsById.get(text(row.parent_user_id))'),
+      );
       expect(source, contains('pending_verification'));
-      expect(source, contains('transaction_ref: text(form.get("transaction_ref")'));
+      expect(source, contains('transaction_ref: text('));
+      expect(
+        source,
+        contains('form.get("transaction_ref") ?? form.get("transaction_id")'),
+      );
       expect(source, contains('proof_file_name: screenshot?.name'));
       expect(source, contains('fee_receipts'));
       expect(source, contains('payment_id'));
@@ -123,4 +130,101 @@ void main() {
     expect(source, isNot(contains('/parents/fees/payments')));
     expect(source, isNot(contains('/parents/fees/receipts')));
   });
+
+  test(
+    'payment config resolution should inspect invoice-aware scope before returning a QR config',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf(
+        'if (feesPath === "/payment-config" && method === "GET") {',
+      );
+      final end = source.indexOf(
+        'if (feesPath === "/payment-config" && method === "PUT") {',
+      );
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('invoice_id'));
+      expect(section, contains('resolveScopedPaymentConfig'));
+      expect(source, contains('grade_id'));
+      expect(source, contains('section_id'));
+      expect(source, contains('configRecordId("section", gradeId, sectionId)'));
+      expect(source, contains('configRecordId("grade", gradeId)'));
+    },
+  );
+
+  test(
+    'payment config save updates or inserts without requiring an unsupported upsert conflict target',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf('async function savePaymentConfigRecord');
+      final end = source.indexOf('async function resolveScopedPaymentConfig');
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('if (existing != null)'));
+      expect(section, contains('.update({'));
+      expect(section, contains('.insert({'));
+      expect(section, isNot(contains('.upsert({')));
+      expect(section, isNot(contains('onConflict')));
+    },
+  );
+
+  test(
+    'principal fees screen previews QR safely and keeps Book Kit before tuition collection',
+    () {
+      final source = File(
+        'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
+      ).readAsStringSync();
+
+      expect(source, contains("const Text('Current QR image')"));
+      expect(source, contains('Image.network('));
+      expect(source, contains('_absoluteMediaUrl(qrImageUrl)'));
+      expect(source, contains('sheetContext.mounted'));
+      expect(source, contains('Navigator.of(sheetContext).pop()'));
+      expect(source, contains('_disposeFeeComponentAfterFrame('));
+      expect(source, contains('_feeInvoicePriority('));
+      expect(source, contains('final priorityCompare = _feeInvoicePriority('));
+      expect(source, contains(').compareTo(_feeInvoicePriority(b));'));
+      expect(source, contains('_syncManualMonthsFromAmount('));
+      expect(
+        source,
+        contains('onChanged: (_) => _syncManualMonthsFromAmount()'),
+      );
+      expect(source, contains('.round().clamp('));
+      expect(source, contains('unpaid.length'));
+    },
+  );
+
+  test(
+    'payment approval decision keeps admin remarks separate and updates invoice balances',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+      final start = source.indexOf(
+        'if (seg && path.endsWith("/decision") && method === "PUT") {',
+      );
+      final end = source.indexOf(
+        'if (feesPath === "/payment-config" && method === "GET") {',
+      );
+      final section = start >= 0 && end > start
+          ? source.substring(start, end)
+          : source;
+
+      expect(section, contains('await svc.from('));
+      expect(section, contains('"payments"'));
+      expect(section, contains(').insert({'));
+      expect(section, contains('"fee_receipts"'));
+      expect(source, contains('applyInvoiceAllocationUpdate('));
+      expect(section, contains('admin_remarks: body.admin_remarks'));
+      expect(section, isNot(contains('remarks: body.remarks')));
+    },
+  );
 }

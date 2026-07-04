@@ -171,7 +171,7 @@ class _AdminPaymentRequestsScreenState
     final rejected = _countByStatus('rejected');
     return SchoolDeskResponsiveGrid(
       minTileWidth: 160,
-      mainAxisExtent: 92,
+      mainAxisExtent: 112,
       children: [
         SchoolDeskKpiCard(
           title: 'Pending',

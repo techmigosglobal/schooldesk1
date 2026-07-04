@@ -84,29 +84,388 @@ async function principalUserIdForSchool(
   return `${data?.[0]?.id ?? ""}`;
 }
 
-function canReadChatConversation(
-  conversation: Record<string, unknown>,
+async function validateChatConversationScope(
+  svc: SupabaseClient,
+  school: string,
+  type: string,
+  teacherId: string,
+  parentId: string,
+  studentId: string,
+): Promise<string | null> {
+  if (type === "parent_teacher") {
+    if (!studentId) {
+      return "parent_teacher scope requires a linked student";
+    }
+    if (!parentId || !teacherId) {
+      return "parent_teacher scope requires a parent and teacher participant";
+    }
+
+    // Check linked student
+    const { data: link, error: linkError } = await svc.from(
+      "parent_student_links",
+    )
+      .select("id")
+      .eq("parent_user_id", parentId)
+      .eq("student_id", studentId)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (linkError || !link) {
+      return "parent_teacher scope requires a linked student";
+    }
+
+    // Check teacher is class teacher or co-teacher of student's section
+    const { data: student, error: studentError } = await svc.from("students")
+      .select("current_section_id")
+      .eq("id", studentId)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (studentError || !student || !student.current_section_id) {
+      return "student does not have a current section";
+    }
+
+    const { data: section, error: sectionError } = await svc.from("sections")
+      .select("class_teacher_id, co_teacher_id")
+      .eq("id", student.current_section_id)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (sectionError || !section) {
+      return "section not found";
+    }
+
+    if (
+      section.class_teacher_id !== teacherId &&
+      section.co_teacher_id !== teacherId
+    ) {
+      return "teacher must be class teacher or co-teacher";
+    }
+  } else if (type === "principal_parent") {
+    if (!parentId) {
+      return "principal_parent scope requires a parent participant";
+    }
+    const { data: parentUser, error: pError } = await svc.from("users")
+      .select("role_name")
+      .eq("id", parentId)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (
+      pError || !parentUser ||
+      `${parentUser.role_name}`.trim().toLowerCase() !== "parent"
+    ) {
+      return "principal_parent scope requires a parent participant";
+    }
+  } else if (type === "principal_teacher") {
+    if (!teacherId) {
+      return "principal_teacher scope requires a teacher participant";
+    }
+    const { data: staffMember, error: sError } = await svc.from("staff")
+      .select("id")
+      .eq("id", teacherId)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (sError || !staffMember) {
+      return "principal_teacher scope requires a teacher participant";
+    }
+  }
+  return null;
+}
+
+async function parentChatContacts(
+  svc: SupabaseClient,
+  school: string,
+  user: User,
+  studentId?: string,
+) {
+  let studentQuery = svc.from("parent_student_links")
+    .select(
+      "student_id, students(id, first_name, last_name, current_section_id)",
+    )
+    .eq("parent_user_id", user.id)
+    .eq("school_id", school);
+
+  if (studentId) {
+    studentQuery = studentQuery.eq("student_id", studentId);
+  }
+
+  const { data: links } = await studentQuery;
+  const contacts: any[] = [];
+  const addedKeys = new Set<string>();
+
+  for (const link of links ?? []) {
+    const student = (link as any).students;
+    if (!student) continue;
+    const studentName = [student.first_name, student.last_name].filter(Boolean)
+      .join(" ");
+    const sectionId = student.current_section_id;
+    if (!sectionId) continue;
+
+    const { data: section } = await svc.from("sections")
+      .select(
+        "id, class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
+      )
+      .eq("id", sectionId)
+      .eq("school_id", school)
+      .maybeSingle();
+
+    if (section) {
+      const ct = (section as any).class_teacher;
+      if (ct) {
+        const key = `teacher:${ct.id}:${student.id}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          contacts.push({
+            id: ct.id,
+            name: [ct.first_name, ct.last_name].filter(Boolean).join(" "),
+            role: "teacher",
+            contact_role: "class_teacher",
+            student_id: student.id,
+            student_name: studentName,
+            type: "parent_teacher",
+          });
+        }
+      }
+      const co = (section as any).co_teacher;
+      if (co) {
+        const key = `teacher:${co.id}:${student.id}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          contacts.push({
+            id: co.id,
+            name: [co.first_name, co.last_name].filter(Boolean).join(" "),
+            role: "teacher",
+            contact_role: "co_teacher",
+            student_id: student.id,
+            student_name: studentName,
+            type: "parent_teacher",
+          });
+        }
+      }
+    }
+  }
+
+  // Add principals
+  const { data: principals } = await svc.from("users")
+    .select("id, name, username")
+    .eq("school_id", school)
+    .ilike("role_name", "principal");
+
+  for (const p of principals ?? []) {
+    const key = `principal:${p.id}`;
+    if (!addedKeys.has(key)) {
+      addedKeys.add(key);
+      contacts.push({
+        id: p.id,
+        name: p.name || p.username || "Principal",
+        role: "principal",
+        type: "principal_parent",
+      });
+    }
+  }
+
+  return contacts;
+}
+
+async function teacherChatContacts(
+  svc: SupabaseClient,
+  school: string,
   user: User,
 ) {
+  const staffId = linkedStaffId(user);
+  if (!staffId) return [];
+
+  const { data: sections } = await svc.from("sections")
+    .select(
+      "id, class_teacher:staff!sections_class_teacher_id_fkey(*), co_teacher:staff!sections_co_teacher_id_fkey(*)",
+    )
+    .eq("school_id", school)
+    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`);
+
+  const contacts: any[] = [];
+  const addedKeys = new Set<string>();
+
+  for (const section of sections ?? []) {
+    const { data: students } = await svc.from("students")
+      .select("id, first_name, last_name")
+      .eq("current_section_id", section.id)
+      .eq("school_id", school);
+
+    for (const student of students ?? []) {
+      const studentName = [student.first_name, student.last_name].filter(
+        Boolean,
+      ).join(" ");
+      const { data: links } = await svc.from("parent_student_links")
+        .select(
+          "parent_user_id, parent:users!parent_student_links_parent_user_id_fkey(*)",
+        )
+        .eq("student_id", student.id)
+        .eq("school_id", school);
+
+      for (const link of links ?? []) {
+        const p = (link as any).parent;
+        if (!p) continue;
+        const key = `parent:${p.id}:${student.id}`;
+        if (!addedKeys.has(key)) {
+          addedKeys.add(key);
+          contacts.push({
+            id: p.id,
+            name: p.name || p.username || "Parent",
+            role: "parent",
+            student_id: student.id,
+            student_name: studentName,
+            contact_role: "student_parent",
+            type: "parent_teacher",
+          });
+        }
+      }
+    }
+  }
+
+  // Add principals
+  const { data: principals } = await svc.from("users")
+    .select("id, name, username")
+    .eq("school_id", school)
+    .ilike("role_name", "principal");
+
+  for (const p of principals ?? []) {
+    const key = `principal:${p.id}`;
+    if (!addedKeys.has(key)) {
+      addedKeys.add(key);
+      contacts.push({
+        id: p.id,
+        name: p.name || p.username || "Principal",
+        role: "principal",
+        type: "principal_teacher",
+      });
+    }
+  }
+
+  return contacts;
+}
+
+async function principalChatContacts(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const contacts: any[] = [];
+  const addedKeys = new Set<string>();
+
+  const { data: staff } = await svc.from("staff")
+    .select("*")
+    .eq("school_id", school)
+    .eq("is_active", true);
+
+  for (const s of staff ?? []) {
+    const key = `teacher:${s.id}`;
+    if (!addedKeys.has(key)) {
+      addedKeys.add(key);
+      contacts.push({
+        id: s.id,
+        name: [s.first_name, s.last_name].filter(Boolean).join(" "),
+        role: "teacher",
+        type: "principal_teacher",
+      });
+    }
+  }
+
+  const { data: parents } = await svc.from("users")
+    .select("*")
+    .eq("school_id", school)
+    .ilike("role_name", "parent");
+
+  for (const p of parents ?? []) {
+    const key = `parent:${p.id}`;
+    if (!addedKeys.has(key)) {
+      addedKeys.add(key);
+      contacts.push({
+        id: p.id,
+        name: p.name || p.username || "Parent",
+        role: "parent",
+        type: "principal_parent",
+      });
+    }
+  }
+
+  return contacts;
+}
+
+async function getTeacherAllowedConversationsStaffIds(
+  svc: SupabaseClient,
+  school: string,
+  staffId: string,
+): Promise<string[]> {
+  const { data: sections } = await svc.from("sections")
+    .select("class_teacher_id, co_teacher_id")
+    .eq("school_id", school)
+    .or(`class_teacher_id.eq.${staffId},co_teacher_id.eq.${staffId}`);
+
+  const ids = new Set<string>([staffId]);
+  for (const s of sections ?? []) {
+    if (s.class_teacher_id) ids.add(s.class_teacher_id);
+    if (s.co_teacher_id) ids.add(s.co_teacher_id);
+  }
+  return [...ids];
+}
+
+async function canReadChatConversation(
+  svc: SupabaseClient,
+  school: string,
+  conversation: Record<string, unknown>,
+  user: User,
+): Promise<boolean> {
   if (canManageSchoolContent(user)) return true;
   const userRole = role(user);
   if (userRole === "parent") {
     return text(conversation.parent_id) === user.id;
   }
   if (userRole === "teacher") {
-    return text(conversation.teacher_id) === linkedStaffId(user);
+    const staffId = linkedStaffId(user);
+    if (!staffId) return false;
+    const convTeacherId = text(conversation.teacher_id);
+    if (convTeacherId === staffId) return true;
+
+    // Check if user is counterpart teacher for the student's class
+    const studentId = text(conversation.student_id);
+    if (!studentId) return false;
+
+    const { data: student } = await svc.from("students")
+      .select("current_section_id")
+      .eq("id", studentId)
+      .eq("school_id", school)
+      .maybeSingle();
+    if (!student || !student.current_section_id) return false;
+
+    const { data: section } = await svc.from("sections")
+      .select("class_teacher_id, co_teacher_id")
+      .eq("id", student.current_section_id)
+      .eq("school_id", school)
+      .maybeSingle();
+    if (!section) return false;
+
+    const isUserTeacher = section.class_teacher_id === staffId ||
+      section.co_teacher_id === staffId;
+    const isConvTeacher = section.class_teacher_id === convTeacherId ||
+      section.co_teacher_id === convTeacherId;
+
+    return isUserTeacher && isConvTeacher;
   }
   return false;
 }
 
-function canSendChatMessage(
+async function canSendChatMessage(
+  svc: SupabaseClient,
+  school: string,
   conversation: Record<string, unknown>,
   user: User,
-) {
+): Promise<boolean> {
   const userRole = role(user);
   const type = text(conversation.type) || "parent_teacher";
   if (type === "parent_teacher") {
-    return canReadChatConversation(conversation, user) && userRole !== "principal";
+    return await canReadChatConversation(svc, school, conversation, user) &&
+      userRole !== "principal";
   }
   if (canManageSchoolContent(user)) return true;
   if (type === "principal_parent") {
@@ -298,6 +657,22 @@ export async function handleCommunications(
   const body = method !== "GET" ? await req.json().catch(() => ({})) : {};
 
   // ── Unified WhatsApp-style chat ────────────────────────────
+  if (path === "/chat/contacts" && method === "GET") {
+    const roleParam = text(url.searchParams.get("role")).toLowerCase();
+    const studentId = text(url.searchParams.get("student_id"));
+    if (roleParam === "parent") {
+      const contacts = await parentChatContacts(svc, school, user, studentId);
+      return ok(contacts);
+    } else if (roleParam === "teacher") {
+      const contacts = await teacherChatContacts(svc, school, user);
+      return ok(contacts);
+    } else if (roleParam === "principal") {
+      const contacts = await principalChatContacts(svc, school);
+      return ok(contacts);
+    }
+    return fail("invalid role param");
+  }
+
   if (path === "/chat/conversations" && method === "GET") {
     let q = svc.from("message_conversations").select("*").eq(
       "school_id",
@@ -317,7 +692,12 @@ export async function handleCommunications(
       if (userRole == "teacher") {
         const teacher = linkedStaffId(user);
         if (!teacher) return ok([]);
-        q = q.eq("teacher_id", teacher);
+        const allowedTeacherIds = await getTeacherAllowedConversationsStaffIds(
+          svc,
+          school,
+          teacher,
+        );
+        q = q.in("teacher_id", allowedTeacherIds);
       } else if (userRole == "parent") {
         q = q.eq("parent_id", user.id);
       }
@@ -357,6 +737,19 @@ export async function handleCommunications(
     const parentId = text(body.parent_id) ||
       (role(user) == "parent" ? user.id : "");
     const studentId = text(body.student_id);
+
+    const validationError = await validateChatConversationScope(
+      svc,
+      school,
+      conversationType,
+      teacherId,
+      parentId,
+      studentId,
+    );
+    if (validationError) {
+      return fail(validationError, 403);
+    }
+
     if (conversationType == "parent_teacher" && (!teacherId || !parentId)) {
       return fail("teacher_id and parent_id are required");
     }
@@ -396,7 +789,7 @@ export async function handleCommunications(
       .maybeSingle();
     if (conversationError) return fail(conversationError.message);
     if (!conversation) return fail("conversation not found", 404);
-    if (!canReadChatConversation(conversation, user)) {
+    if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
     const pageSize = Math.min(
@@ -422,7 +815,9 @@ export async function handleCommunications(
       .maybeSingle();
     if (conversationError) return fail(conversationError.message);
     if (!conversation) return fail("conversation not found", 404);
-    if (!canSendChatMessage(conversation, user)) return fail("forbidden", 403);
+    if (!await canSendChatMessage(svc, school, conversation, user)) {
+      return fail("forbidden", 403);
+    }
     const messageText = text(body.body ?? body.message ?? body.message_body);
     if (!messageText && !text(body.attachment_url)) {
       return fail("message body required");
@@ -486,7 +881,7 @@ export async function handleCommunications(
       .maybeSingle();
     if (conversationError) return fail(conversationError.message);
     if (!conversation) return fail("conversation not found", 404);
-    if (!canReadChatConversation(conversation, user)) {
+    if (!await canReadChatConversation(svc, school, conversation, user)) {
       return fail("forbidden", 403);
     }
     const { data, error } = await svc.from("messages").select("*")
@@ -620,6 +1015,11 @@ export async function handleCommunications(
       reference_id: row.entity_id ?? "",
       target_role: row.target_role ?? "all",
       target_user_id: row.user_id ?? "",
+      route: row.route ?? "",
+      priority: row.priority ?? "medium",
+      student_id: row.student_id ?? "",
+      section_id: row.section_id ?? "",
+      teacher_id: row.teacher_id ?? "",
       sent_at: row.created_at ?? null,
     })));
   }
@@ -627,11 +1027,17 @@ export async function handleCommunications(
     const { data, error } = await svc.from("notification_logs").insert({
       school_id: school,
       user_id: body.user_id ?? user.id,
+      target_role: body.target_role ?? body.role ?? null,
       title: body.title ?? body.subject ?? "Notification",
       body: body.body ?? body.message ?? "",
       type: body.type ?? body.notification_type ?? "general",
       entity_type: body.entity_type ?? body.reference_type ?? null,
       entity_id: body.entity_id ?? body.reference_id ?? null,
+      route: body.route ?? null,
+      priority: body.priority ?? "medium",
+      student_id: body.student_id ?? null,
+      section_id: body.section_id ?? null,
+      teacher_id: body.teacher_id ?? null,
       is_read: body.is_read ?? false,
     }).select().single();
     if (error) return fail(error.message);
@@ -642,6 +1048,11 @@ export async function handleCommunications(
       reference_id: data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
+      route: data?.route ?? "",
+      priority: data?.priority ?? "medium",
+      student_id: data?.student_id ?? "",
+      section_id: data?.section_id ?? "",
+      teacher_id: data?.teacher_id ?? "",
       sent_at: data?.created_at ?? null,
     });
   }
@@ -666,6 +1077,11 @@ export async function handleCommunications(
       reference_id: data?.entity_id ?? "",
       target_role: data?.target_role ?? "all",
       target_user_id: data?.user_id ?? "",
+      route: data?.route ?? "",
+      priority: data?.priority ?? "medium",
+      student_id: data?.student_id ?? "",
+      section_id: data?.section_id ?? "",
+      teacher_id: data?.teacher_id ?? "",
       sent_at: data?.created_at ?? null,
     });
   }

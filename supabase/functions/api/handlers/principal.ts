@@ -831,7 +831,7 @@ async function buildPrincipalSubjectsOverview(
       "assigned_teachers": [...dedupedTeachers.values()],
     };
   });
-  subjects.sort((left, right) =>
+  subjects.sort((left: any, right: any) =>
     text(left["subject_name"]).localeCompare(text(right["subject_name"]))
   );
 
@@ -860,10 +860,10 @@ async function validateClassImportRows(
   const previewRows: Array<Record<string, unknown>> = [];
   const errors: Array<Record<string, unknown>> = [];
   const warnings: Array<Record<string, unknown>> = [];
-  var validRows = 0;
-  var invalidRows = 0;
-  var classesToCreate = 0;
-  var classesToUpdate = 0;
+  let validRows = 0;
+  let invalidRows = 0;
+  let classesToCreate = 0;
+  let classesToUpdate = 0;
 
   for (const row of rows) {
     const rowNumber = integer(row["row_number"]) ?? 0;
@@ -952,8 +952,8 @@ async function importClassRows(
 ) {
   const errors: Array<Record<string, unknown>> = [];
   const warnings: Array<Record<string, unknown>> = [];
-  var createdClasses = 0;
-  var updatedClasses = 0;
+  let createdClasses = 0;
+  let updatedClasses = 0;
 
   for (const row of rows) {
     const rowNumber = integer(row["row_number"]) ?? 0;
@@ -1132,7 +1132,7 @@ export async function handlePrincipal(
       ).eq("school_id", school).order("created_at", { ascending: true });
       if (error) return fail(error.message);
       const counts = await studentCountsBySection(svc, school);
-      const classes = (data ?? []).map((row) =>
+      const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
           row as Record<string, any>,
           (row["grade"] ?? null) as Record<string, any> | null,
@@ -1141,7 +1141,7 @@ export async function handlePrincipal(
         )
       );
       const totalStudents = classes.reduce(
-        (sum, item) => sum + Number(item.student_count ?? 0),
+        (sum: number, item: any) => sum + Number(item.student_count ?? 0),
         0,
       );
       return ok({

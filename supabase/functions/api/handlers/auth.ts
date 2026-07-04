@@ -9,6 +9,35 @@ function svc() {
   return serviceClient();
 }
 
+function profileText(value: unknown, fallback = ""): string {
+  if (value === null || value === undefined) return fallback;
+  const text = String(value).trim();
+  return text.length ? text : fallback;
+}
+
+function normalizeProfileResponse(
+  profile: Record<string, unknown> | null | undefined,
+  authUser: { id?: string; email?: string | null },
+): Record<string, unknown> {
+  return {
+    id: profileText(authUser.id ?? profile?.id),
+    username: profileText(profile?.username),
+    name: profileText(profile?.name, profileText(authUser.email)),
+    email: profileText(authUser.email ?? profile?.email),
+    phone: profileText(profile?.phone),
+    avatar: profileText(profile?.avatar),
+    school_id: profileText(profile?.school_id),
+    role_id: profileText(profile?.role_id),
+    role_name: profileText(profile?.role_name),
+    linked_type: profileText(profile?.linked_type),
+    linked_id: profileText(profile?.linked_id),
+    is_active: profile?.is_active ?? true,
+    is_verified: profile?.is_verified ?? false,
+    roles: [],
+    school: profile?.school ?? {},
+  };
+}
+
 export async function handleAuth(
   req: Request,
   path: string,
@@ -177,23 +206,7 @@ export async function handleAuth(
       .eq("id", user.id)
       .maybeSingle();
 
-    return ok({
-      id: user.id,
-      username: profile?.username ?? "",
-      name: profile?.name ?? user.email,
-      email: user.email,
-      phone: profile?.phone ?? "",
-      avatar: profile?.avatar ?? "",
-      school_id: profile?.school_id ?? "",
-      role_id: profile?.role_id ?? "",
-      role_name: profile?.role_name ?? "",
-      linked_type: profile?.linked_type ?? "",
-      linked_id: profile?.linked_id ?? "",
-      is_active: profile?.is_active ?? true,
-      is_verified: profile?.is_verified ?? false,
-      roles: [],
-      school: {},
-    });
+    return ok(normalizeProfileResponse(profile, user));
   }
 
   // ── PATCH /auth/profile ──────────────────────────────────────
@@ -221,7 +234,7 @@ export async function handleAuth(
       .single();
 
     if (error) return fail(error.message);
-    return ok({ profile });
+    return ok(normalizeProfileResponse(profile, user));
   }
 
   if (path === "/auth/profile/avatar" && method === "POST") {

@@ -71,9 +71,7 @@ class _ParentPaymentRequestFormScreenState
   Map<String, dynamic> _paymentConfig = const {};
   Map<String, dynamic>? _paymentIntent;
   String _paymentMode = 'upi';
-  String _intervalMode = 'full';
-  final Set<String> _selectedMonthNames = {'January'};
-  int _selectedTerms = 1;
+  final Set<String> _selectedMonthNames = <String>{};
   static const List<String> _monthNames = [
     'January',
     'February',
@@ -102,19 +100,40 @@ class _ParentPaymentRequestFormScreenState
       _fees.isEmpty ? const <String, dynamic>{} : _fees.first;
 
   bool get _isTuition => _text(_selectedFee['fee_type']) == 'tuition';
+  List<String> get _allowedMonthNames {
+    final configured = (_selectedFee['allowed_month_names'] is List
+            ? (_selectedFee['allowed_month_names'] as List)
+                .map((value) => '$value'.trim())
+                .where((value) => value.isNotEmpty)
+                .toList()
+            : const <String>[])
+        .cast<String>();
+    if (configured.isEmpty && _isTuition) {
+      return _monthNames;
+    }
+    return configured;
+  }
+  List<String> get _paidMonthNames =>
+      (_selectedFee['paid_month_names'] is List
+              ? (_selectedFee['paid_month_names'] as List)
+                  .map((value) => '$value'.trim())
+                  .where((value) => value.isNotEmpty)
+                  .toList()
+              : const <String>[])
+          .cast<String>();
+  List<String> get _unpaidMonthNames =>
+      _allowedMonthNames
+          .where((month) => !_paidMonthNames.contains(month))
+          .toList(growable: false);
   double get _totalAmount {
     final balance =
         (_selectedFee['amount'] as num?)?.toDouble() ??
         (_selectedFee['balance_amount'] as num?)?.toDouble() ??
         0;
-    if (_isTuition && _intervalMode == 'monthly') {
+    if (_isTuition) {
       final monthly =
           (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? balance / 12;
       return monthly * _selectedMonthNames.length;
-    }
-    if (_isTuition && _intervalMode == 'term_wise') {
-      final term = (_selectedFee['term_amount'] as num?)?.toDouble() ?? balance;
-      return term * _selectedTerms;
     }
     return balance;
   }
@@ -176,6 +195,7 @@ class _ParentPaymentRequestFormScreenState
         fallback: _paymentMode,
       );
     }
+    _seedMonthSelection();
     _loadPaymentConfig(forceRefresh: true);
   }
 
@@ -185,6 +205,18 @@ class _ParentPaymentRequestFormScreenState
     _paymentDateController.dispose();
     _remarksController.dispose();
     super.dispose();
+  }
+
+  void _seedMonthSelection() {
+    _selectedMonthNames
+      ..clear()
+      ..addAll(_initialContinuousMonthSelection());
+  }
+
+  List<String> _initialContinuousMonthSelection() {
+    if (!_isTuition) return const <String>[];
+    if (_unpaidMonthNames.isEmpty) return const <String>[];
+    return <String>[_unpaidMonthNames.first];
   }
 
   Future<void> _loadPaymentConfig({bool forceRefresh = false}) async {
@@ -315,7 +347,40 @@ class _ParentPaymentRequestFormScreenState
       (_isClarificationResubmit || !_isUpiMode || _upiEnabled) &&
       _isIsoDate(_paymentDateController.text.trim()) &&
       (!_requiresReference || _utrController.text.trim().length >= 6) &&
+      (!_isTuition || _selectedMonthNames.isNotEmpty) &&
       (!_requiresProof || (_proofPath?.isNotEmpty ?? false));
+
+  bool _isPaidMonth(String month) => _paidMonthNames.contains(month);
+
+  bool _canAddMonth(String month) {
+    if (!_isTuition || _isPaidMonth(month)) return false;
+    final nextIndex = _selectedMonthNames.length;
+    if (nextIndex >= _unpaidMonthNames.length) return false;
+    return _unpaidMonthNames[nextIndex] == month;
+  }
+
+  bool _canRemoveMonth(String month) {
+    if (!_selectedMonthNames.contains(month)) return false;
+    if (_selectedMonthNames.length <= 1) return false;
+    final ordered = _unpaidMonthNames
+        .where(_selectedMonthNames.contains)
+        .toList(growable: false);
+    return ordered.isNotEmpty && ordered.last == month;
+  }
+
+  void _toggleMonthSelection(String month) {
+    if (_submitting || !_isTuition) return;
+    setState(() {
+      if (_selectedMonthNames.contains(month)) {
+        if (_canRemoveMonth(month)) {
+          _selectedMonthNames.remove(month);
+        }
+      } else if (_canAddMonth(month)) {
+        _selectedMonthNames.add(month);
+      }
+      _resetPaymentIntent();
+    });
+  }
 
   Widget _buildPaymentModeSelector() {
     return _panel(
@@ -492,7 +557,7 @@ class _ParentPaymentRequestFormScreenState
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Book & Kit is a one-time fee. It cannot be split into monthly or term payments.',
+                'Book & Kit is a one-time fee. Parents must clear the remaining balance in one payment.',
                 style: GoogleFonts.dmSans(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -505,86 +570,70 @@ class _ParentPaymentRequestFormScreenState
       );
     }
     final monthly = (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? 0;
-    final termAmount = (_selectedFee['term_amount'] as num?)?.toDouble() ?? 0;
-    final termCount = (_selectedFee['term_count'] as num?)?.toInt() ?? 0;
     return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Tuition payment interval',
+            'Tuition month selection',
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'monthly', label: Text('Monthly')),
-              ButtonSegment(value: 'term_wise', label: Text('Term-wise')),
-            ],
-            selected: {_intervalMode == 'full' ? 'monthly' : _intervalMode},
-            onSelectionChanged: _submitting
-                ? null
-                : (values) => setState(() {
-                    _intervalMode = values.first;
-                    _resetPaymentIntent();
-                  }),
+          Text(
+            '₹${monthly.toStringAsFixed(0)} per month',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 12),
-          if ((_intervalMode == 'full' || _intervalMode == 'monthly')) ...[
+          Text(
+            'Months already marked by the school stay locked. You can only extend the next continuous unpaid month range.',
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _monthNames.map((month) {
+              final selected = _selectedMonthNames.contains(month);
+              final paid = _isPaidMonth(month);
+              final canAdd = _canAddMonth(month);
+              final canRemove = _canRemoveMonth(month);
+              final enabled = canAdd || canRemove;
+              return FilterChip(
+                label: Text(paid ? '$month Paid' : month),
+                selected: selected || paid,
+                onSelected: enabled ? (_) => _toggleMonthSelection(month) : null,
+                selectedColor: paid
+                    ? context.appTheme.success.withOpacity(0.16)
+                    : context.appTheme.primaryContainer,
+                disabledColor: paid
+                    ? context.appTheme.success.withOpacity(0.10)
+                    : context.appTheme.surfaceVariant,
+                checkmarkColor: paid
+                    ? context.appTheme.success
+                    : context.appTheme.primary,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _selectedMonthNames.isEmpty
+                ? 'Select the next payable month to continue.'
+                : 'Selected months: ${_unpaidMonthNames.where(_selectedMonthNames.contains).join(', ')}',
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          if (_paidMonthNames.isNotEmpty) ...[
+            const SizedBox(height: 4),
             Text(
-              '₹${monthly.toStringAsFixed(0)} per month',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _monthNames.map((month) {
-                final selected = _selectedMonthNames.contains(month);
-                return FilterChip(
-                  label: Text(month),
-                  selected: selected,
-                  onSelected: _submitting
-                      ? null
-                      : (value) => setState(() {
-                          if (value) {
-                            _selectedMonthNames.add(month);
-                          } else if (_selectedMonthNames.length > 1) {
-                            _selectedMonthNames.remove(month);
-                          }
-                          _resetPaymentIntent();
-                        }),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Selected months: ${_selectedMonthNames.join(', ')}',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-            ),
-          ] else ...[
-            Text(
-              termCount > 0
-                  ? '₹${termAmount.toStringAsFixed(0)} per term'
-                  : 'Academic terms are not configured yet.',
-              style: GoogleFonts.dmSans(fontWeight: FontWeight.w800),
-            ),
-            if (termCount > 0) ...[
-              Slider(
-                value: _selectedTerms.clamp(1, termCount).toDouble(),
-                min: 1,
-                max: termCount.toDouble(),
-                divisions: termCount > 1 ? termCount - 1 : null,
-                label: '$_selectedTerms term(s)',
-                onChanged: _submitting
-                    ? null
-                    : (value) => setState(() {
-                        _selectedTerms = value.round();
-                        _resetPaymentIntent();
-                      }),
+              'Already paid: ${_paidMonthNames.join(', ')}',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.success,
+                fontWeight: FontWeight.w600,
               ),
-              Text('Selected terms: $_selectedTerms'),
-            ],
+            ),
           ],
           const Divider(height: 18),
           Row(
@@ -1106,15 +1155,10 @@ class _ParentPaymentRequestFormScreenState
       final intent = await BackendApiClient.instance.createFeePaymentIntent(
         invoiceId: '${_selectedFee['id']}',
         paymentMethod: _paymentMode,
-        selectedMonthNames: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonthNames.toList()
-            : const [],
-        selectedMonths: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonthNames.length
-            : 0,
-        selectedTerms: _isTuition && _intervalMode == 'term_wise'
-            ? _selectedTerms
-            : 0,
+        selectedMonthNames:
+            _isTuition ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList() : const [],
+        selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
+        selectedTerms: 0,
         remarks: _remarksController.text.trim(),
       );
       if (!mounted) return intent;
@@ -1249,15 +1293,10 @@ class _ParentPaymentRequestFormScreenState
         transactionRef: reference,
         screenshotPath: _proofPath!,
         screenshotName: _proofName ?? 'payment-proof',
-        selectedMonthNames: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonthNames.toList()
-            : const [],
-        selectedMonths: _isTuition && _intervalMode != 'term_wise'
-            ? _selectedMonthNames.length
-            : 0,
-        selectedTerms: _isTuition && _intervalMode == 'term_wise'
-            ? _selectedTerms
-            : 0,
+        selectedMonthNames:
+            _isTuition ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList() : const [],
+        selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
+        selectedTerms: 0,
         remarks: _remarksController.text.trim(),
       );
       final requestReference = '${request['request_reference'] ?? ''}'.trim();
@@ -1314,10 +1353,11 @@ class _ParentPaymentRequestFormScreenState
                 fallback: _text(_selectedFee['id']),
               ),
             ),
-            if (_isTuition && _intervalMode != 'term_wise')
-              _confirmRow('Months', _selectedMonthNames.join(', ')),
-            if (_isTuition && _intervalMode == 'term_wise')
-              _confirmRow('Terms', '$_selectedTerms'),
+            if (_isTuition)
+              _confirmRow(
+                'Months',
+                _unpaidMonthNames.where(_selectedMonthNames.contains).join(', '),
+              ),
             _confirmRow('UTR', _utrController.text.trim()),
             _confirmRow('Proof', _proofName ?? 'Selected proof'),
           ],

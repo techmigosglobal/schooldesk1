@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class ParentTeacherChatScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _pollingTimer;
+  RealtimeChannel? _realtimeChannel;
 
   bool _loading = true;
   bool _sending = false;
@@ -41,11 +44,20 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted && !_sending) _load(background: true);
     });
+    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+      channelName: 'parent-chat-channel',
+      onUpdate: () {
+        if (mounted && !_sending) _load(background: true);
+      },
+    );
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    if (_realtimeChannel != null) {
+      Supabase.instance.client.removeChannel(_realtimeChannel!);
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -77,8 +89,45 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       final principalConversations = await api.getUnifiedChatConversations(
         type: 'principal_parent',
       );
-      final users = await api.getUsers(page: 1, pageSize: 200);
-      final teacherRows = await _loadTeacherRows(children, selectedStudent);
+      final contacts = await api.getUnifiedChatContacts(
+        role: 'parent',
+        studentId: selectedStudent,
+      );
+      final teacherRows = contacts
+          .where((c) => _text(c['role']) == 'teacher')
+          .map((c) {
+            final teacherId = _text(c['id']);
+            final studentId = _text(c['student_id'], fallback: selectedStudent);
+            return _TeacherThread(
+              threadKey: _teacherThreadKey(teacherId, studentId),
+              teacherId: teacherId,
+              teacherName: _text(c['name']),
+              subtitle: _contactSubtitle(c),
+              studentId: studentId,
+              studentName: _text(c['student_name']),
+            );
+          })
+          .toList();
+      final principalContacts = contacts
+          .where((c) => _text(c['role']) == 'principal')
+          .map(
+            (c) => UserAccountModel(
+              id: _text(c['id']),
+              name: _text(c['name']),
+              username: '',
+              email: '',
+              phone: '',
+              avatar: '',
+              schoolId: '',
+              roleId: '',
+              roleName: 'principal',
+              linkedType: '',
+              linkedId: '',
+              isActive: true,
+              isVerified: true,
+            ),
+          )
+          .toList();
       final threads = _mergeThreads(
         parentUserId: profile.id,
         studentId: selectedStudent,
@@ -86,9 +135,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         teacherRows: teacherRows,
         conversations: conversations,
         principalConversations: principalConversations,
-        principalContacts: users.data,
+        principalContacts: principalContacts,
       );
-      final selected = _selectThread(threads);
+      final selected = _selectRetainedThread(_selectedThread, threads);
       final messages = selected?.conversationId.isNotEmpty == true
           ? await api.getUnifiedChatMessages(
               conversationId: selected!.conversationId,
@@ -117,51 +166,6 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         if (!background) _error = error.toString();
       });
     }
-  }
-
-  Future<List<_TeacherThread>> _loadTeacherRows(
-    List<Map<String, dynamic>> children,
-    String selectedStudentId,
-  ) async {
-    final api = BackendApiClient.instance;
-    final rows = <_TeacherThread>[];
-    for (final child in children) {
-      if (selectedStudentId.isNotEmpty &&
-          _text(child['id']) != selectedStudentId) {
-        continue;
-      }
-      final sectionId = _text(child['current_section_id']);
-      if (sectionId.isEmpty) continue;
-      try {
-        final slots = await api.getTimetableSlots(sectionId: sectionId);
-        for (final slot in slots) {
-          final teacherId = _text(slot['staff_id']);
-          if (teacherId.isEmpty) continue;
-          final staff = _map(slot['staff']);
-          final subject = _map(slot['subject']);
-          final name = _name(
-            staff,
-            fallback: _text(slot['teacher_name'], fallback: 'Teacher'),
-          );
-          rows.add(
-            _TeacherThread(
-              threadKey: _teacherThreadKey(teacherId, _text(child['id'])),
-              teacherId: teacherId,
-              teacherName: name,
-              subtitle: [
-                _text(subject['subject_name'] ?? subject['name']),
-                _childClassLabel(child),
-              ].where((part) => part.isNotEmpty).join(' - '),
-              studentId: _text(child['id']),
-              studentName: _childName(child),
-            ),
-          );
-        }
-      } catch (_) {
-        // A timetable gap should not block existing chat conversations.
-      }
-    }
-    return rows;
   }
 
   List<_TeacherThread> _mergeThreads({
@@ -254,13 +258,21 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     return threads;
   }
 
-  _TeacherThread? _selectThread(List<_TeacherThread> threads) {
+  _TeacherThread? _selectRetainedThread(
+    _TeacherThread? selected,
+    List<_TeacherThread> threads,
+  ) {
     if (threads.isEmpty) return null;
-    final selectedId = _selectedThread?.threadKey ?? '';
-    return threads.firstWhere(
-      (thread) => thread.threadKey == selectedId,
-      orElse: () => threads.first,
-    );
+    final selectedId = selected?.threadKey ?? '';
+    if (selectedId.isEmpty) return null;
+    for (final thread in threads) {
+      if (thread.threadKey == selectedId) return thread;
+    }
+    return null;
+  }
+
+  void _clearMessages() {
+    _messages = const [];
   }
 
   Future<void> _send() async {
@@ -360,6 +372,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
               setState(() {
                 _selectedStudentId = id;
                 _selectedThread = null;
+                _clearMessages();
               });
               _load();
             },
@@ -379,10 +392,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       itemCount: _threads.length,
       separatorBuilder: (_, __) =>
           Divider(height: 1, color: context.appTheme.outlineVariant),
-        itemBuilder: (context, index) {
-          final thread = _threads[index];
-          final selected = thread.threadKey == _selectedThread?.threadKey;
-          return ListTile(
+      itemBuilder: (context, index) {
+        final thread = _threads[index];
+        final selected = thread.threadKey == _selectedThread?.threadKey;
+        return ListTile(
           selected: selected,
           leading: CircleAvatar(child: Text(_initials(thread.teacherName))),
           title: Text(
@@ -421,7 +434,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
             ],
           ),
           onTap: () {
-            setState(() => _selectedThread = thread);
+            setState(() {
+              _selectedThread = thread;
+              _clearMessages();
+            });
             _load(background: true);
           },
         );
@@ -429,10 +445,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
     );
   }
 
-  Widget _chatPane({
-    required bool canSend,
-    required bool showBackButton,
-  }) {
+  Widget _chatPane({required bool canSend, required bool showBackButton}) {
     final thread = _selectedThread;
     if (thread == null) {
       return const Center(child: Text('Select a teacher to start chatting.'));
@@ -444,7 +457,10 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
               ? IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
                   tooltip: 'Back to chats',
-                  onPressed: () => setState(() => _selectedThread = null),
+                  onPressed: () => setState(() {
+                    _selectedThread = null;
+                    _clearMessages();
+                  }),
                 )
               : CircleAvatar(child: Text(_initials(thread.teacherName))),
           title: Text(thread.teacherName),
@@ -535,12 +551,19 @@ class _TeacherThread {
       subtitle: subtitle,
       studentId: studentId,
       studentName: studentName,
+      conversationType: conversationType,
       conversationId: conversationId ?? this.conversationId,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageAt: lastMessageAt ?? this.lastMessageAt,
       unreadCount: unreadCount ?? this.unreadCount,
     );
   }
+}
+
+String _contactSubtitle(Map<String, dynamic> row) {
+  final contactRole = _text(row['contact_role']);
+  if (contactRole == 'co_teacher') return 'Co-teacher';
+  return 'Teacher';
 }
 
 String _teacherThreadKey(String teacherId, String studentId) =>
@@ -565,13 +588,6 @@ String _name(Map<String, dynamic> row, {String fallback = ''}) {
 }
 
 String _childName(Map<String, dynamic> row) => _name(row, fallback: 'Child');
-
-String _childClassLabel(Map<String, dynamic> row) {
-  return [
-    _text(row['grade_name'] ?? row['class']),
-    _text(row['section_name'] ?? row['section']),
-  ].where((part) => part.isNotEmpty).join(' ');
-}
 
 String _initials(String value) {
   final words = value.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();

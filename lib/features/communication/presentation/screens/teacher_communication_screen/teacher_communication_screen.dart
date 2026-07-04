@@ -8,6 +8,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class TeacherCommunicationScreen extends StatefulWidget {
@@ -23,6 +25,7 @@ class _TeacherCommunicationScreenState
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _pollingTimer;
+  RealtimeChannel? _realtimeChannel;
 
   bool _loading = true;
   bool _sending = false;
@@ -39,11 +42,20 @@ class _TeacherCommunicationScreenState
     _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted && !_sending) _load(background: true);
     });
+    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+      channelName: 'teacher-chat-channel',
+      onUpdate: () {
+        if (mounted && !_sending) _load(background: true);
+      },
+    );
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    if (_realtimeChannel != null) {
+      Supabase.instance.client.removeChannel(_realtimeChannel!);
+    }
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -68,22 +80,26 @@ class _TeacherCommunicationScreenState
         type: 'principal_teacher',
         teacherId: RoleAccessService.teacherStaffId,
       );
-      final users = await api.getUsers(page: 1, pageSize: 200);
-      final conversations = _mergeConversationsWithContacts(
-        parentConversations: parentConversations,
-        principalConversations: principalConversations,
-        userContacts: users.data,
-      )..sort((a, b) {
-          final leftPlaceholder = _isContactPlaceholder(a);
-          final rightPlaceholder = _isContactPlaceholder(b);
-          if (leftPlaceholder != rightPlaceholder) {
-            return leftPlaceholder ? 1 : -1;
-          }
-          final timeCompare = _sortTime(b).compareTo(_sortTime(a));
-          if (timeCompare != 0) return timeCompare;
-          return _conversationTitle(a).compareTo(_conversationTitle(b));
-        });
-      final selected = _selectConversation(conversations);
+      final contacts = await api.getUnifiedChatContacts(role: 'teacher');
+      final conversations =
+          _mergeConversationsWithContacts(
+            parentConversations: parentConversations,
+            principalConversations: principalConversations,
+            contacts: contacts,
+          )..sort((a, b) {
+            final leftPlaceholder = _isContactPlaceholder(a);
+            final rightPlaceholder = _isContactPlaceholder(b);
+            if (leftPlaceholder != rightPlaceholder) {
+              return leftPlaceholder ? 1 : -1;
+            }
+            final timeCompare = _sortTime(b).compareTo(_sortTime(a));
+            if (timeCompare != 0) return timeCompare;
+            return _conversationTitle(a).compareTo(_conversationTitle(b));
+          });
+      final selected = _selectRetainedConversation(
+        _selectedConversation,
+        conversations,
+      );
       final messages = selected == null
           ? <Map<String, dynamic>>[]
           : _isContactPlaceholder(selected)
@@ -112,15 +128,21 @@ class _TeacherCommunicationScreenState
     }
   }
 
-  Map<String, dynamic>? _selectConversation(
+  Map<String, dynamic>? _selectRetainedConversation(
+    Map<String, dynamic>? selected,
     List<Map<String, dynamic>> conversations,
   ) {
     if (conversations.isEmpty) return null;
-    final selectedId = _text(_selectedConversation?['id']);
-    return conversations.firstWhere(
-      (row) => _text(row['id']) == selectedId,
-      orElse: () => conversations.first,
-    );
+    final selectedId = _text(selected?['id']);
+    if (selectedId.isEmpty) return null;
+    for (final row in conversations) {
+      if (_text(row['id']) == selectedId) return row;
+    }
+    return null;
+  }
+
+  void _clearMessages() {
+    _messages = const [];
   }
 
   Future<void> _send() async {
@@ -136,6 +158,7 @@ class _TeacherCommunicationScreenState
               type: _text(conversation['type'], fallback: 'parent_teacher'),
               teacherId: RoleAccessService.teacherStaffId,
               parentId: _text(conversation['parent_id']),
+              studentId: _text(conversation['student_id']),
               title: _conversationTitle(conversation),
             );
         conversationId = _text(created['id']);
@@ -154,8 +177,8 @@ class _TeacherCommunicationScreenState
   @override
   Widget build(BuildContext context) {
     return TeacherFlowScaffold(
-      title: 'Parent Messages',
-      subtitle: 'WhatsApp-style parent conversations monitored by principal',
+      title: 'Communication',
+      subtitle: 'Parent and principal chats in one place',
       selectedIndex: TeacherNav.communication,
       loading: _loading,
       error: _error,
@@ -242,7 +265,10 @@ class _TeacherCommunicationScreenState
             ],
           ),
           onTap: () {
-            setState(() => _selectedConversation = row);
+            setState(() {
+              _selectedConversation = row;
+              _clearMessages();
+            });
             _load(background: true);
           },
         );
@@ -263,7 +289,10 @@ class _TeacherCommunicationScreenState
               ? IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
                   tooltip: 'Back to chats',
-                  onPressed: () => setState(() => _selectedConversation = null),
+                  onPressed: () => setState(() {
+                    _selectedConversation = null;
+                    _clearMessages();
+                  }),
                 )
               : CircleAvatar(child: Text(_initials(label))),
           title: Text(label),
@@ -313,30 +342,37 @@ class _TeacherCommunicationScreenState
 List<Map<String, dynamic>> _mergeConversationsWithContacts({
   required List<Map<String, dynamic>> parentConversations,
   required List<Map<String, dynamic>> principalConversations,
-  required List<UserAccountModel> userContacts,
+  required List<Map<String, dynamic>> contacts,
 }) {
   final merged = <String, Map<String, dynamic>>{
     for (final row in [...parentConversations, ...principalConversations])
       _text(row['id']): Map<String, dynamic>.from(row),
   };
 
-  for (final user in userContacts) {
-    final role = user.roleName.trim().toLowerCase();
+  for (final contact in contacts) {
+    final role = _text(contact['role']).toLowerCase();
     if (role == 'parent') {
-      final parentId = user.id.trim();
+      final parentId = _text(contact['id']);
+      final studentId = _text(contact['student_id']);
       if (parentId.isEmpty) continue;
       final exists = parentConversations.any(
-        (row) => _text(row['parent_id']) == parentId,
+        (row) =>
+            _text(row['parent_id']) == parentId &&
+            _text(row['student_id']) == studentId,
       );
       if (exists) continue;
-      merged['contact-parent-$parentId'] = {
-        'id': 'contact-parent-$parentId',
+      merged['contact-parent-$parentId-$studentId'] = {
+        'id': 'contact-parent-$parentId-$studentId',
         'type': 'parent_teacher',
         'parent_id': parentId,
+        'student_id': studentId,
         'parent': {
           'id': parentId,
-          'name': user.name,
-          'username': user.username,
+          'name': _text(contact['name'], fallback: 'Parent'),
+        },
+        'student': {
+          'id': studentId,
+          'name': _text(contact['student_name'], fallback: 'Student'),
         },
         'last_message': '',
         'last_message_at': null,
@@ -346,7 +382,7 @@ List<Map<String, dynamic>> _mergeConversationsWithContacts({
     }
 
     if (role == 'principal') {
-      final principalId = user.id.trim();
+      final principalId = _text(contact['id']);
       if (principalId.isEmpty) continue;
       final exists = principalConversations.any(
         (row) => _text(row['created_by']) == principalId,
@@ -385,7 +421,7 @@ String _conversationSubtitle(Map<String, dynamic> row) {
   }
   final student = _name(_map(row['student']), fallback: 'Parent contact');
   return _isContactPlaceholder(row)
-      ? 'Parent contact - tap to start direct chat'
+      ? '$student - Parent contact - tap to start direct chat'
       : '$student - Principal can monitor this chat';
 }
 

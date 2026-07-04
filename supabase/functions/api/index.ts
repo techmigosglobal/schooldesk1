@@ -28,6 +28,8 @@ import { handleReports } from "./handlers/reports.ts";
 import { handleMonitoring } from "./handlers/monitoring.ts";
 import { handleHomework } from "./handlers/homework.ts";
 import { handleMedical } from "./handlers/medical.ts";
+import { handleHealthReminders } from "./handlers/health_reminders.ts";
+import { handleBirthdayAlerts } from "./handlers/birthday_alerts.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -96,6 +98,7 @@ export function serviceClient() {
   );
 }
 
+// deno-lint-ignore require-await
 async function ensureSchemaCacheReady() {
   if (schemaReloadPromise) {
     return schemaReloadPromise;
@@ -224,6 +227,18 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  if (path.startsWith("/jobs/birthday-alerts")) {
+    return handleBirthdayAlerts(
+      req,
+      path,
+      method,
+      url,
+      null,
+      serviceClient(),
+      null,
+    );
+  }
+
   // ── All other routes require authentication ────────────────
   const { user, client, svc } = await authedClient(req);
   if (!user || !client) {
@@ -284,6 +299,9 @@ Deno.serve(async (req: Request) => {
   }
   if (path.startsWith("/medical-records")) {
     return handleMedical(req, path, method, url, client, svc, user);
+  }
+  if (path.startsWith("/health-reminders")) {
+    return handleHealthReminders(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/timetable")) {
     return handleTimetable(req, path, method, url, client, svc, user);

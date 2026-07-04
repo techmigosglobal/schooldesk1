@@ -35,6 +35,9 @@ void main() {
     final teacherNav = File(
       'lib/core/widgets/teacher_navigation.dart',
     ).readAsStringSync();
+    final teacherFlow = File(
+      'lib/core/widgets/teacher_flow_ui.dart',
+    ).readAsStringSync();
     final principalNav = File(
       'lib/core/widgets/app_navigation.dart',
     ).readAsStringSync();
@@ -42,8 +45,9 @@ void main() {
       'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
     ).readAsStringSync();
 
-    expect(teacherNav, contains("label: 'Parent Messages'"));
+    expect(teacherNav, contains("label: 'Communication'"));
     expect(teacherNav, contains("label: 'PTM Slots'"));
+    expect(teacherFlow, contains('showBackButton: false'));
     expect(principalNav, isNot(contains("label: 'Broadcasts & Notices'")));
     expect(principalNav, contains("label: 'Communications'"));
     expect(principalDashboard, contains("label: 'Communications'"));

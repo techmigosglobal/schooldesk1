@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 
+import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -76,6 +77,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
   final _upiIdController = TextEditingController();
   final _payeeNameController = TextEditingController();
   final _qrNoteController = TextEditingController();
+  final Set<String> _selectedPaymentMonths = <String>{};
 
   bool _loading = true;
   bool _saving = false;
@@ -151,6 +153,130 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     super.dispose();
   }
 
+  List<String> _invoiceMonthList(Map<String, dynamic>? invoice, String key) {
+    final raw = invoice?[key];
+    if (raw is! List) return const <String>[];
+    return raw
+        .map((value) => '$value'.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  bool _isTuitionInvoice(Map<String, dynamic>? invoice) =>
+      _textValue(invoice?['fee_type']) == 'tuition';
+
+  List<String> _allowedInvoiceMonths(Map<String, dynamic>? invoice) =>
+      _invoiceMonthList(invoice, 'allowed_month_names');
+
+  List<String> _paidInvoiceMonths(Map<String, dynamic>? invoice) =>
+      _invoiceMonthList(invoice, 'paid_month_names');
+
+  List<String> _unpaidInvoiceMonths(Map<String, dynamic>? invoice) {
+    final allowed = _allowedInvoiceMonths(invoice);
+    final paid = _paidInvoiceMonths(invoice).toSet();
+    return allowed.where((month) => !paid.contains(month)).toList();
+  }
+
+  void _seedManualPaymentMonths(Map<String, dynamic>? invoice) {
+    _selectedPaymentMonths.clear();
+    final unpaid = _unpaidInvoiceMonths(invoice);
+    if (_isTuitionInvoice(invoice) && unpaid.isNotEmpty) {
+      _selectedPaymentMonths.add(unpaid.first);
+    }
+  }
+
+  void _recalculateManualPaymentAmount() {
+    final invoice = _selectedInvoice;
+    if (invoice == null) return;
+    if (!_isTuitionInvoice(invoice)) {
+      _paymentAmountController.text = _amountText(
+        _numValue(invoice['balance']),
+      );
+      return;
+    }
+    final unpaid = _unpaidInvoiceMonths(invoice);
+    final monthly = _numValue(invoice['monthly_amount']);
+    if (_selectedPaymentMonths.isEmpty || monthly <= 0) {
+      _paymentAmountController.text = _amountText(0);
+      return;
+    }
+    final amount = _selectedPaymentMonths.length == unpaid.length
+        ? _numValue(invoice['balance'])
+        : monthly * _selectedPaymentMonths.length;
+    _paymentAmountController.text = _amountText(amount);
+  }
+
+  void _selectManualMonthsForAmount(double amount) {
+    final invoice = _selectedInvoice;
+    if (!_isTuitionInvoice(invoice)) return;
+    final unpaid = _unpaidInvoiceMonths(invoice);
+    final monthly = _numValue(invoice?['monthly_amount']);
+    _selectedPaymentMonths.clear();
+    if (unpaid.isEmpty || monthly <= 0 || amount <= 0) return;
+    final balance = _numValue(invoice?['balance']);
+    final cappedAmount = amount > balance && balance > 0 ? balance : amount;
+    final selectedCount = (cappedAmount / monthly).round().clamp(
+      1,
+      unpaid.length,
+    );
+    _selectedPaymentMonths.addAll(unpaid.take(selectedCount));
+  }
+
+  void _syncManualMonthsFromAmount() {
+    final invoice = _selectedInvoice;
+    if (!_isTuitionInvoice(invoice)) return;
+    final amount = double.tryParse(_paymentAmountController.text.trim()) ?? 0;
+    setState(() => _selectManualMonthsForAmount(amount));
+  }
+
+  double _manualPaymentAmountForSelection(Map<String, dynamic> invoice) {
+    if (!_isTuitionInvoice(invoice)) return _numValue(invoice['balance']);
+    final unpaid = _unpaidInvoiceMonths(invoice);
+    final monthly = _numValue(invoice['monthly_amount']);
+    if (_selectedPaymentMonths.isEmpty || monthly <= 0) return 0;
+    return _selectedPaymentMonths.length == unpaid.length
+        ? _numValue(invoice['balance'])
+        : monthly * _selectedPaymentMonths.length;
+  }
+
+  bool _canAddManualMonth(String month) {
+    final invoice = _selectedInvoice;
+    final unpaid = _unpaidInvoiceMonths(invoice);
+    if (!_isTuitionInvoice(invoice) ||
+        _paidInvoiceMonths(invoice).contains(month)) {
+      return false;
+    }
+    final nextIndex = _selectedPaymentMonths.length;
+    if (nextIndex >= unpaid.length) return false;
+    return unpaid[nextIndex] == month;
+  }
+
+  bool _canRemoveManualMonth(String month) {
+    if (!_selectedPaymentMonths.contains(month) ||
+        _selectedPaymentMonths.length <= 1) {
+      return false;
+    }
+    final ordered = _unpaidInvoiceMonths(
+      _selectedInvoice,
+    ).where(_selectedPaymentMonths.contains).toList(growable: false);
+    return ordered.isNotEmpty && ordered.last == month;
+  }
+
+  void _toggleManualMonth(String month) {
+    final invoice = _selectedInvoice;
+    if (!_isTuitionInvoice(invoice)) return;
+    setState(() {
+      if (_selectedPaymentMonths.contains(month)) {
+        if (_canRemoveManualMonth(month)) {
+          _selectedPaymentMonths.remove(month);
+        }
+      } else if (_canAddManualMonth(month)) {
+        _selectedPaymentMonths.add(month);
+      }
+      _recalculateManualPaymentAmount();
+    });
+  }
+
   void _handleOverviewScroll() {
     final shouldShow =
         _overviewScrollController.hasClients &&
@@ -187,7 +313,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
       List<Map<String, dynamic>> prList = const [];
       try {
-        prList = await api.getParentPaymentRequests(status: 'pending');
+        prList = (await api.getParentPaymentRequests()).where((request) {
+          final status = _textValue(request['status']).toLowerCase();
+          return status == 'pending' ||
+              status == 'pending_verification' ||
+              status == 'clarification_required';
+        }).toList();
       } catch (_) {
         // Payment requests endpoint may not exist yet — fail gracefully.
       }
@@ -1325,7 +1456,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         const SizedBox(height: 10),
         _FeeInfoBanner(
           text:
-              'Use this for cash or older offline payments. Amount is required; reference number and note are optional.',
+              'Use this for cash or older offline payments. For tuition, record the next continuous unpaid months so parent UPI and principal cash stay in sync.',
         ),
         const SizedBox(height: 10),
         FilledButton(
@@ -1338,6 +1469,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
 
   Widget _buildCollectDetailsView() {
     final account = _selectedAccount;
+    final invoice = _selectedInvoice;
     if (account == null) {
       return _missingSelectionPage(
         title: 'Manual Fee Update',
@@ -1364,6 +1496,53 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_isTuitionInvoice(invoice)) ...[
+                Text(
+                  'Tuition months',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: context.appTheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select the next continuous unpaid month range. Already paid months stay locked.',
+                  style: TextStyle(fontSize: 12, color: context.appTheme.muted),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _allowedInvoiceMonths(invoice).map((month) {
+                    final isPaid = _paidInvoiceMonths(invoice).contains(month);
+                    final isSelected = _selectedPaymentMonths.contains(month);
+                    final canToggle =
+                        _canAddManualMonth(month) ||
+                        _canRemoveManualMonth(month);
+                    return FilterChip(
+                      label: Text(isPaid ? '$month Paid' : month),
+                      selected: isPaid || isSelected,
+                      onSelected: canToggle
+                          ? (_) => _toggleManualMonth(month)
+                          : null,
+                      selectedColor: isPaid
+                          ? context.appTheme.success.withOpacity(0.16)
+                          : context.appTheme.primaryContainer,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _selectedPaymentMonths.isEmpty
+                      ? 'Pick the next payable month.'
+                      : 'Selected months: ${_unpaidInvoiceMonths(invoice).where(_selectedPaymentMonths.contains).join(', ')}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: context.appTheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               TextField(
                 controller: _paymentAmountController,
                 keyboardType: const TextInputType.numberWithOptions(
@@ -1372,6 +1551,15 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Amount to be Paid',
                 ),
+                onChanged: (_) => _syncManualMonthsFromAmount(),
+                onEditingComplete: () {
+                  if (_isTuitionInvoice(invoice)) {
+                    _paymentAmountController.text = _amountText(
+                      _manualPaymentAmountForSelection(invoice!),
+                    );
+                  }
+                  FocusScope.of(context).unfocus();
+                },
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<_PaymentMode>(
@@ -2029,94 +2217,158 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 18,
-              right: 18,
-              bottom: MediaQuery.viewInsetsOf(context).bottom + 18,
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Edit Parent QR',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final qrImageUrl = _textValue(_paymentConfig['qr_image_url']);
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 18,
+                  right: 18,
+                  bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + 18,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Edit Parent QR',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text('Current QR image'),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 170,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: context.appTheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: context.appTheme.outlineVariant,
+                          ),
+                        ),
+                        child: qrImageUrl.isEmpty
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.qr_code_2_rounded,
+                                    size: 56,
+                                    color: context.appTheme.muted,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'No QR uploaded yet',
+                                    style: TextStyle(
+                                      color: context.appTheme.muted,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.network(
+                                  _absoluteMediaUrl(qrImageUrl),
+                                  height: 154,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.broken_image_outlined,
+                                    color: context.appTheme.error,
+                                  ),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _upiIdController,
+                        decoration: const InputDecoration(
+                          labelText: 'UPI ID',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _payeeNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Payee name',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _qrNoteController,
+                        minLines: 2,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment note for parents',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: _uploadingQr
+                            ? null
+                            : () => _pickPaymentQr(
+                                onUpdated: () => setSheetState(() {}),
+                              ),
+                        icon: _uploadingQr
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.qr_code_2_rounded),
+                        label: const Text('Upload QR Image'),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _savingPaymentConfig
+                            ? null
+                            : () async {
+                                final saved = await _savePaymentConfig();
+                                if (saved && sheetContext.mounted) {
+                                  Navigator.of(sheetContext).pop();
+                                }
+                              },
+                        icon: _savingPaymentConfig
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.save_outlined),
+                        label: const Text('Save Payment Details'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _upiIdController,
-                    decoration: const InputDecoration(
-                      labelText: 'UPI ID',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _payeeNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Payee name',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _qrNoteController,
-                    minLines: 2,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: 'Payment note for parents',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  OutlinedButton.icon(
-                    onPressed: _uploadingQr ? null : _pickPaymentQr,
-                    icon: _uploadingQr
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.qr_code_2_rounded),
-                    label: const Text('Upload QR Image'),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: _savingPaymentConfig
-                        ? null
-                        : () async {
-                            await _savePaymentConfig();
-                            if (mounted && Navigator.canPop(context)) {
-                              Navigator.pop(context);
-                            }
-                          },
-                    icon: _savingPaymentConfig
-                        ? const SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save_outlined),
-                    label: const Text('Save Payment Details'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  void _syncPaymentConfigControllers() {
-    _upiIdController.text = _textValue(_paymentConfig['upi_id']);
-    _payeeNameController.text = _textValue(_paymentConfig['payee_name']);
-    _qrNoteController.text = _textValue(_paymentConfig['qr_note']);
+  String _absoluteMediaUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
+    return '${EnvConfig.apiOrigin}/$trimmed';
   }
 
-  Future<void> _savePaymentConfig() async {
+  Future<bool> _savePaymentConfig() async {
     setState(() => _savingPaymentConfig = true);
     try {
       final config = await BackendApiClient.instance.updatePaymentConfig(
@@ -2125,17 +2377,19 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         qrNote: _qrNoteController.text,
         qrImageUrl: _textValue(_paymentConfig['qr_image_url']),
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _paymentConfig = config);
       _snack('Parent payment QR details saved.', success: true);
+      return true;
     } catch (error) {
       _snack('Unable to save payment QR details: $error');
+      return false;
     } finally {
       if (mounted) setState(() => _savingPaymentConfig = false);
     }
   }
 
-  Future<void> _pickPaymentQr() async {
+  Future<void> _pickPaymentQr({VoidCallback? onUpdated}) async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
@@ -2153,13 +2407,23 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       if (!mounted) return;
       setState(() => _paymentConfig = config);
       _syncPaymentConfigControllers();
-      // Auto-save so the QR URL is persisted immediately
-      await _savePaymentConfig();
+      onUpdated?.call();
+      _snack('Payment QR uploaded for parents.', success: true);
     } catch (error) {
       _snack('Unable to upload payment QR: $error');
     } finally {
       if (mounted) setState(() => _uploadingQr = false);
     }
+  }
+
+  void _syncPaymentConfigControllers() {
+    _upiIdController.text = _textValue(_paymentConfig['upi_id']);
+    _payeeNameController.text = _textValue(_paymentConfig['payee_name']);
+    _qrNoteController.text = _textValue(_paymentConfig['qr_note']);
+  }
+
+  void _disposeFeeComponentAfterFrame(_FeeComponentEntry component) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => component.dispose());
   }
 
   void _showFeeStructureEditor() {
@@ -2226,8 +2490,8 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                 tooltip: 'Remove component',
                                 onPressed: () {
                                   setSheetState(() {
-                                    components[i].dispose();
-                                    components.removeAt(i);
+                                    final removed = components.removeAt(i);
+                                    _disposeFeeComponentAfterFrame(removed);
                                   });
                                 },
                               ),
@@ -2264,7 +2528,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                       const SizedBox(height: 12),
                       _FeeInfoBanner(
                         text:
-                            'Principal sets only the total amount and due date. Book & Kit Fee stays one-time. Tuition Fee is automatically divided monthly or term-wise for parents.',
+                            'Principal sets only the total amount and due date. Book & Kit Fee stays one-time. Tuition Fee is automatically divided month-wise, and parents or the principal must clear the months in continuous order.',
                       ),
                       const SizedBox(height: 12),
                       FilledButton.icon(
@@ -2320,7 +2584,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                     final feeType = _feeTypeForName(compName);
                                     final billingMode = feeType == 'book_kit'
                                         ? 'one_time'
-                                        : 'term_wise';
+                                        : 'monthly';
 
                                     // Find or create the fee category
                                     final existing = categories
@@ -2343,19 +2607,22 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
                                             ))['id'],
                                           );
 
-                                    final created = await api.createFeeStructure(
-                                      academicYearId: yearId,
-                                      gradeId: gradeId,
-                                      sectionId: _selectedSectionId,
-                                      feeCategoryId: categoryId,
-                                      amount: amount,
-                                      feeType: feeType,
-                                      billingMode: billingMode,
-                                      priority: feeType == 'book_kit' ? 1 : 2,
-                                      effectiveFrom: DateFormat(
-                                        'yyyy-MM-dd',
-                                      ).format(DateTime.now()),
-                                    );
+                                    final created = await api
+                                        .createFeeStructure(
+                                          academicYearId: yearId,
+                                          gradeId: gradeId,
+                                          sectionId: _selectedSectionId,
+                                          feeCategoryId: categoryId,
+                                          amount: amount,
+                                          feeType: feeType,
+                                          billingMode: billingMode,
+                                          priority: feeType == 'book_kit'
+                                              ? 1
+                                              : 2,
+                                          effectiveFrom: DateFormat(
+                                            'yyyy-MM-dd',
+                                          ).format(DateTime.now()),
+                                        );
                                     final createdId = _textValue(created['id']);
                                     if (createdId.isNotEmpty) {
                                       structureIdsToSync.add(createdId);
@@ -3040,11 +3307,13 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     setState(() {
       _selectedAccount = account;
       _selectedInvoice = invoice;
-      _selectedPaymentMode = _PaymentMode.onlinePayment;
+      _selectedPaymentMode = _PaymentMode.cash;
       _paymentDate = DateTime.now();
+      _seedManualPaymentMonths(invoice);
       _paymentAmountController.text = _amountText(
         _numValue(invoice['balance']),
       );
+      _recalculateManualPaymentAmount();
       _transactionController.text = _suggestedTransactionId();
       _notesController.clear();
       _view = _FeeView.collectMode;
@@ -3306,7 +3575,9 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       _snack('Select a student invoice before continuing.');
       return;
     }
+    _seedManualPaymentMonths(invoice);
     _paymentAmountController.text = _amountText(_numValue(invoice['balance']));
+    _recalculateManualPaymentAmount();
     setState(() => _view = _FeeView.collectDetails);
   }
 
@@ -3319,7 +3590,7 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     }
 
     final invoiceId = _textValue(invoice['id']);
-    final amount = double.tryParse(_paymentAmountController.text.trim()) ?? 0.0;
+    var amount = double.tryParse(_paymentAmountController.text.trim()) ?? 0.0;
     final balance = _numValue(invoice['balance']);
     if (invoiceId.isEmpty) {
       _snack('Backend invoice ID is missing.');
@@ -3329,6 +3600,15 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       _snack('Payment amount must be greater than zero.');
       return;
     }
+    if (_isTuitionInvoice(invoice)) {
+      _selectManualMonthsForAmount(amount);
+      if (_selectedPaymentMonths.isEmpty) {
+        _snack('Select the next continuous tuition month range first.');
+        return;
+      }
+      amount = _manualPaymentAmountForSelection(invoice);
+      _paymentAmountController.text = _amountText(amount);
+    }
     if (amount > balance) {
       _snack('Payment amount exceeds outstanding balance.');
       return;
@@ -3337,6 +3617,10 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
     final receiptNumber = _receiptNumber();
     setState(() => _saving = true);
     try {
+      final unpaidMonths = _unpaidInvoiceMonths(invoice);
+      final selectedMonths = unpaidMonths
+          .where(_selectedPaymentMonths.contains)
+          .toList(growable: false);
       await BackendApiClient.instance.recordPayment(
         PaymentRequest(
           invoiceId: invoiceId,
@@ -3350,6 +3634,12 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
           remarks: _notesController.text.trim().isEmpty
               ? null
               : _notesController.text.trim(),
+          selectedMonthNames: _isTuitionInvoice(invoice)
+              ? selectedMonths
+              : const [],
+          selectedMonths: _isTuitionInvoice(invoice)
+              ? selectedMonths.length
+              : 0,
         ),
       );
       final result = _FeePaymentResult(
@@ -3856,11 +4146,21 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
         account.invoices
             .where((invoice) => _numValue(invoice['balance']) > 0)
             .toList()
-          ..sort(
-            (a, b) =>
-                _sortDate(a['due_date']).compareTo(_sortDate(b['due_date'])),
-          );
+          ..sort((a, b) {
+            final priorityCompare = _feeInvoicePriority(
+              a,
+            ).compareTo(_feeInvoicePriority(b));
+            if (priorityCompare != 0) return priorityCompare;
+            return _sortDate(a['due_date']).compareTo(_sortDate(b['due_date']));
+          });
     return due.isEmpty ? null : due.first;
+  }
+
+  int _feeInvoicePriority(Map<String, dynamic> invoice) {
+    final raw = invoice['priority'];
+    final parsed = raw is num ? raw.toInt() : int.tryParse('$raw');
+    if (parsed != null && parsed > 0) return parsed;
+    return _textValue(invoice['fee_type']) == 'book_kit' ? 1 : 2;
   }
 
   _FeeStructureBundle? _reselectStructure(_FeeStructureBundle? current) {
@@ -3955,10 +4255,17 @@ class _FeeMonitoringScreenState extends State<FeeMonitoringScreen> {
       ),
       'photo_url': _textValue(student['photo_url'] ?? student['photo']),
       'invoice_number': _textValue(row['invoice_number']),
+      'fee_type': _textValue(row['fee_type']),
+      'billing_mode': _textValue(row['billing_mode']),
+      'priority': row['priority'],
       'total': _numValue(row['total_amount'] ?? row['net_amount']),
       'discount': _numValue(row['discount_amount']),
       'paid': _numValue(row['paid_amount']),
       'balance': _numValue(row['balance']),
+      'monthly_amount': _numValue(row['monthly_amount']),
+      'allowed_month_names': row['allowed_month_names'],
+      'paid_month_names': row['paid_month_names'],
+      'unpaid_month_names': row['unpaid_month_names'],
       'status': _textValue(row['status'], fallback: 'pending'),
       'due_date': row['due_date'],
     };

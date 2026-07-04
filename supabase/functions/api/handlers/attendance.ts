@@ -85,7 +85,7 @@ async function verifyStaffQrToken(token: string) {
   return parsed;
 }
 
-function staffAttendanceCsv(rows: Array<Record<string, any>>) {
+function staffAttendanceCsv(rows: Array<Record<string, unknown>>) {
   const header = [
     "date",
     "staff_name",
@@ -153,7 +153,7 @@ async function loadAttendanceSession(
   return data as Record<string, unknown> | null;
 }
 
-async function canUseAttendanceSession(
+function canUseAttendanceSession(
   svc: SupabaseClient,
   school: string,
   roleName: string,
@@ -176,7 +176,7 @@ export async function handleAttendance(
   path: string,
   method: string,
   url: URL,
-  client: SupabaseClient,
+  _client: SupabaseClient,
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {

@@ -19,7 +19,7 @@ function qp(url: URL, key: string): string | null {
   return url.searchParams.get(key);
 }
 
-function paginate(url: URL) {
+function _paginate(url: URL) {
   const page = parseInt(qp(url, "page") ?? "1");
   const size = parseInt(qp(url, "page_size") ?? "50");
   return { from: (page - 1) * size, to: page * size - 1 };
@@ -66,7 +66,7 @@ export async function handleAcademics(
   path: string,
   method: string,
   url: URL,
-  client: SupabaseClient,
+  _client: SupabaseClient,
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {

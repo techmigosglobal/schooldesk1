@@ -1,15 +1,12 @@
 {
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext", "deno.ns"],
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "strict": false
+    "strict": false,
+    "noImplicitAny": false
   },
   "lint": {
-    "rules": {
-      "include": ["scripts/**/*.ts"],
-      "exclude": ["build/**", "android/**", "ios/**"]
-    }
+    "include": ["scripts/**/*.ts"],
+    "exclude": ["build/**", "android/**", "ios/**", "supabase/**"]
   },
   "fmt": {
     "lineWidth": 80,

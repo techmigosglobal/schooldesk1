@@ -1,12 +1,12 @@
 // handlers/schools.ts
-import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { ok, fail, serviceClient } from "../index.ts";
+import { SupabaseClient, User as _User } from "https://esm.sh/@supabase/supabase-js@2";
+import { ok, fail } from "../index.ts";
 
 export async function handleSchools(
   req: Request,
   path: string,
   method: string,
-  url: URL,
+  _url: URL,
   client: SupabaseClient | null,
   svc: SupabaseClient,
 ): Promise<Response> {

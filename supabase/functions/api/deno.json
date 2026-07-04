@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "deno.unstable", "dom"],
+    "strict": false,
+    "noImplicitAny": false
+  },
+  "imports": {
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  },
+  "lint": {
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "no-var",
+        "require-await",
+        "no-unused-vars"
+      ]
+    }
+  }
+}

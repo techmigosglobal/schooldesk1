@@ -3,6 +3,20 @@ part of '../backend_api_client.dart';
 extension BackendCommunicationsApi on BackendApiClient {
   // ─── Unified Chat ─────────────────────────────────────────────────────────
 
+  Future<List<Map<String, dynamic>>> getUnifiedChatContacts({
+    required String role,
+    String studentId = '',
+  }) {
+    final params = <String, dynamic>{
+      'role': role.trim().toLowerCase(),
+      if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
+    };
+    return getRawList(
+      '/chat/contacts',
+      queryParameters: params,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> getUnifiedChatConversations({
     String? type,
     String? teacherId,

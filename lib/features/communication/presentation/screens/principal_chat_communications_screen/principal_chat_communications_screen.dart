@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:schooldesk1/core/services/chat_realtime_service.dart';
 import 'package:schooldesk1/features/communication/presentation/widgets/chat_shared_widgets.dart';
 
 class PrincipalChatCommunicationsScreen extends StatefulWidget {
@@ -27,6 +29,7 @@ class _PrincipalChatCommunicationsScreenState
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   Timer? _pollingTimer;
+  RealtimeChannel? _realtimeChannel;
 
   bool _loading = true;
   bool _sending = false;
@@ -39,8 +42,10 @@ class _PrincipalChatCommunicationsScreenState
   DateTime? _dateFilter;
   List<Map<String, dynamic>> _monitorConversations = const [];
   List<Map<String, dynamic>> _directConversations = const [];
-  List<Map<String, dynamic>> _messages = const [];
-  Map<String, dynamic>? _selectedConversation;
+  List<Map<String, dynamic>> _monitorMessages = const [];
+  List<Map<String, dynamic>> _directMessages = const [];
+  Map<String, dynamic>? _selectedMonitorConversation;
+  Map<String, dynamic>? _selectedDirectConversation;
 
   @override
   void initState() {
@@ -50,11 +55,20 @@ class _PrincipalChatCommunicationsScreenState
     _pollingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted && !_sending) _load(background: true);
     });
+    _realtimeChannel = ChatRealtimeService.instance.subscribe(
+      channelName: 'principal-chat-channel',
+      onUpdate: () {
+        if (mounted && !_sending) _load(background: true);
+      },
+    );
   }
 
   @override
   void dispose() {
     _pollingTimer?.cancel();
+    if (_realtimeChannel != null) {
+      Supabase.instance.client.removeChannel(_realtimeChannel!);
+    }
     _tabController.dispose();
     _messageController.dispose();
     _searchController.dispose();
@@ -72,55 +86,92 @@ class _PrincipalChatCommunicationsScreenState
     try {
       final api = BackendApiClient.instance;
       final profile = await api.getProfile();
-      final monitor = await api.getUnifiedChatConversations(
-        type: 'parent_teacher',
-        monitor: true,
+      final monitor = await _safeChatRows(
+        () => api.getUnifiedChatConversations(
+          type: 'parent_teacher',
+          monitor: true,
+        ),
       );
-      final directTeacher = await api.getUnifiedChatConversations(
-        type: 'principal_teacher',
-        monitor: true,
+      final directTeacher = await _safeChatRows(
+        () => api.getUnifiedChatConversations(
+          type: 'principal_teacher',
+          monitor: true,
+        ),
       );
-      final directParent = await api.getUnifiedChatConversations(
-        type: 'principal_parent',
-        monitor: true,
+      final directParent = await _safeChatRows(
+        () => api.getUnifiedChatConversations(
+          type: 'principal_parent',
+          monitor: true,
+        ),
       );
-      final teacherContacts = await api.getStaff(page: 1, pageSize: 200);
-      final parentContacts = await api.getUsers(
-        role: 'Parent',
-        page: 1,
-        pageSize: 200,
+      final contacts = await _safeChatRows(
+        () => api.getUnifiedChatContacts(role: 'principal'),
       );
-      final direct = _mergeDirectConversationsWithContacts(
-        directTeacher: directTeacher,
-        directParent: directParent,
-        teacherContacts: teacherContacts.data,
-        parentContacts: parentContacts.data,
-      )..sort((a, b) {
-          final leftPlaceholder = _isContactPlaceholder(a);
-          final rightPlaceholder = _isContactPlaceholder(b);
-          if (leftPlaceholder != rightPlaceholder) {
-            return leftPlaceholder ? 1 : -1;
-          }
-          final timeCompare = _sortTime(b).compareTo(_sortTime(a));
-          if (timeCompare != 0) return timeCompare;
-          return _directTitle(a).compareTo(_directTitle(b));
-        });
+      List<dynamic> teacherContacts = contacts
+          .where((row) => _text(row['role']).toLowerCase() == 'teacher')
+          .toList();
+      List<dynamic> parentContacts = contacts
+          .where((row) => _text(row['role']).toLowerCase() == 'parent')
+          .toList();
+      if (teacherContacts.isEmpty) {
+        teacherContacts = await _safeModelRows(
+          () async => (await api.getStaff(page: 1, pageSize: 200)).data,
+        );
+      }
+      if (parentContacts.isEmpty) {
+        parentContacts = await _safeModelRows(
+          () async =>
+              (await api.getUsers(role: 'Parent', page: 1, pageSize: 200)).data,
+        );
+      }
+      final direct =
+          _mergeDirectConversationsWithContacts(
+            directTeacher: directTeacher,
+            directParent: directParent,
+            teacherContacts: teacherContacts,
+            parentContacts: parentContacts,
+          )..sort((a, b) {
+            final leftPlaceholder = _isContactPlaceholder(a);
+            final rightPlaceholder = _isContactPlaceholder(b);
+            if (leftPlaceholder != rightPlaceholder) {
+              return leftPlaceholder ? 1 : -1;
+            }
+            final timeCompare = _sortTime(b).compareTo(_sortTime(a));
+            if (timeCompare != 0) return timeCompare;
+            return _directTitle(a).compareTo(_directTitle(b));
+          });
       monitor.sort((a, b) => _sortTime(b).compareTo(_sortTime(a)));
-      final selected = _selectConversation(monitor, direct);
+      final selectedMonitor = _selectRetainedConversation(
+        _selectedMonitorConversation,
+        _filteredMonitor(monitor),
+      );
+      final selectedDirect = _selectRetainedConversation(
+        _selectedDirectConversation,
+        direct,
+      );
+      final monitorMode = _tabController.index == 0;
+      final selected = monitorMode ? selectedMonitor : selectedDirect;
       final messages = selected == null
           ? <Map<String, dynamic>>[]
           : _isContactPlaceholder(selected)
           ? <Map<String, dynamic>>[]
-          : await api.getUnifiedChatMessages(
-              conversationId: _text(selected['id']),
+          : await _safeChatRows(
+              () => api.getUnifiedChatMessages(
+                conversationId: _text(selected['id']),
+              ),
             );
       if (!mounted) return;
       setState(() {
         _principalUserId = profile.id;
         _monitorConversations = monitor;
         _directConversations = direct;
-        _selectedConversation = selected;
-        _messages = messages;
+        _selectedMonitorConversation = selectedMonitor;
+        _selectedDirectConversation = selectedDirect;
+        if (monitorMode) {
+          _monitorMessages = messages;
+        } else {
+          _directMessages = messages;
+        }
         _loading = false;
       });
       _scrollToBottom();
@@ -138,19 +189,58 @@ class _PrincipalChatCommunicationsScreenState
     }
   }
 
-  Map<String, dynamic>? _selectConversation(
-    List<Map<String, dynamic>> monitor,
-    List<Map<String, dynamic>> direct,
+  Future<List<Map<String, dynamic>>> _safeChatRows(
+    Future<List<Map<String, dynamic>>> Function() load,
+  ) async {
+    try {
+      return await load();
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<List<dynamic>> _safeModelRows(
+    Future<List<dynamic>> Function() load,
+  ) async {
+    try {
+      return await load();
+    } catch (_) {
+      return const <dynamic>[];
+    }
+  }
+
+  Map<String, dynamic>? _selectRetainedConversation(
+    Map<String, dynamic>? selected,
+    List<Map<String, dynamic>> source,
   ) {
-    final source = _tabController.index == 0
-        ? _filteredMonitor(monitor)
-        : direct;
-    if (source.isEmpty) return null;
-    final selectedId = _text(_selectedConversation?['id']);
-    return source.firstWhere(
-      (row) => _text(row['id']) == selectedId,
-      orElse: () => source.first,
-    );
+    final selectedId = _text(selected?['id']);
+    if (selectedId.isEmpty) return null;
+    for (final row in source) {
+      if (_text(row['id']) == selectedId) return row;
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _selectedFor(bool monitorMode) =>
+      monitorMode ? _selectedMonitorConversation : _selectedDirectConversation;
+
+  List<Map<String, dynamic>> _messagesFor(bool monitorMode) =>
+      monitorMode ? _monitorMessages : _directMessages;
+
+  void _selectFor(bool monitorMode, Map<String, dynamic>? row) {
+    if (monitorMode) {
+      _selectedMonitorConversation = row;
+    } else {
+      _selectedDirectConversation = row;
+    }
+  }
+
+  void _clearMessagesFor(bool monitorMode) {
+    if (monitorMode) {
+      _monitorMessages = const [];
+    } else {
+      _directMessages = const [];
+    }
   }
 
   List<Map<String, dynamic>> _filteredMonitor([
@@ -203,7 +293,7 @@ class _PrincipalChatCommunicationsScreenState
   }
 
   Future<void> _send() async {
-    final conversation = _selectedConversation;
+    final conversation = _selectedFor(_tabController.index == 0);
     final body = _messageController.text.trim();
     if (conversation == null || body.isEmpty || !_canSendIn(conversation)) {
       return;
@@ -249,7 +339,8 @@ class _PrincipalChatCommunicationsScreenState
         );
     setState(() {
       _tabController.index = 1;
-      _selectedConversation = created;
+      _selectedDirectConversation = created;
+      _directMessages = const [];
     });
     await _load();
   }
@@ -270,7 +361,7 @@ class _PrincipalChatCommunicationsScreenState
       bottom: TabBar(
         controller: _tabController,
         onTap: (_) {
-          setState(() => _selectedConversation = null);
+          setState(() {});
           _load(background: true);
         },
         tabs: const [
@@ -307,10 +398,7 @@ class _PrincipalChatCommunicationsScreenState
             Expanded(child: _conversationList(conversations, monitorMode)),
           ],
         );
-        final chat = _chatPane(
-          monitorMode: monitorMode,
-          showBackButton: !wide,
-        );
+        final chat = _chatPane(monitorMode: monitorMode, showBackButton: !wide);
         if (wide) {
           return Row(
             children: [
@@ -320,7 +408,7 @@ class _PrincipalChatCommunicationsScreenState
             ],
           );
         }
-        return _selectedConversation == null ? list : chat;
+        return _selectedFor(monitorMode) == null ? list : chat;
       },
     );
   }
@@ -339,77 +427,114 @@ class _PrincipalChatCommunicationsScreenState
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _filterMenu(
-                label: 'Teacher',
-                value: _teacherFilter,
-                options: {
-                  for (final row in _monitorConversations)
-                    _text(row['teacher_id']): _name(
-                      _map(row['teacher']),
-                      fallback: 'Teacher',
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 46),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _filterMenu(
+                    label: 'Teacher',
+                    value: _teacherFilter,
+                    options: {
+                      for (final row in _monitorConversations)
+                        _text(row['teacher_id']): _name(
+                          _map(row['teacher']),
+                          fallback: 'Teacher',
+                        ),
+                    },
+                    onChanged: (value) =>
+                        setState(() => _teacherFilter = value),
+                  ),
+                  const SizedBox(width: 8),
+                  _filterMenu(
+                    label: 'Parent',
+                    value: _parentFilter,
+                    options: {
+                      for (final row in _monitorConversations)
+                        _text(row['parent_id']): _name(
+                          _map(row['parent']),
+                          fallback: 'Parent',
+                        ),
+                    },
+                    onChanged: (value) => setState(() => _parentFilter = value),
+                  ),
+                  const SizedBox(width: 8),
+                  _filterMenu(
+                    label: 'Student',
+                    value: _studentFilter,
+                    options: {
+                      for (final row in _monitorConversations)
+                        _text(row['student_id']): _name(
+                          _map(row['student']),
+                          fallback: 'Student',
+                        ),
+                    },
+                    onChanged: (value) =>
+                        setState(() => _studentFilter = value),
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('Unread'),
+                    selected: _unreadOnly,
+                    backgroundColor: context.appTheme.surface,
+                    selectedColor: context.appTheme.primaryContainer,
+                    checkmarkColor: context.appTheme.primary,
+                    side: BorderSide(color: context.appTheme.outlineVariant),
+                    labelStyle: TextStyle(
+                      color: _unreadOnly
+                          ? context.appTheme.primary
+                          : context.appTheme.onSurface,
+                      fontWeight: FontWeight.w700,
                     ),
-                },
-                onChanged: (value) => setState(() => _teacherFilter = value),
-              ),
-              _filterMenu(
-                label: 'Parent',
-                value: _parentFilter,
-                options: {
-                  for (final row in _monitorConversations)
-                    _text(row['parent_id']): _name(
-                      _map(row['parent']),
-                      fallback: 'Parent',
+                    onSelected: (value) => setState(() => _unreadOnly = value),
+                  ),
+                  const SizedBox(width: 8),
+                  ActionChip(
+                    avatar: Icon(
+                      Icons.calendar_month_rounded,
+                      size: 18,
+                      color: context.appTheme.primary,
                     ),
-                },
-                onChanged: (value) => setState(() => _parentFilter = value),
-              ),
-              _filterMenu(
-                label: 'Student',
-                value: _studentFilter,
-                options: {
-                  for (final row in _monitorConversations)
-                    _text(row['student_id']): _name(
-                      _map(row['student']),
-                      fallback: 'Student',
+                    label: Text(
+                      _dateFilter == null
+                          ? 'Date'
+                          : DateFormat('dd MMM').format(_dateFilter!),
                     ),
-                },
-                onChanged: (value) => setState(() => _studentFilter = value),
-              ),
-              FilterChip(
-                label: const Text('Unread'),
-                selected: _unreadOnly,
-                onSelected: (value) => setState(() => _unreadOnly = value),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.calendar_month_rounded, size: 18),
-                label: Text(
-                  _dateFilter == null
-                      ? 'Date'
-                      : DateFormat('dd MMM').format(_dateFilter!),
-                ),
-                onPressed: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: _dateFilter ?? DateTime.now(),
-                    firstDate: DateTime.now().subtract(
-                      const Duration(days: 365),
+                    backgroundColor: context.appTheme.surface,
+                    side: BorderSide(color: context.appTheme.outlineVariant),
+                    labelStyle: TextStyle(
+                      color: context.appTheme.onSurface,
+                      fontWeight: FontWeight.w700,
                     ),
-                    lastDate: DateTime.now().add(const Duration(days: 30)),
-                  );
-                  if (picked != null) setState(() => _dateFilter = picked);
-                },
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _dateFilter ?? DateTime.now(),
+                        firstDate: DateTime.now().subtract(
+                          const Duration(days: 365),
+                        ),
+                        lastDate: DateTime.now().add(const Duration(days: 30)),
+                      );
+                      if (picked != null) setState(() => _dateFilter = picked);
+                    },
+                  ),
+                  if (_dateFilter != null) ...[
+                    const SizedBox(width: 8),
+                    ActionChip(
+                      label: const Text('Clear date'),
+                      backgroundColor: context.appTheme.surface,
+                      side: BorderSide(color: context.appTheme.outlineVariant),
+                      labelStyle: TextStyle(
+                        color: context.appTheme.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      onPressed: () => setState(() => _dateFilter = null),
+                    ),
+                  ],
+                ],
               ),
-              if (_dateFilter != null)
-                ActionChip(
-                  label: const Text('Clear date'),
-                  onPressed: () => setState(() => _dateFilter = null),
-                ),
-            ],
+            ),
           ),
         ],
       ),
@@ -435,8 +560,29 @@ class _PrincipalChatCommunicationsScreenState
         ),
       ],
       child: Chip(
-        avatar: const Icon(Icons.filter_list_rounded, size: 18),
-        label: Text(value.isEmpty ? label : cleanOptions[value] ?? label),
+        avatar: Icon(
+          Icons.filter_list_rounded,
+          size: 18,
+          color: context.appTheme.primary,
+        ),
+        label: Text(
+          value.isEmpty ? label : cleanOptions[value] ?? label,
+          style: TextStyle(
+            color: value.isEmpty
+                ? context.appTheme.onSurface
+                : context.appTheme.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        backgroundColor: value.isEmpty
+            ? context.appTheme.surface
+            : context.appTheme.primaryContainer,
+        side: BorderSide(
+          color: value.isEmpty
+              ? context.appTheme.outlineVariant
+              : context.appTheme.primary,
+        ),
+        deleteIconColor: context.appTheme.primary,
         onDeleted: value.isEmpty ? null : () => onChanged(''),
       ),
     );
@@ -462,18 +608,14 @@ class _PrincipalChatCommunicationsScreenState
       itemBuilder: (context, index) {
         final row = conversations[index];
         final selected =
-            _text(row['id']) == _text(_selectedConversation?['id']);
+            _text(row['id']) == _text(_selectedFor(monitorMode)?['id']);
         final title = monitorMode ? _monitorTitle(row) : _directTitle(row);
         final subtitle = monitorMode
             ? _studentLine(row)
             : _isContactPlaceholder(row)
-            ? _text(
-                row['type'],
-                fallback: 'direct',
-              ) ==
-                    'principal_teacher'
-                ? 'Teacher contact - tap to start direct chat'
-                : 'Parent contact - tap to start direct chat'
+            ? _text(row['type'], fallback: 'direct') == 'principal_teacher'
+                  ? 'Teacher contact - tap to start direct chat'
+                  : 'Parent contact - tap to start direct chat'
             : _text(row['last_message'], fallback: 'Direct conversation');
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
@@ -513,7 +655,10 @@ class _PrincipalChatCommunicationsScreenState
             ],
           ),
           onTap: () {
-            setState(() => _selectedConversation = row);
+            setState(() {
+              _selectFor(monitorMode, row);
+              _clearMessagesFor(monitorMode);
+            });
             if (!_isContactPlaceholder(row)) {
               _load(background: true);
             }
@@ -523,11 +668,9 @@ class _PrincipalChatCommunicationsScreenState
     );
   }
 
-  Widget _chatPane({
-    required bool monitorMode,
-    required bool showBackButton,
-  }) {
-    final conversation = _selectedConversation;
+  Widget _chatPane({required bool monitorMode, required bool showBackButton}) {
+    final conversation = _selectedFor(monitorMode);
+    final messages = _messagesFor(monitorMode);
     if (conversation == null) {
       return const Center(child: Text('Select a conversation.'));
     }
@@ -539,7 +682,10 @@ class _PrincipalChatCommunicationsScreenState
               ? IconButton(
                   icon: const Icon(Icons.arrow_back_rounded),
                   tooltip: 'Back to chats',
-                  onPressed: () => setState(() => _selectedConversation = null),
+                  onPressed: () => setState(() {
+                    _selectFor(monitorMode, null);
+                    _clearMessagesFor(monitorMode);
+                  }),
                 )
               : CircleAvatar(
                   child: Text(
@@ -593,9 +739,9 @@ class _PrincipalChatCommunicationsScreenState
             child: ListView.builder(
               controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: _messages.length,
+              itemCount: messages.length,
               itemBuilder: (context, index) {
-                final message = _messages[index];
+                final message = messages[index];
                 final mine =
                     _text(message['sender_user_id'] ?? message['sender_id']) ==
                     _principalUserId;
@@ -647,8 +793,9 @@ class _PrincipalChatCommunicationsScreenState
         .toSet();
 
     for (final contact in teacherContacts) {
-      final id = _text(contact.id);
+      final id = _contactId(contact);
       if (id.isEmpty || existingTeacherIds.contains(id)) continue;
+      final name = _contactName(contact);
       rows.add({
         'id': 'contact-teacher-$id',
         'type': 'principal_teacher',
@@ -660,18 +807,18 @@ class _PrincipalChatCommunicationsScreenState
         'unread_count': 0,
         'teacher': {
           'id': id,
-          'first_name': _text(contact.firstName),
-          'last_name': _text(contact.lastName),
-          'name': '${_text(contact.firstName)} ${_text(contact.lastName)}'
-              .trim(),
+          'first_name': _contactFirstName(contact),
+          'last_name': _contactLastName(contact),
+          'name': name,
         },
         'is_contact_placeholder': true,
       });
     }
 
     for (final contact in parentContacts) {
-      final id = _text(contact.id);
+      final id = _contactId(contact);
       if (id.isEmpty || existingParentIds.contains(id)) continue;
+      final name = _contactName(contact);
       rows.add({
         'id': 'contact-parent-$id',
         'type': 'principal_parent',
@@ -681,11 +828,7 @@ class _PrincipalChatCommunicationsScreenState
         'last_message': '',
         'last_message_at': '',
         'unread_count': 0,
-        'parent': {
-          'id': id,
-          'name': _text(contact.name, fallback: _text(contact.username)),
-          'full_name': _text(contact.name, fallback: _text(contact.username)),
-        },
+        'parent': {'id': id, 'name': name, 'full_name': name},
         'is_contact_placeholder': true,
       });
     }
@@ -694,6 +837,53 @@ class _PrincipalChatCommunicationsScreenState
 
   bool _isContactPlaceholder(Map<String, dynamic> row) =>
       row['is_contact_placeholder'] == true;
+
+  String _contactId(dynamic contact) {
+    if (contact is Map) return _text(contact['id']);
+    try {
+      return _text(contact.id);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _contactName(dynamic contact) {
+    if (contact is Map) {
+      return _text(
+        contact['name'] ?? contact['full_name'],
+        fallback: [
+          _text(contact['first_name']),
+          _text(contact['last_name']),
+        ].where((part) => part.isNotEmpty).join(' '),
+      );
+    }
+    try {
+      return _text(contact.name, fallback: _text(contact.username));
+    } catch (_) {
+      return [
+        _contactFirstName(contact),
+        _contactLastName(contact),
+      ].where((part) => part.isNotEmpty).join(' ');
+    }
+  }
+
+  String _contactFirstName(dynamic contact) {
+    if (contact is Map) return _text(contact['first_name']);
+    try {
+      return _text(contact.firstName);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _contactLastName(dynamic contact) {
+    if (contact is Map) return _text(contact['last_name']);
+    try {
+      return _text(contact.lastName);
+    } catch (_) {
+      return '';
+    }
+  }
 
   String _monitorTitle(Map<String, dynamic> row) {
     return [

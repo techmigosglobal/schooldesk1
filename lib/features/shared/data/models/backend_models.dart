@@ -141,20 +141,25 @@ class UserResponse {
   });
 
   factory UserResponse.fromJson(Map<String, dynamic> json) => UserResponse(
-    id: json['id'] as String,
-    username: json['username'] as String? ?? '',
-    name: json['name'] as String? ?? '',
-    email: json['email'] as String,
-    phone: json['phone'] as String? ?? '',
-    avatar: json['avatar'] as String? ?? '',
-    schoolId: json['school_id'] as String,
-    roleId: json['role_id'] as String,
-    roleName: json['role_name'] as String,
-    linkedType: json['linked_type'] as String? ?? '',
-    linkedId: json['linked_id'] as String? ?? '',
+    id: _modelText(json['id']),
+    username: _modelText(json['username']),
+    name: _modelText(json['name']),
+    email: _modelText(json['email']),
+    phone: _modelText(json['phone']),
+    avatar: _modelText(json['avatar']),
+    schoolId: _modelText(json['school_id']),
+    roleId: _modelText(json['role_id']),
+    roleName: _modelText(json['role_name']),
+    linkedType: _modelText(json['linked_type']),
+    linkedId: _modelText(json['linked_id']),
     isActive: json['is_active'] as bool? ?? true,
     isVerified: json['is_verified'] as bool? ?? false,
   );
+}
+
+String _modelText(Object? value, {String fallback = ''}) {
+  final text = '${value ?? ''}'.trim();
+  return text.isEmpty || text.toLowerCase() == 'null' ? fallback : text;
 }
 
 class UserAccountModel {
@@ -1217,6 +1222,9 @@ class PaymentRequest {
   final String? transactionId;
   final String? proofUrl;
   final String? remarks;
+  final List<String> selectedMonthNames;
+  final int selectedMonths;
+  final int selectedTerms;
 
   const PaymentRequest({
     required this.invoiceId,
@@ -1227,17 +1235,28 @@ class PaymentRequest {
     this.transactionId,
     this.proofUrl,
     this.remarks,
+    this.selectedMonthNames = const [],
+    this.selectedMonths = 0,
+    this.selectedTerms = 0,
   });
 
   Map<String, dynamic> toJson() => {
     'invoice_id': invoiceId,
     'receipt_number': receiptNumber,
+    'amount': amountPaid,
     'amount_paid': amountPaid,
     'payment_date': paymentDate,
+    'payment_method': paymentMode,
     'payment_mode': paymentMode,
+    'reference_number': transactionId ?? receiptNumber,
     if (transactionId != null) 'transaction_id': transactionId,
+    if (transactionId != null) 'transaction_ref': transactionId,
     if (proofUrl != null) 'proof_url': proofUrl,
     if (remarks != null) 'remarks': remarks,
+    if (selectedMonthNames.isNotEmpty)
+      'selected_month_names': selectedMonthNames,
+    if (selectedMonths > 0) 'selected_months': selectedMonths,
+    if (selectedTerms > 0) 'selected_terms': selectedTerms,
   };
 
   Map<String, dynamic> toParentPaymentRequestJson() => {
@@ -1249,6 +1268,10 @@ class PaymentRequest {
     if (transactionId != null) 'transaction_id': transactionId,
     if (proofUrl != null) 'proof_url': proofUrl,
     if (remarks != null) 'remarks': remarks,
+    if (selectedMonthNames.isNotEmpty)
+      'selected_month_names': selectedMonthNames,
+    if (selectedMonths > 0) 'selected_months': selectedMonths,
+    if (selectedTerms > 0) 'selected_terms': selectedTerms,
   };
 }
 

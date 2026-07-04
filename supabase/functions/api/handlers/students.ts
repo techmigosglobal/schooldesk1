@@ -130,7 +130,7 @@ export async function handleStudents(
   path: string,
   method: string,
   url: URL,
-  client: SupabaseClient,
+  _client: SupabaseClient,
   svc: SupabaseClient,
   user: User,
 ): Promise<Response> {

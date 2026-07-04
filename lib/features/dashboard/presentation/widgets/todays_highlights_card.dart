@@ -53,7 +53,8 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
     }).toList();
 
     final healthNotifs = allNotifs.where((n) {
-      return n.category == NotificationCategory.healthAlert &&
+      return (n.category == NotificationCategory.health ||
+              n.category == NotificationCategory.healthAlert) &&
           _isSameDay(n.timestamp, today);
     }).toList();
 
@@ -66,7 +67,8 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
 
     // Also check reference_type for health reminders
     final healthByRef = allNotifs.where((n) {
-      return n.referenceType.contains('health') &&
+      return (n.referenceType.contains('health_reminder') ||
+              n.referenceType.contains('health')) &&
           _isSameDay(n.timestamp, today);
     }).toList();
 
@@ -101,9 +103,7 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(
-          color: theme.colorScheme.primary.withAlpha(40),
-        ),
+        border: Border.all(color: theme.colorScheme.primary.withAlpha(40)),
       ),
       child: Padding(
         padding: EdgeInsets.all(tokens.spacing.md),
@@ -182,12 +182,14 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
                 color: const Color(0xFFE91E63),
                 items: combinedBirthdays
                     .take(5)
-                    .map((n) => _HighlightItem(
-                          title: n.title,
-                          subtitle: n.body,
-                          icon: Icons.cake_rounded,
-                          color: const Color(0xFFE91E63),
-                        ))
+                    .map(
+                      (n) => _HighlightItem(
+                        title: n.title,
+                        subtitle: n.body,
+                        icon: Icons.cake_rounded,
+                        color: const Color(0xFFE91E63),
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -266,8 +268,18 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
 
   String _formatDate(DateTime date) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}';
   }
@@ -442,7 +454,9 @@ class _HealthAlertTile extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            acknowledged ? Icons.check_circle_rounded : Icons.medical_services_rounded,
+            acknowledged
+                ? Icons.check_circle_rounded
+                : Icons.medical_services_rounded,
             size: 16,
             color: acknowledged ? Colors.green : orange,
           ),
@@ -457,8 +471,12 @@ class _HealthAlertTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
-                    decoration: acknowledged ? TextDecoration.lineThrough : null,
-                    color: acknowledged ? theme.colorScheme.onSurfaceVariant : null,
+                    decoration: acknowledged
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: acknowledged
+                        ? theme.colorScheme.onSurfaceVariant
+                        : null,
                   ),
                 ),
                 if (notification.body.isNotEmpty)
@@ -476,9 +494,7 @@ class _HealthAlertTile extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           if (!acknowledged)
-            _AcknowledgeButton(
-              onPressed: () => onAcknowledge(notification.id),
-            )
+            _AcknowledgeButton(onPressed: () => onAcknowledge(notification.id))
           else
             Padding(
               padding: const EdgeInsets.only(left: 4),
@@ -518,9 +534,10 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
-    _scaleAnim = Tween<double>(begin: 1.0, end: 0.9).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnim = Tween<double>(
+      begin: 1.0,
+      end: 0.9,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -533,10 +550,8 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _scaleAnim,
-      builder: (context, child) => Transform.scale(
-        scale: _scaleAnim.value,
-        child: child,
-      ),
+      builder: (context, child) =>
+          Transform.scale(scale: _scaleAnim.value, child: child),
       child: InkWell(
         onTap: _loading ? null : _handleTap,
         onTapDown: (_) => _controller.forward(),

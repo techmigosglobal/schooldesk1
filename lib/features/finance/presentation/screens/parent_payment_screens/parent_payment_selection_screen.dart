@@ -27,30 +27,57 @@ class ParentPaymentSelectionScreen extends StatefulWidget {
 
 class _ParentPaymentSelectionScreenState
     extends State<ParentPaymentSelectionScreen> {
-  final Set<String> _selectedInvoiceIds = {};
+  String _selectedInvoiceId = '';
 
   List<Map<String, dynamic>> get _pendingFees => widget.fees
       .where((fee) => ((fee['amount'] as num?)?.toDouble() ?? 0) > 0)
       .toList();
 
   double get _selectedTotalAmount {
-    return _pendingFees
-        .where((fee) => _selectedInvoiceIds.contains(fee['id']?.toString()))
-        .fold<double>(
-          0,
-          (sum, fee) => sum + ((fee['amount'] as num?)?.toDouble() ?? 0),
-        );
+    final selected = _pendingFees.firstWhere(
+      (fee) => (fee['id']?.toString() ?? '') == _selectedInvoiceId,
+      orElse: () => const <String, dynamic>{},
+    );
+    return (selected['amount'] as num?)?.toDouble() ?? 0;
   }
 
   @override
   void initState() {
     super.initState();
-    // Auto-select all pending fees initially
-    for (final fee in _pendingFees) {
-      if (fee['id'] != null) {
-        _selectedInvoiceIds.add(fee['id'].toString());
-      }
+    if (_pendingFees.isNotEmpty && _pendingFees.first['id'] != null) {
+      _selectedInvoiceId = _pendingFees.first['id'].toString();
     }
+  }
+
+  Map<String, dynamic> get _selectedFee => _pendingFees.firstWhere(
+    (fee) => (fee['id']?.toString() ?? '') == _selectedInvoiceId,
+    orElse: () => const <String, dynamic>{},
+  );
+
+  bool _isSelectable(Map<String, dynamic> fee) {
+    final id = fee['id']?.toString() ?? '';
+    return id.isNotEmpty;
+  }
+
+  String _selectionSubtitle(Map<String, dynamic> fee) {
+    final feeType = '${fee['fee_type'] ?? ''}'.trim().toLowerCase();
+    if (feeType == 'book_kit') {
+      return 'One-time yearly payment';
+    }
+    final paidMonths = fee['paid_month_names'] is List
+        ? (fee['paid_month_names'] as List).whereType<String>().toList()
+        : const <String>[];
+    final unpaidMonths = fee['unpaid_month_names'] is List
+        ? (fee['unpaid_month_names'] as List).whereType<String>().toList()
+        : const <String>[];
+    if (paidMonths.isEmpty) {
+      return unpaidMonths.isEmpty
+          ? 'Monthly tuition payment'
+          : 'Start from ${unpaidMonths.first}';
+    }
+    return unpaidMonths.isEmpty
+        ? 'Monthly tuition payment'
+        : 'Paid: ${paidMonths.join(', ')}  •  Next: ${unpaidMonths.first}';
   }
 
   @override
@@ -123,7 +150,7 @@ class _ParentPaymentSelectionScreenState
       itemBuilder: (context, index) {
         final fee = _pendingFees[index];
         final id = fee['id']?.toString() ?? '';
-        final isSelected = _selectedInvoiceIds.contains(id);
+        final isSelected = _selectedInvoiceId == id;
         final amount = (fee['amount'] as num?)?.toDouble() ?? 0;
         final dueDate = fee['dueDate'] ?? fee['due_date'] ?? '';
         final instNum = fee['installment_number'];
@@ -132,13 +159,8 @@ class _ParentPaymentSelectionScreenState
 
         return InkWell(
           onTap: () {
-            setState(() {
-              if (isSelected) {
-                _selectedInvoiceIds.remove(id);
-              } else {
-                _selectedInvoiceIds.add(id);
-              }
-            });
+            if (!_isSelectable(fee)) return;
+            setState(() => _selectedInvoiceId = id);
           },
           borderRadius: BorderRadius.circular(12),
           child: Container(
@@ -230,6 +252,15 @@ class _ParentPaymentSelectionScreenState
                           ),
                         ),
                       ],
+                      const SizedBox(height: 4),
+                      Text(
+                        _selectionSubtitle(fee),
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 11,
+                          color: context.appTheme.muted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -272,7 +303,7 @@ class _ParentPaymentSelectionScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Selected installment total',
+                    'Selected fee total',
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 13,
                       color: context.appTheme.muted,
@@ -293,18 +324,10 @@ class _ParentPaymentSelectionScreenState
             ),
             const SizedBox(width: 16),
             ElevatedButton(
-              onPressed: _selectedInvoiceIds.isEmpty
+              onPressed: _selectedInvoiceId.isEmpty || _selectedFee.isEmpty
                   ? null
                   : () {
-                      final selectedFees = _pendingFees
-                          .where(
-                            (fee) => _selectedInvoiceIds.contains(
-                              fee['id']?.toString(),
-                            ),
-                          )
-                          .map((fee) => Map<String, dynamic>.from(fee))
-                          .toList();
-                      _onProceedToPay(selectedFees);
+                      _onProceedToPay([Map<String, dynamic>.from(_selectedFee)]);
                     },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
@@ -319,7 +342,7 @@ class _ParentPaymentSelectionScreenState
                 elevation: 0,
               ),
               child: Text(
-                'Pay installment',
+                'Continue',
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,

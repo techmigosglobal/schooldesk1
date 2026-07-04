@@ -54,7 +54,7 @@ async function buildAssignments(
   if (staffSubjectError) throw staffSubjectError;
 
   const directAssignments = (staffSubjectRows ?? []).map(
-    (row: Record<string, unknown>) => {
+    (row: any) => {
       const subject = row.subject && typeof row.subject === "object"
         ? row.subject as Record<string, unknown>
         : {};
@@ -68,7 +68,7 @@ async function buildAssignments(
         teacher_name: `${textValue(staff.first_name)} ${textValue(staff.last_name)}`.trim(),
       };
     },
-  ).filter((row) => row.subject_id || row.staff_id);
+  ).filter((row: any) => row.subject_id || row.staff_id);
   if (directAssignments.length > 0) return directAssignments;
 
   const gradeId = textValue(section?.grade_id);
@@ -90,7 +90,7 @@ async function buildAssignments(
       subject_name: textValue(subject.subject_name, "General"),
       teacher_name: "",
     };
-  }).filter((row) => row.subject_id);
+  }).filter((row: any) => row.subject_id);
 }
 
 async function generateSlots(

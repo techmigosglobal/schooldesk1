@@ -1,5 +1,15 @@
 part of '../backend_api_client.dart';
 
+Map<String, dynamic> _profilePayloadFromEnvelope(Map<String, dynamic> data) {
+  final payload = data['data'];
+  if (payload is Map) {
+    final profile = payload['profile'];
+    if (profile is Map) return Map<String, dynamic>.from(profile);
+    return Map<String, dynamic>.from(payload);
+  }
+  return <String, dynamic>{};
+}
+
 extension BackendAuthApi on BackendApiClient {
   // ─── Authentication ────────────────────────────────────────────────────────
 
@@ -164,9 +174,9 @@ extension BackendAuthApi on BackendApiClient {
   Future<UserResponse> getProfile() async {
     try {
       final response = await _dio.get('/auth/profile');
-      final data = response.data as Map<String, dynamic>;
+      final data = _asMap(response.data);
       if (data['success'] == true) {
-        return UserResponse.fromJson(data['data'] as Map<String, dynamic>);
+        return UserResponse.fromJson(_profilePayloadFromEnvelope(data));
       }
       throw ServerException(message: data['error'] ?? 'Failed to get profile');
     } on DioException catch (e) {
@@ -177,9 +187,9 @@ extension BackendAuthApi on BackendApiClient {
   Future<UserResponse> updateProfile(Map<String, dynamic> payload) async {
     try {
       final response = await _dio.patch('/auth/profile', data: payload);
-      final data = response.data as Map<String, dynamic>;
+      final data = _asMap(response.data);
       if (data['success'] == true) {
-        return UserResponse.fromJson(data['data'] as Map<String, dynamic>);
+        return UserResponse.fromJson(_profilePayloadFromEnvelope(data));
       }
       throw ServerException(
         message: data['error'] ?? 'Failed to update profile',

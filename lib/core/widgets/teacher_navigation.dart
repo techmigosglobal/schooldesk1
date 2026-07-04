@@ -196,7 +196,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               index: TeacherNav.communication,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
-              label: 'Parent Messages',
+              label: 'Communication',
               route: AppRoutes.teacherCommunication,
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),

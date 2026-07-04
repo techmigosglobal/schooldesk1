@@ -166,6 +166,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 'monthly_amount': inv['monthly_amount'],
                 'term_amount': inv['term_amount'],
                 'term_count': inv['term_count'],
+                'allowed_month_names': inv['allowed_month_names'],
+                'paid_month_names': inv['paid_month_names'],
+                'unpaid_month_names': inv['unpaid_month_names'],
                 'rejection_reason': inv['rejection_reason'],
                 'items': _invoiceItems(inv),
               };

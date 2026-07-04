@@ -138,6 +138,7 @@ async function notifyUser(
 let eventPostSchemaReady = false;
 let eventPostSchemaPromise: Promise<void> | null = null;
 
+// deno-lint-ignore require-await
 async function ensureEventPostSchema() {
   if (eventPostSchemaReady) return;
   if (eventPostSchemaPromise) return eventPostSchemaPromise;
@@ -715,7 +716,7 @@ export async function handleReports(
   req: Request,
   path: string,
   method: string,
-  url: URL,
+  _url: URL,
   _client: SupabaseClient,
   svc: SupabaseClient,
   user: User,
