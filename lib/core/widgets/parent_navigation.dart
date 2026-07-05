@@ -30,7 +30,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
   int _unreadCount = 0;
   String _schoolName = 'School';
   String _schoolSubtitle = 'Family access';
-  String _userId = '';
   String _userName = 'Parent';
   String _userSubtitle = 'Parent Portal';
 
@@ -68,7 +67,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
           school['affiliation_board'],
           fallback: safeText(school['school_type'], fallback: 'Family access'),
         );
-        _userId = profile.id;
         _userName = safeText(
           profile.name,
           fallback: safeText(profile.username, fallback: 'Parent'),

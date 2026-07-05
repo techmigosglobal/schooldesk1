@@ -95,7 +95,7 @@ void main() {
     );
     final galleryBlock = dashboard.substring(
       dashboard.indexOf("label: 'Gallery'"),
-      dashboard.indexOf("label: 'Communications'"),
+      dashboard.indexOf("label: 'Messages & Chats'"),
     );
     expect(
       calendarBlock,

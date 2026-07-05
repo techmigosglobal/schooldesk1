@@ -26,8 +26,6 @@ enum _EventFilter {
 
 enum _EventsDisplayMode { month, week, agenda }
 
-
-
 enum SchoolCalendarPortal { principal, teacher, parent }
 
 class EventsCalendarScreen extends StatefulWidget {
@@ -210,10 +208,18 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
       if (_activeLegendFilter != null) {
         if (_activeLegendFilter == 'Holiday' && !event.isHoliday) return false;
-        if (_activeLegendFilter == 'Festival' && event.type != 'festival' && event.type != 'cultural') return false;
-        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) return false;
+        if (_activeLegendFilter == 'Festival' &&
+            event.type != 'festival' &&
+            event.type != 'cultural') {
+          return false;
+        }
+        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) {
+          return false;
+        }
         if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
-        if (_activeLegendFilter == 'Approval' && !event.needsApproval) return false;
+        if (_activeLegendFilter == 'Approval' && !event.needsApproval) {
+          return false;
+        }
       }
 
       final matchesTimeFilter = switch (_filter) {
@@ -241,13 +247,21 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final query = _query.trim().toLowerCase();
     final rows = _events.where((event) {
       if (!event.overlapsDate(day)) return false;
-      
+
       if (_activeLegendFilter != null) {
         if (_activeLegendFilter == 'Holiday' && !event.isHoliday) return false;
-        if (_activeLegendFilter == 'Festival' && event.type != 'festival' && event.type != 'cultural') return false;
-        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) return false;
+        if (_activeLegendFilter == 'Festival' &&
+            event.type != 'festival' &&
+            event.type != 'cultural') {
+          return false;
+        }
+        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) {
+          return false;
+        }
         if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
-        if (_activeLegendFilter == 'Approval' && !event.needsApproval) return false;
+        if (_activeLegendFilter == 'Approval' && !event.needsApproval) {
+          return false;
+        }
       }
 
       if (query.isEmpty) return true;
@@ -1043,57 +1057,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       ),
     );
   }
-
-  Widget _buildLegend() {
-    const items = [
-      _LegendItemData(
-        label: 'Holiday',
-        icon: Icons.beach_access_rounded,
-        color: Color(0xFFD14343),
-      ),
-      _LegendItemData(
-        label: 'Festival',
-        icon: Icons.celebration_rounded,
-        color: Color(0xFFF59E0B),
-      ),
-      _LegendItemData(
-        label: 'Academic',
-        icon: Icons.edit_note_rounded,
-        color: Color(0xFF2563EB),
-      ),
-      _LegendItemData(
-        label: 'PTM',
-        icon: Icons.groups_2_rounded,
-        color: Color(0xFF0F766E),
-      ),
-      _LegendItemData(
-        label: 'Approval',
-        icon: Icons.verified_rounded,
-        color: Color(0xFF16A34A),
-      ),
-    ];
-    return Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      children: items.map((item) {
-        final isSelected = _activeLegendFilter == item.label;
-        return _LegendChip(
-          item: item,
-          isSelected: isSelected,
-          onTap: () {
-            setState(() {
-              if (isSelected) {
-                _activeLegendFilter = null;
-              } else {
-                _activeLegendFilter = item.label;
-              }
-            });
-          },
-        );
-      }).toList(),
-    );
-
-  }
 }
 
 class _CalendarPanel extends StatelessWidget {
@@ -1416,72 +1379,6 @@ class _EventCountBadge extends StatelessWidget {
           color: Colors.white,
           fontSize: 9,
           fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-class _LegendItemData {
-  final String label;
-  final IconData icon;
-  final Color color;
-
-  const _LegendItemData({
-    required this.label,
-    required this.icon,
-    required this.color,
-  });
-}
-
-class _LegendChip extends StatelessWidget {
-  final _LegendItemData item;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _LegendChip({
-    required this.item,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: isSelected,
-      label: 'Filter by ${item.label}',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(999),
-          child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: isSelected ? item.color.withAlpha(40) : item.color.withAlpha(15),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(
-                color: isSelected ? item.color : item.color.withAlpha(55),
-                width: isSelected ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(item.icon, size: 16, color: item.color),
-                const SizedBox(width: 6),
-                Text(
-                  item.label,
-                  style: GoogleFonts.dmSans(
-                    color: principalDirectoryText,
-                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

@@ -170,7 +170,11 @@ class _PrincipalEventApprovalScreenState
   }
 
   Future<void> _notifyAndReload({Map<String, dynamic>? keepPost}) async {
-    await BackendApiClient.instance.invalidateCachedReads();
+    try {
+      await BackendApiClient.instance.invalidateCachedReads();
+    } catch (_) {
+      // The write already succeeded; do not let cache cleanup blank the screen.
+    }
     try {
       final service = await NotificationService.getInstance();
       await service.refresh();
@@ -330,6 +334,7 @@ class _PrincipalEventApprovalScreenState
             );
             if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
           } catch (e) {
+            if (!dialogContext.mounted) return;
             setDialogState(() {
               saving = false;
               validationError = 'Failed to save changes: $e';
@@ -369,6 +374,7 @@ class _PrincipalEventApprovalScreenState
             deleted = true;
             if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
           } catch (e) {
+            if (!dialogContext.mounted) return;
             setDialogState(() {
               deleting = false;
               validationError = 'Failed to delete post: $e';
@@ -560,6 +566,7 @@ class _PrincipalEventApprovalScreenState
           _error = null;
         });
       }
+      if (!mounted) return;
       await _notifyAndReload(keepPost: editedPost);
       if (!mounted) return;
       final message = deleted

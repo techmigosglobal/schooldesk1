@@ -48,8 +48,8 @@ void main() {
     expect(teacherNav, contains("label: 'PTM Slots'"));
     expect(teacherFlow, contains('showBackButton: false'));
     expect(principalNav, isNot(contains("label: 'Broadcasts & Notices'")));
-    expect(principalNav, contains("label: 'Communications'"));
-    expect(principalDashboard, contains("label: 'Communications'"));
+    expect(principalNav, contains("label: 'Messages & Chats'"));
+    expect(principalDashboard, contains("label: 'Messages & Chats'"));
     expect(principalDashboard, isNot(contains("label: 'Chat Communications'")));
   });
 

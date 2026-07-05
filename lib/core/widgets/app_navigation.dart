@@ -238,13 +238,13 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
           ],
         ),
         SchoolDeskNavigationSection(
-          label: 'Communication',
+          label: 'Messages',
           items: [
             SchoolDeskNavigationItem(
               index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,
-              label: 'Communications',
+              label: 'Messages & Chats',
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(

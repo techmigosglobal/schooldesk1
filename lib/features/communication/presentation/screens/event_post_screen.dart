@@ -222,7 +222,11 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         ),
       );
       _clearForm();
-      await BackendApiClient.instance.invalidateCachedReads();
+      try {
+        await BackendApiClient.instance.invalidateCachedReads();
+      } catch (_) {
+        // The write succeeded; cache cleanup should not turn it into an error.
+      }
       unawaited(
         NotificationService.getInstance().then((service) => service.refresh()),
       );
@@ -251,6 +255,95 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
     _destParentHome = true;
     _destSchoolGallery = false;
     _destSchoolLanding = false;
+  }
+
+  void _startEditingPost(Map<String, dynamic> post) {
+    final id = (post['id'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+
+    final media = EventPostMediaItem.parseList(post['media_urls']);
+    final destinations = _labels(post['destinations']).toSet();
+    setState(() {
+      _editingPostId = id;
+      _editingRejectedPost =
+          (post['approval_status'] ?? '').toString() == 'rejected';
+      _titleController.text = (post['title'] ?? '').toString();
+      _descController.text = (post['description'] ?? '').toString();
+      _dateController.text = _dateInputText(post['event_date']);
+      _uploadedUrls
+        ..clear()
+        ..addAll(media.map((item) => item.url));
+      _uploadedMedia
+        ..clear()
+        ..addAll(media);
+      _destParentHome =
+          destinations.isEmpty ||
+          destinations.contains('PARENTS_HOME') ||
+          destinations.contains('Parent Home Feed');
+      _destSchoolGallery =
+          destinations.contains('SCHOOL_GALLERY') ||
+          destinations.contains('School Gallery');
+      _destSchoolLanding =
+          destinations.contains('SCHOOL_LANDING') ||
+          destinations.contains('Public Landing Page');
+      _error = null;
+      _tabController.animateTo(0);
+    });
+  }
+
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final id = (post['id'] ?? '').toString().trim();
+    if (id.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Event Post'),
+        content: const Text('This will permanently remove this event post.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _loading = true);
+    try {
+      await BackendApiClient.instance.deleteEventPost(id);
+      try {
+        await BackendApiClient.instance.invalidateCachedReads();
+      } catch (_) {
+        // The delete succeeded; keep the UI refresh path alive.
+      }
+      unawaited(
+        NotificationService.getInstance().then((service) => service.refresh()),
+      );
+      if (!mounted) return;
+      setState(() {
+        _posts = _posts
+            .where((item) => (item['id'] ?? '').toString() != id)
+            .toList();
+        _loading = false;
+        if (_editingPostId == id) _clearForm();
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Event post deleted.')));
+      unawaited(_loadPosts(showSpinner: false));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Failed to delete post: $e';
+      });
+    }
   }
 
   // ── Build ───────────────────────────────────────────────────────────────────
@@ -560,6 +653,30 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                     'Reason: ${post['rejection_reason']}',
                     style: const TextStyle(color: Colors.red),
                   ),
+                if (status == 'draft' || status == 'rejected') ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _startEditingPost(Map<String, dynamic>.from(post)),
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: const Text('Edit'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            _deletePost(Map<String, dynamic>.from(post)),
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Delete'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: context.appTheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -570,6 +687,18 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
 
   List<String> _labels(dynamic raw) {
     return parseEventPostMediaUrls(raw);
+  }
+
+  String _dateInputText(dynamic raw) {
+    final text = (raw ?? '').toString().trim();
+    if (text.isEmpty) return '';
+    final parsed = DateTime.tryParse(text);
+    if (parsed == null) return text.split('T').first;
+    return [
+      parsed.year.toString().padLeft(4, '0'),
+      parsed.month.toString().padLeft(2, '0'),
+      parsed.day.toString().padLeft(2, '0'),
+    ].join('-');
   }
 }
 

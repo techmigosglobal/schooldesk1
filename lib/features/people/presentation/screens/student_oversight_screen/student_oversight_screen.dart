@@ -1480,41 +1480,6 @@ class _Initials extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String label;
-
-  const _StatusBadge({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = switch (label) {
-      'Absent' => (const Color(0xFFFFECEC), const Color(0xFFDD4646)),
-      'Late' => (const Color(0xFFFFF2CE), const Color(0xFFB78412)),
-      'Needs attention' => (const Color(0xFFFFF2CE), const Color(0xFFB78412)),
-      'Not marked' => (const Color(0xFFEAF2FF), const Color(0xFF2B5CAA)),
-      'Inactive' => (const Color(0xFFF0F2F4), const Color(0xFF64727E)),
-      _ => (const Color(0xFFDFF8E7), const Color(0xFF3AB468)),
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-      decoration: BoxDecoration(
-        color: colors.$1,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: GoogleFonts.dmSans(
-          fontSize: 11,
-          fontWeight: FontWeight.w900,
-          color: colors.$2,
-        ),
-      ),
-    );
-  }
-}
-
 class _SearchBox extends StatelessWidget {
   final String hint;
   final ValueChanged<String> onChanged;
@@ -3000,7 +2965,8 @@ class _StudentDetailPage extends StatelessWidget {
                 _DetailRow(
                   label: 'Status',
                   value: student.status.trim().isNotEmpty
-                      ? student.status.trim()[0].toUpperCase() + student.status.trim().substring(1)
+                      ? student.status.trim()[0].toUpperCase() +
+                            student.status.trim().substring(1)
                       : 'Active',
                 ),
                 _DetailRow(
@@ -3029,7 +2995,6 @@ class _StudentDetailPage extends StatelessWidget {
               children: [
                 _ResponsiveMetricGrid(
                   children: [
-
                     _SignalTile(
                       icon: Icons.account_balance_wallet_outlined,
                       label: 'Fees',
