@@ -208,6 +208,9 @@ export async function handleHomework(
                 entity_type: "homework",
                 entity_id: id,
                 is_read: false,
+                reference_type: "homework",
+                reference_id: id,
+                action: "assignment",
               }));
               // Insert notifications
               await svc.from("notification_logs").insert(notifications);

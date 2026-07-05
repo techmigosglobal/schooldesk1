@@ -132,16 +132,16 @@ class TeacherFlowScrollView extends StatelessWidget {
 class TeacherCurrentClassCard extends StatelessWidget {
   final String greeting;
   final String classLabel;
-  final String subject;
-  final String timeLabel;
+  final String? subject;
+  final String? timeLabel;
   final List<TeacherFlowAction> actions;
 
   const TeacherCurrentClassCard({
     super.key,
     required this.greeting,
     required this.classLabel,
-    required this.subject,
-    required this.timeLabel,
+    this.subject,
+    this.timeLabel,
     this.actions = const [],
   });
 
@@ -206,16 +206,6 @@ class TeacherCurrentClassCard extends StatelessWidget {
                         color: teacherFlowInk,
                         fontSize: 22,
                         fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$subject · $timeLabel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        color: teacherFlowMuted,
-                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],

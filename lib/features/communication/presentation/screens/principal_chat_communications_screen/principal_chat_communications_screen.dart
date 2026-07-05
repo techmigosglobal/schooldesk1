@@ -407,7 +407,7 @@ class _PrincipalChatCommunicationsScreenState
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Communications',
+      title: 'Messages',
       subtitle: 'Monitor parent-teacher chats and message staff or parents',
       drawer: PrincipalDrawer(
         selectedIndex: PrincipalNav.messages,

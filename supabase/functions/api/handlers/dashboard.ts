@@ -34,21 +34,34 @@ function buildTeacherAssignments(
     const sectionId = text(section?.id ?? fallback.section_id);
     if (!sectionId) return null;
     const grade = asRecord(section?.grade) ?? asRecord(fallback.grade);
-    const existing = assignments.get(sectionId) ?? {
-      id: sectionId,
-      section_id: sectionId,
-      grade_id: text(section?.grade_id ?? fallback.grade_id),
-      grade_name: text(grade?.grade_name ?? fallback.grade_name),
-      section_name: text(section?.section_name ?? fallback.section_name),
-      academic_year_id: text(section?.academic_year_id ?? fallback.academic_year_id),
-      subject_id: "",
-      subject_name: "",
-      teacher_role: role,
-      is_class_teacher: false,
-      is_co_teacher: false,
-      subjects: [] as Array<Record<string, unknown>>,
-    };
-    assignments.set(sectionId, existing);
+    let existing = assignments.get(sectionId);
+    if (!existing) {
+      existing = {
+        id: sectionId,
+        section_id: sectionId,
+        grade_id: text(section?.grade_id ?? fallback.grade_id),
+        grade_name: text(grade?.grade_name ?? fallback.grade_name),
+        section_name: text(section?.section_name ?? fallback.section_name),
+        academic_year_id: text(section?.academic_year_id ?? fallback.academic_year_id),
+        subject_id: "",
+        subject_name: "",
+        teacher_role: role,
+        is_class_teacher: false,
+        is_co_teacher: false,
+        subjects: [] as Array<Record<string, unknown>>,
+      };
+      assignments.set(sectionId, existing);
+    } else {
+      if (!text(existing.grade_name)) {
+        existing.grade_name = text(grade?.grade_name ?? fallback.grade_name);
+      }
+      if (!text(existing.section_name)) {
+        existing.section_name = text(section?.section_name ?? fallback.section_name);
+      }
+      if (!text(existing.academic_year_id)) {
+        existing.academic_year_id = text(section?.academic_year_id ?? fallback.academic_year_id);
+      }
+    }
     return existing;
   };
 
@@ -109,6 +122,8 @@ function buildTeacherAssignments(
     const gradeId = text(entry.grade_id);
     const sectionYear = text(entry.academic_year_id);
     const subjects = entry.subjects as Array<Record<string, unknown>>;
+    // Clear out any subjects assigned directly to the teacher so we ONLY show Class Hub subjects
+    subjects.length = 0;
     // 1. Match from grade_subjects — match by section_id OR grade_id
     const matchingGradeSubjects = gradeSubjects.filter((gs) => {
       const gsSectionId = text(gs.section_id);
@@ -132,51 +147,8 @@ function buildTeacherAssignments(
       }
     }
 
-    // 2. Match from staff_subjects — match by section_id OR grade_id
-    const matchingStaffSubjects = staffSubjects.filter((ss) => {
-      const ssSectionId = text(ss.section_id);
-      const ssGradeId = text(ss.grade_id);
-      return ssSectionId === sectionId || (gradeId !== "" && ssGradeId === gradeId);
-    });
-
-    for (const ss of matchingStaffSubjects) {
-      const subject = asRecord(ss.subject);
-      const subjectId = text(subject?.id ?? ss.subject_id);
-      const subjectName = text(subject?.subject_name ?? ss.subject_name);
-      if (
-        subjectId &&
-        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
-      ) {
-        subjects.push({
-          id: subjectId,
-          subject_id: subjectId,
-          subject_name: subjectName,
-        });
-      }
-    }
-
-    // 3. Match from timetable_slots — match by section_id OR grade_id
-    const matchingTimetableSlots = timetableSlots.filter((ts) => {
-      const tsSectionId = text(ts.section_id);
-      const tsGradeId = text(ts.grade_id);
-      return tsSectionId === sectionId || (gradeId !== "" && tsGradeId === gradeId);
-    });
-
-    for (const ts of matchingTimetableSlots) {
-      const subject = asRecord(ts.subject);
-      const subjectId = text(subject?.id ?? ts.subject_id);
-      const subjectName = text(subject?.subject_name ?? ts.subject_name);
-      if (
-        subjectId &&
-        !subjects.some((item) => text(item.id ?? item.subject_id) === subjectId)
-      ) {
-        subjects.push({
-          id: subjectId,
-          subject_id: subjectId,
-          subject_name: subjectName,
-        });
-      }
-    }
+    // The class hub (grade_subjects) is the single source of truth for the subjects available to a class.
+    // Removed legacy merging from other teachers (staff_subjects) and timetable slots (timetable_slots).
   }
 
   return [...assignments.values()];

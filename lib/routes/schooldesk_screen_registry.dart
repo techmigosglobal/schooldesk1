@@ -228,13 +228,13 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/communication-center-screen',
-      title: 'Communications',
+      title: 'Messages',
       module: 'Communication',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
       route: '/principal-chat-communications-screen',
-      title: 'Communications',
+      title: 'Messages',
       module: 'Communication',
       portal: 'principal',
     ),
@@ -246,8 +246,8 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/events-calendar-screen',
-      title: SchoolDeskGlossary.calendar,
-      module: SchoolDeskGlossary.calendar,
+      title: 'Academic Calendar',
+      module: 'Academic Calendar',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
@@ -355,7 +355,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/teacher-calendar-screen',
-      title: SchoolDeskGlossary.calendar,
+      title: 'Academic Calendar',
       module: 'School',
       portal: 'teacher',
     ),
@@ -532,7 +532,7 @@ class SchoolDeskScreenRegistry {
     ),
     SchoolDeskScreenMetadata(
       route: '/parent-calendar-screen',
-      title: SchoolDeskGlossary.calendar,
+      title: 'Academic Calendar',
       module: 'School',
       portal: 'parent',
     ),

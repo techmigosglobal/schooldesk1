@@ -308,7 +308,13 @@ Deno.serve(async (req: Request) => {
   if (path.startsWith("/timetable")) {
     return handleTimetable(req, path, method, url, client, svc, user);
   }
-  if (path.startsWith("/notifications") && path.startsWith("/notifications/")) {
+  if (
+    path.startsWith("/notifications/register-token") ||
+    path.startsWith("/notifications/revoke-token") ||
+    path.startsWith("/notifications/preferences") ||
+    path.startsWith("/notifications/subscribe") ||
+    path.startsWith("/notifications/unsubscribe")
+  ) {
     return handleNotifications(req, path, method, url, client, svc, user);
   }
   if (
@@ -319,7 +325,9 @@ Deno.serve(async (req: Request) => {
     path.startsWith("/parent-teacher-meetings") ||
     path.startsWith("/teacher/ptm-slots") ||
     path.startsWith("/lesson-planners") ||
-    path.startsWith("/diary-entries")
+    path.startsWith("/diary-entries") ||
+    path === "/notifications" ||
+    path.startsWith("/notifications/")
   ) {
     return handleCommunications(req, path, method, url, client, svc, user);
   }

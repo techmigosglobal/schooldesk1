@@ -11,6 +11,7 @@ import 'package:schooldesk1/features/homework/presentation/screens/parent_homewo
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
+import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 
 class ParentHomeworkScreen extends StatefulWidget {
   const ParentHomeworkScreen({super.key});
@@ -449,12 +450,25 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         ),
         subtitle: subtitleParts.isEmpty
             ? null
-            : Text(
-                subtitleParts.join(' • '),
-                style: GoogleFonts.dmSans(
-                  fontSize: 11,
-                  color: context.appTheme.muted,
-                ),
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (subject.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    SubjectChips(subjectString: subject),
+                  ],
+                  if (deadline.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Due: $deadline',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                    ),
+                ],
               ),
         children: [
           const Divider(height: 1),

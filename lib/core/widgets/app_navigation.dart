@@ -244,7 +244,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,
-              label: 'Communications',
+              label: 'Messages',
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(
@@ -265,7 +265,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.calendar,
               icon: Icons.event_outlined,
               activeIcon: Icons.event_rounded,
-              label: SchoolDeskGlossary.calendar,
+              label: 'Academic Calendar',
               route: AppRoutes.eventsCalendar,
             ),
             SchoolDeskNavigationItem(

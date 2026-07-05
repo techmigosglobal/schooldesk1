@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -58,9 +59,9 @@ class TeacherHomeworkFormScreen extends StatefulWidget {
 class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _subjectController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _dueDateController = TextEditingController();
+  final Set<String> _selectedSubjects = {};
   String _sectionId = '';
   String _studentId = '';
   String _homeworkType = 'Homework';
@@ -94,10 +95,17 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
     _students = widget.args.students;
     final homework = widget.args.homework;
     _titleController.text = teacherFlowText(homework?['title']);
-    _subjectController.text = teacherFlowText(
+    // Parse subject(s) — could be comma-separated
+    final rawSubject = teacherFlowText(
       homework?['subject'] ?? homework?['subject_id'],
       fallback: _defaultSubject,
     );
+    _selectedSubjects.addAll(
+      rawSubject.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty),
+    );
+    if (_selectedSubjects.isEmpty && _defaultSubject.isNotEmpty) {
+      _selectedSubjects.add(_defaultSubject);
+    }
     _descriptionController.text = teacherFlowText(
       homework?['description'] ?? homework?['instructions'],
     );
@@ -125,7 +133,6 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
   @override
   void dispose() {
     _titleController.dispose();
-    _subjectController.dispose();
     _descriptionController.dispose();
     _dueDateController.dispose();
     super.dispose();
@@ -200,6 +207,10 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
+    if (_selectedSubjects.isEmpty) {
+      setState(() => _error = 'Please select at least one subject.');
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (_teacherStaffId.trim().isEmpty) {
       setState(() => _error = 'Teacher staff profile is missing.');
@@ -214,7 +225,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       if (homeworkId.isEmpty) {
         await BackendApiClient.instance.createHomework(
           title: _titleController.text.trim(),
-          subject: _subjectController.text.trim(),
+          subject: _selectedSubjects.join(', '),
           className: _selectedClassLabel,
           sectionId: _sectionId,
           teacherId: _teacherStaffId,
@@ -228,7 +239,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         await BackendApiClient.instance.updateHomework(
           homeworkId,
           title: _titleController.text.trim(),
-          subject: _subjectController.text.trim(),
+          subject: _selectedSubjects.join(', '),
           className: _selectedClassLabel,
           sectionId: _sectionId,
           teacherId: _teacherStaffId,
@@ -322,26 +333,29 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                       _required(value, 'Select a class section.'),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _subjectOptions.contains(_subjectController.text)
-                      ? _subjectController.text
-                      : (_subjectOptions.isNotEmpty
-                            ? _subjectOptions.first
-                            : ''),
-                  decoration: const InputDecoration(
-                    labelText: 'Subject',
-                    prefixIcon: Icon(Icons.menu_book_rounded),
-                  ),
-                  items: _subjectOptions
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(
-                          () => _subjectController.text = value ?? '',
-                        ),
-                  validator: (value) => _required(value, 'Select subject.'),
+                SubjectCardGrid(
+                  label: 'Subjects',
+                  subjects: _subjectOptions,
+                  selectedSubjects: _selectedSubjects,
+                  enabled: !_saving,
+                  onToggle: (subject) {
+                    setState(() {
+                      if (_selectedSubjects.contains(subject)) {
+                        _selectedSubjects.remove(subject);
+                      } else {
+                        _selectedSubjects.add(subject);
+                      }
+                    });
+                  },
                 ),
+                if (_selectedSubjects.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Please select at least one subject',
+                      style: TextStyle(fontSize: 12, color: Colors.red),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: _homeworkType,
@@ -563,9 +577,9 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           teacherFlowText(widget.args.homework?['student_id']),
           ['', ..._students.map((row) => teacherFlowText(row['id']))],
         );
-        if (_subjectController.text.trim().isEmpty ||
-            _subjectController.text == 'General') {
-          _subjectController.text = _defaultSubject;
+        if (_selectedSubjects.isEmpty || _selectedSubjects.contains('General')) {
+          _selectedSubjects.clear();
+          if (_defaultSubject.isNotEmpty) _selectedSubjects.add(_defaultSubject);
         }
         _loadingContext = false;
       });
@@ -588,7 +602,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
       'entry_type': 'homework',
       'type': 'homework',
       'class': _selectedClassLabel,
-      'subject': _subjectController.text.trim(),
+      'subject': _selectedSubjects.join(', '),
       'title': 'Homework assigned',
       'homework': _descriptionController.text.trim(),
       'notes':

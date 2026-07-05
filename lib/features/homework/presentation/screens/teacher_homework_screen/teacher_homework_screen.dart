@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
+import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/teacher_homework_screen/teacher_homework_form_screens.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -338,7 +339,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
   final _descriptionController = TextEditingController();
   final _dueDateController = TextEditingController();
 
-  String _selectedSubject = '';
+  final Set<String> _selectedSubjects = {};
   String _homeworkType = 'Homework';
   bool _saving = false;
   bool _uploading = false;
@@ -391,9 +392,9 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
     _dueDateController.text = teacherFlowDate(
       DateTime.now().add(const Duration(days: 3)),
     );
-    // Default subject
+    // Default subject — pre-select first
     final opts = _subjectOptions;
-    _selectedSubject = opts.isNotEmpty ? opts.first : '';
+    if (opts.isNotEmpty) _selectedSubjects.add(opts.first);
   }
 
   @override
@@ -461,6 +462,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
+    if (_selectedSubjects.isEmpty) {
+      setState(() => _formError = 'Please select at least one subject.');
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _saving = true;
@@ -475,7 +480,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
 
       await BackendApiClient.instance.createHomework(
         title: _titleController.text.trim(),
-        subject: _selectedSubject,
+        subject: _selectedSubjects.join(', '),
         className: className,
         sectionId: sectionId,
         teacherId: staffId,
@@ -495,6 +500,9 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       setState(() {
         _saving = false;
         _homeworkType = 'Homework';
+        _selectedSubjects.clear();
+        final opts = _subjectOptions;
+        if (opts.isNotEmpty) _selectedSubjects.add(opts.first);
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -612,24 +620,30 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                 ),
                 const SizedBox(height: 20),
 
-                // ── Subject Dropdown ──────────────────────────────
-                _FormLabel(label: 'Subject', icon: Icons.menu_book_rounded),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: subjects.contains(_selectedSubject)
-                      ? _selectedSubject
-                      : (subjects.isNotEmpty ? subjects.first : null),
-                  isExpanded: true,
-                  decoration: _inputDecoration(hint: 'Select subject'),
-                  items: subjects
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: _saving
-                      ? null
-                      : (v) => setState(() => _selectedSubject = v ?? ''),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Please select a subject' : null,
+                // ── Subject Cards ──────────────────────────────
+                SubjectCardGrid(
+                  label: 'Subjects',
+                  subjects: subjects,
+                  selectedSubjects: _selectedSubjects,
+                  enabled: !_saving,
+                  onToggle: (subject) {
+                    setState(() {
+                      if (_selectedSubjects.contains(subject)) {
+                        _selectedSubjects.remove(subject);
+                      } else {
+                        _selectedSubjects.add(subject);
+                      }
+                    });
+                  },
                 ),
+                if (_selectedSubjects.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Please select at least one subject',
+                      style: TextStyle(fontSize: 12, color: Colors.red),
+                    ),
+                  ),
                 const SizedBox(height: 16),
 
                 // ── Homework Type ─────────────────────────────────

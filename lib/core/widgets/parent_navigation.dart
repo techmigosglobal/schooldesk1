@@ -169,7 +169,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
               index: ParentNav.chat,
               icon: Icons.chat_outlined,
               activeIcon: Icons.chat_rounded,
-              label: 'Teacher Chat',
+              label: 'Messages',
               route: AppRoutes.parentTeacherChat,
             ),
             const SchoolDeskNavigationItem(
@@ -178,25 +178,6 @@ class _ParentDrawerState extends State<ParentDrawer> {
               activeIcon: Icons.event_available_rounded,
               label: 'PTM Slots',
               route: AppRoutes.parentPTMBooking,
-            ),
-            SchoolDeskNavigationItem(
-              index: ParentNav.homeworkFeedback,
-              icon: Icons.feedback_outlined,
-              activeIcon: Icons.feedback_rounded,
-              label: 'Homework Feedback',
-              route: AppRoutes.homeworkMessaging,
-              arguments: {
-                'role': 'parent',
-                'userId': _userId,
-                'userName': _userName,
-              },
-            ),
-            const SchoolDeskNavigationItem(
-              index: ParentNav.complaints,
-              icon: Icons.support_agent_outlined,
-              activeIcon: Icons.support_agent_rounded,
-              label: 'Complaints',
-              route: AppRoutes.parentComplaints,
             ),
           ],
         ),
@@ -226,7 +207,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
               index: ParentNav.calendar,
               icon: Icons.calendar_month_outlined,
               activeIcon: Icons.calendar_month_rounded,
-              label: SchoolDeskGlossary.calendar,
+              label: 'Academic Calendar',
               route: AppRoutes.parentCalendar,
             ),
             SchoolDeskNavigationItem(

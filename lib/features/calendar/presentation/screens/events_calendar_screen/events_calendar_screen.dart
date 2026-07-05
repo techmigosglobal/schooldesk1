@@ -26,14 +26,7 @@ enum _EventFilter {
 
 enum _EventsDisplayMode { month, week, agenda }
 
-enum _CalendarCategoryFilter {
-  all,
-  events,
-  holidays,
-  ptms,
-  academic,
-  approvals,
-}
+
 
 enum SchoolCalendarPortal { principal, teacher, parent }
 
@@ -63,7 +56,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
   late DateTime _selectedWeekStart;
   _EventFilter _filter = _EventFilter.month;
   _EventsDisplayMode _displayMode = _EventsDisplayMode.month;
-  _CalendarCategoryFilter _categoryFilter = _CalendarCategoryFilter.all;
+  String? _activeLegendFilter;
 
   @override
   void initState() {
@@ -96,6 +89,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       final events = [
         ...rows.map(_PrincipalEvent.fromApi),
         ...ptmRows.map(_PrincipalEvent.fromPtmApi),
+        ..._getBuiltInHolidays(selectedYearId),
       ]..sort((a, b) => a.start.compareTo(b.start));
       if (!mounted) return;
       // Derive the display year from the selected academic year's start date so
@@ -144,6 +138,41 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return years.isNotEmpty ? years.first.id : '';
   }
 
+  List<_PrincipalEvent> _getBuiltInHolidays(String academicYearId) {
+    final holidays = [
+      (DateTime(2026, 1, 14), 'Makar Sankranti'),
+      (DateTime(2026, 1, 26), 'Republic Day'),
+      (DateTime(2026, 2, 14), 'Vasant Panchami'),
+      (DateTime(2026, 2, 15), 'Maha Shivaratri'),
+      (DateTime(2026, 3, 4), 'Holi'),
+      (DateTime(2026, 3, 20), 'Eid-ul-Fitr'),
+      (DateTime(2026, 4, 3), 'Good Friday'),
+      (DateTime(2026, 8, 15), 'Independence Day'),
+      (DateTime(2026, 8, 28), 'Raksha Bandhan'),
+      (DateTime(2026, 9, 5), 'Teachers\' Day'),
+      (DateTime(2026, 10, 2), 'Gandhi Jayanti'),
+      (DateTime(2026, 10, 19), 'Dussehra'),
+      (DateTime(2026, 11, 8), 'Diwali'),
+      (DateTime(2026, 12, 25), 'Christmas'),
+    ];
+
+    return holidays.map((h) {
+      return _PrincipalEvent(
+        id: 'builtin_${h.$1.millisecondsSinceEpoch}',
+        academicYearId: academicYearId,
+        title: h.$2,
+        type: 'festival',
+        status: 'scheduled',
+        description: 'National holiday / Festival',
+        venue: 'All',
+        audienceValue: 'all',
+        isHoliday: true,
+        start: h.$1,
+        end: h.$1.add(const Duration(hours: 23, minutes: 59)),
+      );
+    }).toList();
+  }
+
   bool get _canManageEvents {
     if (widget.portal != SchoolCalendarPortal.principal) return false;
     final role = BackendApiClient.instance.currentRoleName
@@ -179,6 +208,14 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
           ].join(' ').toLowerCase().contains(query);
       if (!matchesSearch) return false;
 
+      if (_activeLegendFilter != null) {
+        if (_activeLegendFilter == 'Holiday' && !event.isHoliday) return false;
+        if (_activeLegendFilter == 'Festival' && event.type != 'festival' && event.type != 'cultural') return false;
+        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) return false;
+        if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
+        if (_activeLegendFilter == 'Approval' && !event.needsApproval) return false;
+      }
+
       final matchesTimeFilter = switch (_filter) {
         _EventFilter.month => event.overlapsMonth(_selectedMonth),
         _EventFilter.all => true,
@@ -190,7 +227,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         _EventFilter.cancelled => event.isCancelled,
       };
       if (!matchesTimeFilter) return false;
-      return _matchesCategoryFilter(event);
+      return true;
     }).toList();
     rows.sort((a, b) => a.start.compareTo(b.start));
     return rows;
@@ -204,6 +241,15 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     final query = _query.trim().toLowerCase();
     final rows = _events.where((event) {
       if (!event.overlapsDate(day)) return false;
+      
+      if (_activeLegendFilter != null) {
+        if (_activeLegendFilter == 'Holiday' && !event.isHoliday) return false;
+        if (_activeLegendFilter == 'Festival' && event.type != 'festival' && event.type != 'cultural') return false;
+        if (_activeLegendFilter == 'Academic' && !event.isAcademicEntry) return false;
+        if (_activeLegendFilter == 'PTM' && !event.isPtm) return false;
+        if (_activeLegendFilter == 'Approval' && !event.needsApproval) return false;
+      }
+
       if (query.isEmpty) return true;
       return [
         event.title,
@@ -214,23 +260,11 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         event.description,
       ].join(' ').toLowerCase().contains(query);
     }).toList();
-    rows.retainWhere(_matchesCategoryFilter);
     rows.sort((a, b) => a.start.compareTo(b.start));
     return rows;
   }
 
   List<_PrincipalEvent> get _selectedDayEvents => _eventsForDay(_selectedDate);
-
-  bool _matchesCategoryFilter(_PrincipalEvent event) {
-    return switch (_categoryFilter) {
-      _CalendarCategoryFilter.all => true,
-      _CalendarCategoryFilter.events => event.isGeneralEvent,
-      _CalendarCategoryFilter.holidays => event.isHolidayOrFestival,
-      _CalendarCategoryFilter.ptms => event.isPtm,
-      _CalendarCategoryFilter.academic => event.isAcademicEntry,
-      _CalendarCategoryFilter.approvals => event.needsApproval,
-    };
-  }
 
   DateTime _startOfWeek(DateTime day) => DateTime(
     day.year,
@@ -575,7 +609,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildPrincipalCalendar() {
     return PrincipalDirectoryScaffold(
-      title: 'School Calendar',
+      title: 'Academic Calendar',
       subtitle:
           'Live school calendar for events, holidays, PTMs, and approvals',
       loading: _loading,
@@ -612,7 +646,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               ),
             ]
           : null,
-      isEmpty: !_loading && _error == null && _visibleEvents.isEmpty,
+      isEmpty: false,
       emptyState: _buildCalendarEmptyState(),
       filters: _buildFilters(),
       slivers: [
@@ -632,7 +666,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
 
   Widget _buildReadOnlyCalendar() {
     return SchoolDeskModuleScaffold(
-      title: 'School Calendar',
+      title: 'Academic Calendar',
       subtitle: 'Holidays, events, PTMs, and school milestones',
       drawer: _schoolCalendarDrawer(),
       actions: [
@@ -790,13 +824,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
         const SizedBox(height: 12),
         if (events.isEmpty)
-          _buildSelectedDayEmptyState(
-            title: 'No entries on this day',
-            message: _canManageEvents
-                ? 'Select another date or create an event for this day.'
-                : 'Select another date to view school events, holidays, or PTMs.',
-            showCreate: _canManageEvents,
-          )
+          const SizedBox.shrink()
         else
           ...events.map(
             (event) => Padding(
@@ -843,14 +871,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               height: 1.35,
             ),
           ),
-          if (showCreate) ...[
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: () => _openCreateEvent(initialDate: _selectedDate),
-              icon: const Icon(Icons.add_circle_outline_rounded),
-              label: const Text('Create event on this date'),
-            ),
-          ],
         ],
       ),
     );
@@ -893,7 +913,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
       _selectedDate = DateTime.now();
       _focusedDay = _selectedDate;
       _selectedWeekStart = _startOfWeek(_selectedDate);
-      _categoryFilter = _CalendarCategoryFilter.all;
     });
   }
 
@@ -958,10 +977,6 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               _buildDisplayModeSelector(),
               const SizedBox(height: 8),
               _buildMonthStrip(),
-              const SizedBox(height: 10),
-              _buildLegend(),
-              const SizedBox(height: 10),
-              _buildCategoryFilters(),
             ],
           );
         },
@@ -1060,31 +1075,24 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
     return Wrap(
       spacing: 10,
       runSpacing: 8,
-      children: items.map((item) => _LegendChip(item: item)).toList(),
+      children: items.map((item) {
+        final isSelected = _activeLegendFilter == item.label;
+        return _LegendChip(
+          item: item,
+          isSelected: isSelected,
+          onTap: () {
+            setState(() {
+              if (isSelected) {
+                _activeLegendFilter = null;
+              } else {
+                _activeLegendFilter = item.label;
+              }
+            });
+          },
+        );
+      }).toList(),
     );
-  }
 
-  Widget _buildCategoryFilters() {
-    final filters = [
-      (_CalendarCategoryFilter.all, 'All'),
-      (_CalendarCategoryFilter.events, 'Events'),
-      (_CalendarCategoryFilter.holidays, 'Holidays'),
-      (_CalendarCategoryFilter.ptms, 'PTMs'),
-      (_CalendarCategoryFilter.academic, 'Academic'),
-      (_CalendarCategoryFilter.approvals, 'Approvals'),
-    ];
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (filter, label) in filters)
-          FilterChip(
-            label: Text(label),
-            selected: _categoryFilter == filter,
-            onSelected: (_) => setState(() => _categoryFilter = filter),
-          ),
-      ],
-    );
   }
 }
 
@@ -1343,13 +1351,13 @@ class _CalendarDateCell extends StatelessWidget {
           child: Stack(
             children: [
               Align(
-                alignment: Alignment.topLeft,
+                alignment: Alignment.center,
                 child: Text(
                   '${day.day}',
                   style: GoogleFonts.dmSans(
                     color: textColor,
                     fontWeight: FontWeight.w900,
-                    fontSize: 13,
+                    fontSize: 14,
                   ),
                 ),
               ),
@@ -1361,21 +1369,20 @@ class _CalendarDateCell extends StatelessWidget {
                 ),
               if (events.isNotEmpty)
                 Align(
-                  alignment: Alignment.bottomLeft,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onIndicatorTap,
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
                     child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
+                      spacing: 3,
+                      alignment: WrapAlignment.center,
                       children: [
                         for (final event in events.take(3))
-                          Tooltip(
-                            message: event.title,
-                            child: Icon(
-                              event.calendarIcon,
-                              size: 15,
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
                               color: event.typeColor,
+                              shape: BoxShape.circle,
                             ),
                           ),
                       ],
@@ -1429,32 +1436,53 @@ class _LegendItemData {
 
 class _LegendChip extends StatelessWidget {
   final _LegendItemData item;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  const _LegendChip({required this.item});
+  const _LegendChip({
+    required this.item,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: item.color.withAlpha(18),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: item.color.withAlpha(55)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(item.icon, size: 16, color: item.color),
-          const SizedBox(width: 6),
-          Text(
-            item.label,
-            style: GoogleFonts.dmSans(
-              color: principalDirectoryText,
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: 'Filter by ${item.label}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected ? item.color.withAlpha(40) : item.color.withAlpha(15),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: isSelected ? item.color : item.color.withAlpha(55),
+                width: isSelected ? 1.5 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(item.icon, size: 16, color: item.color),
+                const SizedBox(width: 6),
+                Text(
+                  item.label,
+                  style: GoogleFonts.dmSans(
+                    color: principalDirectoryText,
+                    fontWeight: isSelected ? FontWeight.w900 : FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2502,14 +2530,13 @@ class _PrincipalEvent {
   }
 
   Color get typeColor {
-    if (isHoliday) return Colors.red;
+    if (isHoliday) return const Color(0xFFD14343);
+    if (needsApproval) return const Color(0xFF16A34A);
     return switch (type) {
-      'meeting' => Colors.teal,
-      'ptm' => const Color(0xFF1B4F72),
-      'exam' => const Color(0xFFD35400),
-      'academic' => const Color(0xFF2563EB),
+      'meeting' || 'ptm' => const Color(0xFF0F766E),
+      'academic' || 'exam' => const Color(0xFF2563EB),
+      'cultural' || 'festival' => const Color(0xFFF59E0B),
       'sports' => const Color(0xFF16A34A),
-      'cultural' => const Color(0xFF8E44AD),
       'staff' => const Color(0xFF4F46E5),
       'health' => const Color(0xFF0E9384),
       _ => principalDirectoryAccent,

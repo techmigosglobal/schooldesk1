@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
 @immutable
 class ParentHomeworkSubmissionArgs {
   final Map<String, dynamic> homework;
@@ -401,7 +402,21 @@ class _ParentHomeworkSubmissionScreenState
           ),
           const SizedBox(height: 10),
           _infoRow(Icons.person_outline_rounded, 'Student: ${widget.args.studentName}'),
-          if (subject.isNotEmpty) _infoRow(Icons.menu_book_rounded, 'Subject: $subject'),
+          if (subject.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.menu_book_rounded, size: 14, color: context.appTheme.muted),
+                const SizedBox(width: 6),
+                Text(
+                  'Subjects:',
+                  style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SubjectChips(subjectString: subject),
+          ],
           if (deadline.isNotEmpty) _infoRow(Icons.event_rounded, 'Due: $deadline'),
           if (instructions.isNotEmpty) ...[
             const Divider(height: 18),
