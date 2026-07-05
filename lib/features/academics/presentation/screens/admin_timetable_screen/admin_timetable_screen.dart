@@ -45,7 +45,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   _ManualTimetableStage _stage = _ManualTimetableStage.selectClass;
   _TimetableSettings _settings = _TimetableSettings.defaults();
   List<_ManualTimetableCell> _draftCells = [];
-  int _selectedEditorDay = DateTime.now().weekday.clamp(1, 6).toInt();
+  final Set<int> _selectedEditorDays = {DateTime.now().weekday.clamp(1, 6).toInt()};
 
   List<Map<String, dynamic>> _slots = [];
   List<SectionModel> _sections = [];
@@ -747,7 +747,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
           const SizedBox(height: 10),
           if (_dayCells.isEmpty)
             _hintText(
-              'No periods for ${_dayFullLabels[_selectedEditorDay - 1]}.',
+              _selectedEditorDays.isEmpty
+                  ? 'Select one or more days to edit.'
+                  : 'No periods for $_selectedDaysLabel.',
             )
           else
             for (final cell in _dayCells)
@@ -763,8 +765,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _buildDayPreview(List<_ClassSubjectOption> subjectOptions) {
     if (_dayCells.isEmpty) {
       return _panel(
-        child: _hintText(
-          'No periods for ${_dayFullLabels[_selectedEditorDay - 1]}.',
+        child:          _hintText(
+          _selectedEditorDays.isEmpty
+              ? 'Select one or more days to preview.'
+              : 'No periods for $_selectedDaysLabel.',
         ),
       );
     }
@@ -786,41 +790,100 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     final visibleDays = days.isEmpty
         ? (_settings.workingDays.toList()..sort())
         : days;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    final allSelected = visibleDays.every(
+      (day) => _selectedEditorDays.contains(day),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final day in visibleDays)
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => setState(() => _selectedEditorDay = day),
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                decoration: BoxDecoration(
-                  color: _selectedEditorDay == day
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _selectedEditorDays.isEmpty
+                    ? 'Tap days to edit'
+                    : '${_selectedEditorDays.length} day(s) selected — changes apply to all',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: _selectedEditorDays.length > 1
                       ? _accent
-                      : const Color(0xFFEBF0F7),
-                  border: Border.all(
-                    color: _selectedEditorDay == day
-                        ? _accent
-                        : const Color(0xFF9BACC0),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
+                      : _muted,
+                ),
+              ),
+            ),
+            InkWell(
+              onTap: () {
+                setState(() {
+                  if (allSelected) {
+                    _selectedEditorDays.clear();
+                    if (visibleDays.isNotEmpty) {
+                      _selectedEditorDays.add(visibleDays.first);
+                    }
+                  } else {
+                    _selectedEditorDays
+                      ..clear()
+                      ..addAll(visibleDays);
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
                 ),
                 child: Text(
-                  _dayShortLabels[day - 1],
+                  allSelected ? 'Clear' : 'Select All',
                   style: TextStyle(
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    fontSize: 13,
-                    color: _selectedEditorDay == day ? Colors.white : _ink,
+                    color: _accent,
                   ),
                 ),
               ),
             ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final day in visibleDays)
+              FilterChip(
+                label: Text(
+                  _dayShortLabels[day - 1],
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: _selectedEditorDays.contains(day)
+                        ? Colors.white
+                        : _ink,
+                  ),
+                ),
+                selected: _selectedEditorDays.contains(day),
+                selectedColor: _accent,
+                checkmarkColor: Colors.white,
+                backgroundColor: const Color(0xFFEBF0F7),
+                side: BorderSide(
+                  color: _selectedEditorDays.contains(day)
+                      ? _accent
+                      : const Color(0xFF9BACC0),
+                  width: 2,
+                ),
+                onSelected: (selected) {
+                  setState(() {
+                    if (selected) {
+                      _selectedEditorDays.add(day);
+                    } else if (_selectedEditorDays.length > 1) {
+                      _selectedEditorDays.remove(day);
+                    }
+                  });
+                },
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -897,11 +960,18 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                         ],
                         onChanged: (value) {
                           setState(() {
-                            cell.subjectId = value ?? '';
-                            cell.staffId = _teacherIdForSubject(cell.subjectId);
-                            cell.slotType = cell.subjectId.isEmpty
-                                ? 'free'
-                                : 'regular';
+                            final newSubjectId = value ?? '';
+                            // Apply to all selected days for this period
+                            for (final day in _selectedEditorDays) {
+                              final target = _cellFor(day, cell.periodNumber);
+                              if (target != null) {
+                                target.subjectId = newSubjectId;
+                                target.staffId = _teacherIdForSubject(newSubjectId);
+                                target.slotType = newSubjectId.isEmpty
+                                    ? 'free'
+                                    : 'regular';
+                              }
+                            }
                           });
                         },
                       ),
@@ -1437,7 +1507,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     setState(() {
       _settings = _TimetableSettings.defaults();
       _draftCells = [];
-      _selectedEditorDay = _settings.workingDays.first;
+      _selectedEditorDays
+        ..clear()
+        ..add(_settings.workingDays.first);
       _stage = _ManualTimetableStage.settings;
     });
   }
@@ -1448,7 +1520,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       _settings = _settingsFromSlots(existing);
       _draftCells = existing.map(_ManualTimetableCell.fromSlot).toList()
         ..sort(_cellSort);
-      _selectedEditorDay = _firstDraftDay;
+      _selectedEditorDays
+        ..clear()
+        ..add(_firstDraftDay);
       _stage = _ManualTimetableStage.editor;
     });
   }
@@ -1466,7 +1540,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     }
     setState(() {
       _draftCells = draft;
-      _selectedEditorDay = _firstDraftDay;
+      _selectedEditorDays
+        ..clear()
+        ..add(_firstDraftDay);
       _stage = _ManualTimetableStage.editor;
     });
   }
@@ -1633,7 +1709,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     } else {
       setState(() {
         _draftCells = _buildDraftFromSettings();
-        _selectedEditorDay = _firstDraftDay;
+        _selectedEditorDays
+          ..clear()
+          ..add(_firstDraftDay);
       });
     }
   }
@@ -1642,7 +1720,11 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     setState(() {
       _draftCells.remove(cell);
       _renumberDay(cell.day);
-      if (_dayCells.isEmpty) _selectedEditorDay = _firstDraftDay;
+      if (_dayCells.isEmpty) {
+        _selectedEditorDays
+          ..clear()
+          ..add(_firstDraftDay);
+      }
     });
   }
 
@@ -1654,7 +1736,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       for (final day in _draftCells.map((cell) => cell.day).toSet()) {
         _renumberDay(day);
       }
-      _selectedEditorDay = _firstDraftDay;
+      _selectedEditorDays
+        ..clear()
+        ..add(_firstDraftDay);
     });
   }
 
@@ -1673,16 +1757,20 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   void _reflowSelectedDay() {
-    final dayCells = _dayCells.where((cell) => !cell.isBreak).toList();
     final start = _clockMinutes(_settings.startTime);
-    if (start == null || dayCells.isEmpty) return;
+    if (start == null) return;
     setState(() {
-      var cursor = start;
-      for (final cell in dayCells) {
-        cell.startTime = _formatMinutes(cursor);
-        cell.endTime = _formatMinutes(cursor + _settings.periodDurationMinutes);
-        cursor +=
-            _settings.periodDurationMinutes + _settings.gapDurationMinutes;
+      for (final day in _selectedEditorDays) {
+        final dayCells = _draftCells
+            .where((c) => c.day == day && !c.isBreak)
+            .toList();
+        var cursor = start;
+        for (final cell in dayCells) {
+          cell.startTime = _formatMinutes(cursor);
+          cell.endTime = _formatMinutes(cursor + _settings.periodDurationMinutes);
+          cursor +=
+              _settings.periodDurationMinutes + _settings.gapDurationMinutes;
+        }
       }
       _draftCells.sort(_cellSort);
     });
@@ -1771,6 +1859,13 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       final subjectId = _text(row['subject_id'] ?? _map(row['subject'])['id']);
       if (subjectId.isNotEmpty) subjectIds.add(subjectId);
     }
+    // Fallback: if no grade_subjects mapped, use all school-wide subjects
+    if (subjectIds.isEmpty) {
+      for (final row in _subjects) {
+        final subjectId = _text(row['id'] ?? row['subject_id']);
+        if (subjectId.isNotEmpty) subjectIds.add(subjectId);
+      }
+    }
     final options = <_ClassSubjectOption>[];
     for (final subjectId in subjectIds) {
       final subject = _subjectById(subjectId);
@@ -1851,7 +1946,10 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   }
 
   List<_ManualTimetableCell> get _dayCells {
-    return _draftCells.where((cell) => cell.day == _selectedEditorDay).toList()
+    if (_selectedEditorDays.isEmpty) return const [];
+    // Use the first selected day as the reference for display
+    final refDay = _selectedEditorDays.first;
+    return _draftCells.where((cell) => cell.day == refDay).toList()
       ..sort(_cellSort);
   }
 
@@ -1901,6 +1999,12 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       if (year.isCurrent) return year;
     }
     return _academicYears.isEmpty ? null : _academicYears.first;
+  }
+
+  String get _selectedDaysLabel {
+    if (_selectedEditorDays.isEmpty) return '';
+    final sorted = _selectedEditorDays.toList()..sort();
+    return sorted.map((d) => _dayShortLabels[d - 1]).join(', ');
   }
 
   String get _selectedClassLabel => _sectionLabel(_selectedSection);
