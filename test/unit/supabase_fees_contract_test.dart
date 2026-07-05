@@ -194,31 +194,6 @@ void main() {
     },
   );
 
-  test(
-    'principal fees screen previews QR safely and keeps Book Kit before tuition collection',
-    () {
-      final source = File(
-        'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
-      ).readAsStringSync();
-
-      expect(source, contains("const Text('Current QR image')"));
-      expect(source, contains('Image.network('));
-      expect(source, contains('_absoluteMediaUrl(qrImageUrl)'));
-      expect(source, contains('sheetContext.mounted'));
-      expect(source, contains('Navigator.of(sheetContext).pop()'));
-      expect(source, contains('_disposeFeeComponentAfterFrame('));
-      expect(source, contains('_feeInvoicePriority('));
-      expect(source, contains('final priorityCompare = _feeInvoicePriority('));
-      expect(source, contains(').compareTo(_feeInvoicePriority(b));'));
-      expect(source, contains('_syncManualMonthsFromAmount('));
-      expect(
-        source,
-        contains('onChanged: (_) => _syncManualMonthsFromAmount()'),
-      );
-      expect(source, contains('.round().clamp('));
-      expect(source, contains('unpaid.length'));
-    },
-  );
 
   test(
     'payment approval decision keeps admin remarks separate and updates invoice balances',
@@ -317,4 +292,126 @@ void main() {
     expect(history, contains("normalizedStatus == 'completed'"));
     expect(history, isNot(contains('value.toDouble() / 100')));
   });
+
+  // ── Orphaned invoice cleanup contract tests ──────────────────────────────
+
+  test(
+    'invoiceIdsForFeeStructure has scope-based fallback for orphaned invoices',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      // The function must exist and contain the three lookup strategies
+      expect(source, contains('async function invoiceIdsForFeeStructure'));
+      // 1. Direct link via fee_invoices.fee_structure_id
+      expect(source, contains('.eq("fee_structure_id", structureId)'));
+      // 2. Indirect link via fee_invoice_items
+      expect(source, contains('fee_invoice_items'));
+      // 3. Scope-based fallback for orphaned invoices
+      expect(source, contains('Scope-based fallback'));
+      expect(source, contains('.is("fee_structure_id", null)'));
+      expect(source, contains('.neq("status", "paid")'));
+      // Must query students through sections for grade/scope matching
+      expect(source, contains('current_section_id'));
+      expect(source, contains('sections'));
+    },
+  );
+
+  test(
+    'DELETE fee structure handler includes reconciliation sweep for orphaned invoices',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      // Find the DELETE handler section
+      final deleteStart = source.indexOf(
+        'if (seg && method === "DELETE") {',
+      );
+      // Find the reconciliation sweep section (after the structure is deleted)
+      final reconciliationStart = source.indexOf('Reconciliation sweep');
+      expect(reconciliationStart, isPositive);
+
+      final section = source.substring(reconciliationStart);
+      // Must query for orphaned invoices after structure deletion
+      expect(section, contains('fee_invoices'));
+      expect(section, contains('.is("fee_structure_id", null)'));
+      expect(section, contains('.neq("status", "paid")'));
+      // Must clean up orphaned invoices via deleteInvoiceWorkflowRows
+      expect(section, contains('deleteInvoiceWorkflowRows'));
+      // Must report reconciled_orphans count in response
+      expect(section, contains('reconciled_orphans'));
+      // Must be best-effort (wrapped in try/catch)
+      expect(section, contains('Best-effort reconciliation'));
+    },
+  );
+
+  test(
+    'dashboard handler queries paid_amount not amount_paid for totalPaid',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/dashboard.ts',
+      ).readAsStringSync();
+
+      // Must use the correct column name paid_amount
+      expect(source, contains('"paid_amount"'));
+      expect(source, contains('i.paid_amount'));
+      // Must NOT use the wrong column name amount_paid in select or reduce
+      expect(source, isNot(contains('"amount_paid"')));
+      expect(source, isNot(contains('i.amount_paid')));
+    },
+  );
+
+  test(
+    'deleteFeeStructureWorkflowRows cleans up installments and concessions',
+    () {
+      final source = File(
+        'supabase/functions/api/handlers/fees.ts',
+      ).readAsStringSync();
+
+      final start = source.indexOf('async function deleteFeeStructureWorkflowRows');
+      final end = source.indexOf('export async function handleFees');
+      final section = source.substring(start, end);
+
+      // Must call invoiceIdsForFeeStructure first
+      expect(section, contains('invoiceIdsForFeeStructure'));
+      // Must call deleteInvoiceWorkflowRows for invoice cleanup
+      expect(section, contains('deleteInvoiceWorkflowRows'));
+      // Must delete fee_installments
+      expect(section, contains('fee_installments'));
+      // Must delete fee_concessions
+      expect(section, contains('fee_concessions'));
+      // Must return deletion stats
+      expect(section, contains('deleted_installments'));
+      expect(section, contains('deleted_concessions'));
+    },
+  );
+
+  test(
+    'orphaned fee cleanup migration covers all affected tables',
+    () {
+      final migration = File(
+        'supabase/migrations/0024_orphaned_fee_cleanup.sql',
+      ).readAsStringSync();
+
+      // Must target fee_invoices with fee_structure_id IS NULL
+      expect(migration, contains('fee_structure_id IS NULL'));
+      expect(migration, contains('status NOT IN'));
+      // Must delete from all child tables in correct order
+      expect(migration, contains('DELETE FROM public.fee_receipts'));
+      expect(
+        migration,
+        contains('DELETE FROM public.parent_payment_requests'),
+      );
+      expect(migration, contains('DELETE FROM public.payments'));
+      expect(
+        migration,
+        contains('DELETE FROM public.fee_invoice_items'),
+      );
+      expect(migration, contains('DELETE FROM public.fee_invoices'));
+      // Must preserve paid and cancelled invoices
+      expect(migration, contains("'paid', 'cancelled'"));
+    },
+  );
 }

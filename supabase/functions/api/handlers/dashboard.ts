@@ -168,7 +168,10 @@ export async function handleDashboard(
   const dashRole = url.searchParams.get("role") ?? role;
 
   if (path === "/dashboard" || path.startsWith("/dashboard")) {
-    const [students, staff, invoices, announcements, sections, pendingLeave] =
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+
+    const [students, staff, invoices, paidInvoices, announcements, sections, pendingLeave, attendanceSessions, todayAttendances, parentPaymentRequests, approvalRequests] =
       await Promise.all([
         svc.from("students").select("id, status", {
           count: "exact",
@@ -182,6 +185,10 @@ export async function handleDashboard(
           "school_id",
           school,
         ).eq("status", "pending"),
+        svc.from("fee_invoices").select("paid_amount").eq(
+          "school_id",
+          school,
+        ).eq("status", "paid"),
         svc.from("announcements").select("id, title, published_at, priority")
           .eq("school_id", school).order("published_at", { ascending: false })
           .limit(5),
@@ -193,12 +200,40 @@ export async function handleDashboard(
           count: "exact",
           head: true,
         }).eq("school_id", school).eq("status", "pending"),
+        svc.from("student_attendances").select("id, status", {
+          count: "exact",
+          head: true,
+        }).eq("school_id", school),
+        svc.from("student_attendances").select("id, status").eq(
+          "school_id",
+          school,
+        ).gte("created_at", todayStart),
+        svc.from("parent_payment_requests").select("id, status").eq(
+          "school_id",
+          school,
+        ).eq("status", "pending"),
+        svc.from("approval_requests").select("id, status").eq(
+          "school_id",
+          school,
+        ).eq("status", "pending"),
       ]);
 
     const totalOutstanding = (invoices.data ?? []).reduce(
       (s: number, i: Record<string, number>) => s + (i.balance ?? 0),
       0,
     );
+    const totalPaid = (paidInvoices.data ?? []).reduce(
+      (s: number, i: Record<string, number>) => s + (i.paid_amount ?? 0),
+      0,
+    );
+    const totalDue = totalOutstanding;
+    const collectionPct = totalDue > 0 ? Math.round((totalPaid / (totalPaid + totalDue)) * 100) : 100;
+
+    // Calculate today's attendance percentage
+    const todayRows = todayAttendances.data ?? [];
+    const todayMarked = todayRows.length;
+    const todayPresent = todayRows.filter((r: Record<string, unknown>) => r.status === "present").length;
+    const attendancePct = todayMarked > 0 ? Math.round((todayPresent / todayMarked) * 100) : 0;
 
     const base = {
       total_students: students.count ?? 0,
@@ -207,6 +242,25 @@ export async function handleDashboard(
       pending_fee_balance: totalOutstanding,
       pending_leave_requests: pendingLeave.count ?? 0,
       recent_announcements: announcements.data ?? [],
+      metrics: {
+        total_students: students.count ?? 0,
+        total_staff: staff.count ?? 0,
+        total_classes: sections.count ?? 0,
+        pending_event_approvals: approvalRequests.data?.length ?? 0,
+        pending_fee_requests: parentPaymentRequests.data?.length ?? 0,
+        pending_access_approvals: approvalRequests.data?.length ?? 0,
+        attendance_today: attendanceSessions.data?.length ?? 0,
+      },
+      today_attendance: {
+        attendance_pct: attendancePct,
+        present: todayPresent,
+        marked: todayMarked,
+      },
+      fees: {
+        collection_pct: collectionPct,
+        total_paid: totalPaid,
+        total_due: totalDue,
+      },
     };
 
     if (dashRole === "teacher") {

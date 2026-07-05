@@ -5,6 +5,7 @@ class RoleAccessService {
   RoleAccessService._();
 
   static bool _initialized = false;
+  static bool _signedOut = false;
   static List<Map<String, dynamic>> _students = [];
   static List<Map<String, dynamic>> _teachers = [];
   static List<Map<String, dynamic>> _parentChildren = [];
@@ -16,6 +17,7 @@ class RoleAccessService {
   static List<Map<String, dynamic>> _teacherAssignedClasses = [];
 
   static Future<void> initialize() async {
+    if (_signedOut) return;
     final api = BackendApiClient.instance;
     if (!api.isAuthenticated) {
       _setEmptyScope(initialized: true);
@@ -138,7 +140,13 @@ class RoleAccessService {
   }
 
   static void clear() {
+    _signedOut = true;
     _setEmptyScope(initialized: false);
+  }
+
+  /// Reset the signed-out guard so the next login can initialize fresh.
+  static void resetSignOutGuard() {
+    _signedOut = false;
   }
 
   static Map<String, dynamic> get loggedInTeacher {

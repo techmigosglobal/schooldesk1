@@ -36,11 +36,12 @@ void main() {
       expect(principal, contains('Save Timetable'));
       expect(principal, contains('_buildManualEditor'));
       expect(principal, contains('_buildDayWiseEditor'));
-      expect(principal, contains('_buildPeriodManagement'));
       expect(principal, contains('_saveManualTimetable'));
+      expect(principal, contains('_deleteDayCell'));
       expect(principal, contains('deleteTimetableSlot('));
       expect(principal, contains('createTimetableSlot('));
-      expect(principal, contains('Delete Extra Period Rows'));
+      expect(principal, isNot(contains('Delete Extra Period Rows')));
+      expect(principal, isNot(contains('_deletePeriodColumn')));
       expect(principal, contains('Reflow Day'));
       expect(principal, contains('Delete Whole Timetable'));
 
@@ -61,7 +62,10 @@ void main() {
       );
       expect(supabaseTimetable, contains('method === "DELETE"'));
       expect(supabaseTimetable, contains('url.searchParams.get("section_id")'));
-      expect(supabaseTimetable, contains('url.searchParams.get("academic_year_id")'));
+      expect(
+        supabaseTimetable,
+        contains('url.searchParams.get("academic_year_id")'),
+      );
     },
   );
 
@@ -89,7 +93,7 @@ void main() {
       expect(principal, contains('_buildDraftFromSettings'));
       expect(principal, contains('_breakCellsForDay'));
       expect(principal, contains('_deleteDayCell'));
-      expect(principal, contains('_deletePeriodColumn'));
+      expect(principal, isNot(contains('_deletePeriodColumn')));
       expect(principal, contains('_reflowSelectedDay'));
       expect(
         principal,

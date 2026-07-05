@@ -10,6 +10,7 @@ class NotificationService extends ChangeNotifier {
   List<AppNotification> _notifications = [];
   final Map<String, bool> _settings = {};
   bool _loaded = false;
+  Future<void>? _loadFuture;
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
   int get totalUnread => _notifications.where((n) => !n.isRead).length;
@@ -23,7 +24,7 @@ class NotificationService extends ChangeNotifier {
     _instance ??= NotificationService._();
     // Only load data once — avoids repeated API calls on every getInstance().
     if (!_instance!._loaded) {
-      await _instance!._load();
+      await (_instance!._loadFuture ??= _instance!._load());
     }
     return _instance!;
   }
@@ -31,9 +32,13 @@ class NotificationService extends ChangeNotifier {
   NotificationService._();
 
   Future<void> _load() async {
-    _loaded = true;
-    final rows = await _api.getNotifications();
-    _notifications = rows.map(AppNotification.fromJson).toList();
+    try {
+      final rows = await _api.getNotifications();
+      _notifications = rows.map(AppNotification.fromJson).toList();
+      _loaded = true;
+    } finally {
+      _loadFuture = null;
+    }
   }
 
   /// Force a fresh reload of notifications from the backend.
@@ -505,7 +510,8 @@ class AppNotification {
           !RegExp(r'-\d{2}:?\d{2}$').hasMatch(normalized)) {
         normalized = '${normalized}Z';
       }
-      parsedTimestamp = DateTime.tryParse(normalized)?.toLocal() ?? DateTime.now();
+      parsedTimestamp =
+          DateTime.tryParse(normalized)?.toLocal() ?? DateTime.now();
     }
 
     return AppNotification(

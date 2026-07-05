@@ -34,34 +34,35 @@ void main() {
     },
   );
 
-  test(
-    'startup defers slow role and push services until after first frame',
-    () {
-      final main = File('lib/main.dart').readAsStringSync();
-      final apiClient = File(
-        'lib/core/network/backend_api_client.dart',
-      ).readAsStringSync();
+  test('startup defers slow role and push services until after first frame', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    final apiClient = File(
+      'lib/core/network/backend_api_client.dart',
+    ).readAsStringSync();
 
-      final runAppIndex = main.indexOf('runApp(');
-      final deferIndex = main.indexOf('_deferStartupServices();');
-      final roleInitIndex = main.indexOf(
-        'await RoleAccessService.initialize()',
-      );
-      final pushInitIndex = main.indexOf(
-        'await PushNotificationService.instance.initialize()',
-      );
-      expect(runAppIndex, lessThan(deferIndex));
-      expect(deferIndex, lessThan(roleInitIndex));
-      expect(deferIndex, lessThan(pushInitIndex));
-      expect(main, contains('WidgetsBinding.instance.addPostFrameCallback'));
-      expect(main, contains('restoreStoredSession()'));
-      expect(
-        apiClient,
-        isNot(contains('await client.restoreStoredSession();')),
-        reason: 'Token validation should not block first paint.',
-      );
-    },
-  );
+    final runAppIndex = main.indexOf('runApp(');
+    final deferIndex = main.indexOf('_deferStartupServices();');
+    final roleInitIndex = main.indexOf('await RoleAccessService.initialize()');
+    final pushInitIndex = main.indexOf(
+      'await PushNotificationService.instance.initialize()',
+    );
+    expect(runAppIndex, lessThan(deferIndex));
+    expect(deferIndex, lessThan(roleInitIndex));
+    expect(deferIndex, lessThan(pushInitIndex));
+    expect(main, contains('WidgetsBinding.instance.addPostFrameCallback'));
+    expect(main, contains('restoreStoredSession()'));
+    expect(
+      main,
+      isNot(contains('await FcmService().initialize()')),
+      reason:
+          'The legacy FCM service must not request notification permission in parallel with PushNotificationService.',
+    );
+    expect(
+      apiClient,
+      isNot(contains('await client.restoreStoredSession();')),
+      reason: 'Token validation should not block first paint.',
+    );
+  });
 
   test('principal dashboard double back exits instead of logging out', () {
     final dashboard = File(

@@ -49,7 +49,9 @@ void main() {
     expect(adminTimetable, contains('Create Editable Timetable'));
     expect(adminTimetable, contains('Day-wise Timetable'));
     expect(adminTimetable, contains('Week-wise Timetable'));
-    expect(adminTimetable, contains('Delete Extra Period Rows'));
+    expect(adminTimetable, contains('_deleteDayCell'));
+    expect(adminTimetable, isNot(contains('Delete Extra Period Rows')));
+    expect(adminTimetable, isNot(contains('_deletePeriodColumn')));
     expect(adminTimetable, contains('DropdownButtonFormField<String>'));
     expect(adminTimetable, contains("labelText: 'Select Class'"));
     expect(adminTimetable, contains('createTimetableSlot('));
@@ -159,7 +161,7 @@ void main() {
     expect(adminTimetable, contains('_buildDraftFromSettings'));
     expect(adminTimetable, contains('_buildDayWiseEditor'));
     expect(adminTimetable, contains('_deleteDayCell'));
-    expect(adminTimetable, contains('_deletePeriodColumn'));
+    expect(adminTimetable, isNot(contains('_deletePeriodColumn')));
     expect(adminTimetable, contains('_reflowSelectedDay'));
     expect(adminTimetable, contains('staffId: cell.staffId'));
     expect(timetableApi, contains('String staffId = \'\''));

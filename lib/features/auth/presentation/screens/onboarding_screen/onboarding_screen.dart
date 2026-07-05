@@ -60,7 +60,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     });
 
     try {
-      final response = await BackendApiClient.instance.setupSchool(
+      RoleAccessService.resetSignOutGuard();
+      await BackendApiClient.instance.setupSchool(
         SchoolSetupRequest(
           schoolName: _schoolNameCtrl.text,
           schoolType: 'school',
@@ -77,14 +78,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           adminRole: _adminRole,
         ),
       );
-      unawaited(RoleAccessService.initialize());
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
-        _dashboardRouteFor(response.user.roleName),
+        AppRoutes.loginLoading,
         (_) => false,
       );
     } catch (error) {
@@ -99,15 +99,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           _ => 'School setup failed. Please try again.',
         };
       });
-    }
-  }
-
-  String _dashboardRouteFor(String roleName) {
-    switch (roleName.trim().toLowerCase()) {
-      case 'principal':
-        return AppRoutes.principalDashboard;
-      default:
-        return AppRoutes.principalDashboard;
     }
   }
 

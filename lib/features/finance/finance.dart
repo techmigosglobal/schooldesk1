@@ -1,6 +1,11 @@
 export 'presentation/screens/parent_fees_screen/parent_fees_screen.dart';
 export 'presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart';
-export 'presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart';
+export 'presentation/screens/fee_home_screen/fee_home_screen.dart';
+export 'presentation/screens/fee_structures_screen/fee_structures_screen.dart';
+export 'presentation/screens/fee_collect_screen/fee_collect_screen.dart';
+export 'presentation/screens/fee_ledger_screen/fee_ledger_screen.dart';
+export 'presentation/screens/fee_reports_screen/fee_reports_screen.dart';
+export 'presentation/screens/fee_payment_config_screen/fee_payment_config_screen.dart';
 export 'presentation/screens/admin_fees_screen/admin_payment_requests_screen.dart';
 export 'presentation/screens/admin_fees_screen/admin_payment_request_decision_screen.dart';
 export 'presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';

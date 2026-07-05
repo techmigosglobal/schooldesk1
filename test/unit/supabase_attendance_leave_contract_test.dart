@@ -112,4 +112,60 @@ void main() {
     expect(source, contains('sub === "attendance"'));
     expect(source, contains('student_attendances'));
   });
+
+  test('StaffAttendanceModel._parseDateTime handles PostgreSQL time-only strings', () {
+    final source = File(
+      'lib/features/shared/data/models/backend_models.dart',
+    ).readAsStringSync();
+
+    // Verify the parser exists in StaffAttendanceModel
+    expect(source, contains('class StaffAttendanceModel'));
+    expect(source, contains('static DateTime? _parseDateTime(Object? value)'));
+
+    // Verify it handles time-only strings
+    expect(source, contains('PostgreSQL time-only'));
+    expect(source, contains('RegExp('));
+    expect(source, contains('\\d{2}'));
+
+    // Verify it combines time with today's date
+    expect(source, contains('now.year'));
+    expect(source, contains('now.month'));
+    expect(source, contains('now.day'));
+
+    // Verify it handles microseconds from fractional seconds
+    expect(source, contains('microseconds'));
+    expect(source, contains('padRight(6'));
+
+    // Verify it still handles full ISO datetimes
+    expect(source, contains('DateTime.tryParse(raw)'));
+    expect(source, contains('full.toLocal()'));
+  });
+
+  test('backend stores full ISO datetime in staff QR scan check_in', () {
+    final source = File(
+      'supabase/functions/api/handlers/attendance.ts',
+    ).readAsStringSync();
+
+    // Verify qr-scan stores full ISO datetime, not time-only string
+    expect(source, contains('/attendance/staff/qr-scan'));
+    expect(source, contains('now.toISOString()'));
+    expect(source, isNot(contains('now.toTimeString()')));
+
+    // Verify legacy /attendance/qr endpoint also uses ISO datetime
+    expect(source, contains('/attendance/qr'));
+    expect(source, contains('new Date().toISOString()'));
+  });
+
+  test('migration 0025 alters staff_attendances check_in to timestamptz', () {
+    final migration = File(
+      'supabase/migrations/0025_staff_attendance_checkin_timestamptz.sql',
+    ).readAsStringSync();
+
+    expect(migration, contains('staff_attendances'));
+    expect(migration, contains('check_in'));
+    expect(migration, contains('check_out'));
+    expect(migration, contains('timestamptz'));
+    expect(migration, contains('USING (date + check_in)'));
+    expect(migration, contains('AT TIME ZONE'));
+  });
 }

@@ -50,6 +50,9 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
     final password = _passwordCtrl.text;
 
     try {
+      // Reset any previous sign-out guard so RoleAccessService can re-initialize.
+      RoleAccessService.resetSignOutGuard();
+
       final response = await BackendApiClient.instance.login(
         LoginRequest(username: username, password: password),
       );
@@ -57,7 +60,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
         developer.log('Backend login successful for ${response.user.roleName}');
       }
 
-      unawaited(RoleAccessService.initialize());
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
@@ -69,9 +71,11 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       }
 
       if (!mounted) return;
+      // Navigate to the loading screen which will initialize
+      // RoleAccessService and then redirect to the correct dashboard.
       Navigator.pushNamedAndRemoveUntil(
         context,
-        _dashboardRouteFor(response.user.roleName),
+        AppRoutes.loginLoading,
         (_) => false,
       );
       await PushNotificationService.instance
@@ -88,24 +92,6 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           _ => 'Sign in failed. Please try again.',
         };
       });
-    }
-  }
-
-  String _dashboardRouteFor(String roleName) {
-    switch (roleName.trim().toLowerCase()) {
-      case AppConstants.rolePrincipal:
-      case AppConstants.roleAdmin:
-        return AppRoutes.principalDashboard;
-      case 'super_admin':
-        return AppRoutes.superAdminDashboard;
-      case AppConstants.roleTeacher:
-        return AppRoutes.teacherDashboard;
-      case AppConstants.roleParent:
-        return AppRoutes.parentDashboard;
-      case 'kiosk':
-        return AppRoutes.kioskQrAttendance;
-      default:
-        throw StateError('Unsupported role returned by backend: $roleName');
     }
   }
 

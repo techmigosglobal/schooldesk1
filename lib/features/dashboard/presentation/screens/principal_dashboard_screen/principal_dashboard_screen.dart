@@ -564,13 +564,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         icon: Icons.fact_check_rounded,
         color: const Color(0xFF0E9384),
         route: AppRoutes.principalAttendance,
-      ),
-      _PrincipalActionQueueItem(
-        label: 'Correction Requests',
-        detail: 'Review reopened or disputed attendance sessions',
-        icon: Icons.lock_open_rounded,
-        color: const Color(0xFFF59E0B),
-        route: AppRoutes.principalAttendance,
+        routeArguments: 'attendance_review',
+        badge: _data.attendanceMarked > 0 ? _data.attendanceMarked : 0,
       ),
       _PrincipalActionQueueItem(
         label: 'Event Approvals',
@@ -579,20 +574,28 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
         icon: Icons.approval_rounded,
         color: const Color(0xFFEA580C),
         route: AppRoutes.principalEventApprovals,
+        routeArguments: 'event_approvals',
+        badge: _data.pendingApprovals,
       ),
       _PrincipalActionQueueItem(
         label: 'Fee Requests',
-        detail: 'Check fee setup, payment requests, and QR status',
+        detail:
+            '${_data.pendingFeeRequests} payment request${_data.pendingFeeRequests == 1 ? '' : 's'} pending',
         icon: Icons.account_balance_wallet_rounded,
         color: const Color(0xFF16A34A),
         route: AppRoutes.feeMonitoring,
+        routeArguments: 'fee_requests',
+        badge: _data.pendingFeeRequests,
       ),
       _PrincipalActionQueueItem(
         label: 'Access Approvals',
-        detail: 'Manage staff, parent, and student account access',
+        detail:
+            '${_data.pendingAccessApprovals} access request${_data.pendingAccessApprovals == 1 ? '' : 's'} pending',
         icon: Icons.manage_accounts_rounded,
         color: const Color(0xFF2563EB),
         route: AppRoutes.principalUserManagement,
+        routeArguments: 'access_approvals',
+        badge: _data.pendingAccessApprovals,
       ),
     ];
     return Material(
@@ -607,7 +610,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             for (var index = 0; index < items.length; index++) ...[
               _PrincipalActionQueueTile(
                 item: items[index],
-                onTap: () => _open(items[index].route),
+                onTap: () => _open(items[index].route, arguments: items[index].routeArguments),
               ),
               if (index != items.length - 1)
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -651,6 +654,8 @@ class _PrincipalHomeData {
   final double collectionPct;
   final double totalPaid;
   final int unreadNotifications;
+  final int pendingFeeRequests;
+  final int pendingAccessApprovals;
   final List<_SetupStep> setupSteps;
 
   const _PrincipalHomeData({
@@ -669,6 +674,8 @@ class _PrincipalHomeData {
     required this.collectionPct,
     required this.totalPaid,
     required this.unreadNotifications,
+    required this.pendingFeeRequests,
+    required this.pendingAccessApprovals,
     required this.setupSteps,
   });
 
@@ -689,6 +696,8 @@ class _PrincipalHomeData {
       collectionPct: 0,
       totalPaid: 0,
       unreadNotifications: 0,
+      pendingFeeRequests: 0,
+      pendingAccessApprovals: 0,
       setupSteps: [],
     );
   }
@@ -728,13 +737,15 @@ class _PrincipalHomeData {
       totalStudents: _intValue(metrics['total_students'], 0),
       totalStaff: _intValue(metrics['total_staff'], 0),
       totalClasses: _intValue(metrics['total_classes'], 0),
-      pendingApprovals: _intValue(metrics['pending_approvals'], 0),
+      pendingApprovals: _intValue(metrics['pending_event_approvals'], 0),
       attendancePct: _doubleValue(attendance['attendance_pct']),
       attendancePresent: _doubleValue(attendance['present']).round(),
       attendanceMarked: _doubleValue(attendance['marked']).round(),
       collectionPct: _doubleValue(fees['collection_pct']),
       totalPaid: _doubleValue(fees['total_paid']),
       unreadNotifications: 0,
+      pendingFeeRequests: _intValue(metrics['pending_fee_requests'], 0),
+      pendingAccessApprovals: _intValue(metrics['pending_access_approvals'], 0),
       setupSteps: const [],
     );
   }
@@ -781,6 +792,9 @@ class _PrincipalHomeData {
       dashboard['metrics'] as Map? ?? {},
     );
 
+    final pendingFeeRequests = _intValue(metrics['pending_fee_requests'], 0);
+    final pendingAccessApprovals = _intValue(metrics['pending_access_approvals'], 0);
+
     return _PrincipalHomeData(
       principalName: principalName,
       schoolName: this.schoolName,
@@ -797,6 +811,8 @@ class _PrincipalHomeData {
       collectionPct: collectionPct,
       totalPaid: totalPaid,
       unreadNotifications: unreadNotifications,
+      pendingFeeRequests: pendingFeeRequests,
+      pendingAccessApprovals: pendingAccessApprovals,
       setupSteps: [
         _SetupStep(
           title: 'School Registration',
@@ -1778,6 +1794,8 @@ class _PrincipalActionQueueItem {
   final IconData icon;
   final Color color;
   final String route;
+  final Object? routeArguments;
+  final int badge;
 
   const _PrincipalActionQueueItem({
     required this.label,
@@ -1785,6 +1803,8 @@ class _PrincipalActionQueueItem {
     required this.icon,
     required this.color,
     required this.route,
+    this.routeArguments,
+    this.badge = 0,
   });
 }
 
@@ -1843,6 +1863,26 @@ class _PrincipalActionQueueTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (item.badge > 0)
+                Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  height: 22,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: item.color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    item.badge > 99 ? '99+' : '${item.badge}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: item.color,
+                      fontWeight: FontWeight.w900,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 6),
               const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
             ],
           ),

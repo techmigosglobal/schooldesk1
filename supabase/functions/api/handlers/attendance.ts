@@ -317,6 +317,7 @@ export async function handleAttendance(
       ? body.attendances
       : body.attendance_records;
     if (!Array.isArray(attendances)) return fail("attendances required");
+    const now = new Date().toISOString();
     const records = attendances.map((r: Record<string, unknown>) => ({
       session_id: sessionId,
       student_id: r.student_id,
@@ -324,7 +325,8 @@ export async function handleAttendance(
       status: r.status ?? "present",
       reason: r.reason ?? r.remarks ?? "",
       remarks: r.remarks ?? r.reason ?? null,
-      updated_at: new Date().toISOString(),
+      marked_at: now,
+      updated_at: now,
     }));
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -372,6 +374,7 @@ export async function handleAttendance(
     if (session.is_finalized === true) {
       return fail("attendance session is finalized", 409);
     }
+    const now = new Date().toISOString();
     const records = attendanceRecords.map((r: Record<string, unknown>) => ({
       session_id: sessionId,
       student_id: r.student_id,
@@ -379,7 +382,8 @@ export async function handleAttendance(
       status: r.status ?? "present",
       reason: r.reason ?? r.remarks ?? "",
       remarks: r.remarks ?? r.reason ?? null,
-      updated_at: new Date().toISOString(),
+      marked_at: now,
+      updated_at: now,
     }));
     const { data, error } = await svc.from("student_attendances").upsert(
       records,
@@ -556,7 +560,7 @@ export async function handleAttendance(
     }
     const date = `${parsed.date ?? todayDate()}`.trim();
     const now = new Date();
-    const timeValue = now.toTimeString().split(" ")[0];
+    const timeValue = now.toISOString();
     const existing = await svc.from("staff_attendances").select(
       "*, staff:staff(*)",
     )
@@ -620,7 +624,7 @@ export async function handleAttendance(
       date: today,
       status: "present",
       qr_scanned: true,
-      check_in: new Date().toTimeString().split(" ")[0],
+      check_in: new Date().toISOString(),
       source: "qr",
       marked_by: user.id,
     }, { onConflict: "staff_id,date" }).select().single();

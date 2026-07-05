@@ -228,20 +228,84 @@ void main() {
     }
   });
 
-  test(
-    'principal subjects stays overview-only and routes setup to class hub',
-    () {
-      final subjects = File(
-        'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
-      ).readAsStringSync();
+  test('classes hub subject assignments are scoped to the exact section', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final academics = File(
+      'supabase/functions/api/handlers/academics.ts',
+    ).readAsStringSync();
+    final subjectSetup = screen.substring(
+      screen.indexOf('class _AssignSubjectsSetupPage'),
+      screen.indexOf('class _FeesSetupPage'),
+    );
+    final gradeSubjectsHandler = academics.substring(
+      academics.indexOf('if (path.startsWith("/grade-subjects"))'),
+      academics.indexOf('if (path.startsWith("/staff-subjects"))'),
+    );
+    final staffSubjectsHandler = academics.substring(
+      academics.indexOf('if (path.startsWith("/staff-subjects"))'),
+      academics.indexOf('if (path.startsWith("/rooms"))'),
+    );
 
-      expect(subjects, contains("title: 'Subjects'"));
-      expect(subjects, contains('AppRoutes.principalClasses'));
-      expect(subjects, contains("'source': 'principal_subjects'"));
-      expect(subjects, contains('await _loadData();'));
-      expect(subjects, isNot(contains('savePrincipalSubjectMapping(')));
-      expect(subjects, isNot(contains('createPrincipalSubjectAction(')));
-      expect(subjects, isNot(contains('Teacher Load')));
-    },
-  );
+    expect(subjectSetup, contains("'section_id': _sectionId"));
+    expect(subjectSetup, contains('_isClassGradeSubject(row)'));
+    expect(
+      subjectSetup,
+      contains('_classText(row[\'section_id\']) == _sectionId'),
+    );
+    expect(
+      gradeSubjectsHandler,
+      contains('if (qp(url, "section_id")) q = q.eq("section_id"'),
+    );
+    expect(
+      staffSubjectsHandler,
+      contains('q = q.eq("section_id", qp(url, "section_id")!)'),
+    );
+  });
+
+  test('classes hub overview subject counts use exact section mappings', () {
+    final screen = File(
+      'lib/features/academics/presentation/screens/principal_classes_screen/principal_classes_screen.dart',
+    ).readAsStringSync();
+    final overviewSubjects = screen.substring(
+      screen.indexOf(
+        'List<Map<String, dynamic>> _subjectsForClass(Map<String, dynamic> row)',
+      ),
+      screen.indexOf('String _teacherForSubject('),
+    );
+
+    expect(
+      overviewSubjects,
+      contains("final sectionId = _text(row['section_id'])"),
+    );
+    expect(
+      overviewSubjects,
+      contains("_text(item['section_id']) == sectionId"),
+    );
+    expect(
+      overviewSubjects,
+      isNot(
+        contains(
+          "..._gradeSubjects\n          .where((item) => _text(item['grade_id']) == gradeId)",
+        ),
+      ),
+    );
+  });
+
+  test('principal subjects stays overview-only and separates class sections', () {
+    final subjects = File(
+      'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
+    ).readAsStringSync();
+
+    expect(subjects, contains("'Subjects'"));
+    expect(subjects, contains('subjectsByClassKey'));
+    expect(subjects, contains("'section:\$sectionId'"));
+    expect(subjects, contains("'grade:\$gradeId'"));
+    expect(subjects, contains('_loadData();'));
+    expect(subjects, contains('onRefresh: _loadData'));
+    expect(subjects, isNot(contains('savePrincipalSubjectMapping(')));
+    expect(subjects, isNot(contains('createPrincipalSubjectAction(')));
+    expect(subjects, isNot(contains('Teacher Load')));
+  });
 }

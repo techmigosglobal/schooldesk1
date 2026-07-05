@@ -820,7 +820,11 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     final sectionId = _text(row['section_id']);
     final ids = <String>{
       ..._gradeSubjects
-          .where((item) => _text(item['grade_id']) == gradeId)
+          .where(
+            (item) =>
+                _text(item['grade_id']) == gradeId &&
+                _text(item['section_id']) == sectionId,
+          )
           .map((item) => _text(item['subject_id'])),
       ..._staffSubjects
           .where(
@@ -4254,11 +4258,19 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ),
         BackendApiClient.instance.getRawList(
           '/grade-subjects',
-          queryParameters: {'grade_id': _gradeId, 'page_size': 500},
+          queryParameters: {
+            'grade_id': _gradeId,
+            'section_id': _sectionId,
+            'page_size': 500,
+          },
         ),
         BackendApiClient.instance.getRawList(
           '/staff-subjects',
-          queryParameters: {'grade_id': _gradeId, 'page_size': 500},
+          queryParameters: {
+            'grade_id': _gradeId,
+            'section_id': _sectionId,
+            'page_size': 500,
+          },
         ),
       ]);
       if (!mounted) return;
@@ -4280,7 +4292,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
   List<Map<String, dynamic>> get _mappedSubjects {
     final ids = <String>{
       ..._gradeSubjects
-          .where((row) => _classText(row['grade_id']) == _gradeId)
+          .where((row) => _isClassGradeSubject(row))
           .map((row) => _classText(row['subject_id'])),
       ..._staffSubjects
           .where((row) => _isClassStaffSubject(row))
@@ -4302,10 +4314,15 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         (sectionId.isEmpty || sectionId == _sectionId);
   }
 
+  bool _isClassGradeSubject(Map<String, dynamic> row) {
+    return _classText(row['grade_id']) == _gradeId &&
+        _classText(row['section_id']) == _sectionId;
+  }
+
   Map<String, dynamic> _gradeSubjectFor(String subjectId) {
     return _gradeSubjects.firstWhere(
       (row) =>
-          _classText(row['grade_id']) == _gradeId &&
+          _isClassGradeSubject(row) &&
           _classText(row['subject_id']) == subjectId,
       orElse: () => const {},
     );

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
-import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
@@ -39,6 +38,7 @@ class AuthController extends ChangeNotifier {
     _clearError();
 
     try {
+      RoleAccessService.resetSignOutGuard();
       final response = await BackendApiClient.instance.login(
         LoginRequest(username: username.trim(), password: password),
       );
@@ -53,13 +53,11 @@ class AuthController extends ChangeNotifier {
 
       _currentRole = actualRole;
       _isLoggedIn = true;
-      unawaited(RoleAccessService.initialize());
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
       _setLoading(false);
-      return RouteAccessGuard.dashboardForRole(actualRole) ??
-          '/$actualRole-dashboard-screen';
+      return AppRoutes.loginLoading;
     } catch (e) {
       _setError('Login failed. Please try again. $e');
       _setLoading(false);

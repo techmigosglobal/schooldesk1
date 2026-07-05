@@ -45,7 +45,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   _ManualTimetableStage _stage = _ManualTimetableStage.selectClass;
   _TimetableSettings _settings = _TimetableSettings.defaults();
   List<_ManualTimetableCell> _draftCells = [];
-  final Set<int> _selectedEditorDays = {DateTime.now().weekday.clamp(1, 6).toInt()};
+  final Set<int> _selectedEditorDays = {
+    DateTime.now().weekday.clamp(1, 6).toInt(),
+  };
 
   List<Map<String, dynamic>> _slots = [];
   List<SectionModel> _sections = [];
@@ -551,8 +553,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         const SizedBox(height: 12),
         _buildDayWiseEditor(subjectOptions),
         const SizedBox(height: 14),
-        _buildPeriodManagement(),
-        const SizedBox(height: 14),
         _sectionTitle('Week-wise Timetable'),
         const SizedBox(height: 8),
         _hintText('Swipe horizontally to edit week-wise cells.'),
@@ -765,7 +765,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
   Widget _buildDayPreview(List<_ClassSubjectOption> subjectOptions) {
     if (_dayCells.isEmpty) {
       return _panel(
-        child:          _hintText(
+        child: _hintText(
           _selectedEditorDays.isEmpty
               ? 'Select one or more days to preview.'
               : 'No periods for $_selectedDaysLabel.',
@@ -806,9 +806,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  color: _selectedEditorDays.length > 1
-                      ? _accent
-                      : _muted,
+                  color: _selectedEditorDays.length > 1 ? _accent : _muted,
                 ),
               ),
             ),
@@ -829,10 +827,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               },
               borderRadius: BorderRadius.circular(12),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Text(
                   allSelected ? 'Clear' : 'Select All',
                   style: TextStyle(
@@ -966,7 +961,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                               final target = _cellFor(day, cell.periodNumber);
                               if (target != null) {
                                 target.subjectId = newSubjectId;
-                                target.staffId = _teacherIdForSubject(newSubjectId);
+                                target.staffId = _teacherIdForSubject(
+                                  newSubjectId,
+                                );
                                 target.slotType = newSubjectId.isEmpty
                                     ? 'free'
                                     : 'regular';
@@ -986,85 +983,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildPeriodManagement() {
-    final columns = _columns.where((cell) => !cell.isBreak).toList();
-    if (columns.isEmpty) return const SizedBox.shrink();
-    return _panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _sectionTitle('Delete Extra Period Rows'),
-          const SizedBox(height: 8),
-          _hintText('Remove P1, P2, P3, or any extra period from every day.'),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final column in columns)
-                Material(
-                  color: Colors.transparent,
-                  child: Tooltip(
-                    message: 'Delete P${column.periodNumber}',
-                    child: InkWell(
-                      onTap: () => _deletePeriodColumn(column.periodNumber),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDD7D1),
-                          border: Border.all(
-                            color: const Color(0xFFE53935),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFE53935).withOpacity(0.15),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.view_week_outlined,
-                              size: 20,
-                              color: const Color(0xFFC62828),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'P${column.periodNumber}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                color: Color(0xFFC62828),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: const Color(0xFFC62828),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -1728,20 +1646,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
     });
   }
 
-  void _deletePeriodColumn(int periodNumber) {
-    setState(() {
-      _draftCells.removeWhere(
-        (cell) => !cell.isBreak && cell.periodNumber == periodNumber,
-      );
-      for (final day in _draftCells.map((cell) => cell.day).toSet()) {
-        _renumberDay(day);
-      }
-      _selectedEditorDays
-        ..clear()
-        ..add(_firstDraftDay);
-    });
-  }
-
   void _renumberDay(int day) {
     final dayCells = _draftCells.where((cell) => cell.day == day).toList()
       ..sort((a, b) {
@@ -1767,7 +1671,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         var cursor = start;
         for (final cell in dayCells) {
           cell.startTime = _formatMinutes(cursor);
-          cell.endTime = _formatMinutes(cursor + _settings.periodDurationMinutes);
+          cell.endTime = _formatMinutes(
+            cursor + _settings.periodDurationMinutes,
+          );
           cursor +=
               _settings.periodDurationMinutes + _settings.gapDurationMinutes;
         }

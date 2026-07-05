@@ -428,9 +428,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             child: TeacherTimelineItem(
               time: time,
               title: '$subject - $classLabel',
-              subtitle: 'Manage homework and class details.',
+              subtitle: 'Review the class period and plan next steps.',
               icon: Icons.auto_stories_rounded,
-              onTap: () => Navigator.pushNamed(context, AppRoutes.teacherHomework),
+              onTap: () => Navigator.pushNamed(
+                context,
+                AppRoutes.teacherLessonPlanner,
+              ),
             ),
           ),
         );
@@ -469,15 +472,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         icon: Icons.event_busy_rounded,
         color: Colors.purple,
         route: AppRoutes.teacherLeave,
-      ),
-      _teacherActionItem(
-        context,
-        time: 'Tasks',
-        title: 'Homework',
-        subtitle: 'Assign homework and review submissions.',
-        icon: Icons.assignment_rounded,
-        color: Colors.indigo,
-        route: AppRoutes.teacherHomework,
       ),
     ];
     return rows;
@@ -527,12 +521,6 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         'Mark your class',
         SchoolDeskUiIllustrations.attendance,
         AppRoutes.teacherAttendance,
-      ),
-      _QuickAction(
-        'Homework',
-        'Today and practice',
-        SchoolDeskUiIllustrations.resources,
-        AppRoutes.teacherHomework,
       ),
       _QuickAction(
         'Lesson Planner',

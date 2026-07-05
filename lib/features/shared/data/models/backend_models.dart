@@ -938,9 +938,43 @@ class StaffAttendanceModel {
     );
   }
 
+  /// Parses a value that may be a full ISO datetime or a PostgreSQL time-only
+  /// string such as `"09:30:00"` or `"09:30:00.123456"`.  Time-only values
+  /// are combined with today's date in local time.
   static DateTime? _parseDateTime(Object? value) {
     if (value == null) return null;
-    return DateTime.tryParse(value.toString())?.toLocal();
+    final raw = value.toString().trim();
+    if (raw.isEmpty) return null;
+
+    // 1. Try full ISO datetime first (e.g. "2025-07-05T09:30:00").
+    final full = DateTime.tryParse(raw);
+    if (full != null) return full.toLocal();
+
+    // 2. Handle PostgreSQL time-only strings: "HH:mm:ss" or "HH:mm:ss.ffffff".
+    //    We combine with today's date so the caller gets a usable DateTime.
+    final timeOnly = RegExp(r'^(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$');
+    final match = timeOnly.firstMatch(raw);
+    if (match != null) {
+      final hour = int.parse(match.group(1)!);
+      final minute = int.parse(match.group(2)!);
+      final second = int.parse(match.group(3)!);
+      final microStr = match.group(4) ?? '';
+      final microseconds = microStr.isEmpty
+          ? 0
+          : int.parse(microStr.padRight(6, '0').substring(0, 6));
+      final now = DateTime.now();
+      return DateTime(
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+        second,
+        microseconds,
+      );
+    }
+
+    return null;
   }
 
   static String _clockLabel(DateTime? value) {

@@ -54,6 +54,7 @@ void main() {
     ).readAsStringSync();
 
     expect(source, contains('_LandingFooter'));
+    expect(source, contains('_LandingCarousel'));
     expect(source, contains('_TechmigasBrand'));
     expect(source, contains('_SlidePositionIndicator'));
     expect(source, contains('Learn Today, Lead Tomorrow'));
@@ -67,4 +68,26 @@ void main() {
       ),
     );
   });
+
+  test(
+    'landing hero artwork uses a responsive poster frame without letterbox',
+    () {
+      final source = File(
+        'lib/features/shell/presentation/screens/landing_page_screen/landing_page_screen.dart',
+      ).readAsStringSync();
+
+      expect(source, contains('Flexible('));
+      expect(source, contains('fit: FlexFit.loose,'));
+      expect(source, contains('final frame = _posterFrameFor'));
+      expect(source, isNot(contains('_kPosterAspectRatio')));
+      expect(
+        source,
+        contains(
+          "Image.asset(\n"
+          "                assetPath,\n"
+          "                fit: BoxFit.fill,",
+        ),
+      );
+    },
+  );
 }

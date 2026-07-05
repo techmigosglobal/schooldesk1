@@ -416,12 +416,6 @@ class SchoolDeskScreenRegistry {
       portal: 'teacher',
     ),
     SchoolDeskScreenMetadata(
-      route: '/teacher-diary-screen',
-      title: 'Homework',
-      module: 'Classroom',
-      portal: 'teacher',
-    ),
-    SchoolDeskScreenMetadata(
       route: '/teacher-homework-screen',
       title: 'Homework',
       module: 'Classroom',
@@ -460,12 +454,6 @@ class SchoolDeskScreenRegistry {
     SchoolDeskScreenMetadata(
       route: '/parent-homework-screen/submit',
       title: 'Submit Homework',
-      module: 'Child Academics',
-      portal: 'parent',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/parent-diary-screen',
-      title: 'Class Diary',
       module: 'Child Academics',
       portal: 'parent',
     ),

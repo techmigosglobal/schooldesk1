@@ -99,12 +99,6 @@ const List<SchoolDeskModuleBottomAction> teacherFlowBottomActions = [
     route: AppRoutes.teacherAttendance,
   ),
   SchoolDeskModuleBottomAction(
-    label: 'Homework',
-    icon: Icons.menu_book_outlined,
-    activeIcon: Icons.menu_book_rounded,
-    route: AppRoutes.teacherHomework,
-  ),
-  SchoolDeskModuleBottomAction(
     label: 'Profile',
     icon: Icons.account_circle_outlined,
     activeIcon: Icons.account_circle_rounded,

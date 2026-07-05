@@ -30,6 +30,9 @@ class AppRoutes {
   static const String landingPage = '/landing-page-screen';
   static const String onboarding = '/onboarding-screen';
 
+  // Loading
+  static const String loginLoading = '/login-loading-screen';
+
   // Principal Module Routes
   static const String principalLogin = '/principal-login-screen';
   static const String principalDashboard = '/principal-dashboard-screen';
@@ -38,6 +41,12 @@ class AppRoutes {
   static const String studentOversight = '/student-oversight-screen';
   static const String approvalCenter = '/approval-center-screen';
   static const String feeMonitoring = '/fee-monitoring-screen';
+  static const String feeHome = '/fee-home-screen';
+  static const String feeStructures = '/fee-structures-screen';
+  static const String feeCollect = '/fee-collect-screen';
+  static const String feeLedger = '/fee-ledger-screen';
+  static const String feeReports = '/fee-reports-screen';
+  static const String feePaymentConfig = '/fee-payment-config-screen';
   static const String principalPaymentRequests =
       '/principal-fees-screen/payment-requests';
   static const String principalPaymentRequestDecision =
@@ -164,6 +173,7 @@ class AppRoutes {
     onboarding: (context) => const OnboardingScreen(),
 
     // Principal
+    loginLoading: (context) => const LoginLoadingScreen(),
     principalLogin: (context) => const AuthLoginScreen(),
     principalDashboard: (context) => const PrincipalDashboardScreen(),
     principalSchoolProfile: (context) => const SchoolProfileScreen(),
@@ -171,7 +181,13 @@ class AppRoutes {
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
-    feeMonitoring: (context) => const FeeMonitoringScreen(),
+    feeMonitoring: (context) => const FeeHomeScreen(),
+    feeHome: (context) => const FeeHomeScreen(),
+    feeStructures: (context) => const FeeStructuresScreen(),
+    feeCollect: (context) => const FeeCollectScreen(),
+    feeLedger: (context) => const FeeLedgerScreen(),
+    feeReports: (context) => const FeeReportsScreen(),
+    feePaymentConfig: (context) => const FeePaymentConfigScreen(),
     principalPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
     principalPaymentRequestDecision: (context) =>
         AdminPaymentRequestDecisionScreen(

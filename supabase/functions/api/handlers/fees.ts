@@ -506,6 +506,8 @@ async function invoiceIdsForFeeStructure(
   structureId: string,
 ) {
   const ids = new Set<string>();
+
+  // 1. Direct link: fee_invoices.fee_structure_id = structureId
   const direct = await svc.from("fee_invoices").select("id").eq(
     "school_id",
     school,
@@ -513,6 +515,7 @@ async function invoiceIdsForFeeStructure(
   if (direct.error) throw new Error(direct.error.message);
   for (const row of direct.data ?? []) ids.add(text(row.id));
 
+  // 2. Indirect link via fee_invoice_items
   const items = await svc.from("fee_invoice_items").select("invoice_id").eq(
     "fee_structure_id",
     structureId,
@@ -522,6 +525,49 @@ async function invoiceIdsForFeeStructure(
     const invoiceId = text(row.invoice_id);
     if (invoiceId) ids.add(invoiceId);
   }
+
+  // 3. Scope-based fallback: find orphaned invoices that belong to the same
+  //    academic_year + students in the fee structure's grade/section but were
+  //    created without a fee_structure_id link (e.g. via the payment request flow).
+  //    Only include unpaid invoices so we don't destroy payment history.
+  const { data: structure } = await svc.from("fee_structures")
+    .select("academic_year_id, grade_id, section_id")
+    .eq("id", structureId).eq("school_id", school).maybeSingle();
+  if (structure) {
+    // Find student IDs in the matching grade/section
+    let studentQuery = svc.from("students")
+      .select("id")
+      .eq("school_id", school)
+      .eq("status", "active");
+    if (structure.section_id) {
+      studentQuery = studentQuery.eq("current_section_id", structure.section_id);
+    } else if (structure.grade_id) {
+      const { data: sections } = await svc.from("sections")
+        .select("id")
+        .eq("school_id", school).eq("grade_id", structure.grade_id);
+      const sectionIds = (sections ?? []).map((s: Record<string, unknown>) => text(s.id)).filter(Boolean);
+      if (sectionIds.length > 0) {
+        studentQuery = studentQuery.in("current_section_id", sectionIds);
+      }
+    }
+    const { data: students } = await studentQuery;
+    const studentIds = (students ?? []).map((s: Record<string, unknown>) => text(s.id)).filter(Boolean);
+
+    if (studentIds.length > 0) {
+      // Find orphaned invoices: same academic year, same students, no fee_structure_id, not fully paid
+      const { data: orphaned } = await svc.from("fee_invoices")
+        .select("id")
+        .eq("school_id", school)
+        .eq("academic_year_id", text(structure.academic_year_id))
+        .in("student_id", studentIds)
+        .neq("status", "paid")
+        .is("fee_structure_id", null);
+      for (const row of orphaned ?? []) {
+        ids.add(text(row.id));
+      }
+    }
+  }
+
   return [...ids].filter(Boolean);
 }
 
@@ -868,7 +914,7 @@ export async function handleFees(
 
     if (seg && method === "DELETE") {
       const removePending = url.searchParams.get("remove_pending") !== "false";
-      let cleanup = { deleted_invoices: 0 };
+      let cleanup: Record<string, unknown> = { deleted_invoices: 0 };
       if (removePending) {
         try {
           cleanup = await deleteFeeStructureWorkflowRows(svc, school, seg);
@@ -885,6 +931,29 @@ export async function handleFees(
         seg,
       ).eq("school_id", school);
       if (error) return fail(error.message);
+
+      // Reconciliation sweep: after the structure is deleted (which sets
+      // fee_structure_id = NULL via ON DELETE SET NULL), clean up any remaining
+      // orphaned unpaid invoices that have no fee_structure_id link.
+      if (removePending) {
+        try {
+          const { data: orphanedInvoices } = await svc.from("fee_invoices")
+            .select("id")
+            .eq("school_id", school)
+            .neq("status", "paid")
+            .is("fee_structure_id", null);
+          const orphanIds = (orphanedInvoices ?? [])
+            .map((r: Record<string, unknown>) => text(r.id))
+            .filter(Boolean);
+          if (orphanIds.length > 0) {
+            await deleteInvoiceWorkflowRows(svc, school, orphanIds);
+          }
+          (cleanup as Record<string, unknown>).reconciled_orphans = orphanIds.length;
+        } catch (_) {
+          // Best-effort reconciliation — don't fail the whole request.
+        }
+      }
+
       return ok({ success: true, ...cleanup });
     }
   }

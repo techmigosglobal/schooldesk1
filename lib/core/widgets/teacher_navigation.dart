@@ -152,13 +152,6 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               label: 'Attendance History',
               route: AppRoutes.teacherAttendanceHistory,
             ),
-            SchoolDeskNavigationItem(
-              index: TeacherNav.diary,
-              icon: Icons.menu_book_outlined,
-              activeIcon: Icons.menu_book_rounded,
-              label: 'Homework',
-              route: AppRoutes.teacherHomework,
-            ),
             const SchoolDeskNavigationItem(
               index: TeacherNav.eventPosts,
               icon: Icons.post_add_outlined,

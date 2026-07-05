@@ -7,8 +7,6 @@ void main() {
     const files = {
       'subjects':
           'lib/features/academics/presentation/screens/principal_subjects_screen/principal_subjects_screen.dart',
-      'fees':
-          'lib/features/finance/presentation/screens/fee_monitoring_screen/fee_monitoring_screen.dart',
       'attendance':
           'lib/features/attendance/presentation/screens/principal_attendance_screen/principal_attendance_screen.dart',
     };
@@ -31,9 +29,6 @@ void main() {
 
     final subjects = File(files['subjects']!).readAsStringSync();
     expect(subjects, contains("'classId'"));
-
-    final fees = File(files['fees']!).readAsStringSync();
-    expect(fees, contains("'classId'"));
   });
 
   test('Class Hub accepts old and new setup argument names', () {

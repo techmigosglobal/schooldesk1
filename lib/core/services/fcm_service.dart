@@ -53,7 +53,10 @@ class FcmService {
       _initialized = true;
 
       if (EnvConfig.enableLogging) {
-        developer.log('FcmService initialized successfully', name: 'FcmService');
+        developer.log(
+          'FcmService initialized successfully',
+          name: 'FcmService',
+        );
       }
     } catch (error) {
       if (EnvConfig.enableLogging) {
@@ -143,7 +146,8 @@ class FcmService {
 
       await _localNotifications
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.createNotificationChannel(channel);
     } catch (error) {
       if (EnvConfig.enableLogging) {
@@ -227,10 +231,7 @@ class FcmService {
   /// Handle notification tap
   void _handleNotificationTap(NotificationResponse response) {
     if (EnvConfig.enableLogging) {
-      developer.log(
-        'Notification tapped: ${response.id}',
-        name: 'FcmService',
-      );
+      developer.log('Notification tapped: ${response.id}', name: 'FcmService');
     }
   }
 
@@ -280,10 +281,7 @@ class FcmService {
     try {
       final token = await _firebaseMessaging.getToken();
       if (EnvConfig.enableLogging) {
-        developer.log(
-          'Device FCM token obtained',
-          name: 'FcmService',
-        );
+        developer.log('Device FCM token obtained', name: 'FcmService');
       }
       return token;
     } catch (error) {
@@ -321,10 +319,7 @@ class FcmService {
     try {
       await BackendApiClient.instance.registerPushToken(token);
       if (EnvConfig.enableLogging) {
-        developer.log(
-          'Push token registered with backend',
-          name: 'FcmService',
-        );
+        developer.log('Push token registered with backend', name: 'FcmService');
       }
     } catch (error) {
       if (EnvConfig.enableLogging) {
@@ -350,10 +345,7 @@ class FcmService {
       }
 
       if (EnvConfig.enableLogging) {
-        developer.log(
-          'Subscribed to school topics',
-          name: 'FcmService',
-        );
+        developer.log('Subscribed to school topics', name: 'FcmService');
       }
     } catch (error) {
       if (EnvConfig.enableLogging) {
@@ -380,12 +372,12 @@ class FcmService {
   /// Subscribe to specific topic
   Future<void> subscribeToTopic(String topic) async {
     try {
-      await _firebaseMessaging.subscribeToTopic(topic);
+      final messaging = _initialized
+          ? _firebaseMessaging
+          : FirebaseMessaging.instance;
+      await messaging.subscribeToTopic(topic);
       if (EnvConfig.enableLogging) {
-        developer.log(
-          'Subscribed to topic: $topic',
-          name: 'FcmService',
-        );
+        developer.log('Subscribed to topic: $topic', name: 'FcmService');
       }
     } catch (error) {
       if (EnvConfig.enableLogging) {
@@ -401,12 +393,12 @@ class FcmService {
   /// Unsubscribe from specific topic
   Future<void> unsubscribeFromTopic(String topic) async {
     try {
-      await _firebaseMessaging.unsubscribeFromTopic(topic);
+      final messaging = _initialized
+          ? _firebaseMessaging
+          : FirebaseMessaging.instance;
+      await messaging.unsubscribeFromTopic(topic);
       if (EnvConfig.enableLogging) {
-        developer.log(
-          'Unsubscribed from topic: $topic',
-          name: 'FcmService',
-        );
+        developer.log('Unsubscribed from topic: $topic', name: 'FcmService');
       }
     } catch (error) {
       if (EnvConfig.enableLogging) {

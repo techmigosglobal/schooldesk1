@@ -125,6 +125,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final isSmall = size.width < 400;
+    final isNarrow = size.width < 350;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark.copyWith(
@@ -140,54 +141,38 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                   constraints: const BoxConstraints(maxWidth: 760),
                   child: Column(
                     children: [
-                      // ── TOP HEADER ──────────────────────────────────────
-                      _LandingHeader(onSignIn: _openLogin, isSmall: isSmall),
-                      // ── SLIDE CAROUSEL ──────────────────────────────────
-                      Expanded(
+                      _LandingHeader(
+                        onSignIn: _openLogin,
+                        isSmall: isSmall,
+                        isNarrow: isNarrow,
+                      ),
+                      SizedBox(height: isSmall ? 2 : 4),
+                      Flexible(
+                        fit: FlexFit.loose,
                         child: Padding(
                           padding: EdgeInsets.symmetric(
                             horizontal: isSmall ? 8 : 16,
                           ),
-                          child: Stack(
-                            children: [
-                              NotificationListener<ScrollNotification>(
-                                onNotification: (notification) {
-                                  if (notification is ScrollStartNotification) {
-                                    _pauseAutoSlide();
-                                  } else if (notification
-                                      is ScrollEndNotification) {
-                                    _resumeAutoSlide();
-                                  }
-                                  return false;
-                                },
-                                child: PageView.builder(
-                                  controller: _controller,
-                                  onPageChanged: (index) =>
-                                      setState(() => _activeSlide = index),
-                                  itemCount: _slideAssets.length,
-                                  itemBuilder: (context, index) {
-                                    return _ArtworkSlide(
-                                      assetPath: _slideAssets[index],
-                                    );
-                                  },
-                                ),
-                              ),
-                              _ArtworkHotspots(
-                                onPrevious: () => _goToSlide(
-                                  (_activeSlide - 1 + _slideAssets.length) %
-                                      _slideAssets.length,
-                                  manual: true,
-                                ),
-                                onNext: () => _goToSlide(
-                                  (_activeSlide + 1) % _slideAssets.length,
-                                  manual: true,
-                                ),
-                              ),
-                            ],
+                          child: _LandingCarousel(
+                            controller: _controller,
+                            slideAssets: _slideAssets,
+                            onPageChanged: (index) =>
+                                setState(() => _activeSlide = index),
+                            onScrollStart: _pauseAutoSlide,
+                            onScrollEnd: _resumeAutoSlide,
+                            onPrevious: () => _goToSlide(
+                              (_activeSlide - 1 + _slideAssets.length) %
+                                  _slideAssets.length,
+                              manual: true,
+                            ),
+                            onNext: () => _goToSlide(
+                              (_activeSlide + 1) % _slideAssets.length,
+                              manual: true,
+                            ),
                           ),
                         ),
                       ),
-                      // ── BOTTOM FOOTER ───────────────────────────────────
+                      SizedBox(height: isSmall ? 2 : 4),
                       _LandingFooter(
                         activeIndex: _activeSlide,
                         itemCount: _slideAssets.length,
@@ -197,6 +182,7 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
                         isAutoSlidePaused:
                             _reduceMotion || _autoSlidePausedByUser,
                         isSmall: isSmall,
+                        isNarrow: isNarrow,
                       ),
                     ],
                   ),
@@ -215,15 +201,20 @@ class _LandingPageScreenState extends State<LandingPageScreen> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _LandingHeader extends StatelessWidget {
-  const _LandingHeader({required this.onSignIn, required this.isSmall});
+  const _LandingHeader({
+    required this.onSignIn,
+    required this.isSmall,
+    required this.isNarrow,
+  });
 
   final VoidCallback onSignIn;
   final bool isSmall;
+  final bool isNarrow;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 10, isSmall ? 8 : 16, 8),
+      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 8, isSmall ? 8 : 16, 0),
       padding: EdgeInsets.symmetric(horizontal: isSmall ? 10 : 14, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -243,13 +234,13 @@ class _LandingHeader extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             child: Image.asset(
               'assets/branding/ArishVilleLogo.png',
-              height: isSmall ? 44 : 52,
-              width: isSmall ? 44 : 52,
+              height: isNarrow ? 38 : (isSmall ? 44 : 52),
+              width: isNarrow ? 38 : (isSmall ? 44 : 52),
               fit: BoxFit.cover,
               semanticLabel: 'School logo',
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: isNarrow ? 8 : 10),
           // School name
           Expanded(
             child: Column(
@@ -264,11 +255,13 @@ class _LandingHeader extends StatelessWidget {
                     fontSize: isSmall ? 15 : 17,
                     fontWeight: FontWeight.w800,
                     color: const Color(0xFF0D1B2A),
-                    letterSpacing: -0.3,
+                    letterSpacing: 0,
                   ),
                 ),
                 Text(
                   'Learn Today, Lead Tomorrow',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: isSmall ? 10 : 11,
                     fontWeight: FontWeight.w500,
@@ -279,11 +272,12 @@ class _LandingHeader extends StatelessWidget {
             ),
           ),
           // Sign In button
-          const SizedBox(width: 8),
+          SizedBox(width: isNarrow ? 6 : 8),
           _SignInButton(
             key: const Key('sign_in_button'),
             onPressed: onSignIn,
             isSmall: isSmall,
+            isNarrow: isNarrow,
           ),
         ],
       ),
@@ -295,11 +289,13 @@ class _SignInButton extends StatelessWidget {
   const _SignInButton({
     required this.onPressed,
     required this.isSmall,
+    required this.isNarrow,
     super.key,
   });
 
   final VoidCallback onPressed;
   final bool isSmall;
+  final bool isNarrow;
 
   @override
   Widget build(BuildContext context) {
@@ -315,7 +311,7 @@ class _SignInButton extends StatelessWidget {
           onTap: onPressed,
           child: Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: isSmall ? 12 : 16,
+              horizontal: isNarrow ? 9 : (isSmall ? 12 : 16),
               vertical: isSmall ? 9 : 11,
             ),
             child: Row(
@@ -323,17 +319,17 @@ class _SignInButton extends StatelessWidget {
               children: [
                 Icon(
                   Icons.login_rounded,
-                  size: isSmall ? 15 : 16,
+                  size: isNarrow ? 14 : (isSmall ? 15 : 16),
                   color: Colors.white,
                 ),
-                const SizedBox(width: 5),
+                SizedBox(width: isNarrow ? 4 : 5),
                 Text(
                   'Sign in',
                   style: TextStyle(
-                    fontSize: isSmall ? 12 : 13,
+                    fontSize: isNarrow ? 11 : (isSmall ? 12 : 13),
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                    letterSpacing: 0.2,
+                    letterSpacing: 0,
                   ),
                 ),
               ],
@@ -341,6 +337,67 @@ class _SignInButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LandingCarousel extends StatelessWidget {
+  const _LandingCarousel({
+    required this.controller,
+    required this.slideAssets,
+    required this.onPageChanged,
+    required this.onScrollStart,
+    required this.onScrollEnd,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  final PageController controller;
+  final List<String> slideAssets;
+  final ValueChanged<int> onPageChanged;
+  final VoidCallback onScrollStart;
+  final VoidCallback onScrollEnd;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final frame = _posterFrameFor(constraints.biggest);
+
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: frame.width,
+            height: frame.height,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if (notification is ScrollStartNotification) {
+                      onScrollStart();
+                    } else if (notification is ScrollEndNotification) {
+                      onScrollEnd();
+                    }
+                    return false;
+                  },
+                  child: PageView.builder(
+                    controller: controller,
+                    onPageChanged: onPageChanged,
+                    itemCount: slideAssets.length,
+                    itemBuilder: (context, index) {
+                      return _ArtworkSlide(assetPath: slideAssets[index]);
+                    },
+                  ),
+                ),
+                _ArtworkHotspots(onPrevious: onPrevious, onNext: onNext),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -356,6 +413,7 @@ class _LandingFooter extends StatelessWidget {
     required this.onToggleAutoSlide,
     required this.isAutoSlidePaused,
     required this.isSmall,
+    required this.isNarrow,
   });
 
   final int activeIndex;
@@ -363,11 +421,12 @@ class _LandingFooter extends StatelessWidget {
   final VoidCallback? onToggleAutoSlide;
   final bool isAutoSlidePaused;
   final bool isSmall;
+  final bool isNarrow;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 8, isSmall ? 8 : 16, 12),
+      margin: EdgeInsets.fromLTRB(isSmall ? 8 : 16, 0, isSmall ? 8 : 16, 8),
       padding: EdgeInsets.symmetric(
         horizontal: isSmall ? 10 : 14,
         vertical: 10,
@@ -385,10 +444,19 @@ class _LandingFooter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Techmigos brand (left)
-          _TechmigasBrand(isSmall: isSmall),
-          // Slide indicator (centre)
+          Flexible(
+            flex: 2,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _TechmigasBrand(isSmall: isSmall, isNarrow: isNarrow),
+              ),
+            ),
+          ),
           Expanded(
+            flex: 2,
             child: Center(
               child: _SlidePositionIndicator(
                 activeIndex: activeIndex,
@@ -396,15 +464,15 @@ class _LandingFooter extends StatelessWidget {
               ),
             ),
           ),
-          // Pause/play (right)
           if (onToggleAutoSlide != null)
             _PauseButton(
               isAutoSlidePaused: isAutoSlidePaused,
               onPressed: onToggleAutoSlide!,
               isSmall: isSmall,
+              isNarrow: isNarrow,
             )
           else
-            SizedBox(width: isSmall ? 32 : 40),
+            SizedBox(width: isNarrow ? 30 : (isSmall ? 32 : 40)),
         ],
       ),
     );
@@ -412,8 +480,9 @@ class _LandingFooter extends StatelessWidget {
 }
 
 class _TechmigasBrand extends StatelessWidget {
-  const _TechmigasBrand({required this.isSmall});
+  const _TechmigasBrand({required this.isSmall, required this.isNarrow});
   final bool isSmall;
+  final bool isNarrow;
 
   @override
   Widget build(BuildContext context) {
@@ -422,28 +491,32 @@ class _TechmigasBrand extends StatelessWidget {
       children: [
         Image.asset(
           'assets/branding/techmigos_logo.png',
-          height: isSmall ? 26 : 30,
-          width: isSmall ? 26 : 30,
+          height: isNarrow ? 22 : (isSmall ? 26 : 30),
+          width: isNarrow ? 22 : (isSmall ? 26 : 30),
           fit: BoxFit.contain,
           semanticLabel: 'TechMigos logo',
         ),
-        const SizedBox(width: 6),
+        SizedBox(width: isNarrow ? 5 : 6),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               'Powered by',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: isSmall ? 8.5 : 9.5,
+                fontSize: isNarrow ? 8 : (isSmall ? 8.5 : 9.5),
                 fontWeight: FontWeight.w500,
                 color: const Color(0xFF607D8B),
               ),
             ),
             Text(
               'TechMigos',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: isSmall ? 10 : 11,
+                fontSize: isNarrow ? 9.5 : (isSmall ? 10 : 11),
                 fontWeight: FontWeight.w800,
                 color: const Color(0xFF1565C0),
               ),
@@ -460,11 +533,13 @@ class _PauseButton extends StatelessWidget {
     required this.isAutoSlidePaused,
     required this.onPressed,
     required this.isSmall,
+    required this.isNarrow,
   });
 
   final bool isAutoSlidePaused;
   final VoidCallback onPressed;
   final bool isSmall;
+  final bool isNarrow;
 
   @override
   Widget build(BuildContext context) {
@@ -474,15 +549,15 @@ class _PauseButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onPressed,
         child: Container(
-          width: isSmall ? 32 : 38,
-          height: isSmall ? 32 : 38,
+          width: isNarrow ? 30 : (isSmall ? 32 : 38),
+          height: isNarrow ? 30 : (isSmall ? 32 : 38),
           decoration: BoxDecoration(
             color: const Color(0xFFE3F0FF),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(
             isAutoSlidePaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-            size: isSmall ? 17 : 20,
+            size: isNarrow ? 16 : (isSmall ? 17 : 20),
             color: const Color(0xFF1565C0),
           ),
         ),
@@ -508,25 +583,28 @@ class _SlidePositionIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: 'Slide ${activeIndex + 1} of $itemCount',
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(itemCount, (index) {
-          final isActive = index == activeIndex;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 3),
-            width: isActive ? 22 : 7,
-            height: 7,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: isActive
-                  ? const Color(0xFF1565C0)
-                  : const Color(0xFFB0C4DE),
-            ),
-          );
-        }),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(itemCount, (index) {
+            final isActive = index == activeIndex;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: isActive ? 22 : 7,
+              height: 7,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: isActive
+                    ? const Color(0xFF1565C0)
+                    : const Color(0xFFB0C4DE),
+              ),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -545,15 +623,12 @@ class _ArtworkSlide extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final maxPosterWidth = constraints.maxHeight * _kPosterAspectRatio;
-        final posterWidth = constraints.maxWidth < maxPosterWidth
-            ? constraints.maxWidth
-            : maxPosterWidth;
+        final frame = _posterFrameFor(constraints.biggest);
 
         return Center(
           child: Container(
-            width: posterWidth,
-            height: constraints.maxHeight,
+            width: frame.width,
+            height: frame.height,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
@@ -568,7 +643,7 @@ class _ArtworkSlide extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: Image.asset(
                 assetPath,
-                fit: BoxFit.contain,
+                fit: BoxFit.fill,
                 filterQuality: FilterQuality.high,
                 semanticLabel: 'School landing artwork',
                 errorBuilder: (context, error, stackTrace) =>
@@ -592,11 +667,8 @@ class _ArtworkHotspots extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final frame = _posterFrameFor(constraints.biggest);
-        final left = frame.left;
-        final top = frame.top;
-        final width = frame.width;
-        final height = frame.height;
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
 
         return Stack(
           children: [
@@ -605,8 +677,8 @@ class _ArtworkHotspots extends StatelessWidget {
               tooltip: 'Previous',
               onTap: onPrevious,
               rect: Rect.fromLTWH(
-                left + (width * 0.19),
-                top + (height * 0.88),
+                width * 0.19,
+                height * 0.88,
                 width * 0.12,
                 height * 0.075,
               ),
@@ -616,8 +688,8 @@ class _ArtworkHotspots extends StatelessWidget {
               tooltip: 'Next',
               onTap: onNext,
               rect: Rect.fromLTWH(
-                left + (width * 0.68),
-                top + (height * 0.88),
+                width * 0.68,
+                height * 0.88,
                 width * 0.12,
                 height * 0.075,
               ),
@@ -682,18 +754,6 @@ class _ArtworkFallback extends StatelessWidget {
   }
 }
 
-/// Target width-to-height ratio for the poster frame.
-const double _kPosterAspectRatio = 0.70;
-
 Rect _posterFrameFor(Size size) {
-  final posterWidth = size.width < size.height * _kPosterAspectRatio
-      ? size.width
-      : size.height * _kPosterAspectRatio;
-  final posterHeight = posterWidth / _kPosterAspectRatio;
-  return Rect.fromLTWH(
-    (size.width - posterWidth) / 2,
-    (size.height - posterHeight) / 2,
-    posterWidth,
-    posterHeight,
-  );
+  return Rect.fromLTWH(0, 0, size.width, size.height);
 }

@@ -5,15 +5,19 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/notification_topic_manager.dart';
+import 'package:schooldesk1/core/services/token_storage_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class LogoutService {
   LogoutService._();
 
+  static bool _signingOut = false;
+
   static Future<void> confirmAndSignOut(
     BuildContext context, {
     required String portalName,
   }) async {
+    if (_signingOut) return;
     final confirmed = await showDialog<bool>(
       context: context,
       useRootNavigator: true,
@@ -38,26 +42,71 @@ class LogoutService {
     }
   }
 
+  /// Signs the user out and navigates to the landing page.
+  ///
+  /// Navigation happens immediately; background cleanup (token revocation,
+  /// topic cleanup, backend logout) runs fire-and-forget so the UI is never
+  /// blocked by slow network calls.
   static Future<void> signOut(BuildContext context) async {
+    if (_signingOut) return;
+    _signingOut = true;
+
     final navigator = Navigator.of(context, rootNavigator: true);
-    try {
-      await PushNotificationService.instance.revokeCurrentToken();
-    } catch (_) {
-      // Continue logout even if the token was already stale or offline.
-    }
-    
-    // Clean up notification topics for all roles (safe to unsubscribe from topics not subscribed to)
-    try {
-      for (final role in SchoolDeskRole.values) {
-        await NotificationTopicManager().cleanupTopicsForRole(role);
-      }
-    } catch (_) {
-      // Continue logout even if topic cleanup fails
-    }
-    
-    await BackendApiClient.instance.logout();
+
+    // 1. Save the refresh token before clearing so the backend can be
+    //    notified of the logout in the background.
+    final refreshToken = await TokenStorageService.getRefreshToken();
+
+    // 2. Clear client-side state immediately.
     RoleAccessService.clear();
-    if (!navigator.mounted) return;
-    navigator.pushNamedAndRemoveUntil(AppRoutes.landingPage, (route) => false);
+    BackendApiClient.instance.clearAuthToken();
+    await TokenStorageService.clear();
+
+    // 3. Navigate to landing page right away — do not await any network call.
+    if (navigator.mounted) {
+      navigator.pushNamedAndRemoveUntil(
+        AppRoutes.landingPage,
+        (route) => false,
+      );
+    }
+
+    // 4. Background cleanup — best-effort, never blocks the UI.
+    _backgroundCleanup(refreshToken: refreshToken);
+
+    // Allow future sign-outs after a short delay.
+    Future.delayed(const Duration(seconds: 2), () {
+      _signingOut = false;
+    });
+  }
+
+  static void _backgroundCleanup({String? refreshToken}) {
+    // Fire-and-forget: revoke push token, unsubscribe topics, notify backend.
+    Future(() async {
+      try {
+        await PushNotificationService.instance.revokeCurrentToken();
+      } catch (_) {
+        // Ignore — token may already be stale.
+      }
+      try {
+        for (final role in SchoolDeskRole.values) {
+          await NotificationTopicManager().cleanupTopicsForRole(role);
+        }
+      } catch (_) {
+        // Ignore — topic cleanup is best-effort.
+      }
+      // Notify the backend about the logout using the saved refresh token.
+      // We cannot use BackendApiClient.instance.logout() here because
+      // the auth token has already been cleared.
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        try {
+          await BackendApiClient.instance.dio.post(
+            '/auth/logout',
+            data: {'refresh_token': refreshToken},
+          );
+        } catch (_) {
+          // Ignore — backend logout is best-effort.
+        }
+      }
+    });
   }
 }

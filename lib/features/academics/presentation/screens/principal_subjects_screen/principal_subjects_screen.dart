@@ -40,7 +40,10 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       final api = BackendApiClient.instance;
       final results = await Future.wait<Object>([
         api.getPrincipalClassesOverview(),
-        api.getRawList('/grade-subjects', queryParameters: const {'page_size': 500}),
+        api.getRawList(
+          '/grade-subjects',
+          queryParameters: const {'page_size': 500},
+        ),
       ]);
 
       final payload = results[0] as Map<String, dynamic>;
@@ -49,27 +52,34 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
 
       if (!mounted) return;
 
-      // Build grade-id to subject-names map from grade_subjects
-      final subjectsByGradeId = <String, List<String>>{};
+      final subjectsByClassKey = <String, List<String>>{};
       for (final row in gradeSubjects) {
         final gradeId = _text(row['grade_id']);
+        final sectionId = _text(row['section_id']);
         final subjectMap = row['subject'];
         final subjectName = subjectMap is Map
             ? _text(subjectMap['subject_name'] ?? subjectMap['name'])
             : _text(row['subject_name']);
-        if (gradeId.isNotEmpty && subjectName.isNotEmpty) {
-          subjectsByGradeId.putIfAbsent(gradeId, () => []);
-          if (!subjectsByGradeId[gradeId]!.contains(subjectName)) {
-            subjectsByGradeId[gradeId]!.add(subjectName);
-          }
+        final classKey = sectionId.isNotEmpty
+            ? 'section:$sectionId'
+            : gradeId.isNotEmpty
+            ? 'grade:$gradeId'
+            : '';
+        if (classKey.isEmpty || subjectName.isEmpty) continue;
+        subjectsByClassKey.putIfAbsent(classKey, () => []);
+        if (!subjectsByClassKey[classKey]!.contains(subjectName)) {
+          subjectsByClassKey[classKey]!.add(subjectName);
         }
       }
 
-      // Build the final list
       final result = <_ClassSubjects>[];
       for (final cls in classes) {
         final gradeId = _text(cls['grade_id']);
-        final subjects = subjectsByGradeId[gradeId] ?? [];
+        final sectionId = _text(cls['section_id']);
+        final subjects =
+            subjectsByClassKey['section:$sectionId'] ??
+            subjectsByClassKey['grade:$gradeId'] ??
+            [];
         result.add(
           _ClassSubjects(
             className: _text(cls['class_name'], fallback: 'Class'),
@@ -135,7 +145,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                     child: EmptyStateWidget(
                       icon: Icons.menu_book_rounded,
                       title: 'No classes found',
-                      description: 'Create classes in Class Hub first, then subjects will appear here.',
+                      description:
+                          'Create classes in Class Hub first, then subjects will appear here.',
                       actionLabel: 'Retry',
                       onAction: _loadData,
                     ),
@@ -148,9 +159,8 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                   sliver: SliverList.separated(
                     itemCount: _classes.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) => _ClassSubjectsCard(
-                      data: _classes[index],
-                    ),
+                    itemBuilder: (context, index) =>
+                        _ClassSubjectsCard(data: _classes[index]),
                   ),
                 ),
               ],
@@ -169,14 +179,18 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
     );
     final totalTeachers = <String>{};
     for (final cls in _classes) {
-      if (cls.classTeacher != 'Not assigned') totalTeachers.add(cls.classTeacher);
-      if (cls.coTeacher != 'Not assigned') totalTeachers.add(cls.coTeacher);
+      if (cls.classTeacher != 'Not assigned') {
+        totalTeachers.add(cls.classTeacher);
+      }
+      if (cls.coTeacher != 'Not assigned') {
+        totalTeachers.add(cls.coTeacher);
+      }
     }
     final subtitle = _loading
         ? 'Loading...'
         : '$totalClasses ${totalClasses == 1 ? 'class' : 'classes'} '
-            '$totalSubjects ${totalSubjects == 1 ? 'subject' : 'subjects'} '
-            '${totalTeachers.length} ${totalTeachers.length == 1 ? 'teacher' : 'teachers'}';
+              '$totalSubjects ${totalSubjects == 1 ? 'subject' : 'subjects'} '
+              '${totalTeachers.length} ${totalTeachers.length == 1 ? 'teacher' : 'teachers'}';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
@@ -227,7 +241,9 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
       0,
       (sum, cls) => sum + cls.subjects.length,
     );
-    final classesWithSubjects = _classes.where((c) => c.subjects.isNotEmpty).length;
+    final classesWithSubjects = _classes
+        .where((c) => c.subjects.isNotEmpty)
+        .length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(22, 4, 22, 0),
@@ -240,7 +256,11 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.menu_book_outlined, color: Color(0xFF6C4CFF), size: 20),
+            const Icon(
+              Icons.menu_book_outlined,
+              color: Color(0xFF6C4CFF),
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -331,9 +351,7 @@ class _ClassSubjectsCard extends StatelessWidget {
                 topLeft: Radius.circular(10),
                 topRight: Radius.circular(10),
               ),
-              border: Border(
-                bottom: BorderSide(color: Color(0xFFE8ECF4)),
-              ),
+              border: Border(bottom: BorderSide(color: Color(0xFFE8ECF4))),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,10 +396,7 @@ class _ClassSubjectsCard extends StatelessWidget {
                       name: data.classTeacher,
                     ),
                     const SizedBox(width: 8),
-                    _TeacherChip(
-                      label: 'Co-Teacher',
-                      name: data.coTeacher,
-                    ),
+                    _TeacherChip(label: 'Co-Teacher', name: data.coTeacher),
                   ],
                 ),
               ],
@@ -435,7 +450,9 @@ class _TeacherChip extends StatelessWidget {
           color: isAssigned ? const Color(0xFFF0F9FF) : const Color(0xFFFFF9F0),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isAssigned ? const Color(0xFFD1E9F8) : const Color(0xFFFFEDD5),
+            color: isAssigned
+                ? const Color(0xFFD1E9F8)
+                : const Color(0xFFFFEDD5),
           ),
         ),
         child: Row(
@@ -443,7 +460,9 @@ class _TeacherChip extends StatelessWidget {
             Icon(
               Icons.person_outline_rounded,
               size: 16,
-              color: isAssigned ? const Color(0xFF0887F2) : const Color(0xFFF97316),
+              color: isAssigned
+                  ? const Color(0xFF0887F2)
+                  : const Color(0xFFF97316),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -542,27 +561,91 @@ class _SubjectChip extends StatelessWidget {
 
   static IconData _subjectIcon(String label) {
     final v = label.toLowerCase();
-    if (v.contains('math')) return Icons.calculate_outlined;
-    if (v.contains('english') || v.contains('language')) return Icons.abc_rounded;
-    if (v.contains('science') || v.contains('evs')) return Icons.science_outlined;
-    if (v.contains('social') || v.contains('history')) return Icons.public_rounded;
-    if (v.contains('computer')) return Icons.computer_rounded;
-    if (v.contains('music')) return Icons.music_note_rounded;
-    if (v.contains('physical') || v.contains('sport')) return Icons.directions_run_rounded;
-    if (v.contains('art')) return Icons.palette_outlined;
-    if (v.contains('hindi')) return Icons.translate_rounded;
+    if (v.contains('math')) {
+      return Icons.calculate_outlined;
+    }
+    if (v.contains('english') || v.contains('language')) {
+      return Icons.abc_rounded;
+    }
+    if (v.contains('science') || v.contains('evs')) {
+      return Icons.science_outlined;
+    }
+    if (v.contains('social') || v.contains('history')) {
+      return Icons.public_rounded;
+    }
+    if (v.contains('computer')) {
+      return Icons.computer_rounded;
+    }
+    if (v.contains('music')) {
+      return Icons.music_note_rounded;
+    }
+    if (v.contains('physical') || v.contains('sport')) {
+      return Icons.directions_run_rounded;
+    }
+    if (v.contains('art')) {
+      return Icons.palette_outlined;
+    }
+    if (v.contains('hindi')) {
+      return Icons.translate_rounded;
+    }
     return Icons.menu_book_outlined;
   }
 
   static (Color, Color, Color) _subjectColors(String label) {
     final v = label.toLowerCase();
-    if (v.contains('math')) return (const Color(0xFFECFDF5), const Color(0xFFA7F3D0), const Color(0xFF059669));
-    if (v.contains('science') || v.contains('evs')) return (const Color(0xFFFFFBEB), const Color(0xFFFDE68A), const Color(0xFFD97706));
-    if (v.contains('hindi') || v.contains('language')) return (const Color(0xFFF5F3FF), const Color(0xFFDDD6FE), const Color(0xFF7C3AED));
-    if (v.contains('english')) return (const Color(0xFFEFF6FF), const Color(0xFFBFDBFE), const Color(0xFF2563EB));
-    if (v.contains('art') || v.contains('music')) return (const Color(0xFFFDF2F8), const Color(0xFFFBCFE8), const Color(0xFFDB2777));
-    if (v.contains('physical') || v.contains('sport')) return (const Color(0xFFECFEFF), const Color(0xFFA5F3FC), const Color(0xFF0891B2));
-    if (v.contains('social') || v.contains('history')) return (const Color(0xFFFFF7ED), const Color(0xFFFED7AA), const Color(0xFFC2410C));
-    return (const Color(0xFFF0F9FF), const Color(0xFFBAE6FD), const Color(0xFF0284C7));
+    if (v.contains('math')) {
+      return (
+        const Color(0xFFECFDF5),
+        const Color(0xFFA7F3D0),
+        const Color(0xFF059669),
+      );
+    }
+    if (v.contains('science') || v.contains('evs')) {
+      return (
+        const Color(0xFFFFFBEB),
+        const Color(0xFFFDE68A),
+        const Color(0xFFD97706),
+      );
+    }
+    if (v.contains('hindi') || v.contains('language')) {
+      return (
+        const Color(0xFFF5F3FF),
+        const Color(0xFFDDD6FE),
+        const Color(0xFF7C3AED),
+      );
+    }
+    if (v.contains('english')) {
+      return (
+        const Color(0xFFEFF6FF),
+        const Color(0xFFBFDBFE),
+        const Color(0xFF2563EB),
+      );
+    }
+    if (v.contains('art') || v.contains('music')) {
+      return (
+        const Color(0xFFFDF2F8),
+        const Color(0xFFFBCFE8),
+        const Color(0xFFDB2777),
+      );
+    }
+    if (v.contains('physical') || v.contains('sport')) {
+      return (
+        const Color(0xFFECFEFF),
+        const Color(0xFFA5F3FC),
+        const Color(0xFF0891B2),
+      );
+    }
+    if (v.contains('social') || v.contains('history')) {
+      return (
+        const Color(0xFFFFF7ED),
+        const Color(0xFFFED7AA),
+        const Color(0xFFC2410C),
+      );
+    }
+    return (
+      const Color(0xFFF0F9FF),
+      const Color(0xFFBAE6FD),
+      const Color(0xFF0284C7),
+    );
   }
 }
