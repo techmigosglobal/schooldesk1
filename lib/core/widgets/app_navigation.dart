@@ -244,7 +244,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
               index: PrincipalNav.messages,
               icon: Icons.forum_outlined,
               activeIcon: Icons.forum_rounded,
-              label: 'Messages',
+              label: 'Communications',
               route: AppRoutes.principalChatCommunications,
             ),
             SchoolDeskNavigationItem(
@@ -527,8 +527,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
           : Image.network(
               _assetUrl(_schoolLogo),
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  const Icon(Icons.security_rounded),
+              errorBuilder: (_, _, _) => const Icon(Icons.security_rounded),
             ),
       userName: _userName,
       userSubtitle: _userSubtitle,
@@ -700,7 +699,10 @@ class SuperAdminShellBottomBar extends StatelessWidget {
     );
   }
 
-  void _navigate(BuildContext context, _SuperAdminShellDestination destination) {
+  void _navigate(
+    BuildContext context,
+    _SuperAdminShellDestination destination,
+  ) {
     final navigator = Navigator.of(context);
     final currentRoute = ModalRoute.of(context)?.settings.name;
     if (currentRoute == destination.route) return;

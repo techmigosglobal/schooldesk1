@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -201,12 +200,15 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   /// Triggers the birthday alert job once per day (fire-and-forget).
   void _fireBirthdayAlerts(BackendApiClient api) {
-    final todayKey = 'birthday_alerts_fired_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}';
+    final todayKey =
+        'birthday_alerts_fired_${DateTime.now().year}_${DateTime.now().month}_${DateTime.now().day}';
     // Use a simple in-memory guard to avoid calling the endpoint
     // multiple times within the same app session.
     if (_birthdayFiredKeys.contains(todayKey)) return;
     _birthdayFiredKeys.add(todayKey);
-    api.triggerBirthdayAlerts().catchError((_) => <String, dynamic>{}); // ignore errors
+    api.triggerBirthdayAlerts().catchError(
+      (_) => <String, dynamic>{},
+    ); // ignore errors
   }
 
   Future<T> _loadOptional<T>({
@@ -231,9 +233,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentRole = BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    final currentRole =
+        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
     final isSuperAdmin = currentRole == 'super_admin';
-    
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -242,14 +245,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFF3F7FC),
         drawer: isSuperAdmin
-            ? SuperAdminDrawer(
-                selectedIndex: 0,
-                onDestinationSelected: (_) {},
-              )
-            : PrincipalDrawer(
-                selectedIndex: 0,
-                onDestinationSelected: (_) {},
-              ),
+            ? SuperAdminDrawer(selectedIndex: 0, onDestinationSelected: (_) {})
+            : PrincipalDrawer(selectedIndex: 0, onDestinationSelected: (_) {}),
         body: SafeArea(
           bottom: false,
           child: Align(
@@ -384,6 +381,14 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: const Color(0xFFE8FAFC),
                   ),
                   _AcademicModuleItem(
+                    label: 'Timetable',
+                    route: AppRoutes.principalTimetable,
+                    illustration: SchoolDeskUiIllustrations.principalTimetable,
+                    fallbackIcon: Icons.calendar_view_week_rounded,
+                    accent: const Color(0xFF0EA5E9),
+                    cardColor: const Color(0xFFE8F7FF),
+                  ),
+                  _AcademicModuleItem(
                     label: 'Lesson Planners',
                     route: AppRoutes.principalLessonPlanner,
                     illustration: SchoolDeskUiIllustrations.lessonPlanner,
@@ -410,7 +415,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   _AcademicModuleItem(
                     label: 'Event Approvals',
                     route: AppRoutes.principalEventApprovals,
-                    illustration: SchoolDeskUiIllustrations.principalEvents,
+                    illustration: SchoolDeskUiIllustrations.notices,
                     fallbackIcon: Icons.fact_check_rounded,
                     accent: const Color(0xFFEA580C),
                     cardColor: const Color(0xFFFFF1E8),
@@ -419,21 +424,13 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                   _AcademicModuleItem(
                     label: 'Gallery',
                     route: AppRoutes.schoolGallery,
-                    illustration: SchoolDeskUiIllustrations.principalEvents,
+                    illustration: SchoolDeskUiIllustrations.resources,
                     fallbackIcon: Icons.photo_library_rounded,
                     accent: const Color(0xFF9333EA),
                     cardColor: const Color(0xFFF5ECFF),
                   ),
                   _AcademicModuleItem(
-                    label: 'Timetable',
-                    route: AppRoutes.principalTimetable,
-                    illustration: SchoolDeskUiIllustrations.calendar,
-                    fallbackIcon: Icons.calendar_month_rounded,
-                    accent: const Color(0xFF0EA5E9),
-                    cardColor: const Color(0xFFE8F7FF),
-                  ),
-                  _AcademicModuleItem(
-                    label: 'Messages',
+                    label: 'Communications',
                     route: AppRoutes.principalChatCommunications,
                     illustration: SchoolDeskUiIllustrations.chat,
                     fallbackIcon: Icons.forum_rounded,
@@ -446,18 +443,6 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
               ),
               const SizedBox(height: 18),
               const TodaysHighlightsCard(role: 'principal'),
-              const SizedBox(height: 22),
-              _SectionTitle('Today'),
-              const SizedBox(height: 10),
-              _TodaySnapshotRow(
-                attendance: '${_data.attendancePct.round()}%',
-                attendanceDetail:
-                    '${_data.attendancePresent}/${_data.attendanceMarked}',
-                fees: '${_data.collectionPct.round()}%',
-                feesDetail: _data.money(_data.totalPaid),
-                onAttendance: () => _open(AppRoutes.principalAttendance),
-                onFees: () => _open(AppRoutes.feeMonitoring),
-              ),
               const SizedBox(height: 22),
               _SectionTitle('Principal Action Queue'),
               const SizedBox(height: 10),
@@ -610,7 +595,10 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
             for (var index = 0; index < items.length; index++) ...[
               _PrincipalActionQueueTile(
                 item: items[index],
-                onTap: () => _open(items[index].route, arguments: items[index].routeArguments),
+                onTap: () => _open(
+                  items[index].route,
+                  arguments: items[index].routeArguments,
+                ),
               ),
               if (index != items.length - 1)
                 const Divider(height: 1, color: Color(0xFFE2E8F0)),
@@ -648,11 +636,8 @@ class _PrincipalHomeData {
   final int totalStaff;
   final int totalClasses;
   final int pendingApprovals;
-  final double attendancePct;
   final int attendancePresent;
   final int attendanceMarked;
-  final double collectionPct;
-  final double totalPaid;
   final int unreadNotifications;
   final int pendingFeeRequests;
   final int pendingAccessApprovals;
@@ -668,11 +653,8 @@ class _PrincipalHomeData {
     required this.totalStaff,
     required this.totalClasses,
     required this.pendingApprovals,
-    required this.attendancePct,
     required this.attendancePresent,
     required this.attendanceMarked,
-    required this.collectionPct,
-    required this.totalPaid,
     required this.unreadNotifications,
     required this.pendingFeeRequests,
     required this.pendingAccessApprovals,
@@ -690,11 +672,8 @@ class _PrincipalHomeData {
       totalStaff: 0,
       totalClasses: 0,
       pendingApprovals: 0,
-      attendancePct: 0,
       attendancePresent: 0,
       attendanceMarked: 0,
-      collectionPct: 0,
-      totalPaid: 0,
       unreadNotifications: 0,
       pendingFeeRequests: 0,
       pendingAccessApprovals: 0,
@@ -712,7 +691,6 @@ class _PrincipalHomeData {
     final metrics = Map<String, dynamic>.from(
       dashboard['metrics'] as Map? ?? {},
     );
-    final fees = Map<String, dynamic>.from(dashboard['fees'] as Map? ?? {});
     final attendance = Map<String, dynamic>.from(
       dashboard['today_attendance'] as Map? ?? {},
     );
@@ -738,11 +716,8 @@ class _PrincipalHomeData {
       totalStaff: _intValue(metrics['total_staff'], 0),
       totalClasses: _intValue(metrics['total_classes'], 0),
       pendingApprovals: _intValue(metrics['pending_event_approvals'], 0),
-      attendancePct: _doubleValue(attendance['attendance_pct']),
       attendancePresent: _doubleValue(attendance['present']).round(),
       attendanceMarked: _doubleValue(attendance['marked']).round(),
-      collectionPct: _doubleValue(fees['collection_pct']),
-      totalPaid: _doubleValue(fees['total_paid']),
       unreadNotifications: 0,
       pendingFeeRequests: _intValue(metrics['pending_fee_requests'], 0),
       pendingAccessApprovals: _intValue(metrics['pending_access_approvals'], 0),
@@ -793,7 +768,10 @@ class _PrincipalHomeData {
     );
 
     final pendingFeeRequests = _intValue(metrics['pending_fee_requests'], 0);
-    final pendingAccessApprovals = _intValue(metrics['pending_access_approvals'], 0);
+    final pendingAccessApprovals = _intValue(
+      metrics['pending_access_approvals'],
+      0,
+    );
 
     return _PrincipalHomeData(
       principalName: principalName,
@@ -805,11 +783,8 @@ class _PrincipalHomeData {
       totalStaff: _intValue(metrics['total_staff'], staffTotal),
       totalClasses: _intValue(metrics['total_classes'], sections.length),
       pendingApprovals: pendingApprovals,
-      attendancePct: attendancePct,
       attendancePresent: attendancePresent,
       attendanceMarked: attendanceMarked,
-      collectionPct: collectionPct,
-      totalPaid: totalPaid,
       unreadNotifications: unreadNotifications,
       pendingFeeRequests: pendingFeeRequests,
       pendingAccessApprovals: pendingAccessApprovals,
@@ -857,14 +832,6 @@ class _PrincipalHomeData {
         _SetupStep(title: 'Go Live', isComplete: goLiveReady),
       ],
     );
-  }
-
-  String money(double value) {
-    return NumberFormat.currency(
-      locale: 'en_IN',
-      symbol: '₹',
-      decimalDigits: 0,
-    ).format(value);
   }
 
   static String _text(Object? value, {String fallback = ''}) {
@@ -1635,155 +1602,6 @@ class _AcademicModuleTileState extends State<_AcademicModuleTile> {
           ),
         );
       },
-    );
-  }
-}
-
-class _TodaySnapshotRow extends StatelessWidget {
-  final String attendance;
-  final String attendanceDetail;
-  final String fees;
-  final String feesDetail;
-  final VoidCallback onAttendance;
-  final VoidCallback onFees;
-
-  const _TodaySnapshotRow({
-    required this.attendance,
-    required this.attendanceDetail,
-    required this.fees,
-    required this.feesDetail,
-    required this.onAttendance,
-    required this.onFees,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final attendanceTile = _SnapshotTile(
-      label: 'Attendance',
-      value: attendance,
-      detail: attendanceDetail,
-      icon: Icons.how_to_reg_rounded,
-      color: const Color(0xFF0EA5E9),
-      onTap: onAttendance,
-    );
-    final feesTile = _SnapshotTile(
-      label: 'Fees',
-      value: fees,
-      detail: feesDetail,
-      icon: Icons.payments_rounded,
-      color: const Color(0xFF22C55E),
-      onTap: onFees,
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 340) {
-          return Column(
-            children: [attendanceTile, const SizedBox(height: 10), feesTile],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: attendanceTile),
-            const SizedBox(width: 10),
-            Expanded(child: feesTile),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SnapshotTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final String detail;
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onTap;
-
-  const _SnapshotTile({
-    required this.label,
-    required this.value,
-    required this.detail,
-    required this.icon,
-    required this.color,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tile = Container(
-      constraints: const BoxConstraints(minHeight: 78),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.appTheme.surface),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF64748B),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFF0F172A),
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  detail,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: const Color(0xFF94A3B8),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Material(
-      color: context.appTheme.surface,
-      borderRadius: BorderRadius.circular(14),
-      elevation: 2,
-      shadowColor: const Color(0x120F172A),
-      child: onTap == null
-          ? tile
-          : InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(14),
-              child: tile,
-            ),
     );
   }
 }

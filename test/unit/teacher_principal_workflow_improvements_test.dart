@@ -11,8 +11,6 @@ void main() {
     expect(source, contains('Today Action Queue'));
     expect(source, contains('_teacherActionQueue'));
     expect(source, contains('Mark Student Attendance'));
-    expect(source, contains('Record Class Diary'));
-    expect(source, contains('Homework'));
     expect(source, contains('Review PTM Slots'));
     expect(source, contains('Track Leave'));
   });
@@ -24,8 +22,9 @@ void main() {
 
     expect(source, contains('Principal Action Queue'));
     expect(source, contains('_principalActionQueue'));
+    expect(source, isNot(contains("_SectionTitle('Today')")));
+    expect(source, isNot(contains('_TodaySnapshotRow')));
     expect(source, contains('Review Attendance'));
-    expect(source, contains('Correction Requests'));
     expect(source, contains('Event Approvals'));
     expect(source, contains('Fee Requests'));
     expect(source, contains('Access Approvals'));

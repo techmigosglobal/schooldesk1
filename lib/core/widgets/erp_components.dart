@@ -74,6 +74,7 @@ class SchoolDeskUiIllustrations {
   static const principalSubjects = 'assets/images/ui/principal-subjects.svg';
   static const principalFees = 'assets/images/ui/principal-fees.svg';
   static const principalEvents = 'assets/images/ui/principal-events.svg';
+  static const principalTimetable = 'assets/images/ui/principal-timetable.svg';
 }
 
 class SchoolDeskCard extends StatelessWidget {

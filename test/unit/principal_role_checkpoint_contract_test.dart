@@ -55,6 +55,58 @@ void main() {
     expect(backendRoutes, contains('path === "/lesson-planners/principal"'));
   });
 
+  test('principal home orders academics and uses distinct event icons', () {
+    final dashboard = File(
+      'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',
+    ).readAsStringSync();
+    final registry = File(
+      'lib/routes/schooldesk_screen_registry.dart',
+    ).readAsStringSync();
+    final illustrations = File(
+      'lib/core/widgets/erp_components.dart',
+    ).readAsStringSync();
+
+    final subjectsIndex = dashboard.indexOf("label: 'Subjects'");
+    final timetableIndex = dashboard.indexOf("label: 'Timetable'");
+    final lessonPlannerIndex = dashboard.indexOf("label: 'Lesson Planners'");
+    expect(subjectsIndex, isNonNegative);
+    expect(timetableIndex, greaterThan(subjectsIndex));
+    expect(lessonPlannerIndex, greaterThan(timetableIndex));
+
+    final registrySubjectsIndex = registry.indexOf(
+      "route: '/principal-subjects-screen'",
+    );
+    final registryTimetableIndex = registry.indexOf(
+      "route: '/principal-timetable-screen'",
+    );
+    final registryLessonPlannerIndex = registry.indexOf(
+      "route: '/principal-lesson-planner-screen'",
+    );
+    expect(registryTimetableIndex, greaterThan(registrySubjectsIndex));
+    expect(registryLessonPlannerIndex, greaterThan(registryTimetableIndex));
+
+    final calendarBlock = dashboard.substring(
+      dashboard.indexOf("label: 'Calendar'"),
+      dashboard.indexOf("label: 'Event Approvals'"),
+    );
+    final approvalsBlock = dashboard.substring(
+      dashboard.indexOf("label: 'Event Approvals'"),
+      dashboard.indexOf("label: 'Gallery'"),
+    );
+    final galleryBlock = dashboard.substring(
+      dashboard.indexOf("label: 'Gallery'"),
+      dashboard.indexOf("label: 'Communications'"),
+    );
+    expect(
+      calendarBlock,
+      contains('SchoolDeskUiIllustrations.principalEvents'),
+    );
+    expect(approvalsBlock, contains('SchoolDeskUiIllustrations.notices'));
+    expect(galleryBlock, contains('SchoolDeskUiIllustrations.resources'));
+    expect(illustrations, contains('principal-timetable.svg'));
+    expect(dashboard, contains('SchoolDeskUiIllustrations.principalTimetable'));
+  });
+
   test('principal lesson planner review filters match backend statuses', () {
     final screen = File(
       'lib/features/academics/presentation/screens/principal_lesson_planner_screen.dart',

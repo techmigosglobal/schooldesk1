@@ -134,6 +134,12 @@ class SchoolDeskScreenRegistry {
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
+      route: '/principal-timetable-screen',
+      title: 'Timetable',
+      module: 'Academics',
+      portal: 'principal',
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-lesson-planner-screen',
       title: 'Lesson Planners',
       module: 'Academics',
@@ -568,12 +574,6 @@ class SchoolDeskScreenRegistry {
       route: '/principal-event-approvals-screen',
       title: 'Event Approvals',
       module: 'Communication',
-      portal: 'principal',
-    ),
-    SchoolDeskScreenMetadata(
-      route: '/principal-timetable-screen',
-      title: 'Timetable',
-      module: 'Academics',
       portal: 'principal',
     ),
     SchoolDeskScreenMetadata(
