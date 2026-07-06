@@ -54,6 +54,30 @@ async function resolveUserId(
   return data?.id ?? "";
 }
 
+/** Resolve the principal's auth user_id for push notifications. */
+async function resolvePrincipalUserId(
+  svc: SupabaseClient,
+  school: string,
+): Promise<string> {
+  const { data } = await svc
+    .from("users")
+    .select("id")
+    .eq("school_id", school)
+    .eq("linked_type", "principal")
+    .limit(1)
+    .maybeSingle();
+  if (data?.id) return data.id;
+  // Fallback: look for role_name containing 'principal'
+  const { data: roleUser } = await svc
+    .from("users")
+    .select("id")
+    .eq("school_id", school)
+    .ilike("role_name", "%principal%")
+    .limit(1)
+    .maybeSingle();
+  return roleUser?.id ?? "";
+}
+
 /** Resolve a student_id to the parent/guardian auth user_id for push notifications. */
 async function resolveStudentParentUserId(
   svc: SupabaseClient,
@@ -152,6 +176,45 @@ export async function handleLeave(
       updated_at: new Date().toISOString(),
     }).eq("id", recallMatch[1]).eq("school_id", school).select().single();
     if (error) return fail(error.message);
+    // Notify the principal that a leave request was recalled
+    try {
+      const principalUserId = await resolvePrincipalUserId(svc, school);
+      if (principalUserId) {
+        const staffName = [
+          text(data.staff?.first_name),
+          text(data.staff?.last_name),
+        ].filter(Boolean).join(" ") || text(data.staff_id, "A teacher");
+        const fromDate = text(data.start_date).split("T")[0] ?? "";
+        const toDate = text(data.end_date).split("T")[0] ?? "";
+        const dateRange = fromDate && toDate
+          ? ` (${fromDate} to ${toDate})`
+          : "";
+        const { data: eventRow } = await svc.from("notification_events").insert({
+          school_id: school,
+          user_id: principalUserId,
+          event_type: "leave_recalled",
+          event_data: {
+            leave_id: recallMatch[1],
+            message: `${staffName} has recalled their leave request${dateRange}.`,
+            reference_type: "leave",
+          },
+        }).select("id").maybeSingle();
+        if (eventRow?.id) triggerPushProcessing(eventRow.id);
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: principalUserId,
+          title: "Leave Request Recalled",
+          body: `${staffName} has recalled their leave request${dateRange}.`,
+          type: "leave",
+          entity_type: "leave",
+          entity_id: recallMatch[1],
+          target_role: "principal",
+          is_read: false,
+        });
+      }
+    } catch (notifErr) {
+      console.error(`Failed to create recall notification: ${notifErr}`);
+    }
     return ok(data);
   }
 

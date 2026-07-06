@@ -38,11 +38,12 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             .map(
               (s) => {
                 'id': s.id,
-                'name': '${s.firstName} ${s.lastName}',
+                'name': '${s.firstName} ${s.lastName}'.trim(),
                 'subject': s.designation ?? 'Teacher',
                 'email': s.email ?? '',
                 'phone': s.phone ?? '',
-                'status': s.status,
+                'status': s.status ?? 'active',
+                'dept': s.departmentName ?? s.designation ?? '',
               },
             )
             .toList();
@@ -50,11 +51,15 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             .map(
               (l) => {
                 'id': l.id,
-                'teacher': l.staffId,
-                'type': l.leaveTypeId,
-                'fromDate': l.fromDate,
-                'toDate': l.toDate,
+                'teacher': l.staffName.isNotEmpty ? l.staffName : l.staffId,
+                'type': l.leaveTypeName.isNotEmpty
+                    ? l.leaveTypeName
+                    : l.leaveTypeId,
+                'from': l.fromDate.split('T').first,
+                'to': l.toDate.split('T').first,
+                'reason': l.reason ?? '',
                 'status': l.status,
+                'totalDays': l.totalDays,
               },
             )
             .toList();
@@ -248,21 +253,14 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                     ],
                   ),
                   Text(
-                    '${t['subject']} • ${t['dept']}',
+                    '${t['subject']}${(t['dept'] ?? '').toString().isNotEmpty ? ' • ${t['dept']}' : ''}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       color: context.appTheme.muted,
                     ),
                   ),
                   Text(
-                    'Classes: ${t['classes']}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: context.appTheme.muted,
-                    ),
-                  ),
-                  Text(
-                    'Leaves taken: ${t['leaves']} • ${t['phone']}',
+                    '${t['phone'] ?? ''}',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
                       color: context.appTheme.muted,
@@ -320,7 +318,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
         addRepaintBoundaries: true,
         itemBuilder: (_, i) {
           final l = _leaveRequests[i];
-          final isPending = l['status'] == 'Pending';
+          final isPending = '${l['status']}' == 'pending';
           final item = Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -335,7 +333,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      l['teacher'] as String,
+                      '${l['teacher']}',
                       style: GoogleFonts.dmSans(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -353,9 +351,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                               ? context.appTheme.warningContainer
                               : context.appTheme.successContainer,
                           borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          l['status'] as String,
+                        ),                          child: Text(
+                          _titleCase(l['status']?.toString() ?? ''),
                           style: GoogleFonts.dmSans(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
@@ -370,7 +367,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${l['from']} – ${l['to']} • Reason: ${l['reason']}',
+                  '${l['from'] ?? ''} – ${l['to'] ?? ''}${(l['reason'] ?? '').toString().isNotEmpty ? ' • Reason: ${l['reason']}' : ''}',
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
                     color: context.appTheme.muted,
@@ -474,7 +471,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      t['salary'] as String,
+                      '${t['salary'] ?? '-'}',
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -540,7 +537,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
         break;
       case 'salary':
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Salary: ${t['salary']} for ${t['name']}')),
+          SnackBar(content: Text('Salary info not available for ${t['name']}')),
         );
         break;
       default:
@@ -624,6 +621,11 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
     );
+  }
+
+  static String _titleCase(String value) {
+    if (value.isEmpty) return value;
+    return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 
   _TeacherNameParts _splitTeacherName(String name) {

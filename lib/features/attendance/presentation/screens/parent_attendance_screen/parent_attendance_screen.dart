@@ -23,8 +23,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   static const _headerColor = Color(0xFF1A6B4A);
 
   // Scoped to only this parent's children
-  List<String> _children = [];
-  List<String> _childIds = [];
+  List<Map<String, dynamic>> _childRows = [];
 
   List<Map<String, dynamic>> _attendanceHistory = [];
   Map<String, dynamic> _attendanceSummary = {};
@@ -32,6 +31,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Map<int, List<Map<String, dynamic>>> _periodRowsByDay = {};
   List<Map<String, dynamic>> _leaveRequests = [];
   bool _loading = true;
+  int _attendanceRequestToken = 0;
 
   @override
   void initState() {
@@ -44,36 +44,31 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
     try {
       final childrenResponse = await BackendApiClient.instance.getMyStudents();
-      final childLabels = childrenResponse.map((c) {
-        final first = (c['first_name'] ?? '').toString();
-        final last = (c['last_name'] ?? '').toString();
-        final name = [first, last].where((e) => e.isNotEmpty).join(' ').trim();
-        final grade = (c['grade_name'] ?? '').toString();
-        final section = (c['section_name'] ?? '').toString();
-        final classLabel = [
-          grade,
-          section,
-        ].where((e) => e.isNotEmpty).join('-');
-        return classLabel.isEmpty ? name : '$name ($classLabel)';
-      }).toList();
-      final childIds = childrenResponse
-          .map((c) => (c['id'] ?? '').toString())
-          .where((id) => id.isNotEmpty)
+      final childRows = childrenResponse
+          .map((child) => Map<String, dynamic>.from(child))
+          .where((child) => _childId(child).isNotEmpty)
           .toList();
       final selectedIndex = await ParentChildSelectionService.indexFor(
-        childrenResponse,
+        childRows,
         fallback: _activeChildIndex,
       );
 
+      if (!mounted) return;
       setState(() {
-        _children = childLabels;
-        _childIds = childIds;
+        _childRows = childRows;
         _activeChildIndex = selectedIndex;
       });
-      if (_children.isNotEmpty && _childIds.isNotEmpty) {
+      if (_childRows.isNotEmpty) {
         await _loadChildAttendance(selectedIndex);
       } else {
-        setState(() => _loading = false);
+        setState(() {
+          _attendanceHistory = [];
+          _attendanceSummary = {};
+          _attendanceDayStatus = {};
+          _periodRowsByDay = {};
+          _leaveRequests = [];
+          _loading = false;
+        });
       }
     } catch (e) {
       setState(() => _loading = false);
@@ -86,12 +81,22 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 
   Future<void> _loadChildAttendance(int childIndex) async {
-    if (childIndex >= _children.length || childIndex >= _childIds.length) {
+    if (childIndex < 0 || childIndex >= _childRows.length) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+      return;
+    }
+    final requestToken = ++_attendanceRequestToken;
+    final studentId = _childId(_childRows[childIndex]);
+    if (studentId.isEmpty) {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
       return;
     }
 
     try {
-      final studentId = _childIds[childIndex];
       final attendanceSummary = await _safeAttendanceSummary(studentId);
       final attendanceRecords = await _safeAttendanceRecords(studentId);
       final leaveRequests = await _safeLeaveRequests(studentId);
@@ -102,18 +107,14 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       );
       final attendanceDayStatus = _dayStatusFromPeriodRows(periodRows);
 
+      if (!mounted ||
+          requestToken != _attendanceRequestToken ||
+          childIndex != _activeChildIndex ||
+          studentId != _activeChildId) {
+        return;
+      }
       setState(() {
         _attendanceHistory = periodRows.take(20).toList();
-        if (_attendanceHistory.isEmpty) {
-          _attendanceHistory = [
-            {
-              'date': 'Current Month',
-              'time': '—',
-              'status': 'Summary',
-              'reason': '',
-            },
-          ];
-        }
         _attendanceSummary = attendanceSummary;
         _attendanceDayStatus = attendanceDayStatus;
         _periodRowsByDay = _groupPeriodRowsByDay(periodRows);
@@ -121,8 +122,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         _loading = false;
       });
     } catch (e) {
-      setState(() => _loading = false);
-      if (mounted) {
+      if (mounted &&
+          requestToken == _attendanceRequestToken &&
+          childIndex == _activeChildIndex) {
+        setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to load attendance: $e')),
         );
@@ -196,6 +199,24 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     };
   }
 
+  String get _activeChildId {
+    if (_activeChildIndex < 0 || _activeChildIndex >= _childRows.length) {
+      return '';
+    }
+    return _childId(_childRows[_activeChildIndex]);
+  }
+
+  String _childId(Map<String, dynamic> child) =>
+      '${child['id'] ?? child['student_id'] ?? ''}'.trim();
+
+  String _childShortLabel(Map<String, dynamic> child) {
+    final first = (child['first_name'] ?? '').toString().trim();
+    final fallback = (child['name'] ?? child['full_name'] ?? 'Student')
+        .toString()
+        .trim();
+    return first.isNotEmpty ? first : fallback.split(' ').first;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
@@ -239,44 +260,70 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 
   Widget _buildChildSelector() {
-    return Row(
-      children: List.generate(_children.length, (i) {
-        final isActive = i == _activeChildIndex;
-        return GestureDetector(
-          onTap: () {
-            setState(() => _activeChildIndex = i);
-            ParentChildSelectionService.saveIndex(
-              List.generate(
-                _childIds.length,
-                (index) => {'id': _childIds[index]},
-              ),
-              i,
-            );
-            _loadChildAttendance(i);
-          },
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: isActive ? _headerColor : context.appTheme.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.outlineVariant,
+    if (_childRows.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.appTheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.family_restroom_rounded, color: context.appTheme.muted),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No linked students found for this parent account.',
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: context.appTheme.onSurfaceVariant,
+                ),
               ),
             ),
-            child: Text(
-              _children[i].split(' ').first,
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isActive ? Colors.white : context.appTheme.onSurface,
+          ],
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(_childRows.length, (i) {
+          final isActive = i == _activeChildIndex;
+          return GestureDetector(
+            onTap: () {
+              if (i == _activeChildIndex && !_loading) return;
+              setState(() {
+                _activeChildIndex = i;
+                _loading = true;
+              });
+              ParentChildSelectionService.saveIndex(_childRows, i);
+              _loadChildAttendance(i);
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: isActive ? _headerColor : context.appTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.outlineVariant,
+                ),
+              ),
+              child: Text(
+                _childShortLabel(_childRows[i]),
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isActive ? Colors.white : context.appTheme.onSurface,
+                ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 
@@ -287,7 +334,12 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     final late = _numberLabel(current['late_count']);
     final leave = _numberLabel(current['leave_days']);
     final halfDay = _numberLabel(current['half_day_count']);
-    final pct = (current['attendance_pct'] as num?)?.toDouble();
+    final pct = _numberValue(
+      current['attendance_pct'] ??
+          current['attendance_percent'] ??
+          current['percent'] ??
+          current['percentage'],
+    );
     final rate = pct == null ? '—' : '${pct.toStringAsFixed(0)}%';
     return GridView.count(
       shrinkWrap: true,
@@ -681,7 +733,25 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           ],
         ),
         const SizedBox(height: 8),
-        ..._leaveRequests.map((lr) => _leaveRequestCard(lr)),
+        if (_leaveRequests.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: context.appTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.appTheme.outlineVariant),
+            ),
+            child: Text(
+              'No leave requests found for this student.',
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
+            ),
+          )
+        else
+          ..._leaveRequests.map((lr) => _leaveRequestCard(lr)),
       ],
     );
   }
@@ -770,7 +840,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   }
 
   Future<void> _showLeaveRequestDialog(BuildContext context) async {
-    if (_activeChildIndex >= _childIds.length) {
+    if (_activeChildIndex >= _childRows.length) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -784,7 +854,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     final request = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
         builder: (_) => _StudentLeaveRequestPage(
-          studentId: _childIds[_activeChildIndex],
+          studentId: _childId(_childRows[_activeChildIndex]),
           headerColor: _headerColor,
         ),
       ),
@@ -1052,6 +1122,11 @@ String _statusCode(dynamic raw) {
 String _numberLabel(dynamic value) {
   if (value is num) return value.toInt().toString();
   return '—';
+}
+
+double? _numberValue(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse('${value ?? ''}'.trim());
 }
 
 String _leaveStartDate(Map<String, dynamic> request) {
