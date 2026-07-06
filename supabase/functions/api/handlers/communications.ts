@@ -1,6 +1,11 @@
 // handlers/communications.ts — announcements, notifications, messages, diary
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok, triggerPushProcessing } from "../index.ts";
+import {
+  fail,
+  invokeNotificationProcessor,
+  ok,
+  triggerPushProcessing,
+} from "../index.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -16,6 +21,13 @@ function canManageSchoolContent(u: User) {
 function text(v: unknown, fallback = "") {
   const value = `${v ?? ""}`.trim();
   return value || fallback;
+}
+
+function maskToken(value: unknown) {
+  const token = text(value);
+  if (!token) return "";
+  if (token.length <= 10) return "***";
+  return `${token.slice(0, 6)}...${token.slice(-4)}`;
 }
 
 function readByList(value: unknown): string[] {
@@ -92,6 +104,166 @@ async function principalUserIdsForSchool(
   const { data } = await svc.from("users").select("id").eq("school_id", school)
     .ilike("role_name", "principal");
   return uniqueText((data ?? []).map((row) => row.id));
+}
+
+function canRunPushDiagnostics(user: User) {
+  return ["principal", "admin", "super_admin"].includes(role(user));
+}
+
+async function runPushDiagnostics(
+  svc: SupabaseClient,
+  user: User,
+  school: string,
+) {
+  const currentRole = role(user);
+  if (!canRunPushDiagnostics(user)) {
+    return fail("forbidden", 403);
+  }
+
+  const [{ data: currentDevices, error: currentDeviceError }, {
+    data: legacyDevices,
+    error: legacyDeviceError,
+  }, {
+    data: preferences,
+    error: preferencesError,
+  }] = await Promise.all([
+    svc.from("notification_devices").select(
+      "id, fcm_token, device_type, is_active, last_registered_at, created_at",
+    ).eq("school_id", school).eq("user_id", user.id).order(
+      "last_registered_at",
+      { ascending: false },
+    ),
+    svc.from("notification_device_tokens").select(
+      "id, token, platform, created_at",
+    ).eq("user_id", user.id).order("created_at", { ascending: false }),
+    svc.from("notification_preferences").select(
+      "enable_push, updated_at",
+    ).eq("school_id", school).eq("user_id", user.id).maybeSingle(),
+  ]);
+
+  if (currentDeviceError) return fail(currentDeviceError.message, 500);
+  if (legacyDeviceError) return fail(legacyDeviceError.message, 500);
+  if (preferencesError && preferencesError.code !== "PGRST116") {
+    return fail(preferencesError.message, 500);
+  }
+
+  const processorHealth = await invokeNotificationProcessor({ healthcheck: true });
+
+  const canonicalDevices = (currentDevices ?? []).map((device) => ({
+    id: device.id,
+    token_preview: maskToken(device.fcm_token),
+    device_type: device.device_type ?? "unknown",
+    is_active: device.is_active ?? false,
+    last_registered_at: device.last_registered_at ?? null,
+    created_at: device.created_at ?? null,
+  }));
+  const legacyTokenRows = (legacyDevices ?? []).map((device) => ({
+    id: device.id,
+    token_preview: maskToken(device.token),
+    platform: device.platform ?? "unknown",
+    created_at: device.created_at ?? null,
+  }));
+
+  const logTitle = `Push diagnostic test (${currentRole})`;
+  const logBody =
+    "Principal-triggered push test routed through notification_events and notification-processor.";
+  const diagnosticReferenceId = `push-diagnostic-${Date.now()}`;
+
+  const { data: logRow, error: logError } = await svc.from("notification_logs")
+    .insert({
+      school_id: school,
+      user_id: user.id,
+      target_role: currentRole,
+      title: logTitle,
+      body: logBody,
+      type: "general",
+      entity_type: "notification_test",
+      entity_id: diagnosticReferenceId,
+      route: "/notification-center-screen",
+      priority: "high",
+      is_read: false,
+    }).select("id, created_at").single();
+  if (logError) return fail(logError.message, 500);
+
+  const { data: eventRow, error: eventError } = await svc.from(
+    "notification_events",
+  ).insert({
+    school_id: school,
+    user_id: user.id,
+    event_type: "push_diagnostic_test",
+    event_data: {
+      message:
+        "This test push was triggered from the principal notification center.",
+      title: logTitle,
+      reference_type: "notification_test",
+      reference_id: logRow.id,
+    },
+  }).select("id, created_at, processed, sent_at").single();
+  if (eventError) return fail(eventError.message, 500);
+
+  const processorResult = await invokeNotificationProcessor({
+    event_ids: [eventRow.id],
+    source: "push_diagnostics",
+  });
+
+  const [{ data: processedEvent, error: processedEventError }, {
+    data: devicesAfter,
+    error: devicesAfterError,
+  }] = await Promise.all([
+    svc.from("notification_events").select(
+      "id, processed, sent_at, created_at, event_type, event_data",
+    ).eq("id", eventRow.id).maybeSingle(),
+    svc.from("notification_devices").select(
+      "id, fcm_token, device_type, is_active, last_registered_at",
+    ).eq("school_id", school).eq("user_id", user.id).order(
+      "last_registered_at",
+      { ascending: false },
+    ),
+  ]);
+
+  if (processedEventError) return fail(processedEventError.message, 500);
+  if (devicesAfterError) return fail(devicesAfterError.message, 500);
+
+  const summary = {
+    has_canonical_device: canonicalDevices.length > 0,
+    canonical_device_count: canonicalDevices.length,
+    active_canonical_device_count: canonicalDevices.filter((device) =>
+      device.is_active
+    ).length,
+    legacy_device_count: legacyTokenRows.length,
+    push_enabled: preferences?.enable_push ?? true,
+    processor_health_ok: processorHealth.ok,
+    processor_run_ok: processorResult.ok,
+    event_processed: processedEvent?.processed ?? false,
+  };
+
+  return ok({
+    requested_at: new Date().toISOString(),
+    actor: {
+      user_id: user.id,
+      school_id: school,
+      role: currentRole,
+    },
+    preference: {
+      enable_push: preferences?.enable_push ?? true,
+      updated_at: preferences?.updated_at ?? null,
+    },
+    canonical_devices: canonicalDevices,
+    legacy_devices: legacyTokenRows,
+    processor_health: processorHealth,
+    notification_log: logRow,
+    notification_event_before: eventRow,
+    processor_run: processorResult,
+    notification_event_after: processedEvent,
+    canonical_devices_after: (devicesAfter ?? []).map((device) => ({
+      id: device.id,
+      token_preview: maskToken(device.fcm_token),
+      device_type: device.device_type ?? "unknown",
+      is_active: device.is_active ?? false,
+      last_registered_at: device.last_registered_at ?? null,
+    })),
+    summary,
+  });
 }
 
 async function validateChatConversationScope(
@@ -1295,6 +1467,9 @@ export async function handleCommunications(
       sent_at: row.created_at ?? null,
     })));
   }
+  if (path === "/notifications/push-diagnostics" && method === "POST") {
+    return runPushDiagnostics(svc, user, school);
+  }
   if (path === "/notifications" && method === "POST") {
     const { data, error } = await svc.from("notification_logs").insert({
       school_id: school,
@@ -1371,11 +1546,6 @@ export async function handleCommunications(
       last_registered_at: new Date().toISOString(),
       is_active: true,
     }, { onConflict: "school_id,user_id,fcm_token" });
-    await svc.from("notification_device_tokens").upsert({
-      user_id: user.id,
-      token,
-      platform: normalizedPlatform,
-    }, { onConflict: "user_id,token" });
     return ok({ success: true });
   }
   if (path === "/notifications/device-tokens" && method === "DELETE") {
@@ -1388,6 +1558,8 @@ export async function handleCommunications(
         schoolId,
       ).eq("user_id", user.id).eq("fcm_token", token);
     }
+    // Legacy cleanup only: keep removing matching rows so older dual-written
+    // tokens do not remain active while the processor still reads the table.
     const { error } = await svc.from("notification_device_tokens").delete().eq(
       "user_id",
       user.id,

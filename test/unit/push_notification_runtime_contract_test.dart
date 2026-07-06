@@ -17,14 +17,18 @@ void main() {
     expect(service, contains('PushNotificationRuntimeStatus'));
     expect(service, contains('runtimeStatus'));
     expect(service, contains('lastRegistrationError'));
+    expect(service, contains('deviceTokenPreview'));
     expect(service, contains('registerDeviceTokenIfPossible()'));
     expect(service, contains('_requestAndroidNotificationPermission'));
     expect(service, contains('requestNotificationsPermission()'));
     expect(service, contains('areNotificationsEnabled()'));
     expect(center, contains('PushNotificationService.instance.runtimeStatus'));
     expect(center, contains('Enable Push'));
+    expect(center, contains('Test Push'));
+    expect(center, contains('_PushDiagnosticsSheet'));
     expect(center, contains('registerDeviceTokenIfPossible()'));
     expect(communicationsApi, contains("'/notifications/register-token'"));
+    expect(communicationsApi, contains("'/notifications/push-diagnostics'"));
     expect(communicationsApi, contains("'fcm_token': token"));
     expect(communicationsApi, contains("'/notifications/revoke-token'"));
   });

@@ -344,6 +344,21 @@ extension BackendCommunicationsApi on BackendApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> runPushDiagnostics() async {
+    try {
+      final response = await _dio.post('/notifications/push-diagnostics');
+      final data = _asMap(response.data);
+      if (data['success'] == true) {
+        return _asMap(data['data']);
+      }
+      throw ServerException(
+        message: data['error'] ?? 'Failed to run push diagnostics',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   // ─── Report Exports ───────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> createReportExport(

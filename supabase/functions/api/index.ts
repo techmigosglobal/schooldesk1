@@ -178,6 +178,49 @@ export function triggerPushProcessing(eventIds: string | string[]) {
   }
 }
 
+export async function invokeNotificationProcessor(
+  payload: Record<string, unknown>,
+) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) {
+    return {
+      ok: false,
+      status: 500,
+      body: { error: "SUPABASE_URL is not configured" },
+    };
+  }
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/notification-processor`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(serviceRoleKey ? { Authorization: `Bearer ${serviceRoleKey}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    const rawText = await response.text();
+    let body: unknown = { raw: rawText };
+    try {
+      body = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      body = { raw: rawText };
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 500,
+      body: { error: String(error) },
+    };
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

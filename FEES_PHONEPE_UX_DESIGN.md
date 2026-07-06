@@ -1,6 +1,6 @@
-# 💳 SchoolDesk Fees — Manual UPI Payment UX Redesign
+# 💳 SchoolDesk Fees — Manual UPI Payment UX Design
 
-> **Design Philosophy:** No payment gateway SDK. Parents pay manually via their installed UPI apps (Google Pay, PhonePe, Paytm, BHIM, etc.) using a one-tap deep link. Principal manages fees manually from time to time. Parents submit payment proof as attachment for principal verification.
+> **Design Philosophy:** No payment gateway SDK, no UPI intent/URL launching. Parents pay manually via their installed UPI apps (Google Pay, PhonePe, Paytm, BHIM, etc.). The app simply shows which UPI apps are installed — the parent taps one, enters the amount themselves, makes the payment, returns to SchoolDesk, and uploads proof for principal verification. Principal manages fees manually from time to time.
 
 ---
 
@@ -9,7 +9,7 @@
 1. [Current State Analysis](#-current-state-analysis)
 2. [Design Goals](#-design-goals)
 3. [App Store / Play Store Policy Notes](#-app-store--play-store-policy-notes)
-4. [Architecture Overview](#-architecture-manual-upi-with-deep-link)
+4. [Architecture Overview](#-architecture-upi-app-picker--manual-payment)
 5. [Screen-by-Screen Wireframes (Parent)](#-parent-role--screen-by-screen-wireframes)
 6. [Screen-by-Screen Wireframes (Principal)](#-principal-role--screen-by-screen-wireframes)
 7. [Payment Flow Diagrams](#-payment-flow-diagrams)
@@ -33,16 +33,14 @@
 | Principal payment requests | ✅ Working | Lists parent-submitted payment requests |
 | Principal payment decision | ✅ Working | Approve/reject/clarify with proof preview |
 | Payment config (UPI ID, QR) | ✅ Working | Principal sets UPI ID + QR image for parents |
-| UPI URI generation | ✅ Working | `upi://pay?pa=...&pn=...&am=...&cu=INR` already generated |
 | Backend API | ✅ Working | `submitFeePaymentProof`, `resubmitFeePaymentProof`, `decideParentPaymentRequest` |
 
 ### What Needs Enhancement
 
 | Gap | Current State | Target State |
 |-----|--------------|--------------|
-| UPI app launch | ❌ Parent must manually copy UPI ID and switch apps | ✅ One-tap "Pay via UPI" opens installed UPI app with pre-filled data |
-| QR scanning | ❌ Parent must use external QR scanner | ✅ In-app camera-based QR scanner |
-| Payment method clarity | ⚠️ Single "Pay fee" button, no method choice | ✅ Clear "Pay via UPI App" + "Scan & Pay" options |
+| UPI app access | ❌ Parent must manually copy UPI ID, leave app, find UPI app | ✅ Shows installed UPI apps as a grid — parent taps one to open |
+| Payment method clarity | ⚠️ Single "Pay fee" button, no method choice | ✅ Clear screen showing available UPI apps + manual option |
 | Principal fee updates | ⚠️ Fee structures exist but manual updates are cumbersome | ✅ Streamlined manual fee update flow |
 | Payment proof flow | ⚠️ Works but has friction points | ✅ Simplified proof submission with guided steps |
 
@@ -56,6 +54,7 @@
 - Fee structure CRUD
 - Invoice generation
 - All existing backend APIs
+- QR code display for manual scanning (existing QR image + Copy UPI ID)
 
 ---
 
@@ -63,51 +62,35 @@
 
 | Goal | How We Solve It |
 |------|----------------|
-| One-tap UPI payment | `url_launcher` opens `upi://pay?pa=...&pn=...&am=...` — parent just enters PIN |
-| In-app QR scanning | `mobile_scanner` or `qr_code_scanner` package scans school QR from camera |
-| Correct amounts | Pre-filled in UPI deep link and QR payload |
+| Easy UPI app access | Show grid of installed UPI apps — parent taps one to open it |
+| Simple payment | Parent enters amount in UPI app manually (no deep links, no pre-fill) |
+| Proof submission | Parent returns to app, uploads screenshot + enters UTR |
 | Principal manual updates | Existing fee structure form + quick-edit on pending invoices |
-| Parent proof submission | Existing screenshot upload + UTR entry, streamlined UI |
 | Receipt on approval | Existing PDF receipt generation, no changes needed |
 
 ---
 
 ## 📱 App Store / Play Store Policy Notes
 
-### Is it allowed to launch third-party UPI apps from within our app?
+### Is this approach allowed on app stores?
 
 **✅ YES — fully allowed on both Google Play Store and Apple App Store.**
 
-Here's why:
+This is the simplest possible approach — we're not even opening the UPI app programmatically. We just detect which UPI apps are installed and show them to the user. The parent taps one and the OS opens it. This is identical to how a contacts app shows "Open in WhatsApp" or "Open in Telegram".
 
-1. **Not a payment aggregator:** Our app never processes, stores, or handles card/bank credentials. We simply open a UPI deep link (`upi://pay://...`) which the OS routes to an installed UPI app.
-
-2. **Standard deep linking pattern:** Thousands of apps (Amazon, Flipkart, Zomato, MakeMyTrip) use this exact pattern. They open UPI apps via intent/deep link without being payment aggregators.
-
-3. **How it works technically:**
-   - Android: `Intent.ACTION_VIEW` with `upi://pay?pa=...&pn=...&am=...&cu=INR`
-   - iOS: `UIApplication.shared.open(URL(string: "upi://pay?...")!)`
-   - The OS shows a chooser dialog if multiple UPI apps are installed
-
-4. **No compliance required:** Since we don't touch payment credentials:
-   - ❌ No PCI-DSS compliance needed
-   - ❌ No RBI payment aggregator license needed
-   - ❌ No KYC integration needed
-   - ✅ Just a standard URL launch via `url_launcher`
-
-5. **App Store review notes:**
-   - Add a note in App Store/Play Store submission: "This app uses standard UPI deep links to open installed payment apps. No payment credentials are collected or processed by this app."
-   - Apple may ask: "Does your app process payments?" → Answer: "No, we launch the user's installed UPI app via standard deep link. Payment happens entirely within the third-party UPI app."
+1. **No payment processing:** Our app never handles payment credentials, amounts, or UPI payloads.
+2. **No deep links:** We don't construct `upi://pay` URIs or use `url_launcher` for payments.
+3. **No QR generation for payment:** We only show the school's QR image for reference.
+4. **App Store review:** Simply state "This app lists installed UPI payment apps for user convenience. All payment processing happens entirely within the third-party UPI app."
 
 ### What if no UPI app is installed?
 
-- Show a fallback message: "No UPI app found. Please install Google Pay, PhonePe, Paytm, or BHIM."
-- Still allow manual QR copy + UTR entry as fallback
-- The existing manual proof upload flow handles this case
+- Show a message: "No UPI app found. Please install Google Pay, PhonePe, Paytm, or BHIM."
+- Still allow manual UPI ID copy + payment proof upload as fallback
 
 ---
 
-## 🏗️ Architecture: Manual UPI with Deep Link
+## 🏗️ Architecture: UPI App Picker + Manual Payment
 
 ```
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
@@ -123,36 +106,39 @@ Here's why:
        │──────────────────>│                   │
        │<──────────────────│                   │
        │                   │                   │
-  4a. Tap "Pay via UPI"   │                   │
-  5. url_launcher opens ──────────────────────>│
-     upi://pay?pa=...&am=...  (OS chooser)    │
+  4. Show UPI apps grid   │                   │
+  5. Parent taps an app   │                   │
+  6. OS opens UPI app ───────────────────────>│
        │                   │                   │
-  6. User enters PIN ─────────────────────────>│
-  7. UPI app processes    │                   │
-  8. Success screen       │                   │
+  7. Parent enters amount ────────────────────>│
+     and pays manually     │                   │
        │                   │                   │
-  9. Return to app        │                   │
-  10. Enter UTR number    │                   │
-  11. Upload screenshot   │                   │
-  12. Submit proof ──────>│                   │
+  8. Parent returns to app │                   │
+  9. Enter UTR number     │                   │
+  10. Upload screenshot   │                   │
+  11. Submit proof ──────>│                   │
        │                   │                   │
-       │                   │  13. Notification  │
+       │                   │  12. Notification │
        │                   │──────────────────>│ Principal
        │                   │                   │
-  14. Principal reviews   │                   │
-  15. Approves/Rejects    │                   │
+  13. Principal reviews   │                   │
+  14. Approves/Rejects    │                   │
        │<──────────────────│                   │
-  16. Receipt generated   │                   │
+  15. Receipt generated   │                   │
 ```
 
 ### Key Packages
 
 | Package | Purpose | Already in project? |
 |---------|---------|-------------------|
-| `url_launcher` | Opens UPI deep links (`upi://pay?...`) | ✅ Yes |
-| `mobile_scanner` | In-app QR code scanning from camera | ❌ Need to add |
+| `device_apps` | Detects installed UPI apps on the device | ❌ Need to add |
 | `qr_flutter` | Generates QR codes for display | ✅ Yes |
 | `clipboard` | Copies UPI ID to clipboard | ✅ Built-in |
+
+**NOT needed:**
+- ❌ `url_launcher` — NOT used for UPI payments
+- ❌ `mobile_scanner` — NOT needed (no QR scanning)
+- ❌ Any UPI SDK — NOT integrated
 
 ---
 
@@ -203,11 +189,11 @@ Here's why:
 └─────────────────────────────────────┘
 ```
 
-**Changes:** Minimal — only the "Pay fee" button behavior changes (now opens UPI method selection instead of directly going to form).
+**Changes:** Minimal — only the "Pay fee" button behavior changes (navigates to new payment screen with UPI app grid).
 
 ---
 
-### SCREEN 2: Payment Method Selection (NEW — Replaces Direct Form Navigation)
+### SCREEN 2: Choose Payment Method (NEW)
 
 ```
 ┌─────────────────────────────────────┐
@@ -217,11 +203,7 @@ Here's why:
 │                                     │
 │  Tuition Fee — Jul 2026             │
 │  Student: Arjun Kumar · Class 5A    │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ Amount Due                   │   │
-│  │ ₹5,000                      │   │
-│  └─────────────────────────────┘   │
+│  Amount Due: ₹5,000                 │
 │                                     │
 │  ── Tuition Month Selection ───     │
 │  (Existing chip-based selector)     │
@@ -230,153 +212,171 @@ Here's why:
 │                                     │
 │  Selected: 1 month · ₹5,000        │
 │                                     │
-│  ── How would you like to pay? ──  │
+│  ── Select a UPI App to Pay ───    │
+│                                     │
+│  ┌─────┐  ┌─────┐  ┌─────┐       │
+│  │     │  │     │  │     │       │
+│  │ GPay│  │Phone│  │Paytm│       │
+│  │     │  │ Pe  │  │     │       │
+│  └─────┘  └─────┘  └─────┘       │
+│                                     │
+│  ┌─────┐  ┌─────┐  ┌─────┐       │
+│  │     │  │     │  │     │       │
+│  │ BHIM│  │Other│  │     │       │
+│  │     │  │ UPI │  │     │       │
+│  └─────┘  └─────┘  └─────┘       │
+│                                     │
+│  (Only apps installed on your       │
+│   device are shown above)           │
+│                                     │
+│  ── Or Pay Manually ────────────   │
 │                                     │
 │  ┌─────────────────────────────┐   │
-│  │ ⚡ Pay via UPI App           │   │
+│  │ 📋 Copy UPI ID & Pay        │   │
 │  │                             │   │
-│  │ Opens Google Pay, PhonePe,  │   │
-│  │ Paytm, or BHIM directly     │   │
-│  │ with ₹5,000 pre-filled      │   │
-│  │                             │   │
-│  │ Just enter your UPI PIN     │   │
+│  │ View QR code and copy the   │   │
+│  │ school UPI ID to pay in any │   │
+│  │ UPI app of your choice      │   │
 │  │                        [→]  │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 📱 Scan School QR            │   │
-│  │                             │   │
-│  │ Open camera to scan the     │   │
-│  │ school's payment QR code    │   │
-│  │                        [→]  │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 📋 Manual UPI Payment        │   │
-│  │                             │   │
-│  │ Copy UPI ID, pay manually,  │   │
-│  │ then upload proof screenshot│   │
-│  │                        [→]  │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  All methods require proof upload   │
-│  for principal verification         │
+│  ⚠️ After payment, upload your     │
+│  payment screenshot and UTR for    │
+│  principal verification.           │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
 **Key Design Decisions:**
-- Three clear paths: UPI App (recommended), Scan QR, Manual
-- UPI App path is highlighted as the fastest option
-- All paths still require proof upload + principal verification
-- Tuition month selection is preserved exactly as-is above the method picker
+- Grid of installed UPI apps with recognizable icons
+- Only apps actually installed on the device are shown
+- "Other UPI" option for apps not detected
+- "Copy UPI ID & Pay" fallback shows existing QR + copy flow
+- Tuition month selection is preserved exactly as-is above the app grid
+- No deep links, no intent launching — parent taps an app and it opens normally
 
 ---
 
-### SCREEN 3A: Pay via UPI App — Confirmation (NEW)
+### SCREEN 3: UPI App Opened — Reminder (NEW)
 
 ```
 ┌─────────────────────────────────────┐
-│ ← Pay via UPI App                   │
-│ Confirm and open your UPI app       │
+│ ← Paying with PhonePe               │
+│ Remember these details              │
 ├─────────────────────────────────────┤
 │                                     │
-│  Tuition Fee — Jul 2026             │
-│  Student: Arjun Kumar · Class 5A    │
-│                                     │
 │  ┌─────────────────────────────┐   │
 │  │                             │   │
-│  │  Amount to Pay              │   │
-│  │  ₹5,000                     │   │
+│  │  ⚠️ Payment Reminder        │   │
 │  │                             │   │
-│  │  Pay to: Greenwood Academy  │   │
-│  │  UPI: school@upi            │   │
+│  │  Your UPI app is opening.   │   │
+│  │  When paying, please note:  │   │
+│  │                             │   │
+│  │  Amount: ₹5,000             │   │
+│  │  Payee: Greenwood Academy   │   │
+│  │  UPI ID: school@upi         │   │
 │  │  Reference: FPR-2026-0042   │   │
 │  │                             │   │
+│  │  After payment, come back   │   │
+│  │  and upload your proof.     │   │
+│  │                             │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  ┌─────────────────────────────┐   │
-│  │      PAY ₹5,000 NOW         │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ⚠️ After payment, you'll return   │
-│  here to upload proof screenshot   │
-│  and enter UTR for verification.   │
+│  💡 Tips:                           │
+│  • Note the UTR/transaction ID     │
+│  • Take a screenshot of success    │
+│  • Enter the exact amount ₹5,000   │
 │                                     │
 │  ┌───────────────────────────┐     │
-│  │  💡 Tip: Note down the    │     │
-│  │  UTR/transaction ID from  │     │
-│  │  your UPI app after       │     │
-│  │  payment. You'll need it. │     │
+│  │  OPEN PHONEPE             │     │
+│  └───────────────────────────┘     │
+│                                     │
+│  ┌───────────────────────────┐     │
+│  │  I've completed payment   │     │
 │  └───────────────────────────┘     │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-**Flow after tap "PAY NOW":**
-1. `url_launcher` opens `upi://pay?pa=school@upi&pn=Greenwood+Academy&am=5000.00&cu=INR&tn=School+fee`
-2. OS shows UPI app chooser (if multiple installed)
-3. User selects their UPI app → enters PIN → payment completes
-4. User returns to SchoolDesk app
-5. App detects return and shows proof upload screen
+**Key Design Decisions:**
+- Shows BEFORE opening the UPI app so parent knows what to pay
+- Displays amount, payee name, UPI ID, and reference number
+- Tips section reminds parent to note UTR and take screenshot
+- "OPEN [APP]" button simply opens the UPI app (using `device_apps` or standard app launch)
+- "I've completed payment" navigates to proof upload screen
+- Parent can also just press back to return to proof upload
 
 ---
 
-### SCREEN 3B: Scan School QR (NEW)
+### SCREEN 4: Upload Payment Proof (Existing — Streamlined)
 
 ```
 ┌─────────────────────────────────────┐
-│ ← Scan QR Code                      │
-│ Point camera at school QR           │
+│ ← Upload Payment Proof              │
+│ Submit proof for verification        │
 ├─────────────────────────────────────┤
 │                                     │
+│  Tuition Fee — Jul 2026             │
+│  Student: Arjun Kumar · ₹5,000     │
+│  Reference: FPR-2026-0042           │
+│                                     │
+│  Step 1: UPI Transaction ID (UTR)   │
 │  ┌─────────────────────────────┐   │
-│  │                             │   │
-│  │      ┌──────────────┐       │   │
-│  │      │              │       │   │
-│  │      │  [CAMERA     │       │   │
-│  │      │   VIEWFINDER]│       │   │
-│  │      │              │       │   │
-│  │      └──────────────┘       │   │
-│  │                             │   │
-│  │  Scanning...                │   │
-│  │                             │   │
+│  │ Enter the UTR from your     │   │
+│  │ UPI app payment screen      │   │
+│  │ ┌───────────────────────┐   │   │
+│  │ │ 123456789012           │   │   │
+│  │ └───────────────────────┘   │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  ── Or enter UPI ID manually ──    │
+│  Step 2: Payment Date               │
 │  ┌─────────────────────────────┐   │
-│  │ UPI ID: [school@upi      ]  │   │
-│  │              [Scan & Pay →] │   │
+│  │ 2026-07-06                  │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  ── School Payment Details ────    │
-│  UPI: school@upi                   │
-│  Name: Greenwood Academy           │
-│  [📋 Copy UPI ID]                  │
+│  Step 3: Upload Screenshot          │
+│  Take a screenshot of the UPI      │
+│  payment success screen and         │
+│  upload it below.                   │
+│  ┌─────────────────────────────┐   │
+│  │  📷 Tap to upload screenshot │   │
+│  └─────────────────────────────┘   │
+│  (jpg, png, or pdf)                │
+│                                     │
+│  Step 4: Notes (optional)           │
+│  ┌─────────────────────────────┐   │
+│  │ Notes for school office      │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  ⚠️ Your payment will be verified   │
+│  by the principal.                  │
+│                                     │
+│  ┌───────────────────────────┐     │
+│  │  SUBMIT PROOF ₹5,000      │     │
+│  └───────────────────────────┘     │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-**Key Design Decisions:**
-- Camera-based QR scanner using `mobile_scanner` package
-- Fallback: manual UPI ID entry if camera unavailable
-- School payment details shown below for reference
-- After scan: opens UPI app with scanned data pre-filled
+**Changes from current:**
+- Cleaner step-by-step layout (1, 2, 3, 4)
+- Reference number pre-filled from payment intent
+- Same UTR + screenshot flow, but with better guidance
+- Existing tuition month selection + amount calculation preserved
 
 ---
 
-### SCREEN 3C: Manual UPI Payment (Current — Streamlined)
+### SCREEN 5: Manual UPI Payment (Existing — QR + Copy ID)
 
 ```
 ┌─────────────────────────────────────┐
 │ ← Manual UPI Payment                │
-│ Pay via UPI and submit proof        │
+│ Scan QR or copy UPI ID              │
 ├─────────────────────────────────────┤
 │                                     │
 │  Tuition Fee — Jul 2026             │
 │  Amount: ₹5,000                     │
 │                                     │
-│  Step 1: Pay via UPI                │
 │  ┌─────────────────────────────┐   │
 │  │                             │   │
 │  │      ┌──────────────┐       │   │
@@ -389,107 +389,33 @@ Here's why:
 │  │  Name: Greenwood Academy   │   │
 │  │                             │   │
 │  │  [📋 Copy UPI ID]          │   │
-│  │  [⚡ Open in UPI App]      │   │
 │  │                             │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  Step 2: Enter Payment Details      │
-│  ┌─────────────────────────────┐   │
-│  │ UPI Transaction ID (UTR)    │   │
-│  │ ┌───────────────────────┐   │   │
-│  │ │ 123456789012           │   │   │
-│  │ └───────────────────────┘   │   │
-│  │                             │   │
-│  │ Payment Date                │   │
-│  │ ┌───────────────────────┐   │   │
-│  │ │ 2026-07-06             │   │   │
-│  │ └───────────────────────┘   │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Step 3: Upload Proof               │
-│  ┌─────────────────────────────┐   │
-│  │ Payment Screenshot          │   │
-│  │ ┌───────────────────────┐   │   │
-│  │ │  📷 Tap to upload      │   │   │
-│  │ └───────────────────────┘   │   │
-│  │                             │   │
-│  │ (jpg, png, or pdf)         │   │
-│  └─────────────────────────────┘   │
+│  After paying, come back here to    │
+│  enter UTR and upload proof.        │
 │                                     │
 │  ┌───────────────────────────┐     │
-│  │    SUBMIT FOR VERIFICATION│     │
+│  │  I'VE COMPLETED PAYMENT   │     │
 │  └───────────────────────────┘     │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
 **Changes from current:**
-- Added "Open in UPI App" button (uses same deep link as Screen 3A)
-- Clearer step-by-step layout
-- Existing UTR + screenshot flow preserved
+- "I've completed payment" button replaces the inline form
+- Navigates to Step 2 (UTR + screenshot) after tap
+- Cleaner separation: payment info screen → proof upload screen
 
 ---
 
-### SCREEN 4: Proof Upload After UPI App Payment (NEW)
+### SCREEN 6: Proof Upload After Manual Payment (Existing — Same as Screen 4)
 
-```
-┌─────────────────────────────────────┐
-│ ← Upload Payment Proof              │
-│ Complete your payment submission     │
-├─────────────────────────────────────┤
-│                                     │
-│  ✅ Payment Initiated               │
-│  Tuition Fee — Jul 2026 · ₹5,000   │
-│  Reference: FPR-2026-0042           │
-│                                     │
-│  ── Enter Payment Details ──────    │
-│                                     │
-│  UPI Transaction ID (UTR)           │
-│  ┌─────────────────────────────┐   │
-│  │ Enter the 12-digit UTR from │   │
-│  │ your UPI app payment screen │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Payment Date                       │
-│  ┌─────────────────────────────┐   │
-│  │ 2026-07-06                  │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ── Upload Screenshot ─────────    │
-│                                     │
-│  Take a screenshot of the UPI      │
-│  payment success screen and         │
-│  upload it below.                   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │  📷 Tap to upload screenshot │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ── Optional Notes ────────────    │
-│  ┌─────────────────────────────┐   │
-│  │ Notes for school office      │   │
-│  │ (optional)                   │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ⚠️ Your payment will be verified   │
-│  by the principal after submission. │
-│                                     │
-│  ┌───────────────────────────┐     │
-│  │  SUBMIT PROOF ₹5,000      │     │
-│  └───────────────────────────┘     │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**Key Design Decisions:**
-- Shown after user returns from UPI app
-- Pre-filled reference number from payment intent
-- UTR input + screenshot upload (same as manual flow)
-- Clear success state at top ("Payment Initiated")
+Same as Screen 4 above — parent enters UTR, uploads screenshot, submits proof.
 
 ---
 
-### SCREEN 5: Payment History (Current — Minimal Changes)
+### SCREEN 7: Payment History (Current — No Changes)
 
 ```
 ┌─────────────────────────────────────┐
@@ -506,15 +432,6 @@ Here's why:
 │  │ Ref: FPR-2026-0042         │   │
 │  └─────────────────────────────┘   │
 │                                     │
-│  ── June 2026 ────────────────      │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ ✅ Tuition Fee - Jun       │   │
-│  │ ₹5,000 · UPI               │   │
-│  │ 05 Jun 2026 · Verified      │   │
-│  │ Ref: FPR-2026-0038         │   │
-│  └─────────────────────────────┘   │
-│                                     │
 │  ── May 2026 ────────────────       │
 │                                     │
 │  ┌─────────────────────────────┐   │
@@ -527,11 +444,11 @@ Here's why:
 └─────────────────────────────────────┘
 ```
 
-**Changes:** Minimal — "PhonePe" badge removed, all payments show as "UPI" method.
+**No changes** — payment history already works correctly.
 
 ---
 
-### SCREEN 6: Receipt (Current — No Changes)
+### SCREEN 8: Receipt (Current — No Changes)
 
 ```
 ┌─────────────────────────────────────┐
@@ -539,27 +456,18 @@ Here's why:
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌─────────────────────────────┐   │
-│  │                             │   │
 │  │    🏫 GREENWOOD ACADEMY     │   │
 │  │    Fee Payment Receipt      │   │
 │  │                             │   │
 │  │  Receipt No: RCP-2026-0042 │   │
 │  │  Date: 06 July 2026        │   │
-│  │                             │   │
 │  │  Student: Arjun Kumar       │   │
 │  │  Class: 5A                  │   │
-│  │                             │   │
 │  │  Fee Type: Tuition Fee      │   │
 │  │  Period: July 2026          │   │
-│  │                             │   │
 │  │  Amount Paid: ₹5,000       │   │
-│  │                             │   │
 │  │  Payment Method: UPI        │   │
-│  │  Transaction ID:           │   │
-│  │  TXN-2026-07-0042          │   │
-│  │                             │   │
 │  │  Status: ✅ Paid & Verified│   │
-│  │                             │   │
 │  └─────────────────────────────┘   │
 │                                     │
 │  [⬇️ Download PDF]  [📤 Share]      │
@@ -567,13 +475,13 @@ Here's why:
 └─────────────────────────────────────┘
 ```
 
-**No changes** — receipt already works correctly.
+**No changes.**
 
 ---
 
 ## 📱 Principal Role — Screen-by-Screen Wireframes
 
-### SCREEN 7: Principal Fee Home (Current — No Changes)
+### SCREEN 9: Principal Fee Home (Current — No Changes)
 
 ```
 ┌─────────────────────────────────────┐
@@ -587,7 +495,6 @@ Here's why:
 │  └──────┘ └─────┘ └─────┘ └─────┘  │
 │                                     │
 │  ── Quick Actions ─────────────     │
-│                                     │
 │  📋 Fee Structures                  │
 │  💰 Collect Fee                     │
 │  📄 Student Ledger & Dues           │
@@ -602,11 +509,11 @@ Here's why:
 └─────────────────────────────────────┘
 ```
 
-**No changes** — principal fee home already works.
+**No changes.**
 
 ---
 
-### SCREEN 8: Principal Payment Requests (Current — Minimal Changes)
+### SCREEN 10: Principal Payment Requests (Current — No Changes)
 
 ```
 ┌─────────────────────────────────────┐
@@ -615,36 +522,16 @@ Here's why:
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌──────┐ ┌──────┐ ┌──────┐       │
-│  │Pending│ │Clarif.│ │All   │ ← Tabs│
+│  │Pending│ │Clarif.│ │All   │       │
 │  │  3   │ │  1   │ │  6   │       │
 │  └──────┘ └──────┘ └──────┘       │
-│                                     │
-│  ── Pending Review ─────────────    │
 │                                     │
 │  ┌─────────────────────────────┐   │
 │  │ 👤 Rahul Sharma             │   │
 │  │ Class 3B · Tuition Fee Jun  │   │
-│  │ ₹5,000                      │   │
-│  │                             │   │
-│  │ UTR: 987654321012          │   │
-│  │ Submitted: 05 Jul 2026     │   │
+│  │ ₹5,000 · UTR: 987654321012 │   │
 │  │                             │   │
 │  │ 📷 [View Screenshot]       │   │
-│  │                             │   │
-│  │ [✅ Approve] [❌ Reject]   │   │
-│  │ [💬 Ask Clarification]     │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ 👤 Meera Patel              │   │
-│  │ Class 7A · Library Fee      │   │
-│  │ ₹2,000                      │   │
-│  │                             │   │
-│  │ UTR: 112233445566          │   │
-│  │ Submitted: 04 Jul 2026     │   │
-│  │                             │   │
-│  │ 📷 [View Screenshot]       │   │
-│  │                             │   │
 │  │ [✅ Approve] [❌ Reject]   │   │
 │  │ [💬 Ask Clarification]     │   │
 │  └─────────────────────────────┘   │
@@ -652,50 +539,17 @@ Here's why:
 └─────────────────────────────────────┘
 ```
 
-**No changes** — principal payment request review already works.
+**No changes.**
 
 ---
 
-### SCREEN 9: Principal Fee Structure Form (Current — No Changes)
+### SCREEN 11: Principal Fee Structure Form (Current — No Changes)
 
-```
-┌─────────────────────────────────────┐
-│ ← Fee Structure Form                │
-│ Create or edit fee structure         │
-├─────────────────────────────────────┤
-│                                     │
-│  Academic Year: 2026-27             │
-│  ┌─────────────────────────────┐   │
-│  │ Class: [5A           ▼]    │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  Fee Components:                    │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │ Tuition Fee                 │   │
-│  │ Type: [Monthly        ▼]   │   │
-│  │ Amount: [₹5,000      ]    │   │
-│  └─────────────────────────────┘   │
-│  ┌─────────────────────────────┐   │
-│  │ Library Fee                 │   │
-│  │ Type: [One-time       ▼]   │   │
-│  │ Amount: [₹2,000       ]   │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  [+ Add Fee Component]              │
-│                                     │
-│  ┌───────────────────────────┐     │
-│  │    SAVE FEE STRUCTURE     │     │
-│  └───────────────────────────┘     │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**No changes** — principal can already create/edit fee structures and generate invoices.
+Fee structure CRUD, invoice generation, and manual payment recording are all unchanged.
 
 ---
 
-### SCREEN 10: Principal Quick Fee Update (NEW — Streamlined)
+### SCREEN 12: Principal Quick Fee Update (NEW — Streamlined)
 
 ```
 ┌─────────────────────────────────────┐
@@ -711,18 +565,11 @@ Here's why:
 │                                     │
 │  ┌─────────────────────────────┐   │
 │  │ 👤 Arjun Kumar              │   │
-│  │ Current: ₹5,000             │   │
-│  │ New:     [₹5,000      ]    │   │
+│  │ Current: ₹5,000  New: [    ]│   │
 │  │                     [Update]│   │
 │  ├─────────────────────────────┤   │
 │  │ 👤 Priya Singh              │   │
-│  │ Current: ₹5,000             │   │
-│  │ New:     [₹4,500      ]    │   │
-│  │                     [Update]│   │
-│  ├─────────────────────────────┤   │
-│  │ 👤 Rahul Sharma             │   │
-│  │ Current: ₹5,000             │   │
-│  │ New:     [₹5,500      ]    │   │
+│  │ Current: ₹5,000  New: [    ]│   │
 │  │                     [Update]│   │
 │  └─────────────────────────────┘   │
 │                                     │
@@ -736,98 +583,54 @@ Here's why:
 **Key Design Decisions:**
 - Quick-edit form for adjusting amounts on existing invoices
 - Filters by class + fee type + month
-- Bulk update or individual update
 - Uses existing `updateRaw` backend API
-
----
-
-### SCREEN 11: Principal Manual Payment Recording (Current — No Changes)
-
-```
-┌─────────────────────────────────────┐
-│ ← Record Payment                    │
-│ Log cash/offline payment            │
-├─────────────────────────────────────┤
-│                                     │
-│  Student: [Arjun Kumar       ▼]    │
-│  Invoice: [Tuition Jul 2026  ▼]    │
-│  Amount:  [₹5,000            ]    │
-│  Mode:    [Cash              ▼]    │
-│  Date:    [2026-07-06        ]    │
-│  Notes:   [Cash payment received]  │
-│                                     │
-│  ┌───────────────────────────┐     │
-│  │    RECORD PAYMENT          │     │
-│  └───────────────────────────┘     │
-│                                     │
-└─────────────────────────────────────┘
-```
-
-**No changes** — principal can already record manual/cash payments.
 
 ---
 
 ## 🔄 Payment Flow Diagrams
 
-### Flow 1: One-Tap UPI App Payment
+### Flow 1: Pay via UPI App (Primary Flow)
 
 ```
-Parent                App                Backend              UPI App
+Parent                App                Backend             UPI App
  │                    │                    │                    │
  │── Select fee ────>│                    │                    │
  │── Choose months ─>│                    │                    │
- │── Tap "Pay via   >│                    │                    │
- │   UPI App"        │                    │                    │
+ │                    │                    │                    │
  │                    │── Create Intent ──>│                    │
- │                    │   (amount, invoice)│                    │
  │                    │<─ reference ──────│                    │
  │                    │                    │                    │
- │── Tap "PAY NOW" ─>│                    │                    │
- │                    │── url_launcher ───────────────────────>│
- │                    │   upi://pay?pa=... │                    │
+ │── See UPI app     │                    │                    │
+ │   grid            │                    │                    │
+ │── Tap "PhonePe" ─>│                    │                    │
+ │                    │                    │                    │
+ │<── Show reminder  │                    │                    │
+ │   (amount, payee, │                    │                    │
+ │    UPI ID)        │                    │                    │
+ │                    │                    │                    │
+ │── Tap "Open       │                    │                    │
+ │   PhonePe"        │── OS opens ────────────────────────────>│
+ │                    │                    │                    │
  │<── UPI app opens ─│────────────────────────────────────────>│
- │── Enter PIN ──────────────────────────────────────────────>│
+ │── Enter amount ────────────────────────────────────────────>│
+ │── Enter UPI PIN ──────────────────────────────────────────>│
  │── Payment success ─│───────────────────────────────────────>│
  │                    │                    │                    │
  │── Return to app ─>│                    │                    │
- │<── Show proof     │                    │                    │
- │   upload form     │                    │                    │
+ │<── Proof upload   │                    │                    │
+ │   form            │                    │                    │
  │                    │                    │                    │
  │── Enter UTR ─────>│                    │                    │
  │── Upload proof ──>│                    │                    │
  │── Submit ────────>│── Submit Proof ───>│                    │
- │<── Pending status ─│                    │                    │
- │                    │                    │── Notification ──>│ Principal
+ │<── Pending ───────│                    │                    │
+ │                    │                    │── Notification ──>│
  │                    │                    │                    │
  │                    │                    │<── Approve ───────│
  │<── Receipt ───────│                    │                    │
 ```
 
-### Flow 2: Scan QR Code Payment
-
-```
-Parent                App                Backend              UPI App
- │                    │                    │                    │
- │── Tap "Scan QR" ─>│                    │                    │
- │<── Camera opens ──│                    │                    │
- │── Scan QR ───────>│                    │                    │
- │   (decodes UPI    │                    │                    │
- │    payload)       │                    │                    │
- │                    │── Create Intent ──>│                    │
- │                    │<─ reference ──────│                    │
- │                    │                    │                    │
- │── Confirm & Pay ─>│                    │                    │
- │                    │── url_launcher ───────────────────────>│
- │<── UPI app opens ─│────────────────────────────────────────>│
- │── Enter PIN ──────────────────────────────────────────────>│
- │── Success ────────────────────────────────────────────────>│
- │                    │                    │                    │
- │── Return to app ─>│                    │                    │
- │── Upload proof ──>│── Submit Proof ───>│                    │
- │<── Pending ───────│                    │                    │
-```
-
-### Flow 3: Manual UPI Payment (Copy + Paste)
+### Flow 2: Manual UPI Payment (Copy UPI ID)
 
 ```
 Parent                App                Backend             Principal
@@ -835,13 +638,16 @@ Parent                App                Backend             Principal
  │── Tap "Manual" ──>│                    │                    │
  │<── Show QR + ID ──│                    │                    │
  │── Copy UPI ID ───>│                    │                    │
- │── Open UPI app ──>│                    │                    │
- │── Paste UPI ID ──>│                    │                    │
- │── Enter amount ──>│                    │                    │
+ │── Open own UPI ──>│                    │                    │
+ │── Paste + amount ─>│                    │                    │
  │── Pay ───────────>│                    │                    │
  │── Screenshot ────>│                    │                    │
  │                    │                    │                    │
- │── Return to app ─>│                    │                    │
+ │── Return ─────────>│                    │                    │
+ │── Tap "I've done" >│                    │                    │
+ │<── UTR + proof    │                    │                    │
+ │   form            │                    │                    │
+ │                    │                    │                    │
  │── Enter UTR ─────>│                    │                    │
  │── Upload proof ──>│── Submit Proof ──>│                    │
  │<── Pending ───────│                    │── Notification ──>│
@@ -849,7 +655,7 @@ Parent                App                Backend             Principal
  │<── Receipt ───────│                    │                    │
 ```
 
-### Flow 4: Principal Manual Fee Update
+### Flow 3: Principal Manual Fee Update
 
 ```
 Principal             App                Backend
@@ -877,86 +683,65 @@ Principal             App                Backend
 
 | File | Purpose |
 |------|---------|
-| `lib/features/finance/presentation/screens/parent_payment_screens/parent_payment_method_screen.dart` | NEW — Payment method selection (UPI App / Scan QR / Manual) |
-| `lib/features/finance/presentation/screens/parent_payment_screens/parent_upi_app_payment_screen.dart` | NEW — UPI app payment confirmation + proof upload after return |
-| `lib/features/finance/presentation/screens/parent_payment_screens/parent_qr_scanner_screen.dart` | NEW — In-app QR code scanner |
-| `lib/features/finance/presentation/screens/parent_payment_screens/upi_app_launcher_service.dart` | NEW — Service to detect installed UPI apps and launch via deep link |
+| `lib/features/finance/presentation/screens/parent_payment_screens/parent_payment_method_screen.dart` | NEW — Payment method screen with UPI app grid + manual option |
+| `lib/features/finance/presentation/screens/parent_payment_screens/parent_upi_reminder_screen.dart` | NEW — Shows amount/payee/reference reminder before opening UPI app |
+| `lib/features/finance/presentation/screens/parent_payment_screens/parent_proof_upload_screen.dart` | NEW — Dedicated UTR + screenshot upload screen (extracted from existing form) |
+| `lib/features/finance/presentation/screens/parent_payment_screens/upi_app_detector_service.dart` | NEW — Detects installed UPI apps on device |
 
 ### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart` | Change "Pay fee" button to navigate to new Payment Method Selection screen |
-| `lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart` | Add "Open in UPI App" button in UPI panel; preserve tuition month selection |
-| `lib/features/finance/presentation/screens/admin_fees_screen/admin_fees_screen.dart` | Add "Quick Fee Update" action in fee structures view |
+| `lib/features/finance/presentation/screens/parent_fees_screen/parent_fees_screen.dart` | "Pay fee" button navigates to new Payment Method screen |
+| `lib/features/finance/presentation/screens/parent_fees_screen/parent_payment_request_form_screen.dart` | Simplify: split into payment info + proof upload steps |
 | `lib/routes/app_routes.dart` | Add routes for new screens |
 | `lib/routes/schooldesk_screen_registry.dart` | Register new screens |
 | `lib/routes/route_access_guard.dart` | Add route permissions |
-
-### Files to Remove/Archive
-
-| File | Reason |
-|------|--------|
-| None | No PhonePe files exist in codebase — only the MD document references them |
 
 ---
 
 ## 📋 Implementation Planning
 
-### Phase 1: UPI App Launch (Week 1)
+### Phase 1: UPI App Grid + Payment Flow (Week 1)
 
-**Goal:** Parents can tap one button to open their UPI app with pre-filled payment data.
+**Goal:** Parent sees installed UPI apps, taps one, gets a reminder, opens it, pays, returns, uploads proof.
 
-| Task | Effort | Files |
-|------|--------|-------|
-| Create `UpiAppLauncherService` — detect installed UPI apps, build `upi://pay` URI, launch via `url_launcher` | 2 hours | New file |
-| Create `ParentPaymentMethodScreen` — three-option picker (UPI App / Scan QR / Manual) | 3 hours | New file |
-| Modify `ParentFeesScreen` — "Pay fee" button navigates to new method selection | 1 hour | Existing file |
-| Add "Open in UPI App" button to existing `ParentPaymentRequestFormScreen` UPI panel | 1 hour | Existing file |
-| Handle app lifecycle — detect return from UPI app, show proof upload form | 2 hours | New + existing files |
-| Test on Android (Google Pay, PhonePe, Paytm, BHIM) | 2 hours | Manual testing |
+| Task | Effort |
+|------|--------|
+| Create `UpiAppDetectorService` — detect installed UPI apps using `device_apps` package | 2 hours |
+| Create `ParentPaymentMethodScreen` — grid of UPI apps + manual fallback | 3 hours |
+| Create `ParentUpiReminderScreen` — shows amount, payee, UPI ID, reference before opening UPI app | 2 hours |
+| Create `ParentProofUploadScreen` — dedicated UTR + screenshot upload (cleaner step-by-step) | 3 hours |
+| Modify `ParentFeesScreen` — "Pay fee" button navigates to new flow | 1 hour |
+| Add routes and screen registration | 1 hour |
+| Test on Android with Google Pay, PhonePe, Paytm | 2 hours |
 
-**Total: ~11 hours**
+**Total: ~14 hours**
 
-### Phase 2: In-App QR Scanner (Week 2)
-
-**Goal:** Parents can scan school QR code from within the app.
-
-| Task | Effort | Files |
-|------|--------|-------|
-| Add `mobile_scanner` package dependency | 0.5 hours | pubspec.yaml |
-| Create `ParentQrScannerScreen` — camera viewfinder, decode UPI payload, fallback to manual entry | 4 hours | New file |
-| Handle camera permissions (Android + iOS) | 1 hour | New file |
-| Connect scanner output to UPI app launch flow | 1 hour | New + existing files |
-| Test on physical devices (camera permission, QR decode accuracy) | 2 hours | Manual testing |
-
-**Total: ~8.5 hours**
-
-### Phase 3: Principal Quick Fee Update (Week 3)
+### Phase 2: Principal Quick Fee Update (Week 2)
 
 **Goal:** Principal can quickly adjust fee amounts on existing invoices.
 
-| Task | Effort | Files |
-|------|--------|-------|
-| Add "Quick Fee Update" action to `AdminFeesScreen` fee structures view | 2 hours | Existing file |
-| Create inline editing UI for invoice amounts (class/type/month filter) | 3 hours | Existing file |
-| Wire to existing `updateRaw` backend API | 1 hour | Existing file |
-| Test bulk update + individual update | 1 hour | Manual testing |
+| Task | Effort |
+|------|--------|
+| Add "Quick Fee Update" action to `AdminFeesScreen` | 2 hours |
+| Create inline editing UI for invoice amounts (class/type/month filter) | 3 hours |
+| Wire to existing `updateRaw` backend API | 1 hour |
+| Test bulk update + individual update | 1 hour |
 
 **Total: ~7 hours**
 
-### Phase 4: Polish & Testing (Week 4)
+### Phase 3: Polish & Testing (Week 3)
 
-| Task | Effort | Files |
-|------|--------|-------|
-| Handle edge cases: no UPI app installed, camera unavailable, network errors | 3 hours | Multiple files |
-| Add analytics events for payment method selection, UPI launch, proof upload | 2 hours | Multiple files |
-| UI polish: animations, loading states, error states | 2 hours | Multiple files |
-| Write unit tests for UpiAppLauncherService | 2 hours | Test files |
-| Write widget tests for payment method selection screen | 2 hours | Test files |
-| Full regression test on existing payment flows | 2 hours | Manual testing |
+| Task | Effort |
+|------|--------|
+| Handle edge cases: no UPI app installed, network errors | 2 hours |
+| UI polish: animations, loading states, error states | 2 hours |
+| Write unit tests for UpiAppDetectorService | 2 hours |
+| Write widget tests for payment method screen | 2 hours |
+| Full regression test on existing payment flows | 2 hours |
 
-**Total: ~13 hours**
+**Total: ~10 hours**
 
 ---
 
@@ -965,18 +750,20 @@ Principal             App                Backend
 | Component | Change Level | Notes |
 |-----------|-------------|-------|
 | Tuition month selector | **NO CHANGE** | Preserved exactly as-is |
-| UPI deep link launch | **NEW** | One-tap opens installed UPI app |
-| QR code scanning | **NEW** | In-app camera scanner |
-| Payment method selection | **NEW** | Three clear paths before payment |
-| Proof upload flow | **MINOR** | Added "Open in UPI App" button, clearer steps |
+| UPI app grid | **NEW** | Shows installed apps, parent taps to open |
+| UPI reminder screen | **NEW** | Shows amount/payee before opening UPI app |
+| Proof upload screen | **NEW** | Clean step-by-step UTR + screenshot upload |
+| Manual UPI (QR + Copy ID) | **MINOR** | Split into info screen → proof upload screen |
+| Payment history | **NO CHANGE** | Already works |
+| Receipt generation | **NO CHANGE** | Already works |
 | Principal fee structures | **NO CHANGE** | CRUD already works |
 | Principal payment requests | **NO CHANGE** | Approve/reject/clarify already works |
-| Principal fee collection | **NO CHANGE** | Manual payment recording already works |
 | Principal quick fee update | **NEW** | Quick-edit invoice amounts |
-| Receipt generation | **NO CHANGE** | PDF receipts already work |
 | Backend API | **NO CHANGE** | All endpoints already exist |
 | Database schema | **NO CHANGE** | No new tables needed |
 | PhonePe SDK | **REMOVED** | Never existed in codebase |
+| UPI deep links | **NOT USED** | Parent opens UPI app manually |
+| QR code scanning | **NOT USED** | Only QR display for reference |
 
 ---
 
@@ -997,6 +784,6 @@ Principal             App                Backend
 
 ---
 
-*Document generated for SchoolDesk Fees Manual UPI Payment UX Redesign*
+*Document generated for SchoolDesk Fees Manual UPI Payment UX Design*
 *Date: July 6, 2026*
-*Approach: Manual UPI with deep link launch — no payment gateway SDK*
+*Approach: UPI app picker + manual payment — no SDK, no deep links, no intent launching*

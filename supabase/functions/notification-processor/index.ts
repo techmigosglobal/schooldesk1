@@ -20,6 +20,22 @@ interface ServiceAccount {
   private_key: string;
 }
 
+interface HealthCheckResult {
+  ok: boolean;
+  environment: {
+    supabaseUrl: string;
+    serviceRoleKeyPresent: boolean;
+    firebaseProjectId: string;
+    serviceAccountEmail: string;
+  };
+  oauth: {
+    attempted: boolean;
+    status: number | null;
+    ok: boolean;
+    error?: string;
+  };
+}
+
 function getServiceAccount(): ServiceAccount | null {
   const raw = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
   if (!raw) return null;
@@ -29,6 +45,18 @@ function getServiceAccount(): ServiceAccount | null {
     console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON");
     return null;
   }
+}
+
+function maskValue(value: string, visiblePrefix = 3, visibleSuffix = 2): string {
+  if (!value) return "<missing>";
+  if (value.length <= visiblePrefix + visibleSuffix) return "***";
+  return `${value.slice(0, visiblePrefix)}***${value.slice(-visibleSuffix)}`;
+}
+
+function maskEmail(email: string): string {
+  const [localPart, domainPart] = email.split("@");
+  if (!localPart || !domainPart) return maskValue(email);
+  return `${maskValue(localPart, 2, 1)}@${domainPart}`;
 }
 
 /** Base64url-encode without padding (RFC 7515 §2). */
@@ -124,6 +152,98 @@ async function getAccessToken(): Promise<string> {
   cachedAccessToken = data.access_token;
   tokenExpiresAt = Date.now() + data.expires_in * 1000;
   return cachedAccessToken;
+}
+
+async function runHealthCheck(): Promise<HealthCheckResult> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const serviceAccount = getServiceAccount();
+  const environment = {
+    supabaseUrl: maskValue(supabaseUrl, 8, 12),
+    serviceRoleKeyPresent: serviceRoleKey.length > 0,
+    firebaseProjectId: maskValue(FCM_PROJECT_ID, 4, 3),
+    serviceAccountEmail: serviceAccount?.client_email
+      ? maskEmail(serviceAccount.client_email)
+      : "<missing>",
+  };
+  console.log("[notification-processor] healthcheck env", environment);
+
+  if (!serviceAccount || !FCM_PROJECT_ID) {
+    const missing = !serviceAccount
+      ? "FIREBASE_SERVICE_ACCOUNT_JSON not set"
+      : "FIREBASE_PROJECT_ID is not set";
+    console.error("[notification-processor] healthcheck oauth skipped", missing);
+    return {
+      ok: false,
+      environment,
+      oauth: {
+        attempted: false,
+        status: null,
+        ok: false,
+        error: missing,
+      },
+    };
+  }
+
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const jwt = await signJwt({
+      iss: serviceAccount.client_email,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: "https://oauth2.googleapis.com/token",
+      exp: now + 3600,
+      iat: now,
+    });
+    const resp = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        assertion: jwt,
+      }),
+    });
+    console.log(
+      `[notification-processor] healthcheck oauth status=${resp.status}`,
+    );
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error(
+        "[notification-processor] healthcheck oauth failure",
+        errorText,
+      );
+      return {
+        ok: false,
+        environment,
+        oauth: {
+          attempted: true,
+          status: resp.status,
+          ok: false,
+          error: errorText.slice(0, 240),
+        },
+      };
+    }
+    return {
+      ok: true,
+      environment,
+      oauth: {
+        attempted: true,
+        status: resp.status,
+        ok: true,
+      },
+    };
+  } catch (error) {
+    console.error("[notification-processor] healthcheck oauth exception", error);
+    return {
+      ok: false,
+      environment,
+      oauth: {
+        attempted: true,
+        status: null,
+        ok: false,
+        error: String(error).slice(0, 240),
+      },
+    };
+  }
 }
 
 // ─── FCM HTTP v1 API ─────────────────────────────────────────────────────────
@@ -628,6 +748,13 @@ async function processNotificationEvent(
 Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.healthcheck === true) {
+      const result = await runHealthCheck();
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const eventIds = Array.isArray(body.event_ids)
       ? body.event_ids.map((id) => `${id}`).filter(Boolean)
       : [];

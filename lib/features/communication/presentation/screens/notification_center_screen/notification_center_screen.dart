@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/notification_route_resolver.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
@@ -30,6 +33,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   NotificationService? _service;
   bool _loading = true;
   bool _markingAllRead = false;
+  bool _runningPushDiagnostic = false;
   String? _error;
   String _parentFilter = 'all';
 
@@ -540,11 +544,14 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             categoryLabel: _categoryLabel(category),
             hasBackendIssue: _error != null,
             runtimeStatus: PushNotificationService.instance.runtimeStatus,
+            showPushDiagnostics: widget.role.trim().toLowerCase() == 'principal',
+            diagnosticsInFlight: _runningPushDiagnostic,
             onRetryPush: () async {
               await PushNotificationService.instance
                   .registerDeviceTokenIfPossible();
               if (context.mounted) setState(() {});
             },
+            onRunPushDiagnostics: _runPushDiagnostics,
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -621,6 +628,35 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         return 'Health';
       default:
         return 'All';
+    }
+  }
+
+  Future<void> _runPushDiagnostics() async {
+    if (_runningPushDiagnostic) return;
+    setState(() => _runningPushDiagnostic = true);
+    try {
+      await PushNotificationService.instance.registerDeviceTokenIfPossible();
+      final report = await BackendApiClient.instance.runPushDiagnostics();
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => _PushDiagnosticsSheet(
+          runtimeStatus: PushNotificationService.instance.runtimeStatus,
+          report: report,
+        ),
+      );
+      await _init(forceRefresh: true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Push diagnostics failed: $error'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _runningPushDiagnostic = false);
     }
   }
 
@@ -864,6 +900,9 @@ class _NotificationSummaryPanel extends StatelessWidget {
   final bool hasBackendIssue;
   final PushNotificationRuntimeStatus runtimeStatus;
   final Future<void> Function() onRetryPush;
+  final Future<void> Function()? onRunPushDiagnostics;
+  final bool showPushDiagnostics;
+  final bool diagnosticsInFlight;
 
   const _NotificationSummaryPanel({
     required this.allCount,
@@ -873,6 +912,9 @@ class _NotificationSummaryPanel extends StatelessWidget {
     required this.hasBackendIssue,
     required this.runtimeStatus,
     required this.onRetryPush,
+    this.onRunPushDiagnostics,
+    this.showPushDiagnostics = false,
+    this.diagnosticsInFlight = false,
   });
 
   @override
@@ -928,13 +970,224 @@ class _NotificationSummaryPanel extends StatelessWidget {
                   ? Icons.notifications_active_rounded
                   : Icons.notifications_off_rounded,
               size: 16,
+              ),
+              label: Text(
+                runtimeStatus.deviceRegistrationSucceeded
+                    ? 'Push Ready'
+                    : 'Enable Push',
+              ),
             ),
-            label: Text(
-              runtimeStatus.deviceRegistrationSucceeded
-                  ? 'Push Ready'
-                  : 'Enable Push',
+          if (showPushDiagnostics)
+            FilledButton.icon(
+              onPressed: diagnosticsInFlight ? null : onRunPushDiagnostics,
+              icon: diagnosticsInFlight
+                  ? const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.bug_report_rounded, size: 16),
+              label: const Text('Test Push'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PushDiagnosticsSheet extends StatelessWidget {
+  final PushNotificationRuntimeStatus runtimeStatus;
+  final Map<String, dynamic> report;
+
+  const _PushDiagnosticsSheet({
+    required this.runtimeStatus,
+    required this.report,
+  });
+
+  String _boolLabel(bool value) => value ? 'yes' : 'no';
+
+  String _prettyJson(Object? value) {
+    if (value == null) return 'null';
+    if (value is String) return value;
+    return const JsonEncoder.withIndent('  ').convert(value);
+  }
+
+  List<String> _diagnosisLines(Map<String, dynamic> summary) {
+    final sent = ((report['processor_run'] as Map?)?['body'] as Map?)?['sent'];
+    final activeCount = summary['active_canonical_device_count'] ?? 0;
+    final lines = <String>[];
+    if (!runtimeStatus.firebaseAvailable) {
+      lines.add('Local Firebase initialization failed before any push work started.');
+    }
+    if (!runtimeStatus.hasDeviceToken) {
+      lines.add('This device does not currently have an FCM token.');
+    }
+    if (!runtimeStatus.deviceRegistrationSucceeded) {
+      lines.add('The app has not confirmed backend token registration on this device.');
+    }
+    if ((summary['processor_health_ok'] ?? false) != true) {
+      lines.add('The notification processor healthcheck failed, so env or OAuth is broken server-side.');
+    }
+    if (activeCount == 0) {
+      lines.add('The backend has no active canonical device tokens for this user.');
+    }
+    if ((summary['event_processed'] ?? false) == true && (sent ?? 0) == 0 && activeCount > 0) {
+      lines.add('The event reached the processor but no push send was recorded; inspect token validity and FCM response details in the full report.');
+    }
+    if (lines.isEmpty) {
+      lines.add('No obvious blocker was detected by the quick heuristics. Use the full report to inspect token state and processor output.');
+    }
+    return lines;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = Map<String, dynamic>.from(
+      report['summary'] as Map? ?? const {},
+    );
+    final actor = Map<String, dynamic>.from(
+      report['actor'] as Map? ?? const {},
+    );
+    final preference = Map<String, dynamic>.from(
+      report['preference'] as Map? ?? const {},
+    );
+    final processorHealth = Map<String, dynamic>.from(
+      report['processor_health'] as Map? ?? const {},
+    );
+    final processorRun = Map<String, dynamic>.from(
+      report['processor_run'] as Map? ?? const {},
+    );
+    final eventAfter = Map<String, dynamic>.from(
+      report['notification_event_after'] as Map? ?? const {},
+    );
+    final diagnosis = _diagnosisLines(summary);
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Push Diagnostics',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Runs the existing notification pipeline for your principal account and shows where it succeeded or failed.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.72,
+              child: ListView(
+                children: [
+                  _DiagnosticSection(
+                    title: 'Local Device',
+                    lines: [
+                      'firebaseAvailable: ${_boolLabel(runtimeStatus.firebaseAvailable)}',
+                      'localNotificationsReady: ${_boolLabel(runtimeStatus.localNotificationsReady)}',
+                      'hasDeviceToken: ${_boolLabel(runtimeStatus.hasDeviceToken)}',
+                      'deviceTokenPreview: ${runtimeStatus.deviceTokenPreview.isEmpty ? '<missing>' : runtimeStatus.deviceTokenPreview}',
+                      'deviceRegistrationSucceeded: ${_boolLabel(runtimeStatus.deviceRegistrationSucceeded)}',
+                      'permissionStatus: ${runtimeStatus.permissionStatus}',
+                      'lastRegistrationError: ${runtimeStatus.lastRegistrationError.isEmpty ? '<none>' : runtimeStatus.lastRegistrationError}',
+                    ],
+                  ),
+                  _DiagnosticSection(
+                    title: 'Backend Summary',
+                    lines: [
+                      'actorRole: ${actor['role'] ?? '<unknown>'}',
+                      'pushEnabled: ${preference['enable_push'] ?? true}',
+                      'canonicalDeviceCount: ${summary['canonical_device_count'] ?? 0}',
+                      'activeCanonicalDeviceCount: ${summary['active_canonical_device_count'] ?? 0}',
+                      'legacyDeviceCount: ${summary['legacy_device_count'] ?? 0}',
+                      'processorHealthOk: ${summary['processor_health_ok'] ?? false}',
+                      'processorRunOk: ${summary['processor_run_ok'] ?? false}',
+                      'eventProcessed: ${summary['event_processed'] ?? false}',
+                    ],
+                  ),
+                  _DiagnosticSection(title: 'Likely Issue', lines: diagnosis),
+                  _DiagnosticSection(
+                    title: 'Processor Health',
+                    code: _prettyJson(processorHealth),
+                  ),
+                  _DiagnosticSection(
+                    title: 'Processor Run',
+                    code: _prettyJson(processorRun),
+                  ),
+                  _DiagnosticSection(
+                    title: 'Event After Processing',
+                    code: _prettyJson(eventAfter),
+                  ),
+                  _DiagnosticSection(
+                    title: 'Full Report',
+                    code: _prettyJson(report),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DiagnosticSection extends StatelessWidget {
+  final String title;
+  final List<String> lines;
+  final String? code;
+
+  const _DiagnosticSection({
+    required this.title,
+    this.lines = const [],
+    this.code,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.appTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
             ),
           ),
+          if (lines.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(line, style: Theme.of(context).textTheme.bodySmall),
+              ),
+          ],
+          if (code != null) ...[
+            const SizedBox(height: 8),
+            SelectableText(
+              code!,
+              style: GoogleFonts.robotoMono(
+                fontSize: 12,
+                color: context.appTheme.onSurface,
+              ),
+            ),
+          ],
         ],
       ),
     );

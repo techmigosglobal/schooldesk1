@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 void main() {
-  test('notification processor and legacy routes bridge both token stores', () {
+  test('notification processor reads legacy rows but current writes stay canonical', () {
     final processor = File(
       'supabase/functions/notification-processor/index.ts',
     ).readAsStringSync();
@@ -31,7 +31,11 @@ void main() {
     expect(processor, contains('deactivateInvalidToken'));
     expect(communications, contains('path === "/notifications/device-tokens"'));
     expect(communications, contains('svc.from("notification_devices").upsert'));
-    expect(communications, contains('svc.from("notification_device_tokens").upsert'));
+    expect(
+      communications,
+      isNot(contains('svc.from("notification_device_tokens").upsert')),
+    );
+    expect(communications, contains('svc.from("notification_device_tokens").delete'));
     expect(healthReminders, contains('svc.from("notification_events")'));
     expect(healthReminders, contains('event_type: "health_reminder"'));
     expect(birthdays, contains('svc.from("notification_events")'));

@@ -63,6 +63,7 @@ class PushNotificationService {
         firebaseAvailable: _firebaseAvailable,
         localNotificationsReady: _localNotificationsReady || kIsWeb,
         hasDeviceToken: (_currentToken ?? '').isNotEmpty,
+        deviceTokenPreview: _maskToken(_currentToken),
         deviceRegistrationAttempted: _deviceRegistrationAttempted,
         deviceRegistrationSucceeded: _deviceRegistrationSucceeded,
         permissionStatus: _permissionStatus ?? 'unknown',
@@ -70,6 +71,13 @@ class PushNotificationService {
       );
 
   String get lastRegistrationError => _lastRegistrationError ?? '';
+
+  String _maskToken(String? value) {
+    final token = (value ?? '').trim();
+    if (token.isEmpty) return '';
+    if (token.length <= 10) return '***';
+    return '${token.substring(0, 6)}...${token.substring(token.length - 4)}';
+  }
 
   // ─── Topic Subscriptions (replaces legacy FcmService) ─────────────────────
 
@@ -420,6 +428,7 @@ class PushNotificationRuntimeStatus {
     required this.firebaseAvailable,
     required this.localNotificationsReady,
     required this.hasDeviceToken,
+    required this.deviceTokenPreview,
     required this.deviceRegistrationAttempted,
     required this.deviceRegistrationSucceeded,
     required this.permissionStatus,
@@ -430,6 +439,7 @@ class PushNotificationRuntimeStatus {
   final bool firebaseAvailable;
   final bool localNotificationsReady;
   final bool hasDeviceToken;
+  final String deviceTokenPreview;
   final bool deviceRegistrationAttempted;
   final bool deviceRegistrationSucceeded;
   final String permissionStatus;
