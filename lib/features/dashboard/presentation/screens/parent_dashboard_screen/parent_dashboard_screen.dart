@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
+import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
@@ -24,7 +25,8 @@ class ParentDashboardScreen extends StatefulWidget {
 
 class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     with WidgetsBindingObserver {
-  static const Duration _autoRefreshInterval = Duration(seconds: 45);
+  static const Duration _autoRefreshInterval = Duration(seconds: 120);
+  DateTime? _lastRefreshAt;
   int _selectedNavIndex = 0;
   int _activeChildIndex = 0;
   bool _loading = true;
@@ -54,6 +56,14 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     bool showSpinner = true,
     bool includeFeedPosts = true,
   }) async {
+    // Debounce: skip if refreshed less than 10 seconds ago (unless forced
+    // with spinner, i.e. pull-to-refresh or first load).
+    final now = DateTime.now();
+    if (showSpinner && _lastRefreshAt != null &&
+        now.difference(_lastRefreshAt!) < const Duration(seconds: 10)) {
+      return;
+    }
+    _lastRefreshAt = now;
     if (showSpinner) {
       setState(() {
         _loading = true;
@@ -274,27 +284,31 @@ class _ParentFeedView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const TodaysHighlightsCard(role: 'parent'),
-        SizedBox(height: tokens.spacing.lg),
-        Text(
-          'School Feed',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-        ),
-        SizedBox(height: tokens.spacing.sm),
-        _SchoolFeedList(eventPosts: eventPosts),
-        SizedBox(height: tokens.spacing.lg),
-        _ParentChildPillSelector(
-          children: children,
-          activeIndex: activeChildIndex,
-          onChanged: onChildSelected,
-          color: parentColor,
-        ),
-        SizedBox(height: tokens.spacing.lg),
-        _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
-        SizedBox(height: tokens.spacing.lg),
-        const _ParentWorkflowShortcuts(),
+          StaggeredFadeIn(
+            children: [
+              const TodaysHighlightsCard(role: 'parent'),
+              SizedBox(height: tokens.spacing.lg),
+              Text(
+                'School Feed',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              SizedBox(height: tokens.spacing.sm),
+              _SchoolFeedList(eventPosts: eventPosts),
+              SizedBox(height: tokens.spacing.lg),
+              _ParentChildPillSelector(
+                children: children,
+                activeIndex: activeChildIndex,
+                onChanged: onChildSelected,
+                color: parentColor,
+              ),
+              SizedBox(height: tokens.spacing.lg),
+              _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
+              SizedBox(height: tokens.spacing.lg),
+              const _ParentWorkflowShortcuts(),
+            ],
+          ),
       ],
     );
   }

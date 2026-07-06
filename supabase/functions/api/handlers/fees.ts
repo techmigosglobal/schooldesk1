@@ -1468,6 +1468,52 @@ export async function handleFees(
         : await svc.from("parent_payment_requests").insert(payload).select()
           .single();
       if (error) return fail(error.message);
+      // Notify principals/admins about the new payment proof submission
+      try {
+        const { data: principals } = await svc.from("users")
+          .select("id")
+          .eq("school_id", school)
+          .in("role_name", ["principal", "admin", "super_admin"]);
+        if (principals && principals.length > 0) {
+          const amountLabel = `INR ${expectedAmount.toFixed(0)}`;
+          const validPrincipals = principals.filter((p: Record<string, unknown>) => text(p.id));
+          if (validPrincipals.length > 0) {
+            // Resolve student name for a readable notification
+            let studentName = text(invoice.student_id, "a student");
+            const { data: studentRow } = await svc.from("students")
+              .select("first_name, last_name")
+              .eq("id", invoice.student_id)
+              .eq("school_id", school)
+              .maybeSingle();
+            if (studentRow) {
+              const fn = text(studentRow.first_name);
+              const ln = text(studentRow.last_name);
+              studentName = fn && ln ? `${fn} ${ln}` : fn || ln || "a student";
+            }
+            await svc.from("notification_events").insert(
+              validPrincipals.map((p: Record<string, unknown>) => ({
+                school_id: school,
+                user_id: text(p.id),
+                event_type: "fee_payment_submitted",
+                title: "New payment proof submitted",
+                body: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
+                event_data: {
+                  payment_request_id: data.id,
+                  invoice_id: invoice.id,
+                  student_id: invoice.student_id,
+                  amount: expectedAmount,
+                  request_reference: data.request_reference,
+                },
+                entity_type: "parent_payment_requests",
+                entity_id: data.id,
+                processed: false,
+              })),
+            );
+          }
+        }
+      } catch (_) {
+        // Best-effort notification — don't fail the submission.
+      }
       try {
         return ok(
           (await attachPaymentRequestRelations(svc, school, [data]))[0],
@@ -1824,6 +1870,36 @@ export async function handleFees(
         updated_at: new Date().toISOString(),
       }).eq("id", seg).eq("school_id", school).select().single();
       if (error) return fail(error.message);
+      // Notify the parent about the approval/rejection decision
+      try {
+        const parentUserId = text(existing.parent_user_id);
+        if (parentUserId) {
+          const isApproved = ["approved", "completed", "paid"].includes(status);
+          const statusLabel = isApproved ? "approved" : (status === "clarification_required" ? "requires clarification" : "rejected");
+          const amountLabel = `INR ${money(existing.amount).toFixed(0)}`;
+          await svc.from("notification_events").insert({
+            school_id: school,
+            user_id: parentUserId,
+            event_type: isApproved ? "fee_payment_approved" : "fee_payment_rejected",
+            title: isApproved ? "Payment approved" : "Payment $statusLabel",
+            body: isApproved
+              ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
+              : `Your ${amountLabel} payment was ${statusLabel}.${body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""}`,
+            event_data: {
+              payment_request_id: seg,
+              invoice_id: existing.invoice_id,
+              amount: money(existing.amount),
+              status: status,
+              admin_remarks: text(body.admin_remarks),
+            },
+            entity_type: "parent_payment_requests",
+            entity_id: seg,
+            processed: false,
+          });
+        }
+      } catch (_) {
+        // Best-effort notification — don't fail the decision.
+      }
       try {
         return ok(
           (await attachPaymentRequestRelations(svc, school, [data]))[0],

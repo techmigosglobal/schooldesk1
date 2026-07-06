@@ -29,11 +29,18 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
     _load();
   }
 
+  static bool _alreadyRefreshedToday = false;
+
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     await _triggerBirthdayAlertsIfNeeded(prefs);
     final svc = await NotificationService.getInstance();
-    await svc.refresh();
+    // Only force-refresh notifications once per app session to avoid
+    // hammering the /notifications endpoint on every widget rebuild.
+    if (!_alreadyRefreshedToday) {
+      _alreadyRefreshedToday = true;
+      await svc.refresh();
+    }
     if (!mounted) return;
     setState(() {
       _prefs = prefs;

@@ -84,7 +84,27 @@ async function registerDeviceToken(
       return fail("notification_devices table not configured");
     }
 
-    // Insert or update device token
+    // ── CRITICAL: Deactivate this token for ALL other users first ─────────
+    // A physical device can only belong to one user at a time. When a user
+    // logs in and registers the same FCM token, any previous user who held
+    // that token must lose it — otherwise the notification processor will
+    // send push notifications to the wrong user.
+    await svc
+      .from("notification_devices")
+      .update({ is_active: false })
+      .eq("school_id", school)
+      .eq("fcm_token", fcmToken)
+      .neq("user_id", userId);
+
+    // Also clean up the deprecated legacy table so the processor doesn't
+    // pick up stale rows from there.
+    await svc
+      .from("notification_device_tokens")
+      .delete()
+      .eq("token", fcmToken)
+      .neq("user_id", userId);
+
+    // Insert or update device token for the current user
     const { error } = await svc
       .from("notification_devices")
       .upsert({

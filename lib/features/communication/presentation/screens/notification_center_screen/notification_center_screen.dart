@@ -1182,7 +1182,8 @@ class _DiagnosticSection extends StatelessWidget {
             const SizedBox(height: 8),
             SelectableText(
               code!,
-              style: GoogleFonts.robotoMono(
+              style: TextStyle(
+                fontFamily: 'monospace',
                 fontSize: 12,
                 color: context.appTheme.onSurface,
               ),

@@ -652,6 +652,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           healthLabel: _healthLabel(row),
           healthColor: _healthColor(row),
           teacherForSubject: (subject) => _teacherForSubject(row, subject),
+          academicYears: _academicYears,
         ),
       ),
     );
@@ -2521,6 +2522,7 @@ class _ClassDetailPage extends StatelessWidget {
   final String healthLabel;
   final Color healthColor;
   final String Function(Map<String, dynamic> subject) teacherForSubject;
+  final List<AcademicYearModel> academicYears;
 
   const _ClassDetailPage({
     required this.row,
@@ -2528,6 +2530,7 @@ class _ClassDetailPage extends StatelessWidget {
     required this.healthLabel,
     required this.healthColor,
     required this.teacherForSubject,
+    required this.academicYears,
   });
 
   @override
@@ -2594,7 +2597,9 @@ class _ClassDetailPage extends StatelessWidget {
                 ),
                 _ClassDetailRow(
                   label: 'Academic Year',
-                  value: _classText(row['academic_year_id'], fallback: '-'),
+                  value: _resolveAcademicYearLabel(
+                    row['academic_year_id'],
+                  ),
                 ),
                 _ClassDetailRow(
                   label: 'Latest Instruction',
@@ -2664,11 +2669,19 @@ class _ClassDetailPage extends StatelessWidget {
                           subtitle: teacherForSubject(subject),
                         ),
                     ],
-            ),
-          ],
-        ),
+            ),            ],
+          ),
       ),
     );
+  }
+
+  String _resolveAcademicYearLabel(Object? academicYearId) {
+    final id = _classText(academicYearId);
+    if (id.isEmpty) return '-';
+    for (final year in academicYears) {
+      if (year.id == id) return year.yearLabel;
+    }
+    return id;
   }
 }
 

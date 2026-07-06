@@ -1538,6 +1538,19 @@ export async function handleCommunications(
     const schoolId = `${user.app_metadata?.school_id ?? ""}`.trim();
     if (!schoolId) return fail("school_id missing", 400);
     const normalizedPlatform = `${platform ?? "android"}`.trim() || "android";
+
+    // Deactivate this token for ALL other users first — a physical device
+    // can only belong to one user at a time.
+    await svc.from("notification_devices")
+      .update({ is_active: false })
+      .eq("school_id", schoolId)
+      .eq("fcm_token", token)
+      .neq("user_id", user.id);
+    await svc.from("notification_device_tokens")
+      .delete()
+      .eq("token", token)
+      .neq("user_id", user.id);
+
     await svc.from("notification_devices").upsert({
       school_id: schoolId,
       user_id: user.id,

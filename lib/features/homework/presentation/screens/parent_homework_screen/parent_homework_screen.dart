@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/homework/presentation/screens/parent_homework_screen/parent_homework_submission_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
+import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/core/widgets/subject_card_widget.dart';
@@ -246,85 +248,139 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   }
 
   Widget _buildChildSelector() {
+    final tokens = Theme.of(context).schoolDesk;
     return Container(
       color: context.appTheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: List.generate(_children.length, (i) {
-          final isActive = i == _activeChildIndex;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _activeChildIndex = i);
-              ParentChildSelectionService.saveIndex(_children, i);
-            },
-            child: Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? _headerColor
-                    : context.appTheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                '${_children[i]['name'] ?? _children[i]['first_name'] ?? 'Student'}'
-                    .split(' ')
-                    .first,
-                style: GoogleFonts.dmSans(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
+      padding: EdgeInsets.symmetric(
+        horizontal: SchoolDeskResponsive.contentHorizontalPaddingForWidth(
+          MediaQuery.sizeOf(context).width,
+          tokens.spacing,
+        ),
+        vertical: 10,
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: List.generate(_children.length, (i) {
+            final isActive = i == _activeChildIndex;
+            return GestureDetector(
+              onTap: () {
+                setState(() => _activeChildIndex = i);
+                ParentChildSelectionService.saveIndex(_children, i);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? _headerColor
+                      : context.appTheme.surfaceVariant,
+                  borderRadius: BorderRadius.circular(20),
+                  border: isActive
+                      ? null
+                      : Border.all(color: context.appTheme.outlineVariant),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: _headerColor.withAlpha(40),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isActive)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    Text(
+                      '${_children[i]['name'] ?? _children[i]['first_name'] ?? 'Student'}'
+                          .split(' ')
+                          .first,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isActive ? Colors.white : context.appTheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
+        ),
       ),
     );
   }
 
   Widget _buildSummaryBar() {
+    final tokens = Theme.of(context).schoolDesk;
+    final horizontal = SchoolDeskResponsive.contentHorizontalPaddingForWidth(
+      MediaQuery.sizeOf(context).width,
+      tokens.spacing,
+    );
     return Container(
       color: context.appTheme.surface,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 12),
       child: Row(
         children: [
           _summaryChip(
             '${_pending.length} Pending',
             context.appTheme.warning,
             context.appTheme.warningContainer,
+            Icons.pending_actions_rounded,
           ),
           const SizedBox(width: 8),
           _summaryChip(
             '${_submitted.length} Submitted',
             context.appTheme.success,
             context.appTheme.successContainer,
+            Icons.check_circle_outline_rounded,
           ),
           const SizedBox(width: 8),
           _summaryChip(
             '${_homework.length} Total',
             context.appTheme.primary,
             context.appTheme.primaryContainer,
+            Icons.assignment_rounded,
           ),
         ],
       ),
     );
   }
 
-  Widget _summaryChip(String label, Color color, Color bg) {
+  Widget _summaryChip(String label, Color color, Color bg, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(40)),
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.dmSans(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -364,7 +420,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: list.length,
-      itemBuilder: (_, i) => _homeworkCard(list[i]),
+      itemBuilder: (_, i) => FadeInCard(
+        delay: Duration(milliseconds: 60 * i),
+        child: _homeworkCard(list[i]),
+      ),
     );
   }
 

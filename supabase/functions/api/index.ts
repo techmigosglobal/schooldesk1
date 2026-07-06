@@ -370,7 +370,7 @@ Deno.serve(async (req: Request) => {
   ) {
     return handleFees(req, path, method, url, client, svc, user);
   }
-  if (path.startsWith("/leave")) {
+  if (path.startsWith("/leave") || path.startsWith("/student-leave")) {
     return handleLeave(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/homework")) {

@@ -11,6 +11,7 @@ import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class ParentFeesScreen extends StatefulWidget {
   const ParentFeesScreen({super.key});
@@ -21,7 +22,9 @@ class ParentFeesScreen extends StatefulWidget {
 
 class _ParentFeesScreenState extends State<ParentFeesScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  static const Duration _autoRefreshInterval = Duration(seconds: 45);
+  static const Duration _autoRefreshInterval = Duration(seconds: 120);
+  DateTime? _lastRefreshAt;
+  static const _refreshDebounce = Duration(seconds: 10);
   int _selectedNavIndex = ParentNav.fees;
   late TabController _tabController;
   int _activeChildIndex = 0;
@@ -94,6 +97,12 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     bool forceRefresh = false,
     bool showSpinner = true,
   }) async {
+    // Debounce rapid successive refreshes.
+    if (forceRefresh && _lastRefreshAt != null) {
+      final elapsed = DateTime.now().difference(_lastRefreshAt!);
+      if (elapsed < _refreshDebounce) return;
+    }
+    _lastRefreshAt = DateTime.now();
     if (showSpinner) {
       setState(() {
         _loading = true;
@@ -334,9 +343,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   }
 
   Widget _buildChildSelector() {
+    final tokens = Theme.of(context).schoolDesk;
     return Container(
       color: context.appTheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: SchoolDeskResponsive.contentHorizontalPaddingForWidth(
+          MediaQuery.sizeOf(context).width,
+          tokens.spacing,
+        ),
+        vertical: 10,
+      ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -351,25 +367,53 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                 ParentChildSelectionService.saveIndex(_childrenData, i);
                 _loadData();
               },
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 6,
+                  horizontal: 16,
+                  vertical: 8,
                 ),
                 decoration: BoxDecoration(
                   color: isActive
                       ? _headerColor
                       : context.appTheme.surfaceVariant,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
+                  border: isActive
+                      ? null
+                      : Border.all(color: context.appTheme.outlineVariant),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: _headerColor.withAlpha(40),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
-                child: Text(
-                  _studentName(_childrenData[i]).split(' ').first,
-                  style: GoogleFonts.ibmPlexSans(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isActive ? Colors.white : context.appTheme.onSurface,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isActive)
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    Text(
+                      _studentName(_childrenData[i]).split(' ').first,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isActive ? Colors.white : context.appTheme.onSurface,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -473,8 +517,16 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
 
   Widget _buildDueFeesTab() {
     final child = _childrenData[_activeChildIndex];
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+    final tokens = Theme.of(context).schoolDesk;
+    final horizontal = SchoolDeskResponsive.contentHorizontalPaddingForWidth(
+      MediaQuery.sizeOf(context).width,
+      tokens.spacing,
+    );
+    return RefreshIndicator(
+      onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
+      child: SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(horizontal, 16, horizontal, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -536,13 +588,64 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
           ],
         ],
       ),
+      ),
     );
   }
 
   Widget _buildDueSummaryCard() {
     final pending = _pendingAmount;
     final hasInvoices = _feeStructure.isNotEmpty;
-    if (!hasInvoices) return const SizedBox.shrink();
+    if (!hasInvoices) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: context.appTheme.outlineVariant),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: context.appTheme.successContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.check_circle_rounded,
+                color: context.appTheme.success,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'All Clear',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: context.appTheme.success,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'No fee invoices have been published yet.',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 12,
+                      color: context.appTheme.muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -936,23 +1039,44 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
   Widget _buildHistoryTab() {
     if (_paymentHistory.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.receipt_long_rounded,
-              size: 48,
-              color: context.appTheme.muted,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'No payment history yet',
-              style: GoogleFonts.ibmPlexSans(
-                fontSize: 14,
-                color: context.appTheme.muted,
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: context.appTheme.primaryContainer.withAlpha(80),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.receipt_long_rounded,
+                  size: 32,
+                  color: context.appTheme.primary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Text(
+                'No payment history yet',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: context.appTheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Completed payments and submitted proofs will appear here once verified by the school.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -1246,14 +1370,42 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     if (feeTypes.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Fee structure will appear after invoices are published.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.ibmPlexSans(
-              fontSize: 14,
-              color: context.appTheme.muted,
-            ),
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: context.appTheme.primaryContainer.withAlpha(80),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.category_rounded,
+                  size: 32,
+                  color: context.appTheme.primary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No fee types published yet',
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: context.appTheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Fee categories and structures will appear here once the school publishes invoices for this class.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -1472,13 +1624,15 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       case 'partial':
         return 'Partial';
       case 'pending_approval':
+        return 'Pending Approval';
       case 'payment_pending':
       case 'pending_verification':
-      case 'submitted':
       case 'initiated':
       case 'payment_app_opened':
       case 'proof_pending':
         return 'Pending Verification';
+      case 'submitted':
+        return 'Payment Submitted';
       case 'clarification_required':
         return 'Clarification Required';
       case 'rejected':
@@ -1537,15 +1691,19 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     try {
       final pdfService = PdfService.getInstance();
       final amount = (payment['amount'] as num?)?.toDouble() ?? 0;
-      final paymentDate = DateTime.tryParse(_text(payment['date']));
+      var paymentDate = DateTime.tryParse(_text(payment['date']));
       if (paymentDate == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Receipt date is not available from backend yet.'),
-          ),
-        );
-        return;
+        final fallbackDate = DateTime.tryParse(_text(payment['created_at']));
+        if (fallbackDate == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Receipt date is not available from backend yet.'),
+            ),
+          );
+          return;
+        }
+        paymentDate = fallbackDate;
       }
       final rawItems = payment['items'];
       final List<Map<String, dynamic>> feeItems = rawItems is List

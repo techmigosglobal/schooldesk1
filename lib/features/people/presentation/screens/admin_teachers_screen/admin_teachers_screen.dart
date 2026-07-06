@@ -42,7 +42,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                 'subject': s.designation ?? 'Teacher',
                 'email': s.email ?? '',
                 'phone': s.phone ?? '',
-                'status': s.status ?? 'active',
+                'status': s.status,
                 'dept': s.departmentName ?? s.designation ?? '',
               },
             )

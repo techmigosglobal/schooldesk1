@@ -9,7 +9,14 @@ create extension if not exists pg_cron with schema extensions;
 create extension if not exists pg_net with schema extensions;
 
 -- Remove any previous birthday alert cron job (idempotent)
-select cron.unschedule('daily-birthday-alerts');
+do $$
+begin
+  perform cron.unschedule('daily-birthday-alerts');
+exception when others then
+  -- Job does not exist yet; nothing to unschedule.
+  null;
+end
+$$;
 
 -- Schedule the birthday alert job to run daily at 06:00 UTC.
 -- The Edge Function uses the service role key via the ANON_KEY header,

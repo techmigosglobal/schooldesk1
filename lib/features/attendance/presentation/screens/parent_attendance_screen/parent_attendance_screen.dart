@@ -8,6 +8,7 @@ import 'package:schooldesk1/core/widgets/dashboard_fab_widget.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/theme/design_tokens.dart';
 
 class ParentAttendanceScreen extends StatefulWidget {
   const ParentAttendanceScreen({super.key});
@@ -29,7 +30,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Map<String, dynamic> _attendanceSummary = {};
   Map<int, String> _attendanceDayStatus = {};
   Map<int, List<Map<String, dynamic>>> _periodRowsByDay = {};
-  List<Map<String, dynamic>> _leaveRequests = [];
   bool _loading = true;
   int _attendanceRequestToken = 0;
 
@@ -66,7 +66,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           _attendanceSummary = {};
           _attendanceDayStatus = {};
           _periodRowsByDay = {};
-          _leaveRequests = [];
           _loading = false;
         });
       }
@@ -118,7 +117,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         _attendanceSummary = attendanceSummary;
         _attendanceDayStatus = attendanceDayStatus;
         _periodRowsByDay = _groupPeriodRowsByDay(periodRows);
-        _leaveRequests = leaveRequests.map(_leaveRequestFromApi).toList();
         _loading = false;
       });
     } catch (e) {
@@ -177,28 +175,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     }
   }
 
-  Map<String, dynamic> _leaveRequestFromApi(Map<String, dynamic> request) {
-    final fromRaw = _leaveStartDate(request);
-    final toRaw = _leaveEndDate(request);
-    final fromDate = DateTime.tryParse(fromRaw);
-    final toDate = DateTime.tryParse(toRaw);
-    final dateLabel = fromDate == null
-        ? fromRaw.split('T').first
-        : DateFormat('d MMM yyyy').format(fromDate);
-    final toLabel = toDate == null
-        ? ''
-        : DateFormat('d MMM yyyy').format(toDate);
-    return {
-      'date': toLabel.isEmpty || toLabel == dateLabel
-          ? dateLabel
-          : '$dateLabel - $toLabel',
-      'reason': request['reason'] ?? 'Not specified',
-      'type': request['leave_type'] ?? 'Leave',
-      'status': request['status'] ?? 'Pending',
-      'approvedBy': request['decided_by'] ?? request['approved_by'] ?? '',
-    };
-  }
-
   String get _activeChildId {
     if (_activeChildIndex < 0 || _activeChildIndex >= _childRows.length) {
       return '';
@@ -221,7 +197,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'My Child Attendance',
-      subtitle: 'Today status, month summary, calendar, and leave',
+      subtitle: 'Today status, month summary, calendar, and attendance',
       drawer: ParentDrawer(
         selectedIndex: _selectedNavIndex,
         onDestinationSelected: (i) => setState(() => _selectedNavIndex = i),
@@ -230,13 +206,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      actions: [
-        TextButton.icon(
-          onPressed: () => _showLeaveRequestDialog(context),
-          icon: const Icon(Icons.add_rounded, size: 16),
-          label: Text('Leave Request', style: GoogleFonts.dmSans(fontSize: 12)),
-        ),
-      ],
+
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -251,8 +221,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                   _buildMonthlyCalendar(),
                   const SizedBox(height: 16),
                   _buildHistoryList(),
-                  const SizedBox(height: 16),
-                  _buildLeaveRequestsSection(),
                 ],
               ),
             ),
@@ -261,17 +229,18 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
   Widget _buildChildSelector() {
     if (_childRows.isEmpty) {
+      final tokens = Theme.of(context).schoolDesk;
       return Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(tokens.spacing.md),
         decoration: BoxDecoration(
           color: context.appTheme.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(tokens.radius.card),
           border: Border.all(color: context.appTheme.outlineVariant),
         ),
         child: Row(
           children: [
             Icon(Icons.family_restroom_rounded, color: context.appTheme.muted),
-            const SizedBox(width: 10),
+            SizedBox(width: tokens.spacing.sm),
             Expanded(
               child: Text(
                 'No linked students found for this parent account.',
@@ -300,25 +269,48 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
               ParentChildSelectionService.saveIndex(_childRows, i);
               _loadChildAttendance(i);
             },
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: isActive ? _headerColor : context.appTheme.surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isActive
-                      ? _headerColor
-                      : context.appTheme.outlineVariant,
-                ),
+                border: isActive
+                    ? null
+                    : Border.all(color: context.appTheme.outlineVariant),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: _headerColor.withAlpha(40),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
               ),
-              child: Text(
-                _childShortLabel(_childRows[i]),
-                style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: isActive ? Colors.white : context.appTheme.onSurface,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isActive)
+                    Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  Text(
+                    _childShortLabel(_childRows[i]),
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? Colors.white : context.appTheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -710,169 +702,6 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       ),
     );
   }
-
-  Widget _buildLeaveRequestsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(
-              'Leave Requests',
-              style: GoogleFonts.dmSans(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () => _showLeaveRequestDialog(context),
-              icon: const Icon(Icons.add_rounded, size: 14),
-              label: Text('New', style: GoogleFonts.dmSans(fontSize: 12)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (_leaveRequests.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.appTheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.appTheme.outlineVariant),
-            ),
-            child: Text(
-              'No leave requests found for this student.',
-              style: GoogleFonts.dmSans(
-                fontSize: 12,
-                color: context.appTheme.muted,
-              ),
-            ),
-          )
-        else
-          ..._leaveRequests.map((lr) => _leaveRequestCard(lr)),
-      ],
-    );
-  }
-
-  Widget _leaveRequestCard(Map<String, dynamic> lr) {
-    final isApproved = lr['status'] == 'Approved';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: isApproved
-                  ? context.appTheme.successContainer
-                  : context.appTheme.warningContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              isApproved ? Icons.check_circle_rounded : Icons.pending_rounded,
-              color: isApproved
-                  ? context.appTheme.success
-                  : context.appTheme.warning,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  lr['type'],
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  '${lr['date']} — ${lr['reason']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-                if (isApproved)
-                  Text(
-                    'Approved by ${lr['approvedBy']}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: context.appTheme.success,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isApproved
-                  ? context.appTheme.successContainer
-                  : context.appTheme.warningContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              lr['status'],
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: isApproved
-                    ? context.appTheme.success
-                    : context.appTheme.warning,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showLeaveRequestDialog(BuildContext context) async {
-    if (_activeChildIndex >= _childRows.length) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Select a backend-linked student before requesting leave.',
-          ),
-          backgroundColor: context.appTheme.error,
-        ),
-      );
-      return;
-    }
-    final request = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(
-        builder: (_) => _StudentLeaveRequestPage(
-          studentId: _childId(_childRows[_activeChildIndex]),
-          headerColor: _headerColor,
-        ),
-      ),
-    );
-    if (!mounted || request == null) return;
-    setState(() {
-      _leaveRequests.insert(0, {
-        'date': _leaveStartDate(request).split('T').first,
-        'reason': request['reason'] ?? 'Not specified',
-        'type': request['leave_type'] ?? 'Leave',
-        'status': request['status'] ?? 'Pending',
-        'approvedBy': request['approved_by'] ?? '',
-      });
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Leave request submitted successfully!')),
-    );
-  }
 }
 
 List<Map<String, dynamic>> _periodRowsFromSources({
@@ -1147,217 +976,4 @@ bool _leaveIsHalfDay(Map<String, dynamic> request) {
   return value == 'true' || value == '1' || value == 'yes';
 }
 
-class _StudentLeaveRequestPage extends StatefulWidget {
-  final String studentId;
-  final Color headerColor;
 
-  const _StudentLeaveRequestPage({
-    required this.studentId,
-    required this.headerColor,
-  });
-
-  @override
-  State<_StudentLeaveRequestPage> createState() =>
-      _StudentLeaveRequestPageState();
-}
-
-class _StudentLeaveRequestPageState extends State<_StudentLeaveRequestPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _reasonCtrl = TextEditingController();
-  late final TextEditingController _fromDateCtrl;
-  late final TextEditingController _toDateCtrl;
-  String _selectedType = 'Sick Leave';
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    _fromDateCtrl = TextEditingController(text: today);
-    _toDateCtrl = TextEditingController(text: today);
-  }
-
-  @override
-  void dispose() {
-    _reasonCtrl.dispose();
-    _fromDateCtrl.dispose();
-    _toDateCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate() || _saving) return;
-    final fromDate = DateTime.parse(_fromDateCtrl.text.trim());
-    final toDate = DateTime.parse(_toDateCtrl.text.trim());
-    if (toDate.isBefore(fromDate)) {
-      setState(() => _error = 'To date cannot be before from date.');
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      final reason = _reasonCtrl.text.trim().isEmpty
-          ? 'Not specified'
-          : _reasonCtrl.text.trim();
-      final response = await BackendApiClient.instance
-          .submitStudentLeaveApplication(
-            studentId: widget.studentId,
-            leaveType: _selectedType,
-            fromDate: _fromDateCtrl.text.trim(),
-            toDate: _toDateCtrl.text.trim(),
-            reason: reason,
-          );
-      if (!mounted) return;
-      Navigator.pop(context, {
-        ...response,
-        'leave_type': response['leave_type'] ?? _selectedType,
-        'from_date': response['from_date'] ?? _fromDateCtrl.text.trim(),
-        'reason': response['reason'] ?? reason,
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _error = 'Leave request failed: $e';
-      });
-    }
-  }
-
-  String? _dateValidator(String? value) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return 'Enter a date.';
-    final parsed = DateTime.tryParse(text);
-    if (parsed == null || DateFormat('yyyy-MM-dd').format(parsed) != text) {
-      return 'Use YYYY-MM-DD.';
-    }
-    return null;
-  }
-
-  Future<void> _pickDate(TextEditingController controller) async {
-    final current = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (picked == null) return;
-    controller.text = DateFormat('yyyy-MM-dd').format(picked);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Submit Leave Request')),
-      body: SafeArea(
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              if (_error != null) ...[
-                _InputErrorBanner(message: _error!),
-                const SizedBox(height: 16),
-              ],
-              DropdownButtonFormField<String>(
-                initialValue: _selectedType,
-                decoration: const InputDecoration(labelText: 'Leave Type'),
-                items:
-                    [
-                          'Sick Leave',
-                          'Personal Leave',
-                          'Early Pickup',
-                          'Special Permission',
-                        ]
-                        .map(
-                          (t) => DropdownMenuItem(
-                            value: t,
-                            child: Text(
-                              t,
-                              style: GoogleFonts.dmSans(fontSize: 13),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                onChanged: _saving
-                    ? null
-                    : (v) => setState(() => _selectedType = v ?? _selectedType),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _fromDateCtrl,
-                enabled: !_saving,
-                readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: 'From date',
-                  suffixIcon: Icon(Icons.calendar_month_rounded),
-                ),
-                onTap: _saving ? null : () => _pickDate(_fromDateCtrl),
-                validator: _dateValidator,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _toDateCtrl,
-                enabled: !_saving,
-                readOnly: true,
-                decoration: const InputDecoration(
-                  labelText: 'To date',
-                  suffixIcon: Icon(Icons.calendar_month_rounded),
-                ),
-                onTap: _saving ? null : () => _pickDate(_toDateCtrl),
-                validator: _dateValidator,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _reasonCtrl,
-                enabled: !_saving,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Reason',
-                  hintText: 'Describe the reason...',
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _saving ? null : _submit,
-                style: FilledButton.styleFrom(
-                  backgroundColor: widget.headerColor,
-                ),
-                child: _saving
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Submit'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _InputErrorBanner extends StatelessWidget {
-  final String message;
-
-  const _InputErrorBanner({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.appTheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        message,
-        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.error),
-      ),
-    );
-  }
-}

@@ -146,26 +146,6 @@ val stripDevOnlyPluginsFromReleaseRegistrant by tasks.registering {
             ""
         )
 
-        // Strip patrol plugin (dev-only)
-        text = text.replace(
-            Regex(
-                """
-\s*try \{\s*
-\s*flutterEngine\.getPlugins\(\)\.add\(new pl\.leancode\.patrol\.PatrolPlugin\(\)\);\s*
-\s*\} catch \(Exception e\) \{\s*
-\s*Log\.e\(TAG, "Error registering plugin patrol, pl\.leancode\.patrol\.PatrolPlugin", e\);\s*
-\s*\}
-                """.trimIndent()
-            ),
-            ""
-        )
-
-        // Fallback: strip any single-line patrol registration
-        text = text.replace(
-            Regex("""[ \t]*flutterEngine\.getPlugins\(\)\.add\(new pl\.leancode\.patrol\.PatrolPlugin\(\)\);[ \t]*\r?\n"""),
-            ""
-        )
-
         registrant.writeText(text)
     }
 }

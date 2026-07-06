@@ -788,11 +788,12 @@ class _ParentPaymentRequestFormScreenState
             ),
             const SizedBox(height: 8),
             Text(
-              _configError ??
-                  'No school UPI QR is configured yet. Please retry after the school updates the QR.',
+              _configError != null
+                  ? 'Unable to load payment settings. Please check your connection and try again.'
+                  : 'The school has not set up UPI payment yet. Please contact the school office to enable online payments, or ask the principal to configure UPI details in Fees → Payment Config.',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
-                color: context.appTheme.error,
+                color: context.appTheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 10),
@@ -1358,19 +1359,88 @@ class _ParentPaymentRequestFormScreenState
         );
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'UPI proof submitted. Fees will be updated after principal verification.',
+      final refLabel = references.isNotEmpty
+          ? '\nReference: ${references.first}'
+          : '';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: Icon(
+            Icons.check_circle_rounded,
+            color: context.appTheme.success,
+            size: 48,
           ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pop(
-        context,
-        ParentPaymentRequestFormResult(
-          submittedCount: 1,
-          references: references,
+          title: Text(
+            _isClarificationResubmit ? 'Proof Resubmitted' : 'Payment Proof Submitted',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _isClarificationResubmit
+                    ? 'Your updated proof has been sent for re-verification.'
+                    : 'Your payment proof of INR ${_payableAmount.toStringAsFixed(0)} has been submitted successfully.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(fontSize: 13),
+              ),
+              if (refLabel.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: context.appTheme.surfaceVariant,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.receipt_rounded, size: 16, color: context.appTheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          refLabel.trim(),
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                'The principal will verify your proof. You will receive a notification once it is reviewed.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) {
+                    Navigator.pop(
+                      context,
+                      ParentPaymentRequestFormResult(
+                        submittedCount: 1,
+                        references: references,
+                      ),
+                    );
+                  }
+                });
+              },
+              child: const Text('Done'),
+            ),
+          ],
         ),
       );
     } catch (error) {
