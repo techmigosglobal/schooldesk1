@@ -1,6 +1,6 @@
 // handlers/communications.ts — announcements, notifications, messages, diary
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -592,6 +592,22 @@ async function appendNotification(
     priority: "medium",
     is_read: false,
   });
+  // Also create a push notification event so the processor sends an FCM message
+  try {
+    const { data } = await svc.from("notification_events").insert({
+      school_id: school,
+      user_id: userId,
+      event_type: "announcement",
+      event_data: {
+        title,
+        message: body,
+        announcement_id: entityId,
+        reference_type: "message",
+        reference_id: entityId,
+      },
+    }).select("id").maybeSingle();
+    if (data?.id) triggerPushProcessing(data.id);
+  } catch (_) { /* best-effort */ }
 }
 
 function normalizeAnnouncementPayload(
@@ -1344,16 +1360,34 @@ export async function handleCommunications(
   if (path === "/notifications/device-tokens" && method === "POST") {
     const { token, platform } = body;
     if (!token) return fail("token required");
+    const schoolId = `${user.app_metadata?.school_id ?? ""}`.trim();
+    if (!schoolId) return fail("school_id missing", 400);
+    const normalizedPlatform = `${platform ?? "android"}`.trim() || "android";
+    await svc.from("notification_devices").upsert({
+      school_id: schoolId,
+      user_id: user.id,
+      fcm_token: token,
+      device_type: normalizedPlatform,
+      last_registered_at: new Date().toISOString(),
+      is_active: true,
+    }, { onConflict: "school_id,user_id,fcm_token" });
     await svc.from("notification_device_tokens").upsert({
       user_id: user.id,
       token,
-      platform: platform ?? "android",
+      platform: normalizedPlatform,
     }, { onConflict: "user_id,token" });
     return ok({ success: true });
   }
   if (path === "/notifications/device-tokens" && method === "DELETE") {
     const { token } = body;
     if (!token) return fail("token required");
+    const schoolId = `${user.app_metadata?.school_id ?? ""}`.trim();
+    if (schoolId) {
+      await svc.from("notification_devices").update({ is_active: false }).eq(
+        "school_id",
+        schoolId,
+      ).eq("user_id", user.id).eq("fcm_token", token);
+    }
     const { error } = await svc.from("notification_device_tokens").delete().eq(
       "user_id",
       user.id,

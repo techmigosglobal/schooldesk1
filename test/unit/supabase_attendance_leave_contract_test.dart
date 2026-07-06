@@ -62,12 +62,17 @@ void main() {
     final migration = File(
       'supabase/migrations/0012_teacher_attendance_alignment.sql',
     ).readAsStringSync();
+    final markedAtMigration = File(
+      'supabase/migrations/20260705142256_add_student_attendance_marked_at.sql',
+    ).readAsStringSync();
 
     expect(migration, contains('add column if not exists enrollment_id'));
     expect(migration, contains('add column if not exists reason text'));
     expect(migration, contains('add column if not exists status text'));
     expect(migration, contains('add column if not exists submitted_at'));
     expect(migration, contains('idx_student_attendances_enrollment'));
+    expect(markedAtMigration, contains('add column if not exists marked_at'));
+    expect(markedAtMigration, contains("notify pgrst, 'reload schema'"));
   });
 
   test('diary route scopes teacher rows and supports delete', () {
@@ -93,11 +98,22 @@ void main() {
     final source = File(
       'supabase/functions/api/handlers/leave.ts',
     ).readAsStringSync();
+    final migration = File(
+      'supabase/migrations/0003_attendance_fees_leave_timetable.sql',
+    ).readAsStringSync();
+    final model = File(
+      'lib/features/shared/data/models/backend_models.dart',
+    ).readAsStringSync();
 
     expect(source, contains('/leave/balances'));
     expect(source, contains(r'^\/leave\/applications\/([^/]+)\/recall$'));
     expect(source, contains(r'/recall$/'));
     expect(source, contains(r'(approve|reject)'));
+    expect(migration, contains('start_date      date not null'));
+    expect(migration, isNot(contains('half_day')));
+    expect(model, contains("'start_date': fromDate"));
+    expect(model, contains("json['start_date']"));
+    expect(model, isNot(contains("'half_day': halfDay")));
     expect(
       source,
       contains(r'^\/student-leave\/applications\/([^/]+)\/decision$'),
@@ -108,38 +124,67 @@ void main() {
     final source = File(
       'supabase/functions/api/handlers/students.ts',
     ).readAsStringSync();
+    final attendanceApi = File(
+      'lib/core/network/api_modules/attendance_api.dart',
+    ).readAsStringSync();
 
     expect(source, contains('sub === "attendance"'));
     expect(source, contains('student_attendances'));
+    expect(attendanceApi, contains("'/students/\$studentId/attendance'"));
+    expect(attendanceApi, contains("'/attendance/students/\$studentId'"));
+    expect(attendanceApi, contains('on NotFoundException'));
   });
 
-  test('StaffAttendanceModel._parseDateTime handles PostgreSQL time-only strings', () {
-    final source = File(
-      'lib/features/shared/data/models/backend_models.dart',
+  test('parent attendance and leave screens accept backend leave date aliases', () {
+    final attendanceScreen = File(
+      'lib/features/attendance/presentation/screens/parent_attendance_screen/parent_attendance_screen.dart',
+    ).readAsStringSync();
+    final leaveScreen = File(
+      'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
     ).readAsStringSync();
 
-    // Verify the parser exists in StaffAttendanceModel
-    expect(source, contains('class StaffAttendanceModel'));
-    expect(source, contains('static DateTime? _parseDateTime(Object? value)'));
-
-    // Verify it handles time-only strings
-    expect(source, contains('PostgreSQL time-only'));
-    expect(source, contains('RegExp('));
-    expect(source, contains('\\d{2}'));
-
-    // Verify it combines time with today's date
-    expect(source, contains('now.year'));
-    expect(source, contains('now.month'));
-    expect(source, contains('now.day'));
-
-    // Verify it handles microseconds from fractional seconds
-    expect(source, contains('microseconds'));
-    expect(source, contains('padRight(6'));
-
-    // Verify it still handles full ISO datetimes
-    expect(source, contains('DateTime.tryParse(raw)'));
-    expect(source, contains('full.toLocal()'));
+    expect(attendanceScreen, contains("request['from_date'] ?? request['start_date']"));
+    expect(attendanceScreen, contains("request['to_date'] ?? request['end_date']"));
+    expect(attendanceScreen, contains('Future<Map<String, dynamic>> _safeAttendanceSummary'));
+    expect(attendanceScreen, contains('Future<List<Map<String, dynamic>>> _safeAttendanceRecords'));
+    expect(attendanceScreen, contains('Future<List<Map<String, dynamic>>> _safeLeaveRequests'));
+    expect(leaveScreen, contains("request['from_date'] ?? request['start_date']"));
+    expect(leaveScreen, contains("request['to_date'] ?? request['end_date']"));
   });
+
+  test(
+    'StaffAttendanceModel._parseDateTime handles PostgreSQL time-only strings',
+    () {
+      final source = File(
+        'lib/features/shared/data/models/backend_models.dart',
+      ).readAsStringSync();
+
+      // Verify the parser exists in StaffAttendanceModel
+      expect(source, contains('class StaffAttendanceModel'));
+      expect(
+        source,
+        contains('static DateTime? _parseDateTime(Object? value)'),
+      );
+
+      // Verify it handles time-only strings
+      expect(source, contains('PostgreSQL time-only'));
+      expect(source, contains('RegExp('));
+      expect(source, contains('\\d{2}'));
+
+      // Verify it combines time with today's date
+      expect(source, contains('now.year'));
+      expect(source, contains('now.month'));
+      expect(source, contains('now.day'));
+
+      // Verify it handles microseconds from fractional seconds
+      expect(source, contains('microseconds'));
+      expect(source, contains('padRight(6'));
+
+      // Verify it still handles full ISO datetimes
+      expect(source, contains('DateTime.tryParse(raw)'));
+      expect(source, contains('full.toLocal()'));
+    },
+  );
 
   test('backend stores full ISO datetime in staff QR scan check_in', () {
     final source = File(

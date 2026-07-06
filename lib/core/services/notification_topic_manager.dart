@@ -1,7 +1,7 @@
 import 'dart:developer' as developer;
 
 import 'package:schooldesk1/core/theme/design_tokens.dart';
-import 'package:schooldesk1/core/services/fcm_service.dart';
+import 'package:schooldesk1/core/services/push_notification_service.dart';
 
 class NotificationTopicManager {
   static final NotificationTopicManager _instance =
@@ -21,10 +21,17 @@ class NotificationTopicManager {
   Future<void> subscribeToRoleTopics(SchoolDeskRole role) async {
     try {
       final topicName = '$_rolePrefix${role.name}';
-      await FcmService().subscribeToTopic(topicName);
-      developer.log('Subscribed to role topic: $topicName', name: 'NotificationTopicManager');
+      await PushNotificationService.instance.subscribeToTopic(topicName);
+      developer.log(
+        'Subscribed to role topic: $topicName',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error subscribing to role topics: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error subscribing to role topics: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 
@@ -32,10 +39,17 @@ class NotificationTopicManager {
   Future<void> unsubscribeFromRoleTopics(SchoolDeskRole role) async {
     try {
       final topicName = '$_rolePrefix${role.name}';
-      await FcmService().unsubscribeFromTopic(topicName);
-      developer.log('Unsubscribed from role topic: $topicName', name: 'NotificationTopicManager');
+      await PushNotificationService.instance.unsubscribeFromTopic(topicName);
+      developer.log(
+        'Unsubscribed from role topic: $topicName',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error unsubscribing from role topics: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error unsubscribing from role topics: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 
@@ -44,10 +58,17 @@ class NotificationTopicManager {
   Future<void> subscribeToEventTopic(String eventType) async {
     try {
       final topicName = '$_eventPrefix$eventType';
-      await FcmService().subscribeToTopic(topicName);
-      developer.log('Subscribed to event topic: $topicName', name: 'NotificationTopicManager');
+      await PushNotificationService.instance.subscribeToTopic(topicName);
+      developer.log(
+        'Subscribed to event topic: $topicName',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error subscribing to event topic: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error subscribing to event topic: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 
@@ -55,10 +76,17 @@ class NotificationTopicManager {
   Future<void> unsubscribeFromEventTopic(String eventType) async {
     try {
       final topicName = '$_eventPrefix$eventType';
-      await FcmService().unsubscribeFromTopic(topicName);
-      developer.log('Unsubscribed from event topic: $topicName', name: 'NotificationTopicManager');
+      await PushNotificationService.instance.unsubscribeFromTopic(topicName);
+      developer.log(
+        'Unsubscribed from event topic: $topicName',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error unsubscribing from event topic: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error unsubscribing from event topic: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 
@@ -75,9 +103,16 @@ class NotificationTopicManager {
         // Subscribe to audit events
         await subscribeToEventTopic('audit_events');
 
-        developer.log('Subscribed to admin topics for role: $role.name', name: 'NotificationTopicManager');
+        developer.log(
+          'Subscribed to admin topics for role: $role.name',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error subscribing to admin topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error subscribing to admin topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -90,9 +125,16 @@ class NotificationTopicManager {
         await unsubscribeFromEventTopic('system_alerts');
         await unsubscribeFromEventTopic('audit_events');
 
-        developer.log('Unsubscribed from admin topics for role: $role.name', name: 'NotificationTopicManager');
+        developer.log(
+          'Unsubscribed from admin topics for role: $role.name',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error unsubscribing from admin topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error unsubscribing from admin topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -106,9 +148,16 @@ class NotificationTopicManager {
         await subscribeToEventTopic('child_academics');
         await subscribeToEventTopic('fees');
 
-        developer.log('Subscribed to parent topics', name: 'NotificationTopicManager');
+        developer.log(
+          'Subscribed to parent topics',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error subscribing to parent topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error subscribing to parent topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -121,9 +170,16 @@ class NotificationTopicManager {
         await unsubscribeFromEventTopic('child_academics');
         await unsubscribeFromEventTopic('fees');
 
-        developer.log('Unsubscribed from parent topics', name: 'NotificationTopicManager');
+        developer.log(
+          'Unsubscribed from parent topics',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error unsubscribing from parent topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error unsubscribing from parent topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -136,9 +192,16 @@ class NotificationTopicManager {
         await subscribeToEventTopic('assignments');
         await subscribeToEventTopic('class_announcements');
 
-        developer.log('Subscribed to teacher topics', name: 'NotificationTopicManager');
+        developer.log(
+          'Subscribed to teacher topics',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error subscribing to teacher topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error subscribing to teacher topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -151,9 +214,16 @@ class NotificationTopicManager {
         await unsubscribeFromEventTopic('assignments');
         await unsubscribeFromEventTopic('class_announcements');
 
-        developer.log('Unsubscribed from teacher topics', name: 'NotificationTopicManager');
+        developer.log(
+          'Unsubscribed from teacher topics',
+          name: 'NotificationTopicManager',
+        );
       } catch (e) {
-        developer.log('Error unsubscribing from teacher topics: $e', name: 'NotificationTopicManager', level: 1000);
+        developer.log(
+          'Error unsubscribing from teacher topics: $e',
+          name: 'NotificationTopicManager',
+          level: 1000,
+        );
       }
     }
   }
@@ -182,9 +252,16 @@ class NotificationTopicManager {
           break;
       }
 
-      developer.log('Setup notification topics for role: $role.name', name: 'NotificationTopicManager');
+      developer.log(
+        'Setup notification topics for role: $role.name',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error setting up topics for role: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error setting up topics for role: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 
@@ -211,9 +288,16 @@ class NotificationTopicManager {
           break;
       }
 
-      developer.log('Cleaned up notification topics for role: $role.name', name: 'NotificationTopicManager');
+      developer.log(
+        'Cleaned up notification topics for role: $role.name',
+        name: 'NotificationTopicManager',
+      );
     } catch (e) {
-      developer.log('Error cleaning up topics for role: $e', name: 'NotificationTopicManager', level: 1000);
+      developer.log(
+        'Error cleaning up topics for role: $e',
+        name: 'NotificationTopicManager',
+        level: 1000,
+      );
     }
   }
 }

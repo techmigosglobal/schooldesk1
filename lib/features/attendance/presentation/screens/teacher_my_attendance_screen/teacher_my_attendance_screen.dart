@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -17,6 +18,7 @@ class TeacherMyAttendanceScreen extends StatefulWidget {
 
 class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
   StaffAttendanceModel? _attendance;
+  List<StaffAttendanceModel> _attendanceLog = const [];
   bool _loading = true;
   bool _submitting = false;
   String? _error;
@@ -55,11 +57,13 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
       _message = null;
     });
     try {
-      final attendance = await BackendApiClient.instance
-          .getMyStaffAttendanceToday();
+      final api = BackendApiClient.instance;
+      final attendance = await api.getMyStaffAttendanceToday();
+      final attendanceLog = await api.getMyStaffAttendanceLog(days: 30);
       if (!mounted) return;
       setState(() {
         _attendance = attendance;
+        _attendanceLog = attendanceLog;
         _loading = false;
       });
       _maybeOpenAutoScanner();
@@ -104,9 +108,12 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
     });
     try {
       final attendance = await BackendApiClient.instance.scanStaffQr(token);
+      final attendanceLog = await BackendApiClient.instance
+          .getMyStaffAttendanceLog(days: 30);
       if (!mounted) return;
       setState(() {
         _attendance = attendance;
+        _attendanceLog = attendanceLog;
         _submitting = false;
         _message = 'Attendance punch recorded';
       });
@@ -155,31 +162,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          TeacherFlowMetricGrid(
-            metrics: [
-              TeacherFlowMetric(
-                label: 'Punch In',
-                value: _attendance?.checkInTimeLabel ?? '--:--',
-                icon: Icons.login_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFE3FAF5),
-              ),
-              TeacherFlowMetric(
-                label: 'Status',
-                value: teacherFlowTitleCase(_attendance?.status ?? 'Pending'),
-                icon: Icons.verified_rounded,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
-              ),
-              TeacherFlowMetric(
-                label: 'Source',
-                value: teacherFlowTitleCase(_attendance?.source ?? 'QR'),
-                icon: Icons.qr_code_2_rounded,
-                color: Colors.purple,
-                tone: const Color(0xFFF5EAFE),
-              ),
-            ],
-          ),
+          _AttendanceLogCard(records: _attendanceLog),
           if (_submitting) ...[
             const SizedBox(height: 18),
             TeacherFlowCard(
@@ -202,6 +185,111 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         ],
       ),
     );
+  }
+}
+
+class _AttendanceLogCard extends StatelessWidget {
+  const _AttendanceLogCard({required this.records});
+
+  final List<StaffAttendanceModel> records;
+
+  @override
+  Widget build(BuildContext context) {
+    return TeacherFlowCard(
+      icon: Icons.history_rounded,
+      title: 'Attendance Log',
+      subtitle: 'Last 30 days',
+      status: '${records.length}',
+      statusColor: teacherFlowAccent,
+      body: records.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Text(
+                'No recorded punch-ins in the last 30 days.',
+                style: TextStyle(
+                  color: teacherFlowMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          : Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: Column(
+                children: [
+                  for (final record in records) _AttendanceLogRow(record),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _AttendanceLogRow extends StatelessWidget {
+  const _AttendanceLogRow(this.record);
+
+  final StaffAttendanceModel record;
+
+  @override
+  Widget build(BuildContext context) {
+    final date = record.date ?? record.checkIn;
+    final checkIn = record.checkIn;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE3FAF5),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: teacherFlowAccent.withAlpha(46)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.login_rounded,
+              color: teacherFlowAccent,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _dateLabel(date),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: teacherFlowInk,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            _timeLabel(checkIn),
+            style: const TextStyle(
+              color: teacherFlowInk,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _dateLabel(DateTime? value) {
+    if (value == null) return 'Unknown date';
+    return DateFormat('dd MMM yyyy').format(value.toLocal());
+  }
+
+  static String _timeLabel(DateTime? value) {
+    if (value == null) return '--:--';
+    return DateFormat('HH:mm').format(value.toLocal());
   }
 }
 

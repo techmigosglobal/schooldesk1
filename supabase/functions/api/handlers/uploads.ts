@@ -1,6 +1,6 @@
 // handlers/uploads.ts — multipart file upload → Supabase Storage
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok, runDbStatements } from "../index.ts";
+import { fail, ok, runDbStatements, triggerPushProcessing } from "../index.ts";
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
 }
@@ -107,6 +107,24 @@ async function notifyUsersByRole(
   }));
   const { error: insertError } = await svc.from("notification_logs").insert(rows);
   if (insertError) throw insertError;
+  const { data: events, error: eventError } = await svc.from("notification_events")
+    .insert(
+      rows.map((row) => ({
+        school_id: row.school_id,
+        user_id: row.user_id,
+        event_type: row.entity_type,
+        event_data: {
+          title: row.title,
+          message: row.body,
+          reference_type: row.entity_type,
+          reference_id: row.entity_id,
+        },
+      })),
+    )
+    .select("id");
+  if (eventError) throw eventError;
+  const eventIds = (events ?? []).map((row) => textValue(row.id)).filter(Boolean);
+  if (eventIds.length > 0) triggerPushProcessing(eventIds);
 }
 
 async function notifyUser(
@@ -133,6 +151,22 @@ async function notifyUser(
     entity_id: payload.referenceId,
   });
   if (error) throw error;
+  const { data: eventRow, error: eventError } = await svc.from("notification_events")
+    .insert({
+      school_id: school,
+      user_id: userId,
+      event_type: payload.referenceType,
+      event_data: {
+        title: payload.title,
+        message: payload.body,
+        reference_type: payload.referenceType,
+        reference_id: payload.referenceId,
+      },
+    })
+    .select("id")
+    .maybeSingle();
+  if (eventError) throw eventError;
+  if (eventRow?.id) triggerPushProcessing(eventRow.id);
 }
 
 let eventPostSchemaReady = false;

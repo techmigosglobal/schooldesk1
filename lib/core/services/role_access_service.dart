@@ -60,11 +60,16 @@ class RoleAccessService {
     final parentChildren = profileRole == 'parent'
         ? await _try(() => api.getMyStudents())
         : <Map<String, dynamic>>[];
-    final timetable = await _try(
+    var timetable = await _try(
       () => api.getTimetableSlots(
         staffId: teacherStaffId.isEmpty ? null : teacherStaffId,
       ),
     );
+    // If no staff-scoped timetable found, try section-scoped timetable as a
+    // fallback (some backends store timetables by section rather than staff).
+    if ((timetable == null || timetable.isEmpty) && teacherSectionId.isNotEmpty) {
+      timetable = await _try(() => api.getTimetableSlots(sectionId: teacherSectionId));
+    }
     final invoices = profileRole == 'teacher'
         ? <Map<String, dynamic>>[]
         : await _try(() => api.getInvoices());
@@ -347,6 +352,11 @@ class RoleAccessService {
   static List<Map<String, dynamic>> get teacherTimetableToday {
     _ensureInitialized();
     return _todayTimetable.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  static List<Map<String, dynamic>> get teacherTimetable {
+    _ensureInitialized();
+    return _teacherTimetable.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   static List<Map<String, dynamic>> get parentChildren {

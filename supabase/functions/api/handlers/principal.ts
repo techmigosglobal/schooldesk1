@@ -1,6 +1,6 @@
 // handlers/principal.ts — classes hub CRUD, subject workflows, imports, timetable
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -744,6 +744,18 @@ async function notifyStaffIfLinked(
     entity_type: entityType,
     entity_id: entityId,
   });
+  const { data: eventRow } = await svc.from("notification_events").insert({
+    school_id: school,
+    user_id: userRow.id,
+    event_type: entityType,
+    event_data: {
+      title,
+      message: body,
+      reference_type: entityType,
+      reference_id: entityId,
+    },
+  }).select("id").maybeSingle();
+  if (eventRow?.id) triggerPushProcessing(eventRow.id);
 }
 
 async function buildPrincipalSubjectsOverview(

@@ -170,14 +170,22 @@ extension BackendAttendanceApi on BackendApiClient {
     String studentId, {
     int? month,
     int? year,
-  }) {
+  }) async {
     final queryParams = <String, dynamic>{};
     if (month != null) queryParams['month'] = month.toString().padLeft(2, '0');
     if (year != null) queryParams['year'] = '$year';
-    return getRawList(
-      '/students/$studentId/attendance',
-      queryParameters: queryParams.isEmpty ? null : queryParams,
-    );
+    final params = queryParams.isEmpty ? null : queryParams;
+    try {
+      return await getRawList(
+        '/students/$studentId/attendance',
+        queryParameters: params,
+      );
+    } on NotFoundException {
+      return getRawList(
+        '/attendance/students/$studentId',
+        queryParameters: params,
+      );
+    }
   }
 
   Future<StaffQrTokenModel> getStaffQrToken({String? nonce}) async {
@@ -245,6 +253,31 @@ extension BackendAttendanceApi on BackendApiClient {
     } on DioException catch (e) {
       throw _handleError(e);
     }
+  }
+
+  Future<List<StaffAttendanceModel>> getMyStaffAttendanceLog({
+    int days = 30,
+  }) async {
+    final rows = await getStaffAttendanceForDate();
+    final today = DateTime.now();
+    final startDate = DateTime(
+      today.year,
+      today.month,
+      today.day,
+    ).subtract(Duration(days: days - 1));
+    final filtered =
+        rows.where((row) {
+          final date = row.date;
+          if (date == null || row.checkIn == null) return false;
+          final local = date.toLocal();
+          final day = DateTime(local.year, local.month, local.day);
+          return !day.isBefore(startDate);
+        }).toList()..sort((a, b) {
+          final aTime = a.checkIn ?? a.date ?? DateTime(1900);
+          final bTime = b.checkIn ?? b.date ?? DateTime(1900);
+          return bTime.compareTo(aTime);
+        });
+    return filtered.take(days).toList();
   }
 
   Future<List<StaffAttendanceModel>> getStaffAttendanceForDate({

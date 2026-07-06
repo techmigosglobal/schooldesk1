@@ -1363,8 +1363,8 @@ class LeaveApplicationModel {
       leaveTypeName:
           '${leaveType['leave_name'] ?? json['leave_type_name'] ?? json['leave_name'] ?? ''}'
               .trim(),
-      fromDate: '${json['from_date'] ?? ''}',
-      toDate: '${json['to_date'] ?? ''}',
+      fromDate: '${json['from_date'] ?? json['start_date'] ?? ''}',
+      toDate: '${json['to_date'] ?? json['end_date'] ?? ''}',
       halfDay: json['half_day'] as bool? ?? false,
       totalDays: (json['total_days'] as num?)?.toDouble() ?? 0,
       reason: json['reason'] as String?,
@@ -1401,9 +1401,8 @@ class LeaveApplicationRequest {
   Map<String, dynamic> toJson() => {
     'staff_id': staffId,
     'leave_type_id': leaveTypeId,
-    'from_date': fromDate,
-    'to_date': toDate,
-    'half_day': halfDay,
+    'start_date': fromDate,
+    'end_date': toDate,
     if (reason != null) 'reason': reason,
   };
 }

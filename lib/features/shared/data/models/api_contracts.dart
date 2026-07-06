@@ -290,9 +290,8 @@ class SubmitLeaveRequest {
   Map<String, dynamic> toJson() => {
     'staff_id': staffId,
     'leave_type_id': leaveTypeId,
-    'from_date': fromDate,
-    'to_date': toDate,
-    'half_day': halfDay,
+    'start_date': fromDate,
+    'end_date': toDate,
     if (_text(reason).isNotEmpty) 'reason': reason,
   };
 }

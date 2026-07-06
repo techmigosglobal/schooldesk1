@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
@@ -170,13 +171,17 @@ class _ParentDrawerState extends State<ParentDrawer> {
               label: 'Messages',
               route: AppRoutes.parentTeacherChat,
             ),
-            const SchoolDeskNavigationItem(
-              index: ParentNav.ptm,
-              icon: Icons.event_available_outlined,
-              activeIcon: Icons.event_available_rounded,
-              label: 'PTM Slots',
-              route: AppRoutes.parentPTMBooking,
-            ),
+            // Show PTM only when backend feature is available
+            if (FeatureAvailabilityService
+                .stateFor(SchoolDeskFeature.teacherParentMeetings)
+                .isAvailable)
+              const SchoolDeskNavigationItem(
+                index: ParentNav.ptm,
+                icon: Icons.event_available_outlined,
+                activeIcon: Icons.event_available_rounded,
+                label: 'PTM Slots',
+                route: AppRoutes.parentPTMBooking,
+              ),
           ],
         ),
         const SchoolDeskNavigationSection(

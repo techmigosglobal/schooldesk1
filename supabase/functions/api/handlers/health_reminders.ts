@@ -1,6 +1,6 @@
 // handlers/health_reminders.ts - day-specific parent health reminders.
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -159,6 +159,30 @@ async function notifyHealthRecipients(
     onConflict: "user_id,entity_type,entity_id",
   });
   if (error) throw error;
+
+  const { data: events, error: eventError } = await svc.from("notification_events")
+    .insert(
+      recipients.map((recipient) => ({
+        school_id: school,
+        user_id: recipient.userId,
+        event_type: "health_reminder",
+        event_data: {
+          title: "Health Reminder",
+          message: notificationBody(studentName, reminder) ||
+            "A parent added a health reminder.",
+          health_reminder_id: reminderId,
+          reference_type: "health_reminder",
+          reference_id: reminderId,
+          student_id: text(reminder.student_id) || "",
+          section_id: sectionId || "",
+          teacher_id: recipient.teacherId || "",
+        },
+      })),
+    )
+    .select("id");
+  if (eventError) throw eventError;
+  const eventIds = (events ?? []).map((row) => text(row.id)).filter(Boolean);
+  if (eventIds.length > 0) triggerPushProcessing(eventIds);
 }
 
 function normalize(row: Record<string, unknown>) {

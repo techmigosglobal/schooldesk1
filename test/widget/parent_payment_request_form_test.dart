@@ -16,11 +16,7 @@ void main() {
   const filePickerChannel = MethodChannel(
     'miguelruivo.flutter.plugins.filepicker',
   );
-  const urlLauncherChannel = MethodChannel('plugins.flutter.io/url_launcher');
-
   late TestBackendAdapter adapter;
-  bool launchedUpi = false;
-  String? launchedUrl;
 
   setUp(() {
     GoogleFonts.config.allowRuntimeFetching = false;
@@ -29,8 +25,6 @@ void main() {
     BackendApiClient.instance.dio.httpClientAdapter = adapter;
     BackendApiClient.instance.setAuthToken('parent-test-token');
     BackendApiClient.instance.setCurrentRole('parent');
-    launchedUpi = false;
-    launchedUrl = null;
   });
 
   tearDown(() async {
@@ -38,10 +32,9 @@ void main() {
     final messenger = TestDefaultBinaryMessengerBinding.instance
         .defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(filePickerChannel, null);
-    messenger.setMockMethodCallHandler(urlLauncherChannel, null);
   });
 
-  testWidgets('parent payment form creates intent and marks UPI as opened', (
+  testWidgets('parent payment form creates intent and stays qr first', (
     tester,
   ) async {
     _setLargeSurface(tester);
@@ -49,16 +42,6 @@ void main() {
     final navigatorKey = GlobalKey<NavigatorState>();
     Map<String, dynamic>? intentPayload;
     _seedPaymentConfig(adapter);
-    final messenger = TestDefaultBinaryMessengerBinding.instance
-        .defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(urlLauncherChannel, (call) async {
-      if (call.method == 'launch') {
-        launchedUpi = true;
-        launchedUrl = (call.arguments as Map)['url'] as String;
-        return true;
-      }
-      return false;
-    });
     adapter.handlers['POST /fees/payments/intent'] = (options) {
       intentPayload = Map<String, dynamic>.from(options.data as Map);
       return <String, dynamic>{
@@ -67,7 +50,8 @@ void main() {
           'id': 'intent-1',
           'request_reference': 'FPR-1001',
           'amount': 1.0,
-          'upi_uri': 'upi://pay?pa=school@upi&am=1.00',
+          'upi_uri':
+              'upi://pay?pa=school@upi&pn=Bad+Name&am=1.00&cu=INR&tn=FPR-1001%20payment',
         },
       };
     };
@@ -77,7 +61,7 @@ void main() {
 
     final confirmPaymentButton = find.widgetWithText(
       FilledButton,
-      'Confirm Payment',
+      'Create Payment Reference',
     );
     await tester.scrollUntilVisible(
       confirmPaymentButton,
@@ -99,17 +83,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Reference: FPR-1001'), findsOneWidget);
-    final payNowButton = find.widgetWithText(FilledButton, 'Pay Now');
-    expect(payNowButton, findsOneWidget);
-
-    await tester.tap(payNowButton);
-    await tester.pumpAndSettle();
-
-    expect(launchedUpi, isTrue);
-    expect(launchedUrl, contains('upi://pay'));
+    expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Reference Ready'), findsOneWidget);
     expect(
       find.text(
-        'After payment, enter the UTR and upload the success screenshot below.',
+        'Scan the QR or use the copied UPI ID, then enter the UTR and upload the success screenshot below.',
       ),
       findsOneWidget,
     );
@@ -169,7 +147,7 @@ void main() {
 
       final confirmPaymentButton = find.widgetWithText(
         FilledButton,
-        'Confirm Payment',
+        'Create Payment Reference',
       );
       await tester.scrollUntilVisible(
         confirmPaymentButton,
@@ -188,7 +166,9 @@ void main() {
       await tester.tap(find.text('April'));
       await tester.pumpAndSettle();
       expect(find.text('Selected months: March, April'), findsOneWidget);
-      await tester.tap(find.widgetWithText(FilledButton, 'Confirm Payment'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Create Payment Reference'),
+      );
       await tester.pumpAndSettle();
 
       expect(secondIntentPayload?['selected_months'], 2);
@@ -221,7 +201,10 @@ void main() {
 
     expect(find.text('UPI payment is not configured'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Confirm Payment'), findsNothing);
+    expect(
+      find.widgetWithText(FilledButton, 'Create Payment Reference'),
+      findsNothing,
+    );
     expect(
       adapter.seenRequests.where(
         (request) => request.path == '/fees/payments/intent',

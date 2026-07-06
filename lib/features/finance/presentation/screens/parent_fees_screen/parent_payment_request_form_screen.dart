@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -64,7 +63,6 @@ class _ParentPaymentRequestFormScreenState
   bool _uploadingProof = false;
   bool _creatingIntent = false;
   bool _submitting = false;
-  bool _upiOpened = false;
   String? _proofName;
   String? _proofPath;
   String? _configError;
@@ -101,30 +99,31 @@ class _ParentPaymentRequestFormScreenState
 
   bool get _isTuition => _text(_selectedFee['fee_type']) == 'tuition';
   List<String> get _allowedMonthNames {
-    final configured = (_selectedFee['allowed_month_names'] is List
-            ? (_selectedFee['allowed_month_names'] as List)
-                .map((value) => '$value'.trim())
-                .where((value) => value.isNotEmpty)
-                .toList()
-            : const <String>[])
-        .cast<String>();
+    final configured =
+        (_selectedFee['allowed_month_names'] is List
+                ? (_selectedFee['allowed_month_names'] as List)
+                      .map((value) => '$value'.trim())
+                      .where((value) => value.isNotEmpty)
+                      .toList()
+                : const <String>[])
+            .cast<String>();
     if (configured.isEmpty && _isTuition) {
       return _monthNames;
     }
     return configured;
   }
+
   List<String> get _paidMonthNames =>
       (_selectedFee['paid_month_names'] is List
               ? (_selectedFee['paid_month_names'] as List)
-                  .map((value) => '$value'.trim())
-                  .where((value) => value.isNotEmpty)
-                  .toList()
+                    .map((value) => '$value'.trim())
+                    .where((value) => value.isNotEmpty)
+                    .toList()
               : const <String>[])
           .cast<String>();
-  List<String> get _unpaidMonthNames =>
-      _allowedMonthNames
-          .where((month) => !_paidMonthNames.contains(month))
-          .toList(growable: false);
+  List<String> get _unpaidMonthNames => _allowedMonthNames
+      .where((month) => !_paidMonthNames.contains(month))
+      .toList(growable: false);
   double get _totalAmount {
     final balance =
         (_selectedFee['amount'] as num?)?.toDouble() ??
@@ -161,25 +160,91 @@ class _ParentPaymentRequestFormScreenState
   String get _intentId => _text(_paymentIntent?['id']);
   String get _intentReference => _text(_paymentIntent?['request_reference']);
   String get _intentUpiUri => _text(_paymentIntent?['upi_uri']);
-  String get _effectiveUpiUri =>
-      _intentUpiUri.isNotEmpty ? _intentUpiUri : _upiUri;
+  String get _effectiveUpiUri {
+    if (_intentUpiUri.isNotEmpty) {
+      final sanitized = _sanitizeUpiUri(_intentUpiUri);
+      if (_isValidUpiUri(sanitized)) {
+        return sanitized;
+      }
+    }
+    return _upiUri;
+  }
+
   double get _payableAmount =>
       (_paymentIntent?['amount'] as num?)?.toDouble() ?? _totalAmount;
 
   String get _upiUri {
-    final params = {
-      'pa': _upiId,
-      'pn': _payeeName,
+    final params = <String, String>{
+      'pa': _upiId.trim(),
+      'pn': _payeeName.trim(),
       'am': _payableAmount.toStringAsFixed(2),
       'cu': 'INR',
-      'tn': _intentReference.isNotEmpty
-          ? _intentReference
-          : _text(_paymentConfig['qr_note'], fallback: 'School fee payment'),
+      'tn': _sanitizeUpiNote(
+        _text(_paymentConfig['qr_note'], fallback: 'School fee payment'),
+      ),
     };
     final query = params.entries
         .map((entry) => '${entry.key}=${Uri.encodeComponent(entry.value)}')
         .join('&');
     return 'upi://pay?$query';
+  }
+
+  String _sanitizeUpiUri(String uriText) {
+    try {
+      final uri = Uri.parse(uriText);
+      final updated = Map<String, String>.from(uri.queryParameters);
+      final note = _text(
+        _paymentConfig['qr_note'],
+        fallback: 'School fee payment',
+      );
+      if (note.isNotEmpty) {
+        updated['tn'] = _sanitizeUpiNote(note);
+      }
+      updated['cu'] = 'INR';
+      final payeeName = _payeeName.trim();
+      if (payeeName.isNotEmpty) {
+        updated['pn'] = payeeName;
+      }
+      // Keep the bank-facing UPI payload minimal. The SchoolDesk request
+      // reference is already tracked in-app and should not ride inside the
+      // payment intent where some PSP/bank flows reject it.
+      updated.remove('tr');
+      updated.remove('tid');
+      return uri.replace(queryParameters: updated).toString();
+    } catch (_) {
+      return uriText;
+    }
+  }
+
+  bool _isValidUpiUri(String uriText) {
+    try {
+      final uri = Uri.parse(uriText);
+      final params = uri.queryParameters;
+      return uri.scheme == 'upi' &&
+          uri.host == 'pay' &&
+          params['pa']?.trim().isNotEmpty == true &&
+          params['am']?.trim().isNotEmpty == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sanitize UPI note field to comply with NPCI standard restrictions.
+  /// - Max 60 characters (UPI standard is ~80, but reduce to 60 for safety)
+  /// - Remove leading/trailing spaces
+  /// - Replace multiple spaces with single space
+  /// - Keep only alphanumeric, spaces, hyphens, and basic punctuation
+  String _sanitizeUpiNote(String note) {
+    var sanitized = note.trim();
+    // Remove disallowed characters, keep alphanumeric, space, hyphen, period, slash
+    sanitized = sanitized.replaceAll(RegExp(r'[^a-zA-Z0-9\s\-\./]'), '');
+    // Replace multiple spaces with single space
+    sanitized = sanitized.replaceAll(RegExp(r'\s+'), ' ');
+    // Truncate to 60 characters max
+    if (sanitized.length > 60) {
+      sanitized = sanitized.substring(0, 60).trim();
+    }
+    return sanitized.isEmpty ? 'School fee' : sanitized;
   }
 
   @override
@@ -599,19 +664,38 @@ class _ParentPaymentRequestFormScreenState
               final canAdd = _canAddMonth(month);
               final canRemove = _canRemoveMonth(month);
               final enabled = canAdd || canRemove;
+              // Improve contrast: explicitly derive active/disabled label color
+              final isActive = selected || paid;
+              final labelColor = isActive
+                  ? context.appTheme.onPrimary
+                  : (enabled
+                        ? context.appTheme.onSurface
+                        : context.appTheme.onSurfaceVariant);
+
               return FilterChip(
                 label: Text(paid ? '$month Paid' : month),
-                selected: selected || paid,
-                onSelected: enabled ? (_) => _toggleMonthSelection(month) : null,
+                labelStyle: GoogleFonts.dmSans(
+                  color: labelColor,
+                  fontWeight: FontWeight.w700,
+                ),
+                selected: isActive,
+                onSelected: enabled
+                    ? (_) => _toggleMonthSelection(month)
+                    : null,
                 selectedColor: paid
-                    ? context.appTheme.success.withOpacity(0.16)
-                    : context.appTheme.primaryContainer,
-                disabledColor: paid
-                    ? context.appTheme.success.withOpacity(0.10)
-                    : context.appTheme.surfaceVariant,
-                checkmarkColor: paid
                     ? context.appTheme.success
                     : context.appTheme.primary,
+                disabledColor: paid
+                    ? context.appTheme.successContainer
+                    : context.appTheme.surfaceVariant,
+                backgroundColor: context.appTheme.surfaceVariant,
+                side: BorderSide(
+                  color: isActive
+                      ? context.appTheme.primary
+                      : context.appTheme.outlineVariant,
+                  width: isActive ? 1.6 : 1,
+                ),
+                checkmarkColor: context.appTheme.onPrimary,
               );
             }).toList(),
           ),
@@ -737,7 +821,7 @@ class _ParentPaymentRequestFormScreenState
             alignment: Alignment.centerLeft,
             child: Text(
               _intentReference.isEmpty
-                  ? 'Generate a school reference before opening UPI.'
+                  ? 'Create a school reference before paying with the QR below.'
                   : 'Reference: $_intentReference',
               style: GoogleFonts.dmSans(
                 fontSize: 12,
@@ -752,11 +836,10 @@ class _ParentPaymentRequestFormScreenState
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: (_creatingIntent || _submitting)
+              onPressed:
+                  (_creatingIntent || _submitting || _intentReference.isNotEmpty)
                   ? null
-                  : _intentReference.isEmpty
-                  ? () => _createPaymentIntent()
-                  : _openUpiApp,
+                  : () => _createPaymentIntent(),
               icon: _creatingIntent
                   ? const SizedBox.square(
                       dimension: 16,
@@ -764,23 +847,23 @@ class _ParentPaymentRequestFormScreenState
                     )
                   : Icon(
                       _intentReference.isEmpty
-                          ? Icons.fact_check_rounded
-                          : Icons.open_in_new_rounded,
+                          ? Icons.qr_code_rounded
+                          : Icons.check_circle_rounded,
                       size: 18,
                     ),
               label: Text(
                 _creatingIntent
                     ? 'Creating Reference...'
                     : _intentReference.isEmpty
-                    ? 'Confirm Payment'
-                    : 'Pay Now',
+                    ? 'Create Payment Reference'
+                    : 'Reference Ready',
               ),
             ),
           ),
-          if (_upiOpened) ...[
+          if (_intentReference.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(
-              'After payment, enter the UTR and upload the success screenshot below.',
+              'Scan the QR or use the copied UPI ID, then enter the UTR and upload the success screenshot below.',
               textAlign: TextAlign.center,
               style: GoogleFonts.dmSans(
                 fontSize: 12,
@@ -1141,7 +1224,6 @@ class _ParentPaymentRequestFormScreenState
 
   void _resetPaymentIntent() {
     _paymentIntent = null;
-    _upiOpened = false;
   }
 
   Future<Map<String, dynamic>?> _createPaymentIntent({
@@ -1153,8 +1235,9 @@ class _ParentPaymentRequestFormScreenState
       final intent = await BackendApiClient.instance.createFeePaymentIntent(
         invoiceId: '${_selectedFee['id']}',
         paymentMethod: _paymentMode,
-        selectedMonthNames:
-            _isTuition ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList() : const [],
+        selectedMonthNames: _isTuition
+            ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList()
+            : const [],
         selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
         selectedTerms: 0,
         remarks: _remarksController.text.trim(),
@@ -1190,38 +1273,6 @@ class _ParentPaymentRequestFormScreenState
         );
       }
       return null;
-    }
-  }
-
-  Future<void> _openUpiApp() async {
-    var intent = _paymentIntent;
-    intent ??= await _createPaymentIntent(showSnack: false);
-    if (intent == null) return;
-    final uriText = _effectiveUpiUri;
-    if (uriText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('UPI link is not available for this payment.'),
-          backgroundColor: context.appTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-    final uri = Uri.parse(uriText);
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!mounted) return;
-    setState(() => _upiOpened = opened);
-    if (!opened) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Unable to open a UPI app. You can scan the QR instead.',
-          ),
-          backgroundColor: context.appTheme.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
     }
   }
 
@@ -1291,8 +1342,9 @@ class _ParentPaymentRequestFormScreenState
         transactionRef: reference,
         screenshotPath: _proofPath!,
         screenshotName: _proofName ?? 'payment-proof',
-        selectedMonthNames:
-            _isTuition ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList() : const [],
+        selectedMonthNames: _isTuition
+            ? _unpaidMonthNames.where(_selectedMonthNames.contains).toList()
+            : const [],
         selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
         selectedTerms: 0,
         remarks: _remarksController.text.trim(),
@@ -1354,7 +1406,9 @@ class _ParentPaymentRequestFormScreenState
             if (_isTuition)
               _confirmRow(
                 'Months',
-                _unpaidMonthNames.where(_selectedMonthNames.contains).join(', '),
+                _unpaidMonthNames
+                    .where(_selectedMonthNames.contains)
+                    .join(', '),
               ),
             _confirmRow('UTR', _utrController.text.trim()),
             _confirmRow('Proof', _proofName ?? 'Selected proof'),

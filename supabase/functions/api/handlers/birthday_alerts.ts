@@ -1,6 +1,6 @@
 // handlers/birthday_alerts.ts - daily DOB based birthday notification fan-out.
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
 
 function sid(user: User) {
   return (user.app_metadata?.school_id as string) ?? "";
@@ -142,12 +142,6 @@ export async function handleBirthdayAlerts(
   );
   const isAuthorizedJob = configuredSecret.length > 0 &&
     suppliedSecret === configuredSecret;
-  if (
-    user &&
-    !["principal", "admin", "super_admin"].includes(role(user))
-  ) {
-    return fail("forbidden", 403);
-  }
   if (!user && !isAuthorizedJob) return fail("unauthorized", 401);
 
   const school = user
@@ -203,6 +197,28 @@ export async function handleBirthdayAlerts(
       { onConflict: "user_id,entity_type,entity_id" },
     );
     if (upsertError) return fail(upsertError.message);
+
+    const { data: events, error: eventError } = await svc.from("notification_events")
+      .insert(
+        rows.map((row) => ({
+          school_id: row.school_id,
+          user_id: row.user_id,
+          event_type: row.entity_type,
+          event_data: {
+            title: row.title,
+            message: row.body,
+            reference_type: row.entity_type,
+            reference_id: row.entity_id,
+            student_id: row.student_id ?? "",
+            section_id: row.section_id ?? "",
+            teacher_id: row.teacher_id ?? "",
+          },
+        })),
+      )
+      .select("id");
+    if (eventError) return fail(eventError.message);
+    const eventIds = (events ?? []).map((row) => text(row.id)).filter(Boolean);
+    if (eventIds.length > 0) triggerPushProcessing(eventIds);
   }
 
   return ok({ date, notifications_created: rows.length });

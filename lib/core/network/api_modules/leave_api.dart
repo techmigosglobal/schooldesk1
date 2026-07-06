@@ -156,7 +156,31 @@ extension BackendLeaveApi on BackendApiClient {
           message: data['error'] ?? 'Failed to submit leave application',
         );
       }
+      return;
     } on DioException catch (e) {
+      // If backend schema doesn't have `half_day`, retry without that key.
+      try {
+        final respData = e.response?.data;
+        final msg = respData is Map<String, dynamic>
+            ? (respData['error'] ?? respData['message'] ?? '')
+            : respData?.toString() ?? '';
+        if (msg.toString().toLowerCase().contains('half_day') ||
+            msg.toString().toLowerCase().contains("could not find the 'half_day'")) {
+          final payload = Map<String, dynamic>.from(request.toJson());
+          payload.remove('half_day');
+          final retryResp = await _dio.post(
+            '/leave/applications',
+            data: payload,
+          );
+          final retryData = retryResp.data as Map<String, dynamic>;
+          if (retryData['success'] == true) return;
+          throw ServerException(
+            message: retryData['error'] ?? 'Failed to submit leave application',
+          );
+        }
+      } catch (_) {
+        // fall-through to throw original handled error
+      }
       throw _handleError(e);
     }
   }

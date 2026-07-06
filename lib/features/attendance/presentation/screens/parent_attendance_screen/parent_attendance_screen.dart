@@ -92,17 +92,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
 
     try {
       final studentId = _childIds[childIndex];
-      // Fetch attendance summary
-      final attendanceSummary = await BackendApiClient.instance
-          .getStudentAttendanceSummary(studentId: studentId);
-      final attendanceRecords = await BackendApiClient.instance
-          .getStudentAttendanceRecords(
-            studentId,
-            month: DateTime.now().month,
-            year: DateTime.now().year,
-          );
-      final leaveRequests = await BackendApiClient.instance
-          .getStudentLeaveApplications(studentId: studentId);
+      final attendanceSummary = await _safeAttendanceSummary(studentId);
+      final attendanceRecords = await _safeAttendanceRecords(studentId);
+      final leaveRequests = await _safeLeaveRequests(studentId);
       final periodRows = _periodRowsFromSources(
         summary: attendanceSummary,
         records: attendanceRecords,
@@ -138,11 +130,57 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     }
   }
 
+  Future<Map<String, dynamic>> _safeAttendanceSummary(String studentId) async {
+    try {
+      return await BackendApiClient.instance.getStudentAttendanceSummary(
+        studentId: studentId,
+      );
+    } catch (_) {
+      return <String, dynamic>{
+        'student_id': studentId,
+        'present_days': 0,
+        'absent_days': 0,
+        'late_count': 0,
+        'leave_days': 0,
+        'half_day_count': 0,
+        'attendance_pct': 0,
+      };
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _safeAttendanceRecords(
+    String studentId,
+  ) async {
+    try {
+      return await BackendApiClient.instance.getStudentAttendanceRecords(
+        studentId,
+        month: DateTime.now().month,
+        year: DateTime.now().year,
+      );
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _safeLeaveRequests(
+    String studentId,
+  ) async {
+    try {
+      return await BackendApiClient.instance.getStudentLeaveApplications(
+        studentId: studentId,
+      );
+    } catch (_) {
+      return const <Map<String, dynamic>>[];
+    }
+  }
+
   Map<String, dynamic> _leaveRequestFromApi(Map<String, dynamic> request) {
-    final fromDate = DateTime.tryParse('${request['from_date'] ?? ''}');
-    final toDate = DateTime.tryParse('${request['to_date'] ?? ''}');
+    final fromRaw = _leaveStartDate(request);
+    final toRaw = _leaveEndDate(request);
+    final fromDate = DateTime.tryParse(fromRaw);
+    final toDate = DateTime.tryParse(toRaw);
     final dateLabel = fromDate == null
-        ? '${request['from_date'] ?? ''}'.split('T').first
+        ? fromRaw.split('T').first
         : DateFormat('d MMM yyyy').format(fromDate);
     final toLabel = toDate == null
         ? ''
@@ -754,7 +792,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     if (!mounted || request == null) return;
     setState(() {
       _leaveRequests.insert(0, {
-        'date': '${request['from_date'] ?? ''}'.split('T').first,
+        'date': _leaveStartDate(request).split('T').first,
         'reason': request['reason'] ?? 'Not specified',
         'type': request['leave_type'] ?? 'Leave',
         'status': request['status'] ?? 'Pending',
@@ -898,8 +936,8 @@ List<Map<String, dynamic>> _approvedLeavePeriodRows(
   final rows = <Map<String, dynamic>>[];
   for (final request in leaveRequests) {
     if ('${request['status'] ?? ''}'.toLowerCase() != 'approved') continue;
-    final from = DateTime.tryParse('${request['from_date'] ?? ''}');
-    final to = DateTime.tryParse('${request['to_date'] ?? ''}') ?? from;
+    final from = DateTime.tryParse(_leaveStartDate(request));
+    final to = DateTime.tryParse(_leaveEndDate(request)) ?? from;
     if (from == null || to == null) continue;
     for (
       var day = from;
@@ -907,11 +945,12 @@ List<Map<String, dynamic>> _approvedLeavePeriodRows(
       day = day.add(const Duration(days: 1))
     ) {
       if (day.month != now.month || day.year != now.year) continue;
+      final isHalfDay = _leaveIsHalfDay(request);
       rows.add({
         'id': request['id'],
         'date': DateFormat('yyyy-MM-dd').format(day),
-        'period_number': request['half_day'] == true ? 'Half Day' : 'All Day',
-        'status': request['half_day'] == true ? 'Half Day' : 'Leave',
+        'period_number': isHalfDay ? 'Half Day' : 'All Day',
+        'status': isHalfDay ? 'Half Day' : 'Leave',
         'reason': request['reason'] ?? '',
         'marked_by': 'Approved leave',
       });
@@ -1013,6 +1052,24 @@ String _statusCode(dynamic raw) {
 String _numberLabel(dynamic value) {
   if (value is num) return value.toInt().toString();
   return '—';
+}
+
+String _leaveStartDate(Map<String, dynamic> request) {
+  return '${request['from_date'] ?? request['start_date'] ?? ''}'.trim();
+}
+
+String _leaveEndDate(Map<String, dynamic> request) {
+  return '${request['to_date'] ?? request['end_date'] ?? _leaveStartDate(request)}'
+      .trim();
+}
+
+bool _leaveIsHalfDay(Map<String, dynamic> request) {
+  final direct = request['half_day'];
+  if (direct is bool) return direct;
+  final value = '${direct ?? request['is_half_day'] ?? ''}'
+      .trim()
+      .toLowerCase();
+  return value == 'true' || value == '1' || value == 'yes';
 }
 
 class _StudentLeaveRequestPage extends StatefulWidget {

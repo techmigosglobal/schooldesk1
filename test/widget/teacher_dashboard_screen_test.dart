@@ -66,4 +66,14 @@ void main() {
     expect(source, contains('for (final row in _timetable)'));
     expect(source, isNot(contains('_timetable.take(4)')));
   });
+
+  test('teacher dashboard distinguishes no-class-today from no timetable setup', () {
+    final source = File(
+      'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains('No classes scheduled today'));
+    expect(source, contains('Your weekly timetable is available in My Timetable.'));
+    expect(source, contains('RoleAccessService.teacherTimetable.length'));
+  });
 }

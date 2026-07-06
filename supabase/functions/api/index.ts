@@ -144,6 +144,40 @@ export async function authedClient(req: Request) {
   return { user, client, svc: serviceClient() };
 }
 
+export function triggerPushProcessing(eventIds: string | string[]) {
+  const ids = (Array.isArray(eventIds) ? eventIds : [eventIds]).filter(Boolean);
+  if (ids.length === 0) return;
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  if (!supabaseUrl) return;
+
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const promise = fetch(`${supabaseUrl}/functions/v1/notification-processor`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(serviceRoleKey ? { Authorization: `Bearer ${serviceRoleKey}` } : {}),
+    },
+    body: JSON.stringify({ event_ids: ids, source: "api" }),
+  }).then(async (response) => {
+    if (!response.ok) {
+      console.error(
+        `Immediate push processing failed (${response.status}): ${await response
+          .text()}`,
+      );
+    }
+  }).catch((error) => {
+    console.error(`Immediate push processing failed: ${error}`);
+  });
+
+  const runtime = (globalThis as unknown as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void };
+  }).EdgeRuntime;
+  if (runtime?.waitUntil) {
+    runtime.waitUntil(promise);
+  }
+}
+
 // ── Router ────────────────────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {

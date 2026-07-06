@@ -31,16 +31,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   String _teacherName = 'Teacher';
   String _assignedClass = 'Not assigned';
   String _assignedSubject = 'General';
-  int _assignedClasses = 0;
-  int _homeworkDue = 0;
-  int _homeworkTotal = 0;
-  int _unreadMessages = 0;
   int _unreadNotifications = 0;
   int _attendancePending = 0;
-  int _attendancePresentToday = 0;
-  int _attendanceMarkedToday = 0;
   StaffAttendanceModel? _myAttendance;
   List<Map<String, dynamic>> _timetable = const [];
+  int _weeklyTimetableCount = 0;
   List<AnnouncementModel> _announcements = const [];
 
   @override
@@ -69,13 +64,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _loadMyAttendanceSafely(api),
         _loadUnreadNotificationsCount(),
       ]);
-      final dashboard = Map<String, dynamic>.from(results[0] as Map);
-      final metrics = Map<String, dynamic>.from(
-        dashboard['metrics'] as Map? ?? const {},
-      );
-      final todayAttendance = Map<String, dynamic>.from(
-        dashboard['today_attendance'] as Map? ?? const {},
-      );
       if (!mounted) return;
       setState(() {
         _roleScopeLoaded = true;
@@ -83,18 +71,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _assignedClass = RoleAccessService.teacherClassName;
         _assignedSubject = RoleAccessService.teacherSubject;
         _timetable = RoleAccessService.teacherTimetableToday;
-        _assignedClasses =
-            RoleAccessService.teacherClassTeacherClasses.isNotEmpty ? 1 : 0;
-        _homeworkDue = teacherFlowInt(metrics['homework_due']);
-        _homeworkTotal = teacherFlowInt(metrics['homework_total']);
-        _unreadMessages = teacherFlowInt(metrics['unread_messages']);
+        _weeklyTimetableCount = RoleAccessService.teacherTimetable.length;
         _attendancePending = _timetable
             .where(
               (row) => teacherFlowText(row['done']).toLowerCase() != 'true',
             )
             .length;
-        _attendancePresentToday = teacherFlowInt(todayAttendance['present']);
-        _attendanceMarkedToday = teacherFlowInt(todayAttendance['marked']);
         _myAttendance = results[2] as StaffAttendanceModel?;
         _announcements = (results[1] as List)
             .whereType<AnnouncementModel>()
@@ -102,7 +84,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _unreadNotifications = results[3] as int? ?? 0;
         _loading = false;
       });
-
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -112,8 +93,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       });
     }
   }
-
-
 
   Future<StaffAttendanceModel?> _loadMyAttendanceSafely(
     BackendApiClient api,
@@ -163,10 +142,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   decoration: BoxDecoration(
                     color: context.appTheme.error,
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: teacherFlowBackground,
-                      width: 2,
-                    ),
+                    border: Border.all(color: teacherFlowBackground, width: 2),
                   ),
                   constraints: const BoxConstraints(
                     minWidth: 18,
@@ -251,41 +227,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           const TeacherFlowSectionHeader(title: 'Quick Actions'),
           const SizedBox(height: 10),
           _TeacherQuickActionGrid(),
-          const SizedBox(height: 18),
-          TeacherFlowMetricGrid(
-            metrics: [
-              TeacherFlowMetric(
-                label: 'Classes',
-                value: '$_assignedClasses',
-                icon: Icons.groups_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFE3FAF5),
-              ),
-              TeacherFlowMetric(
-                label: 'Attendance',
-                value: _attendanceMarkedToday > 0
-                    ? '$_attendancePresentToday/$_attendanceMarkedToday'
-                    : '$_attendancePending pending',
-                icon: Icons.fact_check_rounded,
-                color: Colors.indigo,
-                tone: const Color(0xFFEAF0FF),
-              ),
-              TeacherFlowMetric(
-                label: 'Practice',
-                value: '$_homeworkDue/$_homeworkTotal',
-                icon: Icons.menu_book_outlined,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
-              ),
-              TeacherFlowMetric(
-                label: 'Messages',
-                value: '${_unreadMessages + _announcements.length}',
-                icon: Icons.markunread_rounded,
-                color: Colors.purple,
-                tone: const Color(0xFFF5EAFE),
-              ),
-            ],
-          ),
           const SizedBox(height: 18),
           TeacherFlowSectionHeader(
             title: 'Today Action Queue',
@@ -384,16 +325,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       ),
     );
     if (_timetable.isEmpty) {
+      final hasWeeklyTimetable = _weeklyTimetableCount > 0;
       rows.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: TeacherTimelineItem(
             time: 'Today',
-            title: 'No timetable period found',
-            subtitle: 'Your backend timetable is empty for today.',
+            title: hasWeeklyTimetable
+                ? 'No classes scheduled today'
+                : 'No timetable period found',
+            subtitle: hasWeeklyTimetable
+                ? 'Your weekly timetable is available in My Timetable.'
+                : 'Your backend timetable is empty for today.',
             icon: Icons.event_busy_rounded,
             color: Colors.orange,
-            onTap: () => Navigator.pushNamed(context, AppRoutes.teacherClasses),
+            onTap: () => Navigator.pushNamed(
+              context,
+              hasWeeklyTimetable
+                  ? AppRoutes.teacherTimetable
+                  : AppRoutes.teacherClasses,
+            ),
           ),
         ),
       );
@@ -430,10 +381,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               title: '$subject - $classLabel',
               subtitle: 'Review the class period and plan next steps.',
               icon: Icons.auto_stories_rounded,
-              onTap: () => Navigator.pushNamed(
-                context,
-                AppRoutes.teacherLessonPlanner,
-              ),
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.teacherLessonPlanner),
             ),
           ),
         );
@@ -455,15 +404,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         color: Colors.indigo,
         route: AppRoutes.teacherAttendance,
       ),
-      _teacherActionItem(
-        context,
-        time: 'Parents',
-        title: 'Review PTM Slots',
-        subtitle: 'Check upcoming parent meeting slots and requests.',
-        icon: Icons.event_available_rounded,
-        color: Colors.teal,
-        route: AppRoutes.teacherParentInteraction,
-      ),
+      // PTM review removed from today's required actions per request
       _teacherActionItem(
         context,
         time: 'Admin',
@@ -527,6 +468,18 @@ class _TeacherQuickActionGrid extends StatelessWidget {
         'Weekly plans',
         SchoolDeskUiIllustrations.lessonPlanner,
         AppRoutes.teacherLessonPlanner,
+      ),
+      _QuickAction(
+        'Homework',
+        'Assignments & review',
+        SchoolDeskUiIllustrations.homework,
+        AppRoutes.teacherHomework,
+      ),
+      _QuickAction(
+        'Leaves',
+        'Apply and track',
+        SchoolDeskUiIllustrations.calendar,
+        AppRoutes.teacherLeave,
       ),
       _QuickAction(
         'Event Posts',

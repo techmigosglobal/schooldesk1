@@ -282,14 +282,17 @@ class _TeacherLeaveRequestFormScreenState
                   },
                 ),
                 const SizedBox(height: 8),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _halfDay,
-                  title: const Text('Permission hours / half day'),
-                  subtitle: const Text('Use for short leave requests'),
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() => _halfDay = value),
+                Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _halfDay,
+                    title: const Text('Permission hours / half day'),
+                    subtitle: const Text('Use for short leave requests'),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _halfDay = value),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 TextFormField(

@@ -406,8 +406,8 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
         : context.appTheme.errorContainer;
     final leaveType = request['leave_type']?.toString() ?? 'Leave';
     final studentName = _requestStudentName(request);
-    final fromDate = _dateLabel(request['from_date']);
-    final toDate = _dateLabel(request['to_date']);
+    final fromDate = _dateLabel(request['from_date'] ?? request['start_date']);
+    final toDate = _dateLabel(request['to_date'] ?? request['end_date']);
     final days = _numValue(request['total_days']);
     final reason = request['reason']?.toString() ?? '';
     final decidedBy = _deciderName(request);

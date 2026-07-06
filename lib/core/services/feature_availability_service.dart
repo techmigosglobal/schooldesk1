@@ -53,7 +53,7 @@ class FeatureAvailabilityService {
     SchoolDeskFeature.teacherParentMeetings: FeatureAvailabilityState(
       feature: SchoolDeskFeature.teacherParentMeetings,
       label: 'Parent-teacher meetings',
-      isAvailable: true,
+      isAvailable: false,
       reason:
           'PTM slots, booking, chat conversations, and messages use backend routes.',
       recommendedAction:

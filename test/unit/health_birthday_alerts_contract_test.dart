@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('health reminder and birthday alert contracts', () {
@@ -99,6 +99,9 @@ void main() {
         highlights,
         contains("n.referenceType.contains('health_reminder')"),
       );
+      expect(highlights, contains('api.triggerBirthdayAlerts()'));
+      expect(highlights, contains('_BirthdayAlertSection'));
+      expect(highlights, contains('_BirthdayAlertTile'));
       expect(
         notifications,
         isNot(contains('Future<void> _loadBirthdayAlerts()')),

@@ -309,7 +309,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
   @override
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
-      title: 'Teacher Chat',
+      title: 'Communication',
       subtitle: 'Parent-teacher messages for your selected child',
       drawer: ParentDrawer(
         selectedIndex: ParentNav.chat,
@@ -579,7 +579,11 @@ String _text(Object? value, {String fallback = ''}) {
 
 String _name(Map<String, dynamic> row, {String fallback = ''}) {
   final full = _text(row['name'] ?? row['full_name']);
-  if (full.isNotEmpty) return full;
+  if (full.isNotEmpty) {
+    final lower = full.toLowerCase();
+    if (lower.contains('principle')) return 'Principal';
+    return full;
+  }
   final parts = [
     _text(row['first_name']),
     _text(row['last_name']),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 
@@ -30,6 +31,7 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    await _triggerBirthdayAlertsIfNeeded(prefs);
     final svc = await NotificationService.getInstance();
     await svc.refresh();
     if (!mounted) return;
@@ -37,6 +39,17 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
       _prefs = prefs;
       _service = svc;
     });
+  }
+
+  Future<void> _triggerBirthdayAlertsIfNeeded(SharedPreferences prefs) async {
+    final api = BackendApiClient.instance;
+    if (!api.isAuthenticated) return;
+    final today = DateTime.now();
+    final key =
+        'birthday_alerts_synced_${today.year}_${today.month}_${today.day}_${widget.role}';
+    if (prefs.getBool(key) == true) return;
+    await api.triggerBirthdayAlerts().catchError((_) => <String, dynamic>{});
+    await prefs.setBool(key, true);
   }
 
   @override
@@ -175,22 +188,12 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
             ],
             if (_expanded && combinedBirthdays.isNotEmpty) ...[
               SizedBox(height: tokens.spacing.md),
-              _HighlightSection(
-                icon: '🎂',
-                label: 'Birthdays',
-                count: combinedBirthdays.length,
-                color: const Color(0xFFE91E63),
-                items: combinedBirthdays
-                    .take(5)
-                    .map(
-                      (n) => _HighlightItem(
-                        title: n.title,
-                        subtitle: n.body,
-                        icon: Icons.cake_rounded,
-                        color: const Color(0xFFE91E63),
-                      ),
-                    )
-                    .toList(),
+              _BirthdayAlertSection(
+                notifications: combinedBirthdays.take(5).toList(),
+                onAcknowledge: (notifId) async {
+                  await _service?.markAsRead(notifId);
+                  if (mounted) setState(() {});
+                },
               ),
             ],
             if (_expanded && combinedHealth.isNotEmpty) ...[
@@ -285,19 +288,13 @@ class _TodaysHighlightsCardState extends State<TodaysHighlightsCard> {
   }
 }
 
-class _HighlightSection extends StatelessWidget {
-  final String icon;
-  final String label;
-  final int count;
-  final Color color;
-  final List<_HighlightItem> items;
+class _BirthdayAlertSection extends StatelessWidget {
+  final List<AppNotification> notifications;
+  final Future<void> Function(String notifId) onAcknowledge;
 
-  const _HighlightSection({
-    required this.icon,
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.items,
+  const _BirthdayAlertSection({
+    required this.notifications,
+    required this.onAcknowledge,
   });
 
   @override
@@ -308,22 +305,25 @@ class _HighlightSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text(icon, style: const TextStyle(fontSize: 16)),
+            const Text('🎂', style: TextStyle(fontSize: 16)),
             const SizedBox(width: 6),
             Text(
-              '$label ($count)',
+              'Birthdays (${notifications.length})',
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: color,
+                color: const Color(0xFFE91E63),
               ),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        ...items.map(
-          (item) => Padding(
+        ...notifications.map(
+          (notification) => Padding(
             padding: const EdgeInsets.only(bottom: 4),
-            child: _HighlightTile(item: item),
+            child: _BirthdayAlertTile(
+              notification: notification,
+              onAcknowledge: onAcknowledge,
+            ),
           ),
         ),
       ],
@@ -331,39 +331,63 @@ class _HighlightSection extends StatelessWidget {
   }
 }
 
-class _HighlightTile extends StatelessWidget {
-  final _HighlightItem item;
+class _BirthdayAlertTile extends StatelessWidget {
+  final AppNotification notification;
+  final Future<void> Function(String notifId) onAcknowledge;
 
-  const _HighlightTile({required this.item});
+  const _BirthdayAlertTile({
+    required this.notification,
+    required this.onAcknowledge,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    final acknowledged = notification.isRead;
+    const pink = Color(0xFFE91E63);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withAlpha(180),
+        color: acknowledged
+            ? theme.colorScheme.surface.withAlpha(100)
+            : theme.colorScheme.surface.withAlpha(180),
         borderRadius: BorderRadius.circular(8),
+        border: acknowledged
+            ? null
+            : Border.all(color: pink.withAlpha(50), width: 1),
       ),
       child: Row(
         children: [
-          Icon(item.icon, size: 16, color: item.color),
+          Icon(
+            acknowledged ? Icons.check_circle_rounded : Icons.cake_rounded,
+            size: 16,
+            color: acknowledged ? Colors.green : pink,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.title,
+                  notification.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w700,
+                    decoration: acknowledged
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: acknowledged
+                        ? theme.colorScheme.onSurfaceVariant
+                        : null,
                   ),
                 ),
-                if (item.subtitle.isNotEmpty)
+                if (notification.body.isNotEmpty)
                   Text(
-                    item.subtitle,
+                    notification.body,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -374,6 +398,20 @@ class _HighlightTile extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 6),
+          if (!acknowledged)
+            _AcknowledgeButton(onPressed: () => onAcknowledge(notification.id))
+          else
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                'Seen',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -609,18 +647,4 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
       if (mounted) setState(() => _loading = false);
     }
   }
-}
-
-class _HighlightItem {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-
-  const _HighlightItem({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-  });
 }

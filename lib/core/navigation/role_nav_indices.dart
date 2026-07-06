@@ -40,7 +40,8 @@ class TeacherNav {
   static const ptm = 13;
   static const leave = 14;
   static const documents = 15;
-  static const complaints = 16;
+  static const homework = 16;
+  static const complaints = 17;
 }
 
 class PrincipalNav {

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -69,6 +70,40 @@ class PushNotificationService {
       );
 
   String get lastRegistrationError => _lastRegistrationError ?? '';
+
+  // ─── Topic Subscriptions (replaces legacy FcmService) ─────────────────────
+
+  /// Subscribe to an FCM topic.
+  Future<void> subscribeToTopic(String topic) async {
+    final messaging = _messaging;
+    if (messaging == null) return;
+    try {
+      await messaging
+          .subscribeToTopic(topic)
+          .timeout(_firebaseOperationTimeout);
+    } catch (error) {
+      developer.log(
+        'Failed to subscribe to topic $topic: $error',
+        name: 'PushNotificationService',
+      );
+    }
+  }
+
+  /// Unsubscribe from an FCM topic.
+  Future<void> unsubscribeFromTopic(String topic) async {
+    final messaging = _messaging;
+    if (messaging == null) return;
+    try {
+      await messaging
+          .unsubscribeFromTopic(topic)
+          .timeout(_firebaseOperationTimeout);
+    } catch (error) {
+      developer.log(
+        'Failed to unsubscribe from topic $topic: $error',
+        name: 'PushNotificationService',
+      );
+    }
+  }
 
   static Future<bool> ensureFirebaseInitialized() async {
     if (Firebase.apps.isNotEmpty) return true;

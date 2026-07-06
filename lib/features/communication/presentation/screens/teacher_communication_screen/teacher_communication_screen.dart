@@ -348,6 +348,33 @@ List<Map<String, dynamic>> _mergeConversationsWithContacts({
     for (final row in [...parentConversations, ...principalConversations])
       _text(row['id']): Map<String, dynamic>.from(row),
   };
+  // Enrich parent conversation rows with contact data (parent name, student)
+  for (final entry in merged.entries.toList()) {
+    final row = entry.value;
+    final type = _text(row['type']);
+    if (type == 'parent_teacher') {
+      final parentId = _text(row['parent_id']);
+      final studentId = _text(row['student_id']);
+      if (parentId.isNotEmpty) {
+        // Try to find a matching contact to surface parent and student names
+        final match = contacts.firstWhere(
+          (c) => _text(c['id']) == parentId &&
+              (studentId.isEmpty || _text(c['student_id']) == studentId),
+          orElse: () => <String, dynamic>{},
+        );
+        if (match.isNotEmpty) {
+          row['parent'] = {
+            'id': _text(match['id']),
+            'name': _text(match['name'], fallback: 'Parent'),
+          };
+          row['student'] = {
+            'id': _text(match['student_id']),
+            'name': _text(match['student_name'], fallback: 'Student'),
+          };
+        }
+      }
+    }
+  }
 
   for (final contact in contacts) {
     final role = _text(contact['role']).toLowerCase();
@@ -420,9 +447,19 @@ String _conversationSubtitle(Map<String, dynamic> row) {
         : 'Direct message with school leadership';
   }
   final student = _name(_map(row['student']), fallback: 'Parent contact');
-  return _isContactPlaceholder(row)
-      ? '$student - Parent contact - tap to start direct chat'
-      : '$student - Principal can monitor this chat';
+  final contactRole = _text(row['contact_role']);
+  final roleLabel = contactRole == 'class_teacher'
+      ? 'Class teacher'
+      : contactRole == 'co_teacher'
+          ? 'Co-teacher'
+          : '';
+  if (_isContactPlaceholder(row)) {
+    return roleLabel.isNotEmpty
+        ? '$student - $roleLabel - tap to start direct chat'
+        : '$student - Parent contact - tap to start direct chat';
+  }
+  final base = '$student - Principal can monitor this chat';
+  return roleLabel.isNotEmpty ? '$base — $roleLabel' : base;
 }
 
 Map<String, dynamic> _map(Object? value) =>
@@ -435,7 +472,12 @@ String _text(Object? value, {String fallback = ''}) {
 
 String _name(Map<String, dynamic> row, {String fallback = ''}) {
   final full = _text(row['name'] ?? row['full_name']);
-  if (full.isNotEmpty) return full;
+  if (full.isNotEmpty) {
+    // Correct common misspelling from backend ('principle' -> 'principal')
+    final lower = full.toLowerCase();
+    if (lower.contains('principle')) return 'Principal';
+    return full;
+  }
   final parts = [
     _text(row['first_name']),
     _text(row['last_name']),

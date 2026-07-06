@@ -41,13 +41,18 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     _loadDashboardData(forceRefresh: true);
     _autoRefreshTimer = Timer.periodic(
       _autoRefreshInterval,
-      (_) => _loadDashboardData(forceRefresh: true, showSpinner: false),
+      (_) => _loadDashboardData(
+        forceRefresh: true,
+        showSpinner: false,
+        includeFeedPosts: false,
+      ),
     );
   }
 
   Future<void> _loadDashboardData({
     bool forceRefresh = false,
     bool showSpinner = true,
+    bool includeFeedPosts = true,
   }) async {
     if (showSpinner) {
       setState(() {
@@ -57,17 +62,22 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     }
     try {
       final api = BackendApiClient.instance;
-      final results = await Future.wait([
+      final futures = <Future<dynamic>>[
         api.getDashboard('parent', forceRefresh: forceRefresh),
         api.getMyStudents(
           refreshNonce: forceRefresh
               ? DateTime.now().millisecondsSinceEpoch
               : null,
         ),
-        api.getHomeFeedEventPosts().catchError(
-          (_) => const <Map<String, dynamic>>[],
-        ),
-      ]);
+      ];
+      if (includeFeedPosts) {
+        futures.add(
+          api.getHomeFeedEventPosts().catchError(
+            (_) => const <Map<String, dynamic>>[],
+          ),
+        );
+      }
+      final results = await Future.wait(futures);
 
       if (!mounted) return;
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
@@ -89,32 +99,12 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         fallback: _activeChildIndex,
       );
 
-      final rawEvents = (results[2] as List).whereType<Map<String, dynamic>>();
-
-      final List<Map<String, dynamic>> feedItems = [];
-      for (final ev in rawEvents) {
-        feedItems.add({
-          'title': ev['title'] ?? 'School Post',
-          'description': ev['description'] ?? '',
-          'date': ev['event_date'] ?? ev['created_at'],
-          'sort_date': ev['created_at'] ?? '',
-          'category': ev['category'] ?? '',
-          'author': ev['author'] ?? ev['posted_by'] ?? '',
-          'media_urls': ev['media_urls'],
-          'media': ev['media'],
-          'media_url': ev['media_url'],
-          'mediaUrl': ev['mediaUrl'],
-          'attachments': ev['attachments'],
-          // Keep raw event type for image detection
-          'media_type': ev['media_type'] ?? ev['mediaType'] ?? '',
-          'destinations': ev['destinations'] ?? '',
-        });
-      }
-      feedItems.sort(
-        (a, b) => (b['sort_date']?.toString() ?? '').compareTo(
-          a['sort_date']?.toString() ?? '',
-        ),
-      );
+      final feedItems = includeFeedPosts
+          ? _mapFeedItems(results[2] as List)
+          : _eventPosts
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList();
 
       setState(() {
         _dashboard = dashboard;
@@ -130,6 +120,34 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _loading = false;
       });
     }
+  }
+
+  List<Map<String, dynamic>> _mapFeedItems(List<dynamic> rows) {
+    final rawEvents = rows.whereType<Map<String, dynamic>>();
+    final feedItems = <Map<String, dynamic>>[];
+    for (final ev in rawEvents) {
+      feedItems.add({
+        'title': ev['title'] ?? 'School Post',
+        'description': ev['description'] ?? '',
+        'date': ev['event_date'] ?? ev['created_at'],
+        'sort_date': ev['created_at'] ?? '',
+        'category': ev['category'] ?? '',
+        'author': ev['author'] ?? ev['posted_by'] ?? '',
+        'media_urls': ev['media_urls'],
+        'media': ev['media'],
+        'media_url': ev['media_url'],
+        'mediaUrl': ev['mediaUrl'],
+        'attachments': ev['attachments'],
+        'media_type': ev['media_type'] ?? ev['mediaType'] ?? '',
+        'destinations': ev['destinations'] ?? '',
+      });
+    }
+    feedItems.sort(
+      (a, b) => (b['sort_date']?.toString() ?? '').compareTo(
+        a['sort_date']?.toString() ?? '',
+      ),
+    );
+    return feedItems;
   }
 
   @override
@@ -208,7 +226,13 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_loadDashboardData(forceRefresh: true, showSpinner: false));
+      unawaited(
+        _loadDashboardData(
+          forceRefresh: true,
+          showSpinner: false,
+          includeFeedPosts: false,
+        ),
+      );
     }
   }
 

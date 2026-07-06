@@ -6,6 +6,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/logout_service.dart';
 import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
+import 'package:schooldesk1/core/services/feature_availability_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/utils/text_utils.dart';
 import 'package:schooldesk1/core/widgets/erp_navigation.dart';
@@ -167,6 +168,13 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherLessonPlanner,
             ),
             const SchoolDeskNavigationItem(
+              index: TeacherNav.homework,
+              icon: Icons.menu_book_outlined,
+              activeIcon: Icons.menu_book_rounded,
+              label: 'Homework',
+              route: AppRoutes.teacherHomework,
+            ),
+            const SchoolDeskNavigationItem(
               index: TeacherNav.studentNotes,
               icon: Icons.sticky_note_2_outlined,
               activeIcon: Icons.sticky_note_2_rounded,
@@ -193,13 +201,17 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               route: AppRoutes.teacherCommunication,
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
-            const SchoolDeskNavigationItem(
-              index: TeacherNav.ptm,
-              icon: Icons.event_available_outlined,
-              activeIcon: Icons.event_available_rounded,
-              label: 'PTM Slots',
-              route: AppRoutes.teacherParentInteraction,
-            ),
+            // Show PTM only when backend feature is available
+            if (FeatureAvailabilityService
+                .stateFor(SchoolDeskFeature.teacherParentMeetings)
+                .isAvailable)
+              const SchoolDeskNavigationItem(
+                index: TeacherNav.ptm,
+                icon: Icons.event_available_outlined,
+                activeIcon: Icons.event_available_rounded,
+                label: 'PTM Slots',
+                route: AppRoutes.teacherParentInteraction,
+              ),
             SchoolDeskNavigationItem(
               index: TeacherNav.documents,
               icon: Icons.description_outlined,

@@ -15,6 +15,16 @@ void main() {
     expect(source, contains('Track Leave'));
   });
 
+  test('teacher dashboard exposes leave as a separate quick action', () {
+    final source = File(
+      'lib/features/dashboard/presentation/screens/teacher_dashboard_screen/teacher_dashboard_screen.dart',
+    ).readAsStringSync();
+
+    expect(source, contains("'Leaves'"));
+    expect(source, contains("'Apply and track'"));
+    expect(source, contains('AppRoutes.teacherLeave'));
+  });
+
   test('principal dashboard exposes an oversight action queue', () {
     final source = File(
       'lib/features/dashboard/presentation/screens/principal_dashboard_screen/principal_dashboard_screen.dart',

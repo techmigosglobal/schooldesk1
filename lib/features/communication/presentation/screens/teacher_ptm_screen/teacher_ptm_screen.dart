@@ -123,15 +123,23 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
     if (_saving) return;
     setState(() => _saving = true);
     try {
-      await BackendApiClient.instance.createRaw('/parent-teacher-meetings', {
-        'section_id': RoleAccessService.teacherClassId,
-        'teacher_id': RoleAccessService.teacherStaffId,
+      final payload = <String, dynamic>{
         'slot_date': _dateController.text.trim(),
         'slot_time': _timeController.text.trim(),
         'duration_min': 15,
         'status': 'available',
-        'notes': _purposeController.text.trim(),
-      });
+      };
+      final sectionId = RoleAccessService.teacherClassId.trim();
+      final teacherId = RoleAccessService.teacherStaffId.trim();
+      final notes = _purposeController.text.trim();
+      if (sectionId.isNotEmpty) payload['section_id'] = sectionId;
+      if (teacherId.isNotEmpty) payload['teacher_id'] = teacherId;
+      if (notes.isNotEmpty) payload['notes'] = notes;
+
+      await BackendApiClient.instance.createRaw(
+        '/parent-teacher-meetings',
+        payload,
+      );
       _purposeController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -161,16 +169,20 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
     final id = teacherFlowText(meeting['id']);
     if (id.isEmpty) return;
     try {
-      await BackendApiClient.instance
-          .updateRaw('/parent-teacher-meetings/$id', {
-            'status': status,
-            'notes': teacherFlowText(meeting['notes']),
-            'teacher_id': RoleAccessService.teacherStaffId,
-            'section_id': teacherFlowText(
-              meeting['section_id'],
-              fallback: RoleAccessService.teacherClassId,
-            ),
-          });
+      final payload = <String, dynamic>{'status': status};
+      final notes = teacherFlowText(meeting['notes']).trim();
+      final teacherId = RoleAccessService.teacherStaffId.trim();
+      final sectionId = teacherFlowText(meeting['section_id'],
+          fallback: RoleAccessService.teacherClassId)
+          .trim();
+      if (notes.isNotEmpty) payload['notes'] = notes;
+      if (teacherId.isNotEmpty) payload['teacher_id'] = teacherId;
+      if (sectionId.isNotEmpty) payload['section_id'] = sectionId;
+
+      await BackendApiClient.instance.updateRaw(
+        '/parent-teacher-meetings/$id',
+        payload,
+      );
       await _loadPTMFlow();
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(

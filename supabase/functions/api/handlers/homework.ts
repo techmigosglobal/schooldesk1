@@ -1,6 +1,6 @@
 // handlers/homework.ts — homework assignments, parent submissions, teacher review
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { cors, fail, ok } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -108,12 +108,14 @@ export async function handleHomework(
       );
 
       // Resolve teacher UUIDs to names
-      const staffIds = [...new Set(rows.map((row) => text(row.staff_id)).filter(Boolean))];
+      const staffIds = [
+        ...new Set(rows.map((row) => text(row.staff_id)).filter(Boolean)),
+      ];
       if (staffIds.length > 0) {
         const { data: staffMembers } = await svc.from("staff")
           .select("id, first_name, last_name")
           .in("id", staffIds);
-        
+
         if (staffMembers) {
           const staffNameMap = new Map(
             staffMembers.map((s) => [
@@ -195,15 +197,22 @@ export async function handleHomework(
             .in("student_id", studentIds);
 
           if (links && links.length > 0) {
-            const parentIds = [...new Set(links.map((l: { parent_user_id: string }) => l.parent_user_id).filter(Boolean))];
-            
+            const parentIds = [
+              ...new Set(
+                links.map((l: { parent_user_id: string }) => l.parent_user_id)
+                  .filter(Boolean),
+              ),
+            ];
+
             if (parentIds.length > 0) {
               const notifications = parentIds.map((pid: string) => ({
                 school_id: school,
                 user_id: pid,
                 target_role: "parent",
                 title: `New Homework: ${text(body.title, "Assignment")}`,
-                body: `Homework assigned for ${text(body.subject_id, "your child's class")}.`,
+                body: `Homework assigned for ${
+                  text(body.subject_id, "your child's class")
+                }.`,
                 type: "homework",
                 entity_type: "homework",
                 entity_id: id,
@@ -272,7 +281,9 @@ export async function handleHomework(
   }
 
   if (suffix === "submissions" && method === "GET") {
-    let query = svc.from("homework_submissions").select("*, students (first_name, last_name)").eq(
+    let query = svc.from("homework_submissions").select(
+      "*, students (first_name, last_name)",
+    ).eq(
       "school_id",
       school,
     ).eq("homework_id", homeworkId);
@@ -334,15 +345,15 @@ export async function handleHomework(
       ).eq("school_id", school).select().single()
       : svc.from("homework_submissions").insert(submission).select().single();
     const { data, error } = await write;
-    if (error) return fail(error.message);
-
-    // Notify the teacher who assigned this homework
+    if (error) return fail(error.message); // Notify the teacher who assigned this homework
     const hw = await loadHomework(svc, school, homeworkId);
     if (hw) {
       const staffId = text(hw.staff_id ?? hw.teacher_id);
       const hwTitle = text(hw.title, "Homework");
       const hasAttachment = fileUrls.length > 0;
-      const notifBody = `${text(body.student_name ?? studentId)} submitted${hasAttachment ? " (with attachment)" : ""}: ${hwTitle}`;
+      const notifBody = `${text(body.student_name ?? studentId)} submitted${
+        hasAttachment ? " (with attachment)" : ""
+      }: ${hwTitle}`;
 
       // Lookup teacher user_id from staff record
       const { data: staffRows } = await svc.from("staff")
@@ -371,6 +382,21 @@ export async function handleHomework(
           ...notifBase,
           user_id: teacherUserId,
         });
+        // Create push notification event for the teacher
+        try {
+          const { data: eventRow } = await svc.from("notification_events")
+            .insert({
+              school_id: school,
+              user_id: teacherUserId,
+              event_type: "homework_submitted",
+              event_data: {
+                homework_id: homeworkId,
+                message: notifBody,
+                reference_type: "homework",
+              },
+            }).select("id").maybeSingle();
+          if (eventRow?.id) triggerPushProcessing(eventRow.id);
+        } catch (_) { /* best-effort */ }
       } else if (staffId) {
         // Fallback: broadcast to all teachers in the school
         await svc.from("notification_logs").insert(notifBase);
@@ -410,7 +436,9 @@ export async function handleHomework(
           : `Homework Needs Revision: ${hwTitle}`;
         const feedbackBody = reviewRemarks.length > 0
           ? reviewRemarks
-          : (reviewStatus === "reviewed" ? "Your child's homework has been approved by the teacher." : "Your child's homework needs revision. Please check the feedback.");
+          : (reviewStatus === "reviewed"
+            ? "Your child's homework has been approved by the teacher."
+            : "Your child's homework needs revision. Please check the feedback.");
         const parentNotifs = linkRows.map((l: { parent_user_id: string }) => ({
           school_id: school,
           user_id: l.parent_user_id,
@@ -427,6 +455,25 @@ export async function handleHomework(
           student_id: studentId,
         }));
         await svc.from("notification_logs").insert(parentNotifs);
+        // Create push notification events for each parent
+        try {
+          const eventIds: string[] = [];
+          for (const l of linkRows) {
+            const { data: eventRow } = await svc.from("notification_events")
+              .insert({
+                school_id: school,
+                user_id: l.parent_user_id,
+                event_type: "homework_feedback",
+                event_data: {
+                  homework_id: homeworkId,
+                  message: feedbackBody,
+                  reference_type: "homework",
+                },
+              }).select("id").maybeSingle();
+            if (eventRow?.id) eventIds.push(eventRow.id);
+          }
+          triggerPushProcessing(eventIds);
+        } catch (_) { /* best-effort */ }
       }
     }
 
