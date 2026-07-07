@@ -1057,9 +1057,13 @@ class _YearListCard extends StatelessWidget {
                   runSpacing: 10,
                   children: [
                     if (_isCurrent(year)) const _CurrentChip(compact: true),
-                    SizedBox(
-                      width: 88,
-                      child: _OutlineButton(label: 'View', onPressed: onView),
+                    _OutlineButton(
+                      label: 'View', 
+                      onPressed: onView,
+                      height: 36,
+                      width: 76,
+                      radius: 9,
+                      fontSize: 13,
                     ),
                   ],
                 ),
@@ -1669,33 +1673,42 @@ class _OutlineButton extends StatelessWidget {
   final IconData? icon;
   final VoidCallback onPressed;
   final bool expanded;
+  final double height;
+  final double width;
+  final double radius;
+  final double fontSize;
 
   const _OutlineButton({
     required this.label,
     required this.onPressed,
     this.icon,
     this.expanded = false,
+    this.height = 52,
+    this.width = 88,
+    this.radius = 12,
+    this.fontSize = 14,
   });
 
   @override
   Widget build(BuildContext context) {
     final style = OutlinedButton.styleFrom(
+      padding: EdgeInsets.zero,
       side: const BorderSide(color: _ayBlue, width: 1.4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
     );
     return SizedBox(
-      height: 52,
-      width: expanded ? double.infinity : 88,
+      height: height,
+      width: expanded ? double.infinity : width,
       child: icon == null
           ? OutlinedButton(
               onPressed: onPressed,
               style: style,
-              child: Text(label, style: _labelStyle(14, color: _ayBlue)),
+              child: Text(label, style: _labelStyle(fontSize, color: _ayBlue)),
             )
           : OutlinedButton.icon(
               onPressed: onPressed,
-              icon: Icon(icon, color: _ayBlue, size: 22),
-              label: Text(label, style: _labelStyle(14, color: _ayBlue)),
+              icon: Icon(icon, color: _ayBlue, size: fontSize + 8),
+              label: Text(label, style: _labelStyle(fontSize, color: _ayBlue)),
               style: style,
             ),
     );
@@ -1784,14 +1797,15 @@ class _CurrentChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      height: compact ? 36 : null,
       constraints: BoxConstraints(maxWidth: compact ? 118 : 220),
       padding: EdgeInsets.symmetric(
         horizontal: compact ? 10 : 14,
-        vertical: compact ? 8 : 10,
+        vertical: compact ? 0 : 10,
       ),
       decoration: BoxDecoration(
         color: _ayGreen.withAlpha(20),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(compact ? 9 : 12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

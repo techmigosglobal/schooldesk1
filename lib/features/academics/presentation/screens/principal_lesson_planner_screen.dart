@@ -167,9 +167,11 @@ class _LessonPlannerSummary extends StatelessWidget {
     final completion = planners.isEmpty
         ? '0%'
         : '${((completed / planners.length) * 100).round()}%';
-    return Row(
-      children: [
-        Expanded(
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
           child: _SummaryTile(
             label: 'Plans',
             value: planners.length.toString(),
@@ -193,6 +195,7 @@ class _LessonPlannerSummary extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -210,28 +213,37 @@ class _SummaryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label, 
+            maxLines: 2, 
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12.5, 
+              height: 1.15, 
+              fontWeight: FontWeight.w500,
             ),
-            Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

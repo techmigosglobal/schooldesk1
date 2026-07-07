@@ -1178,7 +1178,9 @@ export async function handleCommunications(
       .eq("type", conversationType);
     if (teacherId) existing = existing.eq("teacher_id", teacherId);
     if (parentId) existing = existing.eq("parent_id", parentId);
-    if (studentId) existing = existing.eq("student_id", studentId);
+    if (conversationType === "parent_teacher" && studentId) {
+      existing = existing.eq("student_id", studentId);
+    }
     const { data: found, error: findError } = await existing.maybeSingle();
     if (findError) return fail(findError.message);
     if (found) return ok(normalizeChatConversation(found, user.id));

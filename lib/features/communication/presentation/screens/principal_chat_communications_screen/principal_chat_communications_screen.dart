@@ -688,7 +688,7 @@ class _PrincipalChatCommunicationsScreenState
           subtitle: Text(
             monitorMode
                 ? '${_studentLine(row)} - ${_text(row['last_message']).isEmpty ? 'Parent-teacher chat' : _text(row['last_message'])}'
-                : '${_directRoleLabel(row)} - ${_text(row['last_message']).isEmpty ? subtitle : _text(row['last_message'])}',
+                : _text(row['last_message']).isEmpty ? subtitle : _text(row['last_message']),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -852,10 +852,22 @@ class _PrincipalChatCommunicationsScreenState
     required List<dynamic> teacherContacts,
     required List<dynamic> parentContacts,
   }) {
-    final rows = <Map<String, dynamic>>[
-      ...directTeacher.map((row) => Map<String, dynamic>.from(row)),
-      ...directParent.map((row) => Map<String, dynamic>.from(row)),
-    ];
+    final uniqueRows = <String, Map<String, dynamic>>{};
+    for (final row in directTeacher) {
+      final key = 'teacher_${_text(row['teacher_id'])}';
+      final existing = uniqueRows[key];
+      if (existing == null || _sortTime(row) > _sortTime(existing)) {
+        uniqueRows[key] = Map<String, dynamic>.from(row);
+      }
+    }
+    for (final row in directParent) {
+      final key = 'parent_${_text(row['parent_id'])}';
+      final existing = uniqueRows[key];
+      if (existing == null || _sortTime(row) > _sortTime(existing)) {
+        uniqueRows[key] = Map<String, dynamic>.from(row);
+      }
+    }
+    final rows = uniqueRows.values.toList();
     final existingTeacherIds = rows
         .where((row) => _text(row['type']) == 'principal_teacher')
         .map((row) => _text(row['teacher_id']))

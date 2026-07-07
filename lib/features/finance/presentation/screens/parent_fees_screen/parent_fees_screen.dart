@@ -560,31 +560,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
             )
           else ...[
             ..._feeStructure.map((f) => _feeItemCard(f, true)),
-            if (_pendingAmount > 0) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () => _openPaymentRequestForm(),
-                  icon: const Icon(Icons.payment_rounded, size: 18),
-                  label: Text(
-                    'Pay now with UPI',
-                    style: GoogleFonts.ibmPlexSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _headerColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+
           ],
         ],
       ),
@@ -1335,13 +1311,8 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                   onPressed: () => _openClarificationResubmit(clarification),
                   icon: const Icon(Icons.upload_rounded, size: 18),
                   label: const Text('Resubmit Now'),
-                )
-              else if (hasDueAmount)
-                FilledButton.icon(
-                  onPressed: () => _openPaymentRequestForm(),
-                  icon: const Icon(Icons.qr_code_rounded, size: 18),
-                  label: const Text('Pay Now'),
                 ),
+
               if (showHistoryShortcut)
                 OutlinedButton.icon(
                   onPressed: () => _tabController.animateTo(1),

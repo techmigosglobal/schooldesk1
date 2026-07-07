@@ -88,13 +88,7 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
         role: DashboardRole.parent,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
-      actions: [
-        TextButton.icon(
-          onPressed: _children.isEmpty ? null : () => _openRequestForm(),
-          icon: const Icon(Icons.add_rounded, size: 16),
-          label: Text('New Request', style: GoogleFonts.dmSans(fontSize: 12)),
-        ),
-      ],
+
       body: RefreshIndicator(
         onRefresh: () => _loadData(showSpinner: false),
         child: ListView(

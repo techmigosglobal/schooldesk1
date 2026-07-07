@@ -2568,7 +2568,6 @@ class _ClassDetailPage extends StatelessWidget {
           children: [
             _ClassDetailCard(
               title: className,
-              trailing: OpsStatusPill(label: healthLabel, color: healthColor),
               children: [
                 _ClassMetricGrid(row: row),
                 _ClassIssueBreakdown(items: _classIssueBreakdown(row)),
@@ -3473,9 +3472,7 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
                                     : null;
                               },
                             ),
-                            const SizedBox(height: 24),
-                            const _ClassSetupTip(),
-                            const SizedBox(height: 26),
+                            const SizedBox(height: 32),
                             _ClassSetupActionButton(
                               saving: _busy,
                               onPressed: _busy ? null : _save,
@@ -4024,65 +4021,6 @@ class _ClassSetupFieldShell extends StatelessWidget {
   }
 }
 
-class _ClassSetupTip extends StatelessWidget {
-  const _ClassSetupTip();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF7FF),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD4E9FF)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: const BoxDecoration(
-              color: Color(0xFFDDEEFF),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.info_outline_rounded,
-              color: _CreateClassSetupPageState._primary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tip',
-                  style: GoogleFonts.dmSans(
-                    color: _CreateClassSetupPageState._ink,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'This creates the class and first section on the central academic server.',
-                  style: GoogleFonts.dmSans(
-                    color: const Color(0xFF334155),
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _ClassSetupActionButton extends StatelessWidget {
   final bool saving;

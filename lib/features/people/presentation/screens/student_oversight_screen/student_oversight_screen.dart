@@ -754,7 +754,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  'All Students Directory V1',
+                  'All Students Directory',
                   textAlign: TextAlign.center,
                   maxLines: 1,
                   style: GoogleFonts.dmSans(

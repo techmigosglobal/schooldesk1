@@ -123,7 +123,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
-      subtitle: 'Read-only schedule from Principal timetable setup',
+      subtitle: 'Assigned schedule from Principal',
       selectedIndex: TeacherNav.timetable,
       loading: _loading,
       error: _error,
@@ -144,9 +144,6 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
               subjects: subjects,
               date: _weekLabel(),
               mappedSubjects: RoleAccessService.teacherSubjectIds.length,
-              sourceLabel: _usingAssignedClassFallback
-                  ? 'Timetable source: assigned class'
-                  : 'Timetable source: teacher slots',
             ),
             const SizedBox(height: 16),
 
@@ -218,14 +215,12 @@ class _FullDayClassCard extends StatelessWidget {
   final List<String> subjects;
   final String date;
   final int mappedSubjects;
-  final String sourceLabel;
 
   const _FullDayClassCard({
     required this.classLabel,
     required this.subjects,
     required this.date,
     required this.mappedSubjects,
-    required this.sourceLabel,
   });
 
   @override
@@ -296,14 +291,6 @@ class _FullDayClassCard extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            sourceLabel,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
           ),
           if (subjects.isNotEmpty) ...[
             const SizedBox(height: 14),

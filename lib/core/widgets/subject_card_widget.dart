@@ -129,17 +129,22 @@ class SubjectCardGrid extends StatelessWidget {
           ),
           const SizedBox(height: 10),
         ],
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: subjects
-              .map((subject) => _SubjectCard(
-                    subject: subject,
-                    isSelected: selectedSubjects.contains(subject),
-                    enabled: enabled,
-                    onTap: () => onToggle(subject),
-                  ))
-              .toList(),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              for (var i = 0; i < subjects.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                _SubjectCard(
+                  subject: subjects[i],
+                  isSelected: selectedSubjects.contains(subjects[i]),
+                  enabled: enabled,
+                  onTap: () => onToggle(subjects[i]),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );

@@ -233,6 +233,7 @@ class TeacherFlowMetricGrid extends StatelessWidget {
         final spacing = Theme.of(context).schoolDesk.spacing.compact;
         final tileWidth = (width - spacing * (columns - 1)) / columns;
         return Wrap(
+          alignment: WrapAlignment.center,
           spacing: spacing,
           runSpacing: spacing,
           children: [
@@ -522,27 +523,28 @@ class TeacherFlowActionWrap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final action in actions)
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
           Semantics(
             button: true,
-            label: action.label,
-            enabled: action.onTap != null,
-            child: action.filled
+            label: actions[i].label,
+            enabled: actions[i].onTap != null,
+            child: actions[i].filled
                 ? FilledButton.icon(
-                    onPressed: action.onTap,
-                    icon: Icon(action.icon, size: 18),
-                    label: Text(action.label),
+                    onPressed: actions[i].onTap,
+                    icon: Icon(actions[i].icon, size: 18),
+                    label: Text(actions[i].label),
                   )
                 : OutlinedButton.icon(
-                    onPressed: action.onTap,
-                    icon: Icon(action.icon, size: 18),
-                    label: Text(action.label),
+                    onPressed: actions[i].onTap,
+                    icon: Icon(actions[i].icon, size: 18),
+                    label: Text(actions[i].label),
                   ),
           ),
+        ],
       ],
     );
   }

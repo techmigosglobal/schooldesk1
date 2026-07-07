@@ -392,7 +392,7 @@ class _ModuleToolbar extends StatelessWidget {
                         SizedBox(height: tokens.spacing.xs),
                         SchoolDeskAdaptiveText(
                           subtitle!,
-                          maxLines: 1,
+                          maxLines: 2,
                           textAlign: TextAlign.center,
                           minFontSize: 9.5,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -443,7 +443,7 @@ class _ModuleToolbar extends StatelessWidget {
                         SizedBox(height: tokens.spacing.xs),
                         SchoolDeskAdaptiveText(
                           subtitle!,
-                          maxLines: 1,
+                          maxLines: 2,
                           minFontSize: 9.5,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: tokens.textMuted,

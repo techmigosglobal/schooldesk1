@@ -95,32 +95,11 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
           TeacherFlowMetricGrid(
             metrics: [
               TeacherFlowMetric(
-                label: 'My Class',
-                value: '${_classes.length}',
-                icon: Icons.class_rounded,
-                color: teacherFlowAccent,
-                tone: const Color(0xFFE3FAF5),
-              ),
-              TeacherFlowMetric(
                 label: 'Students',
                 value: '${_students.length}',
                 icon: Icons.groups_rounded,
                 color: Colors.indigo,
                 tone: const Color(0xFFEAF0FF),
-              ),
-              TeacherFlowMetric(
-                label: 'Subject',
-                value: RoleAccessService.teacherSubject,
-                icon: Icons.menu_book_rounded,
-                color: Colors.orange,
-                tone: const Color(0xFFFFF4E5),
-              ),
-              TeacherFlowMetric(
-                label: 'Role',
-                value: 'Class Teacher',
-                icon: Icons.verified_user_rounded,
-                color: Colors.green,
-                tone: const Color(0xFFEAFBF0),
               ),
             ],
           ),
