@@ -973,7 +973,7 @@ export async function handleFees(
       const page = parseInt(url.searchParams.get("page") ?? "1");
       const size = parseInt(url.searchParams.get("page_size") ?? "50");
       let q = svc.from("fee_invoices").select(
-        "*, student:students(first_name, last_name, admission_number, student_code, current_section_id), fee_invoice_items(*), payments(*)",
+        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section_id), fee_invoice_items(*), payments(*)",
         { count: "exact" },
       ).eq("school_id", school).range((page - 1) * size, page * size - 1);
       if (url.searchParams.get("student_id")) {
@@ -1084,7 +1084,7 @@ export async function handleFees(
       ).replace(/^-|-$/g, "").toUpperCase();
       for (const student of students ?? []) {
         const studentCode = text(
-          student.admission_number ?? student.student_code ?? student.id,
+          student.admission_number ?? student.student_id_number ?? student.id,
         ).replace(/[^A-Za-z0-9]+/g, "").slice(-8);
         for (const structure of structures) {
           const feeType = normalizeFeeType(
@@ -1194,7 +1194,7 @@ export async function handleFees(
 
     if (seg && method === "GET") {
       const { data, error } = await svc.from("fee_invoices").select(
-        "*, student:students(first_name, last_name, admission_number, student_code, current_section_id), fee_invoice_items(*), payments(*)",
+        "*, student:students(first_name, last_name, admission_number, student_id_number, current_section_id), fee_invoice_items(*), payments(*)",
       ).eq("id", seg).eq("school_id", school).maybeSingle();
       if (error) return fail(error.message);
       if (!data) return fail("not found", 404);

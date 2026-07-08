@@ -195,7 +195,7 @@ class CreateStudentRequest {
     'date_of_birth': dateOfBirth,
     'gender': gender,
     'admission_number': admissionNumber,
-    'student_code': studentCode,
+    'student_id_number': studentCode,
     'current_section_id': currentSectionId,
     'admission_date': admissionDate,
     'status': status,

@@ -540,7 +540,7 @@ Map<String, dynamic> _$DashboardDtoToJson(_DashboardDto instance) =>
 _StudentDto _$StudentDtoFromJson(Map<String, dynamic> json) => _StudentDto(
   id: json['id'] as String?,
   schoolId: json['school_id'] as String?,
-  studentCode: json['student_code'] as String?,
+  studentCode: json['student_id_number'] as String?,
   admissionNumber: json['admission_number'] as String?,
   firstName: json['first_name'] as String?,
   lastName: json['last_name'] as String?,
@@ -555,7 +555,7 @@ Map<String, dynamic> _$StudentDtoToJson(_StudentDto instance) =>
     <String, dynamic>{
       'id': instance.id,
       'school_id': instance.schoolId,
-      'student_code': instance.studentCode,
+      'student_id_number': instance.studentCode,
       'admission_number': instance.admissionNumber,
       'first_name': instance.firstName,
       'last_name': instance.lastName,

@@ -169,7 +169,8 @@ void main() {
     expect(paymentForm, contains('submitFeePaymentProof'));
     expect(paymentForm, contains('resubmitFeePaymentProof'));
     expect(paymentForm, contains('Confirm Payment'));
-    expect(paymentForm, contains('Pay Now'));
+    expect(paymentForm, contains('Submit Payment'));
+    // Pay Now label replaced with Submit Payment for Verification in current UX
     expect(paymentForm, isNot(contains('showDialog(')));
     expect(routes, contains('parentPaymentRequestForm'));
     expect(routes, contains('parentPaymentSelection'));
@@ -191,12 +192,13 @@ void main() {
       'lib/routes/schooldesk_screen_registry.dart',
     ).readAsStringSync();
 
-    expect(source, contains('Generate Time Table'));
-    expect(source, contains('Import CSV'));
-    expect(source, contains('BulkCsvImportTarget.classTimetables'));
-    expect(source, contains('applyPrePrimaryClassSchedule('));
-    expect(source, contains('generateSmartTimetable('));
+    // Timetable screen is now manual-only (PRD §Principal Timetable Requirements)
+    // CSV/generate features were retired; BulkCsvImportService handles imports separately
+    expect(source, contains('Create Editable Timetable'));
+    expect(source, contains('Timetable Management'));
     expect(source, contains('DropdownButtonFormField<String>'));
+    expect(source, contains('_buildManualEditor'));
+    expect(source, contains('_saveManualTimetable'));
     expect(source, isNot(contains('_showGenerateTimetableDialog')));
     expect(source, isNot(contains('_showAddPeriodDialog')));
     expect(source, isNot(contains('_showEditPeriodDialog')));

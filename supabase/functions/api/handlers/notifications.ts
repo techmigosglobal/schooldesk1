@@ -104,6 +104,14 @@ async function registerDeviceToken(
       .eq("token", fcmToken)
       .neq("user_id", userId);
 
+    // Deactivate any other active tokens for the current user
+    await svc
+      .from("notification_devices")
+      .update({ is_active: false })
+      .eq("school_id", school)
+      .eq("user_id", userId)
+      .neq("fcm_token", fcmToken);
+
     // Insert or update device token for the current user
     const { error } = await svc
       .from("notification_devices")

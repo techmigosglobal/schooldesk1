@@ -5089,7 +5089,7 @@ as String?,
 /// @nodoc
 mixin _$StudentDto {
 
- String? get id;@JsonKey(name: 'school_id') String? get schoolId;@JsonKey(name: 'student_code') String? get studentCode;@JsonKey(name: 'admission_number') String? get admissionNumber;@JsonKey(name: 'first_name') String? get firstName;@JsonKey(name: 'last_name') String? get lastName;@JsonKey(name: 'date_of_birth') DateTime? get dateOfBirth;@JsonKey(name: 'current_section_id') String? get currentSectionId; String? get status;
+ String? get id;@JsonKey(name: 'school_id') String? get schoolId;@JsonKey(name: 'student_id_number') String? get studentCode;@JsonKey(name: 'admission_number') String? get admissionNumber;@JsonKey(name: 'first_name') String? get firstName;@JsonKey(name: 'last_name') String? get lastName;@JsonKey(name: 'date_of_birth') DateTime? get dateOfBirth;@JsonKey(name: 'current_section_id') String? get currentSectionId; String? get status;
 /// Create a copy of StudentDto
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -5122,7 +5122,7 @@ abstract mixin class $StudentDtoCopyWith<$Res>  {
   factory $StudentDtoCopyWith(StudentDto value, $Res Function(StudentDto) _then) = _$StudentDtoCopyWithImpl;
 @useResult
 $Res call({
- String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_id_number') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
 });
 
 
@@ -5235,7 +5235,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_id_number')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _StudentDto() when $default != null:
 return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
@@ -5256,7 +5256,7 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_id_number')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)  $default,) {final _that = this;
 switch (_that) {
 case _StudentDto():
 return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
@@ -5276,7 +5276,7 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_code')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String? id, @JsonKey(name: 'school_id')  String? schoolId, @JsonKey(name: 'student_id_number')  String? studentCode, @JsonKey(name: 'admission_number')  String? admissionNumber, @JsonKey(name: 'first_name')  String? firstName, @JsonKey(name: 'last_name')  String? lastName, @JsonKey(name: 'date_of_birth')  DateTime? dateOfBirth, @JsonKey(name: 'current_section_id')  String? currentSectionId,  String? status)?  $default,) {final _that = this;
 switch (_that) {
 case _StudentDto() when $default != null:
 return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,_that.firstName,_that.lastName,_that.dateOfBirth,_that.currentSectionId,_that.status);case _:
@@ -5291,12 +5291,12 @@ return $default(_that.id,_that.schoolId,_that.studentCode,_that.admissionNumber,
 @JsonSerializable()
 
 class _StudentDto implements StudentDto {
-  const _StudentDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'student_code') this.studentCode, @JsonKey(name: 'admission_number') this.admissionNumber, @JsonKey(name: 'first_name') this.firstName, @JsonKey(name: 'last_name') this.lastName, @JsonKey(name: 'date_of_birth') this.dateOfBirth, @JsonKey(name: 'current_section_id') this.currentSectionId, this.status});
+  const _StudentDto({this.id, @JsonKey(name: 'school_id') this.schoolId, @JsonKey(name: 'student_id_number') this.studentCode, @JsonKey(name: 'admission_number') this.admissionNumber, @JsonKey(name: 'first_name') this.firstName, @JsonKey(name: 'last_name') this.lastName, @JsonKey(name: 'date_of_birth') this.dateOfBirth, @JsonKey(name: 'current_section_id') this.currentSectionId, this.status});
   factory _StudentDto.fromJson(Map<String, dynamic> json) => _$StudentDtoFromJson(json);
 
 @override final  String? id;
 @override@JsonKey(name: 'school_id') final  String? schoolId;
-@override@JsonKey(name: 'student_code') final  String? studentCode;
+@override@JsonKey(name: 'student_id_number') final  String? studentCode;
 @override@JsonKey(name: 'admission_number') final  String? admissionNumber;
 @override@JsonKey(name: 'first_name') final  String? firstName;
 @override@JsonKey(name: 'last_name') final  String? lastName;
@@ -5337,7 +5337,7 @@ abstract mixin class _$StudentDtoCopyWith<$Res> implements $StudentDtoCopyWith<$
   factory _$StudentDtoCopyWith(_StudentDto value, $Res Function(_StudentDto) _then) = __$StudentDtoCopyWithImpl;
 @override @useResult
 $Res call({
- String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_code') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
+ String? id,@JsonKey(name: 'school_id') String? schoolId,@JsonKey(name: 'student_id_number') String? studentCode,@JsonKey(name: 'admission_number') String? admissionNumber,@JsonKey(name: 'first_name') String? firstName,@JsonKey(name: 'last_name') String? lastName,@JsonKey(name: 'date_of_birth') DateTime? dateOfBirth,@JsonKey(name: 'current_section_id') String? currentSectionId, String? status
 });
 
 

@@ -261,6 +261,7 @@ interface NotificationTemplate {
   title: string;
   body: string;
   data: Record<string, string>;
+  image?: string;
 }
 
 interface FcmSendResult {
@@ -424,6 +425,50 @@ function getNotificationTemplate(
         },
       };
 
+    case "birthday":
+    case "birthday_wish": {
+      const students = (eventData.students || []) as Array<{ id: string; name: string; photo_url: string }>;
+      const image = students.length > 0 ? (students[0].photo_url || undefined) : undefined;
+      const data: Record<string, string> = {
+        event_type: eventType,
+        reference_type: "birthday",
+        reference_id: String(eventData.reference_id || ""),
+        student_id: String(eventData.student_id || ""),
+        section_id: String(eventData.section_id || ""),
+        teacher_id: String(eventData.teacher_id || ""),
+      };
+
+      if (students.length > 0) {
+        data.students_json = JSON.stringify(students);
+        if (!data.student_id && students[0].id) {
+          data.student_id = students[0].id;
+        }
+        if (students[0].photo_url) {
+          data.photo_url = students[0].photo_url;
+        }
+      }
+
+      return {
+        title: String(eventData.title || "Birthday Today"),
+        body: String(eventData.message || "Happy Birthday!"),
+        data,
+        image,
+      };
+    }
+
+    case "leave_recalled":
+      return {
+        title: "Leave Request Recalled",
+        body: String(
+          eventData.message || "A leave request has been recalled.",
+        ),
+        data: {
+          event_type: "leave_recalled",
+          reference_type: "leave",
+          leave_id: String(eventData.leave_id || ""),
+        },
+      };
+
     default:
       return {
         title: "SchoolDesk Notification",
@@ -467,6 +512,7 @@ async function sendFcmNotification(
         notification: {
           title: template.title,
           body: template.body,
+          ...(template.image ? { image: template.image } : {}),
         },
         data: template.data,
         android: {
@@ -474,6 +520,7 @@ async function sendFcmNotification(
           notification: {
             channel_id: "schooldesk_updates",
             priority: "high" as const,
+            ...(template.image ? { image: template.image } : {}),
           },
         },
         apns: {
@@ -482,8 +529,10 @@ async function sendFcmNotification(
               alert: { title: template.title, body: template.body },
               badge: 1,
               sound: "default",
+              ...(template.image ? { "mutable-content": 1 } : {}),
             },
           },
+          ...(template.image ? { fcm_options: { image: template.image } } : {}),
         },
       },
     };

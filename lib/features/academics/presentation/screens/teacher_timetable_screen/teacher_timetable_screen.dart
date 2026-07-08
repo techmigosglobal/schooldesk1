@@ -123,7 +123,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
-      subtitle: 'Assigned schedule from Principal',
+      subtitle: _usingAssignedClassFallback ? 'Timetable source: assigned class' : 'Read-only schedule from Principal timetable setup',
       selectedIndex: TeacherNav.timetable,
       loading: _loading,
       error: _error,

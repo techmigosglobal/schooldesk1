@@ -1264,19 +1264,10 @@ class _StudentFormPageState extends State<_StudentFormPage> {
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: _admissionCtrl,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Admission / Roll Number',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
                     controller: _codeCtrl,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
-                      labelText: 'Student Code',
+                      labelText: 'Student ID Number',
                       border: OutlineInputBorder(),
                     ),
                   ),

@@ -359,7 +359,9 @@ class BulkCsvImportService {
       dateOfBirth: _date(row.value('date_of_birth'), '2010-01-01'),
       gender: row.value('gender', fallback: 'unspecified'),
       admissionNumber: row.value('admission_number'),
-      studentCode: row.value('student_code'),
+      studentCode: row.value('student_id_number').isNotEmpty
+          ? row.value('student_id_number')
+          : row.value('student_code'),
       currentSectionId: sectionId,
       admissionDate: _date(row.value('admission_date'), '2026-01-01'),
       status: row.value('status', fallback: 'active'),

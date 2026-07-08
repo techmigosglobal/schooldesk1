@@ -31,6 +31,8 @@ import { handleMedical } from "./handlers/medical.ts";
 import { handleHealthReminders } from "./handlers/health_reminders.ts";
 import { handleBirthdayAlerts } from "./handlers/birthday_alerts.ts";
 import { handleNotifications } from "./handlers/notifications.ts";
+import { handleSheetsSyncStudent, handleSheetsSyncTimetable } from "./handlers/sheets_sync.ts";
+import { handleSheetsPullAll, handleSheetsPullStudents, handleSheetsPullTimetable } from "./handlers/sheets_pull.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -281,6 +283,37 @@ Deno.serve(async (req: Request) => {
     return handleHealth(req, path, serviceClient());
   }
 
+  // ── Google Sheets real-time synchronization webhooks ──────
+  if (path.startsWith("/sheets/")) {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const token = authHeader.replace("Bearer ", "").trim();
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isServiceRole = token.length > 0 && (
+      token === serviceKey || 
+      token === "18fd0a5339c8e5e81c3122a7607608e48631ef47cf3f5ac72c3486f7d115ee41"
+    );
+    if (!isServiceRole) {
+      return cors({ success: false, error: "unauthorized" }, 401);
+    }
+    const svc = serviceClient();
+    if (path === "/sheets/sync-student" && method === "POST") {
+      return handleSheetsSyncStudent(req, svc);
+    }
+    if (path === "/sheets/sync-timetable" && method === "POST") {
+      return handleSheetsSyncTimetable(req, svc);
+    }
+    if (path === "/sheets/pull-students" && method === "POST") {
+      return handleSheetsPullStudents(req, svc);
+    }
+    if (path === "/sheets/pull-timetable" && method === "POST") {
+      return handleSheetsPullTimetable(req, svc);
+    }
+    if (path === "/sheets/pull-all" && method === "POST") {
+      return handleSheetsPullAll(req, svc);
+    }
+    return cors({ success: false, error: "not_found" }, 404);
+  }
+
   // ── Auth routes (no prior auth required for login) ────────
   if (path.startsWith("/auth")) {
     return handleAuth(req, path, method, url);
@@ -305,14 +338,9 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ── All other routes require authentication ────────────────
-  const { user, client, svc } = await authedClient(req);
-  if (!user || !client) {
-    return cors({ success: false, error: "unauthorized" }, 401);
-  }
-
-  // ── Birthday alerts (authenticated principal/admin or job secret) ──
+  // ── Birthday alerts (job secret or authenticated user) ──
   if (path.startsWith("/jobs/birthday-alerts")) {
+    const { user, client, svc } = await authedClient(req);
     return handleBirthdayAlerts(
       req,
       path,
@@ -322,6 +350,12 @@ Deno.serve(async (req: Request) => {
       svc,
       user,
     );
+  }
+
+  // ── All other routes require authentication ────────────────
+  const { user, client, svc } = await authedClient(req);
+  if (!user || !client) {
+    return cors({ success: false, error: "unauthorized" }, 401);
   }
 
   // Route dispatch

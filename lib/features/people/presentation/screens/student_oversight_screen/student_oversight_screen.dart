@@ -995,7 +995,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       [
         'Name',
         'Admission / Roll',
-        'System ID',
+        'Student ID Number',
         'Class / Section',
         'Gender',
         'Date of Birth',
@@ -1815,11 +1815,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       );
       return;
     }
-    if (_systemIdCtrl.text.trim().isEmpty ||
-        _admissionCtrl.text.trim().isEmpty) {
+    if (_systemIdCtrl.text.trim().isEmpty) {
       setState(
-        () => _error =
-            'Custom System ID and admission / roll number are required',
+        () => _error = 'Student ID Number is required',
       );
       return;
     }
@@ -1885,7 +1883,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     final message = '$error';
     final lower = message.toLowerCase();
     if (lower.contains('student code already exists')) {
-      return 'System ID already exists. Enter a different custom System ID.';
+      return 'Student ID Number already exists. Enter a different Student ID Number.';
     }
     if (lower.contains('admission number already exists')) {
       return 'Admission / roll number already exists. Enter a different value.';
@@ -2038,14 +2036,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('System ID'),
+                                _FieldLabel('Student ID Number'),
                                 _TextInput(
                                   controller: _systemIdCtrl,
                                   enabled: !_saving,
                                   validator: (value) =>
                                       _requiredUniqueIdentifier(
                                         value,
-                                        'System ID',
+                                        'Student ID Number',
                                         (student) => student.systemId,
                                       ),
                                   autovalidateMode:
@@ -2059,24 +2057,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                         _ResponsiveFieldRow(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel('Admission / Roll Number'),
-                                _TextInput(
-                                  controller: _admissionCtrl,
-                                  enabled: !_saving,
-                                  validator: (value) =>
-                                      _requiredUniqueIdentifier(
-                                        value,
-                                        'Admission / roll number',
-                                        (student) => student.rollNumber,
-                                      ),
-                                  autovalidateMode:
-                                      AutovalidateMode.onUserInteraction,
-                                ),
-                              ],
-                            ),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -2952,12 +2932,13 @@ class _StudentDetailPage extends StatelessWidget {
                   label: 'Class / Section',
                   value: student.classSection,
                 ),
+                if (student.rollNumber.isNotEmpty)
+                  _DetailRow(
+                    label: 'Admission / Roll',
+                    value: student.rollNumber,
+                  ),
                 _DetailRow(
-                  label: 'Admission / Roll',
-                  value: student.rollNumber,
-                ),
-                _DetailRow(
-                  label: 'System ID',
+                  label: 'Student ID Number',
                   value: student.systemId.isEmpty
                       ? 'Not available'
                       : student.systemId,

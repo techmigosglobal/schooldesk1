@@ -365,7 +365,7 @@ abstract class StudentDto with _$StudentDto {
   const factory StudentDto({
     String? id,
     @JsonKey(name: 'school_id') String? schoolId,
-    @JsonKey(name: 'student_code') String? studentCode,
+    @JsonKey(name: 'student_id_number') String? studentCode,
     @JsonKey(name: 'admission_number') String? admissionNumber,
     @JsonKey(name: 'first_name') String? firstName,
     @JsonKey(name: 'last_name') String? lastName,

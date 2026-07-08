@@ -540,13 +540,15 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
 
   Widget _buildManualEditor() {
     final subjectOptions = _subjectOptionsForSelectedClass;
+    // Class teacher stays fixed: classTeacherName
+    final classTeacherName = _selectedSection?.classTeacherName ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildEditorActions(preview: false),
         const SizedBox(height: 12),
         _hintText(
-          'Subjects use the class teacher or co-teacher for this class, so every regular slot is assigned to the class team.',
+          'Class teacher stays fixed: $classTeacherName. Subjects use the class teacher or co-teacher.',
         ),
         const SizedBox(height: 10),
         _buildTimingQuickControls(),
