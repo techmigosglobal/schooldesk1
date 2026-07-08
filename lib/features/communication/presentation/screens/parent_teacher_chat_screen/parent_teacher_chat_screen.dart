@@ -231,9 +231,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
       if (user.roleName.trim().toLowerCase() != 'principal') continue;
       final principalId = user.id.trim();
       if (principalId.isEmpty) continue;
-      final alreadyPresent = principalConversations.any(
-        (row) => _text(row['created_by']) == principalId,
-      );
+      final alreadyPresent = principalConversations.isNotEmpty;
       if (alreadyPresent) continue;
       byTeacher['principal-contact:$principalId'] = _TeacherThread(
         threadKey: 'principal-contact:$principalId',

@@ -411,9 +411,7 @@ List<Map<String, dynamic>> _mergeConversationsWithContacts({
     if (role == 'principal') {
       final principalId = _text(contact['id']);
       if (principalId.isEmpty) continue;
-      final exists = principalConversations.any(
-        (row) => _text(row['created_by']) == principalId,
-      );
+      final exists = principalConversations.isNotEmpty;
       if (exists) continue;
       merged['contact-principal-$principalId'] = {
         'id': 'contact-principal-$principalId',

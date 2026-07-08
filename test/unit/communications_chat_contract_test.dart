@@ -73,7 +73,7 @@ void main() {
     'chat realtime migration publishes conversation and message changes',
     () {
       final migration = File(
-        'supabase/migrations/0019_chat_realtime_scope.sql',
+        'supabase/migrations/20260706180000_chat_realtime_scope.sql',
       ).readAsStringSync();
 
       expect(migration, contains('supabase_realtime'));
@@ -152,6 +152,7 @@ void main() {
         parentScreen,
         contains('School leadership - tap to start direct chat'),
       );
+      expect(parentScreen, contains('principalConversations.isNotEmpty'));
       expect(parentScreen, contains("tooltip: 'Back to chats'"));
       expect(teacherScreen, contains("tooltip: 'Back to chats'"));
       expect(principalScreen, contains("tooltip: 'Back to chats'"));
@@ -161,6 +162,9 @@ void main() {
   test(
     'principal chat direct tab hydrates teacher and parent contacts even before threads exist',
     () {
+      final teacherScreen = File(
+        'lib/features/communication/presentation/screens/teacher_communication_screen/teacher_communication_screen.dart',
+      ).readAsStringSync();
       final principalScreen = File(
         'lib/features/communication/presentation/screens/principal_chat_communications_screen/principal_chat_communications_screen.dart',
       ).readAsStringSync();
@@ -187,6 +191,7 @@ void main() {
         principalScreen,
         contains('Parent contact - tap to start direct chat'),
       );
+      expect(teacherScreen, contains('principalConversations.isNotEmpty'));
     },
   );
 

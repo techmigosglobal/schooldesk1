@@ -690,6 +690,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _openSubjectSetup(Map<String, dynamic> row) async {
+    setState(() => _selectedSectionId = _text(row['section_id']));
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => _AssignSubjectsSetupPage(
@@ -706,6 +707,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _openFeesModule(Map<String, dynamic> row) async {
+    setState(() => _selectedSectionId = _text(row['section_id']));
     await Navigator.pushNamed(
       context,
       AppRoutes.feeMonitoring,
@@ -720,6 +722,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   }
 
   Future<void> _openInstructionSheet(Map<String, dynamic> row) async {
+    setState(() => _selectedSectionId = _text(row['section_id']));
     final controller = TextEditingController();
     final result = await showModalBottomSheet<bool>(
       context: context,
