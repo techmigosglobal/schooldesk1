@@ -1010,23 +1010,6 @@ class _ClassesDirectoryHeader extends StatelessWidget {
                   letterSpacing: 0,
                 ),
               ),
-              SizedBox(height: compact ? 3 : 4),
-              Text(
-                'Open a class, manage details, and jump into roster actions',
-                maxLines: tiny ? 3 : 2,
-                overflow: TextOverflow.visible,
-                style: GoogleFonts.dmSans(
-                  color: _classesDirectoryMuted,
-                  fontSize: tiny
-                      ? 11
-                      : compact
-                      ? 11.5
-                      : 12,
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                  letterSpacing: 0,
-                ),
-              ),
             ],
           ),
         ),

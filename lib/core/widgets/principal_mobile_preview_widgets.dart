@@ -322,16 +322,6 @@ class PrincipalPreviewTitleBlock extends StatelessWidget {
               height: 1.15,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: principalPreviewTextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.white.withOpacity(0.84),
-              height: 1.45,
-            ),
-          ),
         ],
       ),
     );

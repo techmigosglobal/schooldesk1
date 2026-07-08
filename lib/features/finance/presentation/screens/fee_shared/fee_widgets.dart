@@ -72,17 +72,6 @@ class FeeHeader extends StatelessWidget {
                     color: context.appTheme.onSurface,
                   ),
                 ),
-                if (subtitle.isNotEmpty)
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: context.appTheme.muted,
-                    ),
-                  ),
               ],
             ),
           ),

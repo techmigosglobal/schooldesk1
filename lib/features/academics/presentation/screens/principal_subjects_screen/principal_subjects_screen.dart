@@ -216,17 +216,6 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
                     color: const Color(0xFF101828),
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: const Color(0xFF5F6F89),
-                  ),
-                ),
               ],
             ),
           ),

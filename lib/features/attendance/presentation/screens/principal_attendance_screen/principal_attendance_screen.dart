@@ -318,8 +318,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_screenTitle, style: _UiText.headline),
-                const SizedBox(height: 4),
-                Text(_screenSubtitle, style: _UiText.caption),
               ],
             ),
           ),

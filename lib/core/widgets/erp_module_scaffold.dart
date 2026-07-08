@@ -388,18 +388,6 @@ class _ModuleToolbar extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      if (subtitle != null) ...[
-                        SizedBox(height: tokens.spacing.xs),
-                        SchoolDeskAdaptiveText(
-                          subtitle!,
-                          maxLines: 2,
-                          textAlign: TextAlign.center,
-                          minFontSize: 9.5,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: tokens.textMuted,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),
@@ -439,17 +427,6 @@ class _ModuleToolbar extends StatelessWidget {
                         minFontSize: 11,
                         style: theme.textTheme.titleLarge,
                       ),
-                      if (subtitle != null) ...[
-                        SizedBox(height: tokens.spacing.xs),
-                        SchoolDeskAdaptiveText(
-                          subtitle!,
-                          maxLines: 2,
-                          minFontSize: 9.5,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: tokens.textMuted,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

@@ -210,16 +210,6 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                     color: _ink,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: _muted,
-                  ),
-                ),
               ],
             ),
           ),

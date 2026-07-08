@@ -995,7 +995,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       [
         'Name',
         'Admission / Roll',
-        'Student ID Number',
+        'Student ID',
         'Class / Section',
         'Gender',
         'Date of Birth',
@@ -1666,7 +1666,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   static const Color _background = Color(0xFFEFF8FD);
 
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
   late final TextEditingController _dobCtrl;
   late final TextEditingController _systemIdCtrl;
   late final TextEditingController _admissionCtrl;
@@ -1697,7 +1698,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     super.initState();
     final initial = widget.initialStudent;
     if (initial != null) {
-      _nameCtrl.text = initial.name;
+      final parts = initial.name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+      _firstNameCtrl.text = parts.isEmpty ? initial.name.trim() : parts.first;
+      _lastNameCtrl.text = parts.length > 1 ? parts.skip(1).join(' ') : '';
       _dob = DateTime.tryParse(initial.dateOfBirth) ?? DateTime(2010);
       final initialGender = _formatStudentGender(initial.gender);
       _gender = const ['Female', 'Male', 'Other'].contains(initialGender)
@@ -1728,7 +1731,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
     _dobCtrl.dispose();
     _systemIdCtrl.dispose();
     _admissionCtrl.dispose();
@@ -1817,7 +1821,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     }
     if (_systemIdCtrl.text.trim().isEmpty) {
       setState(
-        () => _error = 'Student ID Number is required',
+        () => _error = 'Student ID is required',
       );
       return;
     }
@@ -1844,7 +1848,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       await widget.onSubmit(
         _AddStudentInput(
           studentId: widget.initialStudent?.id,
-          studentName: _nameCtrl.text.trim(),
+          studentName: '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'.trim(),
           backendDateOfBirth: _backendDate(_dob),
           gender: _gender,
           sectionId: _sectionId ?? '',
@@ -1883,7 +1887,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     final message = '$error';
     final lower = message.toLowerCase();
     if (lower.contains('student code already exists')) {
-      return 'Student ID Number already exists. Enter a different Student ID Number.';
+      return 'Student ID already exists. Enter a different Student ID.';
     }
     if (lower.contains('admission number already exists')) {
       return 'Admission / roll number already exists. Enter a different value.';
@@ -1897,7 +1901,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   void _resetForm() {
     if (_isEdit) return;
     setState(() {
-      _nameCtrl.clear();
+      _firstNameCtrl.clear();
+      _lastNameCtrl.clear();
       _dob = DateTime(2010);
       _dobCtrl.text = _displayDate(_dob);
       _gender = 'Female';
@@ -1960,11 +1965,30 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        _FieldLabel('Student Name'),
-                        _TextInput(
-                          controller: _nameCtrl,
-                          enabled: !_saving,
-                          validator: _requiredFullName,
+                        _ResponsiveFieldRow(
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('First Name'),
+                                _TextInput(
+                                  controller: _firstNameCtrl,
+                                  enabled: !_saving,
+                                  validator: _requiredFullName,
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _FieldLabel('Last Name'),
+                                _TextInput(
+                                  controller: _lastNameCtrl,
+                                  enabled: !_saving,
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                         _ResponsiveFieldRow(
@@ -2036,14 +2060,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Student ID Number'),
+                                _FieldLabel('Student ID'),
                                 _TextInput(
                                   controller: _systemIdCtrl,
                                   enabled: !_saving,
                                   validator: (value) =>
                                       _requiredUniqueIdentifier(
                                         value,
-                                        'Student ID Number',
+                                        'Student ID',
                                         (student) => student.systemId,
                                       ),
                                   autovalidateMode:
@@ -2192,7 +2216,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Document File'),
+                                _FieldLabel('Upload Document'),
                                 OutlinedButton.icon(
                                   onPressed: _saving
                                       ? null
@@ -2938,7 +2962,7 @@ class _StudentDetailPage extends StatelessWidget {
                     value: student.rollNumber,
                   ),
                 _DetailRow(
-                  label: 'Student ID Number',
+                  label: 'Student ID',
                   value: student.systemId.isEmpty
                       ? 'Not available'
                       : student.systemId,

@@ -167,21 +167,6 @@ class PrincipalDirectoryHeader extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (subtitle.trim().isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                            color: principalDirectoryMuted,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

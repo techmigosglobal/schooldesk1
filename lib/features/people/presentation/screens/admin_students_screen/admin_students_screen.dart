@@ -1267,7 +1267,7 @@ class _StudentFormPageState extends State<_StudentFormPage> {
                     controller: _codeCtrl,
                     textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
-                      labelText: 'Student ID Number',
+                      labelText: 'Student ID',
                       border: OutlineInputBorder(),
                     ),
                   ),
