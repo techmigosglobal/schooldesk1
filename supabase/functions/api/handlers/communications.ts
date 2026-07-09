@@ -1655,7 +1655,8 @@ export async function handleCommunications(
     /^\/parent-teacher-meetings\/([^/]+)(?:\/(book))?$/,
   );
   if (ptmMatch && method === "PUT") {
-    const payload = ptmMatch[2] === "book"
+    const isBookAction = ptmMatch[2] === "book";
+    const payload = isBookAction
       ? {
         status: "booked",
         notes: body.notes ?? "Booked by parent",
@@ -1665,8 +1666,85 @@ export async function handleCommunications(
       : { ...body, updated_at: new Date().toISOString() };
     const { data, error } = await svc.from("parent_teacher_meetings").update(
       payload,
-    ).eq("id", ptmMatch[1]).eq("school_id", school).select().single();
+    ).eq("id", ptmMatch[1]).eq("school_id", school).select(
+      "*, teacher:staff(first_name, last_name), student:students(first_name, last_name)",
+    ).single();
     if (error) return fail(error.message);
+
+    // ── Notify the relevant party based on the action ──────────────────
+    try {
+      const meetingId = `${data.id ?? ""}`;
+      const slotDate = `${data.slot_date ?? ""}`.split("T")[0];
+      const slotTime = `${data.slot_time ?? ""}`.substring(0, 5); // HH:MM
+
+      if (isBookAction) {
+        // Parent booked a slot → notify the teacher
+        const staffId = `${data.teacher_id ?? ""}`.trim();
+        if (staffId) {
+          const { data: teacherUserRow } = await svc.from("users")
+            .select("id")
+            .eq("school_id", school)
+            .eq("linked_type", "staff")
+            .eq("linked_id", staffId)
+            .limit(1)
+            .maybeSingle();
+          if (teacherUserRow?.id) {
+            const teacher = data.teacher as Record<string, unknown> | null;
+            const student = data.student as Record<string, unknown> | null;
+            const studentName = student
+              ? `${student.first_name ?? ""} ${student.last_name ?? ""}`.trim()
+              : "a student";
+            const notifBody = `A parent booked a PTM slot on ${slotDate} at ${slotTime} regarding ${studentName}.`;
+            const { data: ptmEvent } = await svc.from("notification_events").insert({
+              school_id: school,
+              user_id: teacherUserRow.id,
+              event_type: "ptm_booked",
+              event_data: {
+                ptm_id: meetingId,
+                message: notifBody,
+                reference_type: "ptm",
+                slot_date: slotDate,
+                slot_time: slotTime,
+              },
+            }).select("id").maybeSingle();
+            if (ptmEvent?.id) triggerPushProcessing(ptmEvent.id);
+          }
+        }
+      } else {
+        // Teacher/principal changed status → notify the parent
+        const newStatus = `${payload.status ?? data.status ?? ""}`.toLowerCase();
+        if (["confirmed", "cancelled", "rescheduled"].includes(newStatus)) {
+          const parentUserId = `${data.booked_by_parent_user_id ?? ""}`.trim();
+          if (parentUserId) {
+            const teacher = data.teacher as Record<string, unknown> | null;
+            const teacherName = teacher
+              ? `${teacher.first_name ?? ""} ${teacher.last_name ?? ""}`.trim()
+              : "your child's teacher";
+            const statusMessages: Record<string, string> = {
+              confirmed: `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been confirmed.`,
+              cancelled: `Your PTM meeting with ${teacherName} on ${slotDate} at ${slotTime} has been cancelled.`,
+              rescheduled: `Your PTM meeting with ${teacherName} has been rescheduled. Please check new details.`,
+            };
+            const notifBody = statusMessages[newStatus] ?? `Your PTM meeting status has been updated to ${newStatus}.`;
+            const { data: ptmStatusEvent } = await svc.from("notification_events").insert({
+              school_id: school,
+              user_id: parentUserId,
+              event_type: "ptm_status_updated",
+              event_data: {
+                ptm_id: meetingId,
+                status: newStatus,
+                message: notifBody,
+                reference_type: "ptm",
+                slot_date: slotDate,
+                slot_time: slotTime,
+              },
+            }).select("id").maybeSingle();
+            if (ptmStatusEvent?.id) triggerPushProcessing(ptmStatusEvent.id);
+          }
+        }
+      }
+    } catch (_) { /* best-effort notifications — PTM update was already saved */ }
+
     return ok(data);
   }
 

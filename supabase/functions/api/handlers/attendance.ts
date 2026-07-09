@@ -1,6 +1,58 @@
 // handlers/attendance.ts — sessions, mark, summary, staff, QR, corrections
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { fail, ok } from "../index.ts";
+import { fail, ok, triggerPushProcessing } from "../index.ts";
+
+/** Notify parents of absent students via FCM push notification. Best-effort; never throws. */
+async function notifyParentsOfAbsence(
+  svc: SupabaseClient,
+  school: string,
+  absentStudentIds: string[],
+  attendanceDate: string,
+): Promise<void> {
+  if (absentStudentIds.length === 0) return;
+  try {
+    // Find parent user IDs for all absent students
+    const { data: links } = await svc.from("parent_student_links")
+      .select("parent_user_id, student_id")
+      .eq("school_id", school)
+      .in("student_id", absentStudentIds);
+    if (!links || links.length === 0) return;
+
+    // Build per-parent events: deduplicate if parent has multiple absent children
+    const parentEventMap = new Map<string, { studentIds: string[]; parentUserId: string }>();
+    for (const link of links) {
+      const parentId = `${link.parent_user_id ?? ""}`.trim();
+      const studentId = `${link.student_id ?? ""}`.trim();
+      if (!parentId || !studentId) continue;
+      if (!parentEventMap.has(parentId)) {
+        parentEventMap.set(parentId, { parentUserId: parentId, studentIds: [] });
+      }
+      parentEventMap.get(parentId)!.studentIds.push(studentId);
+    }
+
+    const eventRows = Array.from(parentEventMap.values()).map(({ parentUserId, studentIds }) => ({
+      school_id: school,
+      user_id: parentUserId,
+      event_type: "attendance_marked",
+      event_data: {
+        student_ids: studentIds,
+        status: "absent",
+        date: attendanceDate,
+        message: `Your child was marked absent on ${attendanceDate}. Please contact the school if this is incorrect.`,
+        reference_type: "attendance",
+      },
+    }));
+
+    const { data: events, error: eventError } = await svc
+      .from("notification_events")
+      .insert(eventRows)
+      .select("id");
+    if (!eventError) {
+      const eventIds = (events ?? []).map((row: { id: string }) => `${row.id ?? ""}`.trim()).filter(Boolean);
+      if (eventIds.length > 0) triggerPushProcessing(eventIds);
+    }
+  } catch (_) { /* best-effort — attendance was already saved */ }
+}
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -349,6 +401,12 @@ export async function handleAttendance(
         updated_at: new Date().toISOString(),
       }).eq("id", sessionId).eq("school_id", school);
     }
+    // Notify parents of absent students via FCM push
+    const absentIds = (data ?? []).filter(
+      (r: Record<string, unknown>) => `${r.status ?? ""}`.toLowerCase() === "absent",
+    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim()).filter(Boolean);
+    const attendanceDate = `${session.date ?? new Date().toISOString().split("T")[0]}`;
+    await notifyParentsOfAbsence(svc, school, absentIds, attendanceDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
   }
 
@@ -396,6 +454,12 @@ export async function handleAttendance(
       submitted_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).eq("id", sessionId).eq("school_id", school);
+    // Notify parents of absent students via FCM push (legacy bulk mark path)
+    const absentIdsLegacy = (data ?? []).filter(
+      (r: Record<string, unknown>) => `${r.status ?? ""}`.toLowerCase() === "absent",
+    ).map((r: Record<string, unknown>) => `${r.student_id ?? ""}`.trim()).filter(Boolean);
+    const legacyDate = `${session.date ?? new Date().toISOString().split("T")[0]}`;
+    await notifyParentsOfAbsence(svc, school, absentIdsLegacy, legacyDate);
     return ok({ marked: data?.length ?? 0, attendances: data ?? [] });
   }
 

@@ -1,6 +1,6 @@
 // handlers/fees.ts — categories, structures, invoices, payments, requests, config
 import { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2";
-import { cors, fail, ok } from "../index.ts";
+import { cors, fail, ok, triggerPushProcessing } from "../index.ts";
 
 function sid(u: User) {
   return (u.app_metadata?.school_id as string) ?? "";
@@ -2164,14 +2164,191 @@ export async function handleFees(
   }
 
   if (feesPath.startsWith("/reminders") && method === "POST") {
-    return ok({
-      success: true,
-      reminder: {
-        ...body,
-        school_id: school,
-        sent_at: new Date().toISOString(),
-      },
-    });
+    const invoiceId = text(body.invoice_id);
+    const studentId = text(body.student_id);
+    const customMessage = text(body.message);
+
+    try {
+      if (invoiceId) {
+        // 1. Single Invoice Reminder (triggered by Admin UI)
+        const { data: invoice, error: invoiceError } = await svc
+          .from("fee_invoices")
+          .select("*, student:students(first_name, last_name)")
+          .eq("id", invoiceId)
+          .eq("school_id", school)
+          .maybeSingle();
+
+        if (invoiceError) return fail(invoiceError.message);
+        if (!invoice) return fail("Invoice not found", 404);
+
+        const currentStudentId = studentId || text(invoice.student_id);
+        if (!currentStudentId) return fail("student_id not found on invoice", 400);
+
+        // Find the parent user ID(s)
+        const { data: links, error: linksError } = await svc
+          .from("parent_student_links")
+          .select("parent_user_id")
+          .eq("school_id", school)
+          .eq("student_id", currentStudentId);
+
+        if (linksError) return fail(linksError.message);
+        const parentUserIds = (links ?? [])
+          .map((l: Record<string, unknown>) => text(l.parent_user_id))
+          .filter(Boolean);
+
+        if (parentUserIds.length === 0) {
+          return fail("No parent linked to this student", 404);
+        }
+
+        const student = invoice.student as Record<string, unknown> | null;
+        const studentName = student
+          ? `${text(student.first_name)} ${text(student.last_name)}`.trim()
+          : "your child";
+        const balanceVal = money(invoice.balance);
+        const amountLabel = `INR ${balanceVal.toFixed(0)}`;
+        const dueDateLabel = text(invoice.due_date).split("T")[0];
+        
+        const messageBody = customMessage || 
+          `Reminder: Outstanding balance of ${amountLabel} is due for ${studentName} by ${dueDateLabel}.`;
+
+        const eventsToInsert = parentUserIds.map((pId) => ({
+          school_id: school,
+          user_id: pId,
+          event_type: "fee_due",
+          event_data: {
+            invoice_id: invoiceId,
+            student_id: currentStudentId,
+            amount: amountLabel,
+            balance: balanceVal,
+            due_date: dueDateLabel,
+            message: messageBody,
+            reference_type: "fee",
+          },
+          processed: false,
+        }));
+
+        const { data: insertedEvents, error: insertEventError } = await svc
+          .from("notification_events")
+          .insert(eventsToInsert)
+          .select("id");
+
+        if (insertEventError) return fail(insertEventError.message);
+
+        // Insert in-app notifications too so it shows up in history
+        const logsToInsert = parentUserIds.map((pId) => ({
+          school_id: school,
+          user_id: pId,
+          title: "Fee Due Reminder",
+          body: messageBody,
+          type: "fee",
+          entity_type: "fee_invoices",
+          entity_id: invoiceId,
+          target_role: "parent",
+          is_read: false,
+        }));
+        await svc.from("notification_logs").insert(logsToInsert);
+
+        const eventIds = (insertedEvents ?? []).map((row: { id: string }) => text(row.id)).filter(Boolean);
+        if (eventIds.length > 0) {
+          triggerPushProcessing(eventIds);
+        }
+
+        return ok({
+          success: true,
+          sent_to_count: parentUserIds.length,
+          message: messageBody,
+        });
+      } else {
+        // 2. Bulk/Scheduled Outstanding Invoice Reminders (no single invoice_id supplied)
+        const { data: invoices, error: invoicesError } = await svc
+          .from("fee_invoices")
+          .select("*, student:students(first_name, last_name)")
+          .eq("school_id", school)
+          .gt("balance", 0)
+          .neq("status", "paid");
+
+        if (invoicesError) return fail(invoicesError.message);
+        if (!invoices || invoices.length === 0) {
+          return ok({ success: true, message: "No outstanding invoices found." });
+        }
+
+        let totalRemindersSent = 0;
+        for (const invoice of invoices) {
+          const currentStudentId = text(invoice.student_id);
+          if (!currentStudentId) continue;
+
+          const { data: links } = await svc
+            .from("parent_student_links")
+            .select("parent_user_id")
+            .eq("school_id", school)
+            .eq("student_id", currentStudentId);
+
+          const parentUserIds = (links ?? [])
+            .map((l: Record<string, unknown>) => text(l.parent_user_id))
+            .filter(Boolean);
+
+          if (parentUserIds.length === 0) continue;
+
+          const student = invoice.student as Record<string, unknown> | null;
+          const studentName = student
+            ? `${text(student.first_name)} ${text(student.last_name)}`.trim()
+            : "your child";
+          const balanceVal = money(invoice.balance);
+          const amountLabel = `INR ${balanceVal.toFixed(0)}`;
+          const dueDateLabel = text(invoice.due_date).split("T")[0];
+          
+          const messageBody = `Reminder: Outstanding balance of ${amountLabel} is due for ${studentName} by ${dueDateLabel}.`;
+
+          const eventsToInsert = parentUserIds.map((pId) => ({
+            school_id: school,
+            user_id: pId,
+            event_type: "fee_due",
+            event_data: {
+              invoice_id: invoice.id,
+              student_id: currentStudentId,
+              amount: amountLabel,
+              balance: balanceVal,
+              due_date: dueDateLabel,
+              message: messageBody,
+              reference_type: "fee",
+            },
+            processed: false,
+          }));
+
+          const { data: insertedEvents } = await svc
+            .from("notification_events")
+            .insert(eventsToInsert)
+            .select("id");
+
+          const logsToInsert = parentUserIds.map((pId) => ({
+            school_id: school,
+            user_id: pId,
+            title: "Fee Due Reminder",
+            body: messageBody,
+            type: "fee",
+            entity_type: "fee_invoices",
+            entity_id: invoice.id,
+            target_role: "parent",
+            is_read: false,
+          }));
+          await svc.from("notification_logs").insert(logsToInsert);
+
+          const eventIds = (insertedEvents ?? []).map((row: { id: string }) => text(row.id)).filter(Boolean);
+          if (eventIds.length > 0) {
+            triggerPushProcessing(eventIds);
+          }
+          totalRemindersSent += parentUserIds.length;
+        }
+
+        return ok({
+          success: true,
+          sent_to_count: totalRemindersSent,
+          message: `Processed bulk outstanding fee reminders.`,
+        });
+      }
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
   }
 
   if (path === "/parent-payment-requests" && method === "POST") {

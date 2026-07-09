@@ -369,21 +369,62 @@ function getNotificationTemplate(
 
     case "attendance_marked":
       return {
-        title: "Attendance Marked",
-        body: `Attendance has been marked for today`,
+        title: "Attendance Update",
+        body: String(
+          eventData.message ||
+            `Your child was marked ${eventData.status || "absent"} on ${eventData.date || "today"}.`,
+        ),
         data: {
           event_type: "attendance_marked",
           reference_type: "attendance",
+          status: String(eventData.status || "absent"),
+          date: String(eventData.date || ""),
         },
       };
 
     case "fee_due":
       return {
-        title: "Fee Due Reminder",
-        body: `A fee payment is due: ${eventData.amount || ""}`,
+        title: "💰 Fee Payment Due",
+        body: String(
+          eventData.message ||
+            `A fee payment of ${eventData.amount || ""} is due. Please pay before the due date to avoid late charges.`,
+        ),
         data: {
           event_type: "fee_due",
           reference_type: "fee",
+          invoice_id: String(eventData.invoice_id || ""),
+          due_date: String(eventData.due_date || ""),
+        },
+      };
+
+    case "ptm_booked":
+      return {
+        title: "📅 PTM Slot Booked",
+        body: String(
+          eventData.message || "A parent has booked a PTM meeting slot with you.",
+        ),
+        data: {
+          event_type: "ptm_booked",
+          reference_type: "ptm",
+          ptm_id: String(eventData.ptm_id || ""),
+          slot_date: String(eventData.slot_date || ""),
+          slot_time: String(eventData.slot_time || ""),
+        },
+      };
+
+    case "ptm_status_updated":
+      return {
+        title: "📅 PTM Meeting Update",
+        body: String(
+          eventData.message || "Your PTM meeting status has been updated.",
+        ),
+        data: {
+          event_type: "ptm_status_updated",
+          reference_type: "ptm",
+          ptm_id: String(eventData.ptm_id || ""),
+          status: String(eventData.status || ""),
+          slot_date: String(eventData.slot_date || ""),
+          slot_time: String(eventData.slot_time || ""),
         },
       };
 
