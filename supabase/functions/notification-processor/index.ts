@@ -470,6 +470,91 @@ function getNotificationTemplate(
         },
       };
 
+    case "homework_assigned":
+      return {
+        title: String(eventData.title || "New Homework Assigned"),
+        body: String(
+          eventData.message || "Your child has been assigned new homework.",
+        ),
+        data: {
+          event_type: "homework_assigned",
+          reference_type: "homework",
+          homework_id: String(eventData.homework_id || ""),
+          action: "assignment",
+        },
+      };
+
+    case "fee_payment_submitted":
+      return {
+        title: "New Payment Proof Submitted",
+        body: String(
+          eventData.message ||
+            "A parent submitted payment proof. Please review and verify.",
+        ),
+        data: {
+          event_type: "fee_payment_submitted",
+          reference_type: "fee",
+          payment_request_id: String(eventData.payment_request_id || ""),
+          invoice_id: String(eventData.invoice_id || ""),
+        },
+      };
+
+    case "fee_payment_approved":
+      return {
+        title: "Payment Approved ✅",
+        body: String(
+          eventData.message ||
+            "Your payment has been verified and approved. Receipt is now available.",
+        ),
+        data: {
+          event_type: "fee_payment_approved",
+          reference_type: "fee",
+          payment_request_id: String(eventData.payment_request_id || ""),
+          invoice_id: String(eventData.invoice_id || ""),
+        },
+      };
+
+    case "fee_payment_rejected":
+      return {
+        title: "Payment Update",
+        body: String(
+          eventData.message || "Your payment submission requires attention.",
+        ),
+        data: {
+          event_type: "fee_payment_rejected",
+          reference_type: "fee",
+          payment_request_id: String(eventData.payment_request_id || ""),
+          invoice_id: String(eventData.invoice_id || ""),
+        },
+      };
+
+    case "leave_submitted":
+      return {
+        title: "New Leave Request",
+        body: String(
+          eventData.message || "A new leave request is pending your review.",
+        ),
+        data: {
+          event_type: "leave_submitted",
+          reference_type: "leave",
+          leave_id: String(eventData.leave_id || ""),
+        },
+      };
+
+    case "student_leave_submitted":
+      return {
+        title: "Student Leave Request",
+        body: String(
+          eventData.message ||
+            "A parent submitted a student leave request for your review.",
+        ),
+        data: {
+          event_type: "student_leave_submitted",
+          reference_type: "leave",
+          leave_id: String(eventData.leave_id || ""),
+        },
+      };
+
     default:
       return {
         title: "SchoolDesk Notification",

@@ -243,19 +243,18 @@ class NotificationRouteResolver {
   static String _healthRouteFor(String role) {
     return switch (role) {
       'parent' => AppRoutes.parentHealth,
-      'teacher' => AppRoutes.teacherCommunication,
-      'principal' => AppRoutes.communicationCenter,
+      // Teachers and principal receive health reminder alerts but have no
+      // dedicated health management screen — route to notification center.
+      'teacher' => AppRoutes.notificationCenter,
+      'principal' => AppRoutes.notificationCenter,
       _ => AppRoutes.notificationCenter,
     };
   }
 
   static String _birthdayRouteFor(String role) {
-    return switch (role) {
-      'parent' => AppRoutes.parentTeacherChat,
-      'teacher' => AppRoutes.teacherCommunication,
-      'principal' => AppRoutes.communicationCenter,
-      _ => AppRoutes.notificationCenter,
-    };
+    // Birthday notifications have no dedicated screen — route to notification
+    // center for all roles so tapping the push opens a meaningful screen.
+    return AppRoutes.notificationCenter;
   }
 
   static String _leaveRouteFor(String role) {

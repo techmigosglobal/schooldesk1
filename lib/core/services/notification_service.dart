@@ -6,6 +6,12 @@ import 'package:schooldesk1/core/services/role_access_service.dart';
 class NotificationService extends ChangeNotifier {
   static NotificationService? _instance;
 
+  /// Clears the cached singleton — call this on user logout so the next login
+  /// starts with a fresh, empty notification list rather than stale data.
+  static void resetInstance() {
+    _instance = null;
+  }
+
   final BackendApiClient _api = BackendApiClient.instance;
   List<AppNotification> _notifications = [];
   final Map<String, bool> _settings = {};
@@ -204,7 +210,7 @@ class NotificationService extends ChangeNotifier {
       AppNotification.transient(
         title: 'Leave Request $status',
         body: 'Your leave request for $dates has been $status.',
-        category: NotificationCategory.pendingApproval,
+        category: NotificationCategory.general,
         role: role,
         priority: NotificationPriority.high,
       ),
@@ -271,6 +277,9 @@ class NotificationService extends ChangeNotifier {
       if (hasAttachment) 'Attachment included',
     ].join(' - ');
 
+    // Add an in-app transient notification for immediate badge feedback.
+    // The backend homework.ts already persists the notification_log and fires
+    // the FCM push via notification_events — no duplicate API call needed here.
     await addNotification(
       AppNotification.transient(
         title: title,
@@ -283,23 +292,6 @@ class NotificationService extends ChangeNotifier {
         referenceId: homeworkId,
       ),
     );
-
-    try {
-      await _api.createRaw('/notifications', {
-        'title': title,
-        'body': body.isEmpty ? 'A parent submitted homework.' : body,
-        'category': NotificationCategory.homework,
-        'notification_type': NotificationCategory.homework,
-        'target_role': 'teacher',
-        'priority': 'high',
-        'route': '/teacher-homework-screen/submissions',
-        'reference_type': 'homework',
-        'reference_id': homeworkId,
-        'action': 'submission',
-      });
-    } catch (_) {
-      // Notification delivery is best-effort.
-    }
   }
 
   Future<void> triggerHomeworkFeedbackAlert({
@@ -314,6 +306,9 @@ class NotificationService extends ChangeNotifier {
         ? 'Teacher added feedback for ${homeworkTitle.trim().isEmpty ? 'homework' : homeworkTitle.trim()}.'
         : cleanComment;
 
+    // Add an in-app transient notification for immediate badge feedback.
+    // The backend homework.ts review handler already persists the notification_log
+    // and fires the FCM push via notification_events — no duplicate API call needed.
     await addNotification(
       AppNotification.transient(
         title: title,
@@ -326,24 +321,6 @@ class NotificationService extends ChangeNotifier {
         referenceId: homeworkId,
       ),
     );
-
-    try {
-      await _api.createRaw('/notifications', {
-        'title': title,
-        'body': body,
-        'category': NotificationCategory.homework,
-        'notification_type': NotificationCategory.homework,
-        'target_role': 'parent',
-        'priority': 'high',
-        'route': '/parent-homework-screen/submit',
-        'reference_type': 'homework',
-        'reference_id': homeworkId,
-        'action': 'needs_revision',
-        if (studentId.trim().isNotEmpty) 'student_id': studentId.trim(),
-      });
-    } catch (_) {
-      // Notification delivery is best-effort.
-    }
   }
 
   Future<void> triggerInvoiceGeneratedAlert({

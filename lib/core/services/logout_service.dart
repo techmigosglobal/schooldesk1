@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
+import 'package:schooldesk1/core/services/notification_service.dart';
 import 'package:schooldesk1/core/services/push_notification_service.dart';
 import 'package:schooldesk1/core/services/role_access_service.dart';
 import 'package:schooldesk1/core/services/notification_topic_manager.dart';
@@ -60,6 +61,9 @@ class LogoutService {
     // 2. Clear client-side state immediately.
     RoleAccessService.clear();
     BackendApiClient.instance.clearAuthToken();
+    // Reset the notification singleton so stale notifications from this user
+    // session are not visible if another user signs in on the same device.
+    NotificationService.resetInstance();
     await TokenStorageService.clear();
 
     // 3. Navigate to landing page right away — do not await any network call.

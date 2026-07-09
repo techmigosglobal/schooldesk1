@@ -1490,25 +1490,35 @@ export async function handleFees(
               const ln = text(studentRow.last_name);
               studentName = fn && ln ? `${fn} ${ln}` : fn || ln || "a student";
             }
-            await svc.from("notification_events").insert(
-              validPrincipals.map((p: Record<string, unknown>) => ({
-                school_id: school,
-                user_id: text(p.id),
-                event_type: "fee_payment_submitted",
-                title: "New payment proof submitted",
-                body: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
-                event_data: {
-                  payment_request_id: data.id,
-                  invoice_id: invoice.id,
-                  student_id: invoice.student_id,
-                  amount: expectedAmount,
-                  request_reference: data.request_reference,
-                },
-                entity_type: "parent_payment_requests",
-                entity_id: data.id,
-                processed: false,
-              })),
-            );
+            const { data: feeEvents, error: feeEventError } = await svc
+              .from("notification_events")
+              .insert(
+                validPrincipals.map((p: Record<string, unknown>) => ({
+                  school_id: school,
+                  user_id: text(p.id),
+                  event_type: "fee_payment_submitted",
+                  title: "New payment proof submitted",
+                  body: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
+                  event_data: {
+                    payment_request_id: data.id,
+                    invoice_id: invoice.id,
+                    student_id: invoice.student_id,
+                    amount: expectedAmount,
+                    request_reference: data.request_reference,
+                    message: `A parent submitted ${amountLabel} payment proof for ${studentName}. Please review and verify.`,
+                  },
+                  entity_type: "parent_payment_requests",
+                  entity_id: data.id,
+                  processed: false,
+                }))
+              )
+              .select("id");
+            if (!feeEventError) {
+              const feeEventIds = (feeEvents ?? []).map((row: { id: string }) =>
+                `${row.id ?? ""}`.trim()
+              ).filter(Boolean);
+              if (feeEventIds.length > 0) triggerPushProcessing(feeEventIds);
+            }
           }
         }
       } catch (_) {
@@ -1877,25 +1887,28 @@ export async function handleFees(
           const isApproved = ["approved", "completed", "paid"].includes(status);
           const statusLabel = isApproved ? "approved" : (status === "clarification_required" ? "requires clarification" : "rejected");
           const amountLabel = `INR ${money(existing.amount).toFixed(0)}`;
-          await svc.from("notification_events").insert({
+          const approvalBody = isApproved
+            ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
+            : `Your ${amountLabel} payment was ${statusLabel}.${body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""}`;
+          const { data: feeDecisionEvent } = await svc.from("notification_events").insert({
             school_id: school,
             user_id: parentUserId,
             event_type: isApproved ? "fee_payment_approved" : "fee_payment_rejected",
-            title: isApproved ? "Payment approved" : "Payment $statusLabel",
-            body: isApproved
-              ? `Your ${amountLabel} payment has been verified and approved. Receipt is now available.`
-              : `Your ${amountLabel} payment was ${statusLabel}.${body.admin_remarks ? ` Remark: ${text(body.admin_remarks)}` : ""}`,
+            title: isApproved ? "Payment Approved ✅" : `Payment ${statusLabel}`,
+            body: approvalBody,
             event_data: {
               payment_request_id: seg,
               invoice_id: existing.invoice_id,
               amount: money(existing.amount),
               status: status,
               admin_remarks: text(body.admin_remarks),
+              message: approvalBody,
             },
             entity_type: "parent_payment_requests",
             entity_id: seg,
             processed: false,
-          });
+          }).select("id").maybeSingle();
+          if (feeDecisionEvent?.id) triggerPushProcessing(feeDecisionEvent.id);
         }
       } catch (_) {
         // Best-effort notification — don't fail the decision.

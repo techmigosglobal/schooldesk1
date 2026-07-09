@@ -221,8 +221,36 @@ export async function handleHomework(
                 reference_id: id,
                 action: "assignment",
               }));
-              // Insert notifications
+              // Insert in-app notification logs
               await svc.from("notification_logs").insert(notifications);
+              // Also insert notification_events so the processor sends an FCM push to each parent
+              try {
+                const hwTitle = text(body.title, "Assignment");
+                const subjectLabel = text(body.subject_id, "your child's class");
+                const eventRows = parentIds.map((pid: string) => ({
+                  school_id: school,
+                  user_id: pid,
+                  event_type: "homework_assigned",
+                  event_data: {
+                    homework_id: id,
+                    title: `New Homework: ${hwTitle}`,
+                    message: `Homework assigned for ${subjectLabel}.`,
+                    reference_type: "homework",
+                    reference_id: id,
+                    action: "assignment",
+                  },
+                }));
+                const { data: events, error: eventError } = await svc
+                  .from("notification_events")
+                  .insert(eventRows)
+                  .select("id");
+                if (!eventError) {
+                  const eventIds = (events ?? []).map((row: { id: string }) =>
+                    text(row.id)
+                  ).filter(Boolean);
+                  if (eventIds.length > 0) triggerPushProcessing(eventIds);
+                }
+              } catch (_) { /* best-effort push — notification_logs already saved */ }
             }
           }
         }

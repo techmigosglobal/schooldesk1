@@ -166,6 +166,50 @@ export async function handleLeave(
     const { data, error } = await svc.from("leave_applications").insert(payload)
       .select().single();
     if (error) return fail(error.message);
+    // Notify the principal that a new leave request has been submitted
+    try {
+      const principalUserId = await resolvePrincipalUserId(svc, school);
+      if (principalUserId) {
+        const fromDate = text(data.start_date).split("T")[0] ?? "";
+        const toDate = text(data.end_date).split("T")[0] ?? "";
+        const dateRange = fromDate && toDate ? ` (${fromDate} to ${toDate})` : "";
+        const staffUserId = await resolveUserId(svc, school, staffId);
+        // Resolve staff name from staff table
+        const { data: staffRow } = await svc.from("staff")
+          .select("first_name, last_name")
+          .eq("id", staffId)
+          .eq("school_id", school)
+          .maybeSingle();
+        const staffName = staffRow
+          ? `${text(staffRow.first_name)} ${text(staffRow.last_name)}`.trim()
+          : text(staffUserId, "A teacher");
+        const notifBody = `${staffName} has submitted a leave request${dateRange}. Please review.`;
+        const { data: eventRow } = await svc.from("notification_events").insert({
+          school_id: school,
+          user_id: principalUserId,
+          event_type: "leave_submitted",
+          event_data: {
+            leave_id: data.id,
+            message: notifBody,
+            reference_type: "leave",
+          },
+        }).select("id").maybeSingle();
+        if (eventRow?.id) triggerPushProcessing(eventRow.id);
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: principalUserId,
+          title: "New Leave Request",
+          body: notifBody,
+          type: "leave",
+          entity_type: "leave",
+          entity_id: data.id,
+          target_role: "principal",
+          is_read: false,
+        });
+      }
+    } catch (notifErr) {
+      console.error(`Failed to create leave submission notification: ${notifErr}`);
+    }
     return ok(data);
   }
 
@@ -384,6 +428,55 @@ export async function handleLeave(
       payload,
     ).select().single();
     if (error) return fail(error.message);
+    // Notify the principal that a student leave request has been submitted
+    try {
+      const principalUserId = await resolvePrincipalUserId(svc, school);
+      if (principalUserId) {
+        const studentId = text(data.student_id);
+        const fromDate = text(data.start_date).split("T")[0] ?? "";
+        const toDate = text(data.end_date).split("T")[0] ?? "";
+        const dateRange = fromDate && toDate ? ` (${fromDate} to ${toDate})` : "";
+        // Resolve student name
+        let studentLabel = "A student";
+        if (studentId) {
+          const { data: studentRow } = await svc.from("students")
+            .select("first_name, last_name")
+            .eq("id", studentId)
+            .eq("school_id", school)
+            .maybeSingle();
+          if (studentRow) {
+            const fn = text(studentRow.first_name);
+            const ln = text(studentRow.last_name);
+            studentLabel = fn && ln ? `${fn} ${ln}` : fn || ln || "A student";
+          }
+        }
+        const notifBody = `A parent submitted a leave request for ${studentLabel}${dateRange}. Please review.`;
+        const { data: eventRow } = await svc.from("notification_events").insert({
+          school_id: school,
+          user_id: principalUserId,
+          event_type: "student_leave_submitted",
+          event_data: {
+            leave_id: data.id,
+            message: notifBody,
+            reference_type: "leave",
+          },
+        }).select("id").maybeSingle();
+        if (eventRow?.id) triggerPushProcessing(eventRow.id);
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: principalUserId,
+          title: "Student Leave Request",
+          body: notifBody,
+          type: "leave",
+          entity_type: "student_leave",
+          entity_id: data.id,
+          target_role: "principal",
+          is_read: false,
+        });
+      }
+    } catch (notifErr) {
+      console.error(`Failed to create student leave submission notification: ${notifErr}`);
+    }
     return ok(data);
   }
 
