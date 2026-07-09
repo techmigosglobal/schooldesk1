@@ -318,6 +318,8 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                 onTap: () =>
                     _open(AppRoutes.globalSearch, arguments: 'principal'),
               ),
+              const SizedBox(height: 18),
+              _PrincipalStatsRow(data: _data),
               const SizedBox(height: 22),
               _SectionTitle('Academics'),
               const SizedBox(height: 12),
@@ -586,10 +588,21 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
     return Material(
       color: context.appTheme.surface,
       borderRadius: BorderRadius.circular(18),
-      elevation: 2,
-      shadowColor: const Color(0x140F172A),
-      child: Padding(
+      elevation: 0,
+      child: Container(
         padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x140F172A),
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
         child: Column(
           children: [
             for (var index = 0; index < items.length; index++) ...[
@@ -1015,7 +1028,7 @@ class _PrincipalAppHeader extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Hello, School Principal',
+                                  'Hello, ${data.principalName}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: theme.textTheme.titleLarge?.copyWith(
@@ -1352,24 +1365,46 @@ class _DashboardSearchBar extends StatelessWidget {
           height: 48,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(
-            border: Border.all(color: context.appTheme.surface),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.search_rounded,
-                color: Color(0xFF64748B),
-                size: 21,
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1D4ED8).withAlpha(16),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.search_rounded,
+                  color: Color(0xFF1D4ED8),
+                  size: 18,
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Search',
+                  'Search students, staff, fees…',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '⌘ K',
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: const Color(0xFF64748B),
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -1388,13 +1423,30 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-        color: const Color(0xFF111827),
-        fontWeight: FontWeight.w900,
-        letterSpacing: 0,
-      ),
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: const Color(0xFF111827),
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1649,10 +1701,21 @@ class _PrincipalActionQueueTile extends StatelessWidget {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: item.color.withOpacity(0.12),
+                  gradient: LinearGradient(
+                    colors: [item.color, item.color.withAlpha(180)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: item.color.withAlpha(60),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
                 ),
-                child: Icon(item.icon, color: item.color, size: 20),
+                child: Icon(item.icon, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -1731,19 +1794,26 @@ class _SetupPreviewPanel extends StatelessWidget {
     final pending = steps.where((step) => !step.isComplete).take(4).toList();
     final visibleSteps = pending.isEmpty ? steps.take(4).toList() : pending;
     return Material(
-      color: context.appTheme.surface,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(18),
-      elevation: 2,
-      shadowColor: const Color(0x140F172A),
+      elevation: 0,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [context.appTheme.surface, Color(0xFFEFF8FF)],
+            colors: [Color(0xFFEFF8FF), Color(0xFFE0EAFF), Color(0xFFF0FFF4)],
           ),
+          border: Border.all(color: const Color(0xFF2563EB).withAlpha(35)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF2563EB).withAlpha(18),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1797,11 +1867,29 @@ class _SetupPreviewPanel extends StatelessWidget {
             const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                minHeight: 8,
-                value: progress.clamp(0, 1),
-                backgroundColor: const Color(0xFFE2E8F0),
-                color: const Color(0xFF2563EB),
+              child: Stack(
+                children: [
+                  Container(
+                    height: 10,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  LayoutBuilder(
+                    builder: (context, constraints) => Container(
+                      height: 10,
+                      width: constraints.maxWidth * progress.clamp(0.0, 1.0),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2563EB), Color(0xFF16A34A)],
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -1955,6 +2043,131 @@ class _PrincipalErrorState extends StatelessWidget {
               label: const Text('Retry'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// School stats row — students / staff / classes
+// ---------------------------------------------------------------------------
+
+class _PrincipalStatsRow extends StatelessWidget {
+  final _PrincipalHomeData data;
+
+  const _PrincipalStatsRow({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _MiniStatCard(
+            icon: Icons.school_rounded,
+            label: 'Students',
+            value: '${data.totalStudents}',
+            gradientColors: const [Color(0xFF60A5FA), Color(0xFF3B82F6)],
+            route: AppRoutes.studentOversight,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MiniStatCard(
+            icon: Icons.co_present_rounded,
+            label: 'Staff',
+            value: '${data.totalStaff}',
+            gradientColors: const [Color(0xFFA78BFA), Color(0xFF7C3AED)],
+            route: AppRoutes.staffManagement,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _MiniStatCard(
+            icon: Icons.grid_view_rounded,
+            label: 'Classes',
+            value: '${data.totalClasses}',
+            gradientColors: const [Color(0xFF34D399), Color(0xFF059669)],
+            route: AppRoutes.principalClasses,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final List<Color> gradientColors;
+  final String route;
+
+  const _MiniStatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.gradientColors,
+    required this.route,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.pushNamed(context, route),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors[1].withAlpha(60),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(35),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, color: Colors.white, size: 18),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                value,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  height: 1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.white.withAlpha(210),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

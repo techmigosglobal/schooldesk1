@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -12,7 +13,6 @@ import 'package:schooldesk1/core/widgets/event_post_media_preview.dart';
 import 'package:schooldesk1/core/widgets/parent_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
-import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
 
@@ -56,10 +56,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
     bool showSpinner = true,
     bool includeFeedPosts = true,
   }) async {
-    // Debounce: skip if refreshed less than 10 seconds ago (unless forced
-    // with spinner, i.e. pull-to-refresh or first load).
     final now = DateTime.now();
-    if (showSpinner && _lastRefreshAt != null &&
+    if (showSpinner &&
+        _lastRefreshAt != null &&
         now.difference(_lastRefreshAt!) < const Duration(seconds: 10)) {
       return;
     }
@@ -88,7 +87,6 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         );
       }
       final results = await Future.wait(futures);
-
       if (!mounted) return;
       final dashboard = Map<String, dynamic>.from(results[0] as Map);
       final dashboardChildren =
@@ -101,21 +99,18 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
-      final children = dashboardChildren.isNotEmpty
-          ? dashboardChildren
-          : linkedChildren;
+      final children =
+          dashboardChildren.isNotEmpty ? dashboardChildren : linkedChildren;
       final selectedChildIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
       );
-
       final feedItems = includeFeedPosts
           ? _mapFeedItems(results[2] as List)
           : _eventPosts
-              .whereType<Map>()
-              .map((row) => Map<String, dynamic>.from(row))
-              .toList();
-
+                .whereType<Map>()
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList();
       setState(() {
         _dashboard = dashboard;
         _children = children;
@@ -255,9 +250,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 }
 
 // ---------------------------------------------------------------------------
-// Feed view — the only screen content for parents.
-// Design reference: Google Classroom parent/guardian summary view.
-// Child selector pill at top, scrollable post-card feed below. Nothing else.
+// Feed view
 // ---------------------------------------------------------------------------
 
 class _ParentFeedView extends StatelessWidget {
@@ -284,149 +277,302 @@ class _ParentFeedView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-          StaggeredFadeIn(
-            children: [
-              const TodaysHighlightsCard(role: 'parent'),
-              SizedBox(height: tokens.spacing.lg),
-              Text(
-                'School Feed',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              SizedBox(height: tokens.spacing.sm),
-              _SchoolFeedList(eventPosts: eventPosts),
-              SizedBox(height: tokens.spacing.lg),
-              _ParentChildPillSelector(
-                children: children,
-                activeIndex: activeChildIndex,
-                onChanged: onChildSelected,
-                color: parentColor,
-              ),
-              SizedBox(height: tokens.spacing.lg),
-              _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
-              SizedBox(height: tokens.spacing.lg),
-              const _ParentWorkflowShortcuts(),
-            ],
-          ),
-      ],
-    );
-  }
-}
-
-class _ParentSummaryGrid extends StatelessWidget {
-  final Map<String, dynamic> dashboard;
-  final Map<String, dynamic> child;
-
-  const _ParentSummaryGrid({required this.dashboard, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final metrics = dashboard['metrics'] is Map
-        ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
-        : const <String, dynamic>{};
-    final attendance = dashboard['attendance'] is Map
-        ? Map<String, dynamic>.from(dashboard['attendance'] as Map)
-        : const <String, dynamic>{};
-    return SchoolDeskResponsiveGrid(
-      minTileWidth: 180,
-      spacing: 12,
-      children: [
-        _SummaryTile(
-          icon: Icons.how_to_reg_rounded,
-          label: 'Attendance',
-          value:
-              '${_number(child['attendance_pct'] ?? attendance['attendance_pct'])}%',
-          route: AppRoutes.parentAttendance,
-        ),
-        _SummaryTile(
-          icon: Icons.assignment_turned_in_rounded,
-          label: 'Homework Due',
-          value: _number(child['homework_due'] ?? metrics['open_homework']),
-          route: AppRoutes.parentHomework,
-        ),
-        _SummaryTile(
-          icon: Icons.account_balance_wallet_rounded,
-          label: 'Fees Due',
-          value: _money(
-            child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
-          ),
-          route: AppRoutes.parentFees,
-        ),
-        _SummaryTile(
-          icon: Icons.chat_rounded,
-          label: 'Messages',
-          value: _number(metrics['unread_messages']),
-          route: AppRoutes.parentTeacherChat,
+        StaggeredFadeIn(
+          children: [
+            const TodaysHighlightsCard(role: 'parent'),
+            SizedBox(height: tokens.spacing.lg),
+            // ── Section header ──────────────────────────────────────────
+            _SectionHeader(
+              label: 'School Feed',
+              icon: Icons.campaign_rounded,
+              color: parentColor,
+            ),
+            SizedBox(height: tokens.spacing.sm),
+            // ── Auto-scrolling carousel ──────────────────────────────────
+            _SchoolFeedCarousel(eventPosts: eventPosts),
+            SizedBox(height: tokens.spacing.lg),
+            // ── Child selector ───────────────────────────────────────────
+            _ParentChildPillSelector(
+              children: children,
+              activeIndex: activeChildIndex,
+              onChanged: onChildSelected,
+              color: parentColor,
+            ),
+            SizedBox(height: tokens.spacing.lg),
+            // ── Summary stats ────────────────────────────────────────────
+            _SectionHeader(
+              label: "Child's Overview",
+              icon: Icons.bar_chart_rounded,
+              color: parentColor,
+            ),
+            SizedBox(height: tokens.spacing.sm),
+            _ParentSummaryGrid(dashboard: dashboard, child: activeChild),
+            SizedBox(height: tokens.spacing.lg),
+            // ── Quick-access cards ───────────────────────────────────────
+            _SectionHeader(
+              label: 'Quick Access',
+              icon: Icons.grid_view_rounded,
+              color: parentColor,
+            ),
+            SizedBox(height: tokens.spacing.sm),
+            const _ParentQuickAccessRow(),
+          ],
         ),
       ],
     );
   }
 }
 
-class _SummaryTile extends StatelessWidget {
-  final IconData icon;
+// ---------------------------------------------------------------------------
+// Section header with accent line
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
   final String label;
-  final String value;
-  final String route;
+  final IconData icon;
+  final Color color;
 
-  const _SummaryTile({
-    required this.icon,
+  const _SectionHeader({
     required this.label,
-    required this.value,
-    required this.route,
+    required this.icon,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final color = tokens.roleColor(SchoolDeskRole.parent);
-    return InkWell(
-      borderRadius: BorderRadius.circular(tokens.radius.card),
-      onTap: () => Navigator.pushNamed(context, route),
-      child: Container(
-        padding: EdgeInsets.all(tokens.spacing.md),
-        decoration: BoxDecoration(
-          color: tokens.panel,
-          borderRadius: BorderRadius.circular(tokens.radius.card),
-          border: Border.all(color: tokens.panelBorder),
-          boxShadow: tokens.elevation.card,
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 20,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
-        child: Row(
+        const SizedBox(width: 8),
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-scrolling horizontal carousel for school posts
+// ---------------------------------------------------------------------------
+
+class _SchoolFeedCarousel extends StatefulWidget {
+  final List<dynamic> eventPosts;
+
+  const _SchoolFeedCarousel({required this.eventPosts});
+
+  @override
+  State<_SchoolFeedCarousel> createState() => _SchoolFeedCarouselState();
+}
+
+class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
+  late PageController _pageController;
+  int _currentPage = 0;
+  bool _paused = false;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(viewportFraction: 0.92);
+    _startAutoScroll();
+  }
+
+  void _startAutoScroll() {
+    _timer?.cancel();
+    if (widget.eventPosts.length <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_paused || !mounted) return;
+      final next = (_currentPage + 1) % widget.eventPosts.length;
+      _pageController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 480),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void didUpdateWidget(_SchoolFeedCarousel old) {
+    super.didUpdateWidget(old);
+    if (old.eventPosts.length != widget.eventPosts.length) {
+      _startAutoScroll();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _togglePause() {
+    setState(() => _paused = !_paused);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).schoolDesk;
+    final parentColor = tokens.roleColor(SchoolDeskRole.parent);
+
+    if (widget.eventPosts.isEmpty) {
+      return _EmptyFeed(parentColor: parentColor);
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 260,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: widget.eventPosts.length,
+            onPageChanged: (i) => setState(() => _currentPage = i),
+            itemBuilder: (context, index) {
+              final post = Map<String, dynamic>.from(
+                widget.eventPosts[index] is Map
+                    ? widget.eventPosts[index] as Map
+                    : <String, dynamic>{},
+              );
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: _PostCard(post: post),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Dots + pause button
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Dot indicators
+            ...List.generate(
+              math.min(widget.eventPosts.length, 8),
+              (i) => AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeInOut,
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: i == _currentPage ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: i == _currentPage
+                      ? parentColor
+                      : parentColor.withAlpha(60),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            if (widget.eventPosts.length > 1) ...[
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: _togglePause,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _paused
+                        ? parentColor.withAlpha(30)
+                        : parentColor.withAlpha(18),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: parentColor.withAlpha(_paused ? 120 : 50),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _paused
+                            ? Icons.play_arrow_rounded
+                            : Icons.pause_rounded,
+                        size: 14,
+                        color: parentColor,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _paused ? 'Resume' : 'Pause',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: parentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Empty feed state
+// ---------------------------------------------------------------------------
+
+class _EmptyFeed extends StatelessWidget {
+  final Color parentColor;
+
+  const _EmptyFeed({required this.parentColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: parentColor.withAlpha(12),
+        borderRadius: BorderRadius.circular(tokens.radius.card),
+        border: Border.all(color: parentColor.withAlpha(40)),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 64,
+              height: 64,
               decoration: BoxDecoration(
-                color: color.withAlpha(24),
-                borderRadius: BorderRadius.circular(tokens.radius.control),
+                color: parentColor.withAlpha(20),
+                shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color),
+              child: Icon(Icons.campaign_outlined, size: 32, color: parentColor),
             ),
-            SizedBox(width: tokens.spacing.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SchoolDeskAdaptiveText(
-                    value,
-                    maxLines: 1,
-                    minFontSize: 15,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SchoolDeskAdaptiveText(
-                    label,
-                    maxLines: 1,
-                    minFontSize: 10,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: tokens.textMuted,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 16),
+            Text(
+              'No posts yet',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'School events and activity posts will appear here.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: tokens.textMuted,
+                height: 1.5,
               ),
             ),
           ],
@@ -436,280 +582,88 @@ class _SummaryTile extends StatelessWidget {
   }
 }
 
-class _ParentWorkflowShortcuts extends StatelessWidget {
-  const _ParentWorkflowShortcuts();
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _ShortcutAction(
-        'Attendance',
-        Icons.how_to_reg_rounded,
-        AppRoutes.parentAttendance,
-      ),
-      _ShortcutAction(
-        'Homework',
-        Icons.assignment_rounded,
-        AppRoutes.parentHomework,
-      ),
-      _ShortcutAction(
-        'Fees & Status',
-        Icons.receipt_long_rounded,
-        AppRoutes.parentFees,
-      ),
-      _ShortcutAction('Leave', Icons.event_busy_rounded, AppRoutes.parentLeave),
-      _ShortcutAction(
-        'PTM',
-        Icons.family_restroom_rounded,
-        AppRoutes.parentTeacherChat,
-      ),
-      _ShortcutAction(
-        'Documents',
-        Icons.description_rounded,
-        AppRoutes.parentDocuments,
-      ),
-    ];
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    return Wrap(
-      spacing: tokens.spacing.sm,
-      runSpacing: tokens.spacing.sm,
-      children: [
-        for (final action in actions)
-          ActionChip(
-            avatar: Icon(
-              action.icon,
-              size: 18,
-              color: theme.colorScheme.primary,
-            ),
-            label: Text(
-              action.label,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurface,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            backgroundColor: theme.colorScheme.surface,
-            side: BorderSide(color: theme.colorScheme.outlineVariant),
-            onPressed: () => Navigator.pushNamed(context, action.route),
-          ),
-      ],
-    );
-  }
-}
-
-class _ShortcutAction {
-  final String label;
-  final IconData icon;
-  final String route;
-
-  const _ShortcutAction(this.label, this.icon, this.route);
-}
-
 // ---------------------------------------------------------------------------
-// Child selector pill (unchanged design)
+// Redesigned post card — tall, vivid, card-style
 // ---------------------------------------------------------------------------
 
-class _ParentChildPillSelector extends StatelessWidget {
-  final List<Map<String, dynamic>> children;
-  final int activeIndex;
-  final ValueChanged<int> onChanged;
-  final Color color;
-
-  const _ParentChildPillSelector({
-    required this.children,
-    required this.activeIndex,
-    required this.onChanged,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final activeChild = children[activeIndex];
-    final child = Container(
-      constraints: const BoxConstraints(minHeight: 42),
-      padding: EdgeInsets.symmetric(
-        horizontal: tokens.spacing.md,
-        vertical: tokens.spacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(tokens.radius.pill),
-        boxShadow: tokens.elevation.card,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: SchoolDeskAdaptiveText(
-              _childSelectorLabel(activeChild),
-              maxLines: 1,
-              minFontSize: 11,
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: context.appTheme.surface,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          SizedBox(width: tokens.spacing.xs),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-        ],
-      ),
-    );
-    if (children.length <= 1) return child;
-    return PopupMenuButton<int>(
-      tooltip: 'Select child',
-      onSelected: onChanged,
-      itemBuilder: (context) => [
-        for (var index = 0; index < children.length; index++)
-          PopupMenuItem(
-            value: index,
-            child: Text(_childSelectorLabel(children[index])),
-          ),
-      ],
-      child: child,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Google Classroom-inspired post feed
-// ---------------------------------------------------------------------------
-
-/// Feed widget — shows empty state or a list of post cards.
-class _SchoolFeedList extends StatelessWidget {
-  final List<dynamic> eventPosts;
-
-  const _SchoolFeedList({required this.eventPosts});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final tokens = theme.schoolDesk;
-    final parentColor = tokens.roleColor(SchoolDeskRole.parent);
-
-    if (eventPosts.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 64),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: parentColor.withAlpha(20),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.campaign_outlined,
-                  size: 36,
-                  color: parentColor,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'No posts yet',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'School events and activity posts will\nappear here once published.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: tokens.textMuted,
-                  height: 1.5,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final post in eventPosts)
-          _PostCard(
-            post: Map<String, dynamic>.from(
-              post is Map ? post : <String, dynamic>{},
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// A single activity post card — Google Classroom post card style.
-/// Header: coloured tinted background + circular icon avatar + title/meta.
-/// Body: description text with comfortable line-height.
 class _PostCard extends StatelessWidget {
   final Map<String, dynamic> post;
 
   const _PostCard({required this.post});
 
+  // Gradient palette for posts (cycles by index via hashCode)
+  static const List<List<Color>> _gradients = [
+    [Color(0xFF0F766E), Color(0xFF0D9488)],
+    [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
+    [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+    [Color(0xFFEA580C), Color(0xFFFB923C)],
+    [Color(0xFF0284C7), Color(0xFF38BDF8)],
+    [Color(0xFF15803D), Color(0xFF4ADE80)],
+    [Color(0xFFB91C1C), Color(0xFFF87171)],
+    [Color(0xFF92400E), Color(0xFFFBBF24)],
+  ];
+
+  List<Color> _gradientFor(String title) {
+    final index = title.hashCode.abs() % _gradients.length;
+    return _gradients[index];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
-    final parentColor = tokens.roleColor(SchoolDeskRole.parent);
 
-    final title = _text(post['title']).isEmpty
-        ? 'School Post'
-        : _text(post['title']);
+    final title =
+        _text(post['title']).isEmpty ? 'School Post' : _text(post['title']);
     final description = _text(post['description']);
     final rawDate = _text(post['date']);
     final category = _text(post['category']);
     final author = _text(post['author']);
     final formattedDate = _formatPostDate(rawDate);
     final mediaType = _eventPostMediaType(post);
+    final gradient = _gradientFor(title);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: tokens.panel,
-        borderRadius: BorderRadius.circular(tokens.radius.card),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: tokens.panelBorder),
-        boxShadow: tokens.elevation.card,
+        boxShadow: [
+          BoxShadow(
+            color: gradient[0].withAlpha(tokens.isDark ? 50 : 30),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: tinted background + icon avatar + title + date
+          // ── Gradient header ─────────────────────────────────────────
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
             decoration: BoxDecoration(
-              color: parentColor.withAlpha(16),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(tokens.radius.card),
-                topRight: Radius.circular(tokens.radius.card),
+              gradient: LinearGradient(
+                colors: gradient,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Circular icon avatar
                 Container(
-                  width: 40,
-                  height: 40,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
-                    color: parentColor,
+                    color: Colors.white.withAlpha(40),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.campaign_rounded,
                     color: Colors.white,
-                    size: 20,
+                    size: 22,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -723,55 +677,69 @@ class _PostCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
+                          color: Colors.white,
                           height: 1.3,
                         ),
                       ),
                       if (author.isNotEmpty || category.isNotEmpty) ...[
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 4),
                         Text(
                           [
                             if (author.isNotEmpty) author,
                             if (category.isNotEmpty) category,
                           ].join(' • '),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: tokens.textMuted,
+                            color: Colors.white.withAlpha(200),
                           ),
                         ),
-                      ],
-                      if (mediaType.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        _FeedMediaTypeChip(type: mediaType),
                       ],
                     ],
                   ),
                 ),
                 if (formattedDate.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8, top: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(35),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                     child: Text(
                       formattedDate,
                       style: theme.textTheme.labelSmall?.copyWith(
-                        color: tokens.textMuted,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
               ],
             ),
           ),
+          // ── Media type badge ─────────────────────────────────────────
+          if (mediaType.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+              child: _FeedMediaTypeChip(type: mediaType, color: gradient[0]),
+            ),
+          // ── Media preview ─────────────────────────────────────────────
           _SchoolFeedMediaPreview(post: post),
-          // Body: description
+          // ── Body description ──────────────────────────────────────────
           if (description.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
               child: Text(
                 description,
-                style: theme.textTheme.bodyMedium?.copyWith(
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
                   height: 1.6,
-                  color: theme.colorScheme.onSurface.withAlpha(210),
+                  color: theme.colorScheme.onSurface.withAlpha(200),
                 ),
               ),
             ),
-          if (description.isEmpty) const SizedBox(height: 12),
+          if (description.isEmpty) const SizedBox(height: 10),
         ],
       ),
     );
@@ -792,6 +760,10 @@ class _PostCard extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Media preview (unchanged logic)
+// ---------------------------------------------------------------------------
+
 class _SchoolFeedMediaPreview extends StatelessWidget {
   final Map<String, dynamic> post;
 
@@ -811,11 +783,11 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
     if (mediaItems.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(tokens.radius.control),
         child: SizedBox(
-          height: 210,
+          height: 160,
           width: double.infinity,
           child: PageView.builder(
             itemCount: mediaItems.length,
@@ -826,26 +798,28 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
                 children: [
                   EventPostMediaPreview(
                     item: item,
-                    height: 210,
+                    height: 160,
                     onImageTap: () => openEventPostMediaPreview(context, item),
                   ),
                   if (mediaItems.length > 1)
                     Positioned(
-                      right: 10,
-                      bottom: 10,
+                      right: 8,
+                      bottom: 8,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.58),
+                          color: Colors.black.withOpacity(0.55),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 4,
+                            horizontal: 8,
+                            vertical: 3,
                           ),
                           child: Text(
                             '${index + 1}/${mediaItems.length}',
-                            style: Theme.of(context).textTheme.labelSmall
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
                                 ?.copyWith(color: Colors.white),
                           ),
                         ),
@@ -863,31 +837,32 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
 
 class _FeedMediaTypeChip extends StatelessWidget {
   final String type;
+  final Color color;
 
-  const _FeedMediaTypeChip({required this.type});
+  const _FeedMediaTypeChip({required this.type, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).schoolDesk;
-    final color = tokens.roleColor(SchoolDeskRole.parent);
     final label = type.isEmpty ? 'Media' : type;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(tokens.radius.pill),
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(60)),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(_eventPostMediaIcon(label), color: Colors.white, size: 14),
-            const SizedBox(width: 5),
+            Icon(_eventPostMediaIcon(label), color: color, size: 13),
+            const SizedBox(width: 4),
             Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
               ),
             ),
           ],
@@ -898,7 +873,415 @@ class _FeedMediaTypeChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Pure helper functions (no widgets)
+// Summary grid — vivid gradient stat cards
+// ---------------------------------------------------------------------------
+
+class _ParentSummaryGrid extends StatelessWidget {
+  final Map<String, dynamic> dashboard;
+  final Map<String, dynamic> child;
+
+  const _ParentSummaryGrid({required this.dashboard, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = dashboard['metrics'] is Map
+        ? Map<String, dynamic>.from(dashboard['metrics'] as Map)
+        : const <String, dynamic>{};
+    final attendance = dashboard['attendance'] is Map
+        ? Map<String, dynamic>.from(dashboard['attendance'] as Map)
+        : const <String, dynamic>{};
+
+    return SchoolDeskResponsiveGrid(
+      minTileWidth: 160,
+      spacing: 12,
+      children: [
+        _StatCard(
+          icon: Icons.how_to_reg_rounded,
+          label: 'Attendance',
+          value:
+              '${_number(child['attendance_pct'] ?? attendance['attendance_pct'])}%',
+          gradientColors: const [Color(0xFF0F766E), Color(0xFF14B8A6)],
+          route: AppRoutes.parentAttendance,
+        ),
+        _StatCard(
+          icon: Icons.assignment_turned_in_rounded,
+          label: 'Homework Due',
+          value: _number(child['homework_due'] ?? metrics['open_homework']),
+          gradientColors: const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+          route: AppRoutes.parentHomework,
+        ),
+        _StatCard(
+          icon: Icons.account_balance_wallet_rounded,
+          label: 'Fees Due',
+          value: _money(
+            child['pending_fee_balance'] ?? metrics['pending_fee_balance'],
+          ),
+          gradientColors: const [Color(0xFFEA580C), Color(0xFFFB923C)],
+          route: AppRoutes.parentFees,
+        ),
+        _StatCard(
+          icon: Icons.chat_bubble_rounded,
+          label: 'Messages',
+          value: _number(metrics['unread_messages']),
+          gradientColors: const [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
+          route: AppRoutes.parentTeacherChat,
+        ),
+      ],
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final List<Color> gradientColors;
+  final String route;
+
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.gradientColors,
+    required this.route,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.pushNamed(context, route),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors[0].withAlpha(tokens.isDark ? 60 : 50),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(35),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(height: 12),
+              SchoolDeskAdaptiveText(
+                value,
+                maxLines: 1,
+                minFontSize: 16,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 2),
+              SchoolDeskAdaptiveText(
+                label,
+                maxLines: 1,
+                minFontSize: 10,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: Colors.white.withAlpha(210),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Quick-access cards — horizontal scroll row
+// ---------------------------------------------------------------------------
+
+class _ParentQuickAccessRow extends StatelessWidget {
+  const _ParentQuickAccessRow();
+
+  static const _actions = [
+    _QuickAction(
+      label: 'Attendance',
+      icon: Icons.how_to_reg_rounded,
+      route: AppRoutes.parentAttendance,
+      color: Color(0xFF0F766E),
+    ),
+    _QuickAction(
+      label: 'Homework',
+      icon: Icons.assignment_rounded,
+      route: AppRoutes.parentHomework,
+      color: Color(0xFF7C3AED),
+    ),
+    _QuickAction(
+      label: 'Fees',
+      icon: Icons.receipt_long_rounded,
+      route: AppRoutes.parentFees,
+      color: Color(0xFFEA580C),
+    ),
+    _QuickAction(
+      label: 'Leave',
+      icon: Icons.event_busy_rounded,
+      route: AppRoutes.parentLeave,
+      color: Color(0xFFDC2626),
+    ),
+    _QuickAction(
+      label: 'Messages',
+      icon: Icons.chat_bubble_rounded,
+      route: AppRoutes.parentTeacherChat,
+      color: Color(0xFF1D4ED8),
+    ),
+    _QuickAction(
+      label: 'Calendar',
+      icon: Icons.calendar_month_rounded,
+      route: AppRoutes.parentCalendar,
+      color: Color(0xFF0284C7),
+    ),
+    _QuickAction(
+      label: 'Documents',
+      icon: Icons.description_rounded,
+      route: AppRoutes.parentDocuments,
+      color: Color(0xFF15803D),
+    ),
+    _QuickAction(
+      label: 'Timetable',
+      icon: Icons.calendar_view_week_rounded,
+      route: AppRoutes.parentTimetable,
+      color: Color(0xFFB45309),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 100,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        itemCount: _actions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) =>
+            _QuickAccessCard(action: _actions[index]),
+      ),
+    );
+  }
+}
+
+class _QuickAction {
+  final String label;
+  final IconData icon;
+  final String route;
+  final Color color;
+
+  const _QuickAction({
+    required this.label,
+    required this.icon,
+    required this.route,
+    required this.color,
+  });
+}
+
+class _QuickAccessCard extends StatelessWidget {
+  final _QuickAction action;
+
+  const _QuickAccessCard({required this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => Navigator.pushNamed(context, action.route),
+        child: Container(
+          width: 80,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            color: tokens.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: action.color.withAlpha(50)),
+            boxShadow: [
+              BoxShadow(
+                color: action.color.withAlpha(tokens.isDark ? 40 : 20),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: action.color.withAlpha(tokens.isDark ? 40 : 22),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(action.icon, color: action.color, size: 20),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                action.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Child selector pill (unchanged functionality, improved style)
+// ---------------------------------------------------------------------------
+
+class _ParentChildPillSelector extends StatelessWidget {
+  final List<Map<String, dynamic>> children;
+  final int activeIndex;
+  final ValueChanged<int> onChanged;
+  final Color color;
+
+  const _ParentChildPillSelector({
+    required this.children,
+    required this.activeIndex,
+    required this.onChanged,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.schoolDesk;
+    final activeChild = children[activeIndex];
+
+    final pillContent = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color, Color.alphaBlend(Colors.white.withAlpha(30), color)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(tokens.radius.pill),
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(80),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(40),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.child_care_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: SchoolDeskAdaptiveText(
+              _childSelectorLabel(activeChild),
+              maxLines: 1,
+              minFontSize: 11,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          if (children.length > 1) ...[
+            const SizedBox(width: 6),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (children.length <= 1) return pillContent;
+
+    return PopupMenuButton<int>(
+      tooltip: 'Select child',
+      onSelected: onChanged,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      itemBuilder: (context) => [
+        for (var i = 0; i < children.length; i++)
+          PopupMenuItem(
+            value: i,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.person_rounded,
+                  size: 16,
+                  color: i == activeIndex ? color : theme.colorScheme.onSurface,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _childSelectorLabel(children[i]),
+                  style: TextStyle(
+                    fontWeight: i == activeIndex
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                    color: i == activeIndex ? color : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+      child: pillContent,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pure helper functions
 // ---------------------------------------------------------------------------
 
 String _childSelectorLabel(Map<String, dynamic> child) {
@@ -937,9 +1320,8 @@ String _number(dynamic value) {
 }
 
 String _money(dynamic value) {
-  final parsed = value is num
-      ? value.toDouble()
-      : double.tryParse(_text(value));
+  final parsed =
+      value is num ? value.toDouble() : double.tryParse(_text(value));
   final amount = parsed ?? 0;
   if (amount >= 100000) return '₹${(amount / 100000).toStringAsFixed(1)}L';
   if (amount >= 1000) return '₹${(amount / 1000).toStringAsFixed(1)}K';

@@ -198,52 +198,122 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
     final color = event['color'] as Color;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.appTheme.outlineVariant),
+        border: Border.all(color: color.withAlpha(50)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _dateBlock(event, color),
-          const SizedBox(width: 12),
-          Expanded(
+          // Gradient date block
+          Container(
+            width: 58,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color, color.withAlpha(200)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        event['title'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                Text(
+                  event['dateDay'] as String,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  event['dateMonth'] as String,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 11,
+                    color: Colors.white.withAlpha(220),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          event['title'] as String,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                      _typeBadge(event['type'] as String, color),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        size: 12,
+                        color: context.appTheme.muted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${event['day']} · ${event['time']}',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 12,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if ((event['venue'] as String).isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 12,
+                          color: context.appTheme.muted,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            event['venue'] as String,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 12,
+                              color: context.appTheme.muted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    _typeBadge(event['type'] as String, color),
                   ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${event['day']} | ${event['time']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-                if ((event['venue'] as String).isNotEmpty)
-                  Text(
-                    'Venue: ${event['venue']}',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      color: context.appTheme.muted,
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -254,101 +324,110 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
   Widget _holidayCard(Map<String, dynamic> holiday) {
     final type = holiday['type'] as String;
     final typeColor = switch (type.toLowerCase()) {
-      'national' => context.appTheme.error,
-      'state' => context.appTheme.warning,
-      _ => context.appTheme.primary,
+      'national' => const Color(0xFFDC2626),
+      'state' => const Color(0xFFD97706),
+      _ => const Color(0xFF1D4ED8),
     };
-    final typeBg = switch (type.toLowerCase()) {
-      'national' => context.appTheme.errorContainer,
-      'state' => context.appTheme.warningContainer,
-      _ => context.appTheme.primaryContainer,
+    final gradient = switch (type.toLowerCase()) {
+      'national' => [const Color(0xFFDC2626), const Color(0xFFF87171)],
+      'state' => [const Color(0xFFD97706), const Color(0xFFFBBF24)],
+      _ => [const Color(0xFF1D4ED8), const Color(0xFF60A5FA)],
     };
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: typeColor.withAlpha(45)),
+        boxShadow: [
+          BoxShadow(
+            color: typeColor.withAlpha(15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 58,
             decoration: BoxDecoration(
-              color: typeBg,
-              borderRadius: BorderRadius.circular(10),
+              gradient: LinearGradient(
+                colors: gradient,
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+              ),
             ),
-            child: Icon(Icons.celebration_rounded, color: typeColor, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  holiday['name'] as String,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  '${holiday['day']}, ${holiday['date']}',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 12,
-                    color: context.appTheme.muted,
-                  ),
+                Icon(
+                  Icons.celebration_rounded,
+                  color: Colors.white,
+                  size: 24,
                 ),
               ],
             ),
           ),
-          _typeBadge(type, typeColor, bg: typeBg),
-        ],
-      ),
-    );
-  }
-
-  Widget _dateBlock(Map<String, dynamic> row, Color color) {
-    return Container(
-      width: 52,
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          Text(
-            row['dateDay'] as String,
-            style: GoogleFonts.dmSans(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: color,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          holiday['name'] as String,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${holiday['day']}, ${holiday['date']}',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _typeBadge(type, typeColor),
+                ],
+              ),
             ),
           ),
-          Text(
-            row['dateMonth'] as String,
-            style: GoogleFonts.dmSans(fontSize: 10, color: color),
-          ),
         ],
       ),
     );
   }
 
-  Widget _typeBadge(String label, Color color, {Color? bg}) {
+  Widget _typeBadge(String label, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: bg ?? color.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          colors: [color.withAlpha(28), color.withAlpha(16)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(55)),
       ),
       child: Text(
         label,
         style: GoogleFonts.dmSans(
           fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w700,
           color: color,
         ),
       ),

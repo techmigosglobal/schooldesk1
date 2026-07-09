@@ -117,7 +117,18 @@ class RouteAccessGuard {
     AppRoutes.parentDocuments: {'parent'},
     AppRoutes.parentLessonPlanner: {'parent'},
     AppRoutes.parentPaymentSelection: {'parent'},
+    AppRoutes.parentPaymentFlow: {'parent'},
+    AppRoutes.parentPaymentHistory: {'parent'},
+    AppRoutes.parentReceipt: {'parent'},
     AppRoutes.parentHealth: {'parent'},
+    AppRoutes.principalFees: {'principal'},
+    '/parent/fees': {'parent'},
+    '/principal/payment-requests': {'principal'},
+    '/principal/fee-structures': {'principal'},
+    '/principal/invoice-generate': {'principal'},
+    '/principal/collect-fee': {'principal'},
+    '/principal/fee-reports': {'principal'},
+    '/principal/payment-config': {'principal'},
   };
 
   static String? redirectFor({

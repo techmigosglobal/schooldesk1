@@ -127,13 +127,13 @@ class PrincipalPreviewCard extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
-        border: border ?? Border.all(color: const Color(0xF2E2E8F0), width: 1),
+        borderRadius: BorderRadius.circular(14),
+        border: border ?? Border.all(color: const Color(0xFFE2E8F0), width: 1),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 4,
-            offset: Offset(0, 1),
+            color: Color(0x180F172A),
+            blurRadius: 12,
+            offset: Offset(0, 4),
           ),
         ],
       ),
@@ -146,10 +146,10 @@ class PrincipalPreviewCard extends StatelessWidget {
     if (onTap == null) return wrapped;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: wrapped,
       ),
     );
@@ -176,19 +176,30 @@ class PrincipalPreviewHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          bottom: BorderSide(color: PrincipalPreviewColors.gray200),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          PrincipalPreviewCircleButton(
-            tooltip: leadingTooltip,
-            icon: leadingIcon,
-            onPressed: onLeadingPressed,
+          Tooltip(
+            message: leadingTooltip,
+            child: Material(
+              color: Colors.white.withAlpha(30),
+              borderRadius: BorderRadius.circular(999),
+              child: InkWell(
+                onTap: onLeadingPressed,
+                borderRadius: BorderRadius.circular(999),
+                child: SizedBox.square(
+                  dimension: 38,
+                  child: Icon(leadingIcon, size: 19, color: Colors.white),
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -199,12 +210,17 @@ class PrincipalPreviewHeader extends StatelessWidget {
               style: principalPreviewTextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w900,
-                color: PrincipalPreviewColors.ink,
+                color: Colors.white,
               ),
             ),
           ),
           const SizedBox(width: 10),
-          ...trailing,
+          ...trailing.map(
+            (w) => IconTheme(
+              data: const IconThemeData(color: Colors.white),
+              child: w,
+            ),
+          ),
         ],
       ),
     );
@@ -293,34 +309,76 @@ class PrincipalPreviewTitleBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: PrincipalPreviewColors.role,
         borderRadius: BorderRadius.circular(20),
         gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A8A), PrincipalPreviewColors.role],
+          colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x140F172A),
-            blurRadius: 4,
-            offset: Offset(0, 1),
+            color: Color(0x301D4ED8),
+            blurRadius: 20,
+            offset: Offset(0, 8),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
         children: [
-          Text(
-            title,
-            style: principalPreviewTextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: Colors.white,
-              height: 1.15,
+          // Decorative circles in background
+          Positioned(
+            right: -20,
+            top: -20,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withAlpha(18),
+              ),
             ),
+          ),
+          Positioned(
+            right: 20,
+            bottom: -30,
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withAlpha(12),
+              ),
+            ),
+          ),
+          // Content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: principalPreviewTextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  height: 1.15,
+                ),
+              ),
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: principalPreviewTextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withAlpha(210),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -422,11 +480,16 @@ class PrincipalPreviewBadge extends StatelessWidget {
     final color = principalPreviewToneColor(tone);
     final soft = principalPreviewToneSoft(tone);
     return Container(
-      constraints: const BoxConstraints(minHeight: 23),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      constraints: const BoxConstraints(minHeight: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: soft,
+        gradient: LinearGradient(
+          colors: [soft, soft.withAlpha(200)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(60)),
       ),
       child: Text(
         label,
@@ -434,7 +497,7 @@ class PrincipalPreviewBadge extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: principalPreviewTextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w800,
           color: color,
         ),
       ),
@@ -498,28 +561,53 @@ class PrincipalPreviewFilterTabs extends StatelessWidget {
       child: Row(
         children: [
           for (var index = 0; index < labels.length; index++) ...[
-            ChoiceChip(
-              label: Text(labels[index]),
-              selected: selectedIndex == index,
-              onSelected: (_) => onSelected(index),
-              selectedColor: PrincipalPreviewColors.role,
-              backgroundColor: PrincipalPreviewColors.white,
-              side: BorderSide(
-                color: selectedIndex == index
-                    ? PrincipalPreviewColors.role
-                    : PrincipalPreviewColors.gray200,
-                width: 1.5,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-              showCheckmark: false,
-              labelStyle: principalPreviewTextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                color: selectedIndex == index
-                    ? Colors.white
-                    : PrincipalPreviewColors.muted,
+            GestureDetector(
+              onTap: () => onSelected(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  gradient: selectedIndex == index
+                      ? const LinearGradient(
+                          colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  color: selectedIndex == index
+                      ? null
+                      : PrincipalPreviewColors.white,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: selectedIndex == index
+                        ? Colors.transparent
+                        : PrincipalPreviewColors.gray200,
+                    width: 1.5,
+                  ),
+                  boxShadow: selectedIndex == index
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF1D4ED8).withAlpha(50),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  labels[index],
+                  style: principalPreviewTextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: selectedIndex == index
+                        ? Colors.white
+                        : PrincipalPreviewColors.muted,
+                  ),
+                ),
               ),
             ),
             if (index != labels.length - 1) const SizedBox(width: 8),
@@ -530,7 +618,7 @@ class PrincipalPreviewFilterTabs extends StatelessWidget {
   }
 }
 
-class PrincipalPreviewSearchField extends StatelessWidget {
+class PrincipalPreviewSearchField extends StatefulWidget {
   final TextEditingController controller;
   final String hintText;
   final ValueChanged<String>? onChanged;
@@ -543,53 +631,75 @@ class PrincipalPreviewSearchField extends StatelessWidget {
   });
 
   @override
+  State<PrincipalPreviewSearchField> createState() =>
+      _PrincipalPreviewSearchFieldState();
+}
+
+class _PrincipalPreviewSearchFieldState
+    extends State<PrincipalPreviewSearchField> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Semantics(
-      textField: true,
-      label: hintText,
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 13),
-        decoration: BoxDecoration(
-          color: context.appTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: PrincipalPreviewColors.gray200),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x140F172A),
-              blurRadius: 4,
-              offset: Offset(0, 1),
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      child: Semantics(
+        textField: true,
+        label: widget.hintText,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          decoration: BoxDecoration(
+            color: context.appTheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _focused
+                  ? const Color(0xFF1D4ED8)
+                  : PrincipalPreviewColors.gray200,
+              width: _focused ? 2 : 1,
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.search_rounded,
-              size: 22,
-              color: PrincipalPreviewColors.gray400,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                onChanged: onChanged,
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  border: InputBorder.none,
-                  isDense: true,
-                  hintStyle: principalPreviewTextStyle(
+            boxShadow: [
+              BoxShadow(
+                color: _focused
+                    ? const Color(0xFF1D4ED8).withAlpha(20)
+                    : const Color(0x100F172A),
+                blurRadius: _focused ? 12 : 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                size: 22,
+                color: _focused
+                    ? const Color(0xFF1D4ED8)
+                    : PrincipalPreviewColors.gray400,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: widget.controller,
+                  onChanged: widget.onChanged,
+                  decoration: InputDecoration(
+                    hintText: widget.hintText,
+                    border: InputBorder.none,
+                    isDense: true,
+                    hintStyle: principalPreviewTextStyle(
+                      fontSize: 13,
+                      color: PrincipalPreviewColors.muted,
+                    ),
+                  ),
+                  style: principalPreviewTextStyle(
                     fontSize: 13,
-                    color: PrincipalPreviewColors.muted,
+                    color: PrincipalPreviewColors.dark,
                   ),
                 ),
-                style: principalPreviewTextStyle(
-                  fontSize: 13,
-                  color: PrincipalPreviewColors.dark,
-                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -633,8 +743,29 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PrincipalPreviewCard(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+    final valueColor =
+        metric.valueColor ?? PrincipalPreviewColors.roleDark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            valueColor.withAlpha(22),
+            valueColor.withAlpha(10),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: valueColor.withAlpha(45)),
+        boxShadow: [
+          BoxShadow(
+            color: valueColor.withAlpha(18),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 52),
         child: Column(
@@ -645,19 +776,20 @@ class _MetricCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: principalPreviewTextStyle(
-                fontSize: 21,
+                fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: metric.valueColor ?? PrincipalPreviewColors.dark,
+                color: valueColor,
               ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Text(
               metric.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: principalPreviewTextStyle(
                 fontSize: 10,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 color: PrincipalPreviewColors.muted,
               ),
             ),
@@ -673,6 +805,18 @@ class PrincipalPreviewSignalGrid extends StatelessWidget {
 
   const PrincipalPreviewSignalGrid({super.key, required this.signals});
 
+  // Color cycle for signal tiles
+  static const List<Color> _palette = [
+    Color(0xFF1D4ED8),
+    Color(0xFF0F766E),
+    Color(0xFF7C3AED),
+    Color(0xFFEA580C),
+    Color(0xFF0284C7),
+    Color(0xFF16A34A),
+    Color(0xFFB91C1C),
+    Color(0xFFB45309),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
@@ -683,42 +827,50 @@ class PrincipalPreviewSignalGrid extends StatelessWidget {
         crossAxisCount: 4,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
-        mainAxisExtent: 66,
+        mainAxisExtent: 70,
       ),
-      itemBuilder: (context, index) => Container(
-        padding: const EdgeInsets.all(9),
-        decoration: BoxDecoration(
-          color: PrincipalPreviewColors.gray100,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              signals[index].value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: principalPreviewTextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: PrincipalPreviewColors.dark,
-              ),
+      itemBuilder: (context, index) {
+        final color = _palette[index % _palette.length];
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [color.withAlpha(22), color.withAlpha(10)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            const SizedBox(height: 3),
-            Text(
-              signals[index].label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: principalPreviewTextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: PrincipalPreviewColors.muted,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withAlpha(40)),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                signals[index].value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: principalPreviewTextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: color,
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 3),
+              Text(
+                signals[index].label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: principalPreviewTextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: PrincipalPreviewColors.muted,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -743,10 +895,11 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: PrincipalPreviewColors.gray100,
+        color: const Color(0xFFF0F4F8),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Text.rich(
         TextSpan(
@@ -757,7 +910,7 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
                 color: PrincipalPreviewColors.dark,
-                height: 1.45,
+                height: 1.5,
               ),
             ),
             TextSpan(
@@ -766,7 +919,7 @@ class PrincipalPreviewSmallNote extends StatelessWidget {
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 color: PrincipalPreviewColors.muted,
-                height: 1.45,
+                height: 1.5,
               ),
             ),
           ],
@@ -797,7 +950,50 @@ class PrincipalPreviewActionButton extends StatelessWidget {
     final color = tone == PrincipalPreviewTone.role
         ? PrincipalPreviewColors.primary
         : principalPreviewToneColor(tone);
+
     if (filled) {
+      // Use a gradient-wrapped InkWell for the role tone
+      if (tone == PrincipalPreviewTone.role) {
+        return Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 42),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF1D4ED8).withAlpha(60),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: principalPreviewTextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       return FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
@@ -850,16 +1046,16 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
       top: false,
       child: Container(
         height: 72,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(
-            top: BorderSide(color: PrincipalPreviewColors.gray200),
+            top: BorderSide(color: Color(0xFFE5E7EB)),
           ),
           boxShadow: [
             BoxShadow(
-              color: Color(0x120F172A),
-              blurRadius: 18,
-              offset: Offset(0, -4),
+              color: Color(0x180F172A),
+              blurRadius: 20,
+              offset: Offset(0, -6),
             ),
           ],
         ),
@@ -873,32 +1069,52 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
                   label: items[index].label,
                   child: InkWell(
                     onTap: () => onSelected(index),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          selectedIndex == index
-                              ? items[index].activeIcon
-                              : items[index].icon,
-                          size: 22,
-                          color: selectedIndex == index
-                              ? PrincipalPreviewColors.role
-                              : PrincipalPreviewColors.gray500,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          items[index].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: principalPreviewTextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Active indicator pill
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
+                            width: selectedIndex == index ? 36 : 0,
+                            height: 3,
+                            margin: const EdgeInsets.only(bottom: 4),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF1D4ED8),
+                                  Color(0xFF0F766E),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          Icon(
+                            selectedIndex == index
+                                ? items[index].activeIcon
+                                : items[index].icon,
+                            size: 22,
                             color: selectedIndex == index
-                                ? PrincipalPreviewColors.role
+                                ? PrincipalPreviewColors.roleDark
                                 : PrincipalPreviewColors.gray500,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 3),
+                          Text(
+                            items[index].label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: principalPreviewTextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: selectedIndex == index
+                                  ? PrincipalPreviewColors.roleDark
+                                  : PrincipalPreviewColors.gray500,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -938,11 +1154,50 @@ class PrincipalPreviewEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PrincipalPreviewCard(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1D4ED8).withAlpha(14),
+            const Color(0xFF1D4ED8).withAlpha(6),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF1D4ED8).withAlpha(40),
+        ),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.inbox_rounded, color: PrincipalPreviewColors.role),
-          const SizedBox(width: 12),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1D4ED8).withAlpha(50),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.inbox_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -960,7 +1215,7 @@ class PrincipalPreviewEmpty extends StatelessWidget {
                   message,
                   style: principalPreviewTextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                     color: PrincipalPreviewColors.muted,
                     height: 1.4,
                   ),

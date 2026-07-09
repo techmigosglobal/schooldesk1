@@ -302,90 +302,153 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
 
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: context.appTheme.surface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: context.appTheme.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: (doc['color'] as Color).withAlpha(20),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  doc['icon'] as IconData,
-                  color: doc['color'] as Color,
-                  size: 22,
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: (doc['color'] as Color).withAlpha(18),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      doc['name'],
-                      style: GoogleFonts.dmSans(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    Text(
-                      '${doc['type']} • ${doc['size']}',
-                      style: GoogleFonts.dmSans(
-                        fontSize: 11,
-                        color: context.appTheme.muted,
-                      ),
-                    ),
-                    if (canGenerate)
-                      Text(
-                        'PDF receipt',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: context.appTheme.primary,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              isGenerating
-                  ? const SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : ElevatedButton.icon(
-                      onPressed: _generatingPdf
-                          ? null
-                          : () => _downloadDocument(doc),
-                      icon: Icon(
-                        canGenerate
-                            ? Icons.picture_as_pdf_rounded
-                            : Icons.download_rounded,
-                        size: 14,
-                      ),
-                      label: Text(
-                        canGenerate ? 'PDF' : 'Download',
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _headerColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                      ),
-                    ),
             ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        (doc['color'] as Color),
+                        (doc['color'] as Color).withAlpha(200),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (doc['color'] as Color).withAlpha(50),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    doc['icon'] as IconData,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        doc['name'],
+                        style: GoogleFonts.dmSans(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${doc['type']}${(doc['size'] as String).isNotEmpty ? ' • ${doc['size']}' : ''}',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: context.appTheme.muted,
+                        ),
+                      ),
+                      if (canGenerate)
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.picture_as_pdf_rounded,
+                              size: 11,
+                              color: (doc['color'] as Color),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'PDF receipt available',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 10,
+                                color: (doc['color'] as Color),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                isGenerating
+                    ? const SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: _generatingPdf
+                              ? null
+                              : () => _downloadDocument(doc),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: _generatingPdf
+                                  ? null
+                                  : const LinearGradient(
+                                      colors: [
+                                        Color(0xFF0F766E),
+                                        Color(0xFF1A6B4A),
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                              color: _generatingPdf
+                                  ? context.appTheme.surfaceVariant
+                                  : null,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  canGenerate
+                                      ? Icons.picture_as_pdf_rounded
+                                      : Icons.download_rounded,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  canGenerate ? 'PDF' : 'Download',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+              ],
+            ),
           ),
         );
       },

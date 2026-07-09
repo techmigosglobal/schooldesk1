@@ -475,121 +475,190 @@ class _HealthRecordCard extends StatelessWidget {
     final notes = record['notes']?.toString() ?? '';
     final isActive = record['is_active'] != false;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
+    final activeColor = isActive
+        ? const Color(0xFF0F766E)
+        : Theme.of(context).colorScheme.outline;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
           color: isActive
-              ? Theme.of(context).colorScheme.primary.withAlpha(60)
+              ? activeColor.withAlpha(60)
               : Theme.of(context).colorScheme.outlineVariant,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: activeColor.withAlpha(isActive ? 25 : 10),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Gradient header
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isActive
+                    ? [const Color(0xFF0F766E), const Color(0xFF14B8A6)]
+                    : [
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
+                      ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
               children: [
-                Icon(
-                  Icons.medical_services_rounded,
-                  color: isActive
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline,
-                  size: 20,
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(35),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.medical_services_rounded,
+                    color: isActive
+                        ? Colors.white
+                        : Theme.of(context).colorScheme.outline,
+                    size: 18,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     condition.isNotEmpty ? condition : 'Health Update',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
+                      color: isActive
+                          ? Colors.white
+                          : Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
+                    horizontal: 10,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: isActive
-                        ? Theme.of(
-                            context,
-                          ).colorScheme.primaryContainer.withAlpha(100)
-                        : Theme.of(context).colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withAlpha(isActive ? 40 : 30),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     isActive ? 'Active' : 'Inactive',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: isActive
-                          ? Theme.of(context).colorScheme.primary
+                          ? Colors.white
                           : Theme.of(context).colorScheme.outline,
                     ),
                   ),
                 ),
               ],
             ),
-            if (reminderDate.isNotEmpty)
-              _detailRow(
-                context,
-                Icons.event_rounded,
-                'Reminder Date',
-                reminderDate,
-              ),
-            if (medication.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _detailRow(
-                context,
-                Icons.medication_rounded,
-                'Medication',
-                medication,
-              ),
-            ],
-            if (dosage.isNotEmpty)
-              _detailRow(context, Icons.science_rounded, 'Dosage', dosage),
-            if (reminderTime.isNotEmpty)
-              _detailRow(
-                context,
-                Icons.access_time_rounded,
-                'Reminder Time',
-                reminderTime,
-              ),
-            if (notes.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                notes,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
+          ),
+          // Body details
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 14,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Visible to: Teacher & Principal',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                if (reminderDate.isNotEmpty)
+                  _detailRow(
+                    context,
+                    Icons.event_rounded,
+                    'Reminder Date',
+                    reminderDate,
+                    activeColor,
+                  ),
+                if (medication.isNotEmpty)
+                  _detailRow(
+                    context,
+                    Icons.medication_rounded,
+                    'Medication',
+                    medication,
+                    activeColor,
+                  ),
+                if (dosage.isNotEmpty)
+                  _detailRow(
+                    context,
+                    Icons.science_rounded,
+                    'Dosage',
+                    dosage,
+                    activeColor,
+                  ),
+                if (reminderTime.isNotEmpty)
+                  _detailRow(
+                    context,
+                    Icons.access_time_rounded,
+                    'Reminder Time',
+                    reminderTime,
+                    activeColor,
+                  ),
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: activeColor.withAlpha(12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: activeColor.withAlpha(30)),
                     ),
+                    child: Text(
+                      notes,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: activeColor.withAlpha(12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: activeColor.withAlpha(30)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.visibility_rounded,
+                        size: 13,
+                        color: activeColor,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Visible to: Teacher & Principal',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: activeColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -599,21 +668,33 @@ class _HealthRecordCard extends StatelessWidget {
     IconData icon,
     String label,
     String value,
+    Color accentColor,
   ) {
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: Theme.of(context).colorScheme.outline),
-          const SizedBox(width: 6),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: accentColor.withAlpha(18),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: accentColor),
+          ),
+          const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
         ],
       ),

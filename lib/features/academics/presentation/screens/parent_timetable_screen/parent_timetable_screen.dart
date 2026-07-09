@@ -261,10 +261,12 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   Widget _buildDaySelector() {
     return Container(
-      height: 40,
+      height: 44,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: context.appTheme.surfaceVariant.withAlpha(80),
-        borderRadius: BorderRadius.circular(10),
+        color: context.appTheme.surfaceVariant.withAlpha(100),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         children: List.generate(_days.length, (index) {
@@ -274,17 +276,33 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           return Expanded(
             child: GestureDetector(
               onTap: () => setState(() => _selectedDay = dayNum),
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 decoration: BoxDecoration(
-                  color: isActive ? _headerColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
+                  gradient: isActive
+                      ? const LinearGradient(
+                          colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  borderRadius: BorderRadius.circular(9),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF1A6B4A).withAlpha(50),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : null,
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   dayName.substring(0, 3),
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
                     color: isActive ? Colors.white : context.appTheme.muted,
                   ),
                 ),
@@ -328,6 +346,18 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
     );
   }
 
+  // Color palette cycling for subject cards
+  static const List<List<Color>> _subjectGradients = [
+    [Color(0xFF1D4ED8), Color(0xFF60A5FA)],
+    [Color(0xFF0F766E), Color(0xFF14B8A6)],
+    [Color(0xFF7C3AED), Color(0xFFA78BFA)],
+    [Color(0xFFEA580C), Color(0xFFFB923C)],
+    [Color(0xFF0284C7), Color(0xFF38BDF8)],
+    [Color(0xFF15803D), Color(0xFF4ADE80)],
+    [Color(0xFFB91C1C), Color(0xFFF87171)],
+    [Color(0xFFB45309), Color(0xFFFBBF24)],
+  ];
+
   Widget _buildPeriodsList() {
     return ListView.builder(
       itemCount: _daySlots.length,
@@ -352,100 +382,152 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
         final startTime = _stringValue(slot['start_time'], fallback: '-');
         final endTime = _stringValue(slot['end_time'], fallback: '-');
         final periodNum = _intValue(slot['period_number'], fallback: index + 1);
+        final gradient = _subjectGradients[index % _subjectGradients.length];
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: context.appTheme.outlineVariant),
+            boxShadow: [
+              BoxShadow(
+                color: gradient[0].withAlpha(20),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _headerColor.withAlpha(20),
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'P$periodNum',
-                  style: GoogleFonts.dmSans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: _headerColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      subject,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: context.appTheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.person_outline_rounded,
-                          size: 12,
-                          color: context.appTheme.muted,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            teacher,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 12,
-                              color: context.appTheme.muted,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$startTime - $endTime',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: context.appTheme.onSurface,
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Colored period number sidebar
+                Container(
+                  width: 52,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: gradient,
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
+                  alignment: Alignment.center,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.room_rounded, size: 12, color: _headerColor),
-                      const SizedBox(width: 2),
                       Text(
-                        'Room $room',
+                        'P$periodNum',
                         style: GoogleFonts.dmSans(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                          color: _headerColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                      Text(
+                        'Period',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 9,
+                          color: Colors.white.withAlpha(200),
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+                // Content
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                subject,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: context.appTheme.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.person_outline_rounded,
+                                    size: 12,
+                                    color: context.appTheme.muted,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      teacher,
+                                      style: GoogleFonts.dmSans(
+                                        fontSize: 12,
+                                        color: context.appTheme.muted,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: gradient[0].withAlpha(15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: gradient[0].withAlpha(40),
+                                ),
+                              ),
+                              child: Text(
+                                '$startTime – $endTime',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: gradient[0],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.room_rounded,
+                                  size: 11,
+                                  color: context.appTheme.muted,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  'Rm $room',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 11,
+                                    color: context.appTheme.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },

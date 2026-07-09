@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
@@ -318,6 +319,15 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_screenTitle, style: _UiText.headline),
+                Text(
+                  _screenSubtitle,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 12.5,
+                    height: 1.35,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF667085),
+                  ),
+                ),
               ],
             ),
           ),

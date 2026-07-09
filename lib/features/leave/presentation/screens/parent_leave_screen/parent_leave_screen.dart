@@ -247,29 +247,25 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       {
         'label': 'Sick Leave',
         'icon': Icons.sick_rounded,
-        'color': context.appTheme.error,
-        'bg': context.appTheme.errorContainer,
+        'gradient': [const Color(0xFFDC2626), const Color(0xFFF87171)],
         'desc': 'Illness or medical reasons',
       },
       {
         'label': 'Personal Leave',
         'icon': Icons.person_rounded,
-        'color': context.appTheme.primary,
-        'bg': context.appTheme.primaryContainer,
+        'gradient': [const Color(0xFF1D4ED8), const Color(0xFF60A5FA)],
         'desc': 'Family events or personal work',
       },
       {
         'label': 'Early Pickup',
         'icon': Icons.directions_car_rounded,
-        'color': context.appTheme.warning,
-        'bg': context.appTheme.warningContainer,
+        'gradient': [const Color(0xFFD97706), const Color(0xFFFBBF24)],
         'desc': 'Early dismissal request',
       },
       {
         'label': 'Special Permission',
         'icon': Icons.star_rounded,
-        'color': const Color(0xFF6C3483),
-        'bg': const Color(0xFFF3E5F5),
+        'gradient': [const Color(0xFF7C3AED), const Color(0xFFA78BFA)],
         'desc': 'Events or competitions',
       },
     ];
@@ -285,51 +281,75 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
       itemCount: types.length,
       itemBuilder: (_, index) {
         final type = types[index];
-        return InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: _children.isEmpty
-              ? null
-              : () => _openRequestForm(type: type['label'] as String),
-          child: Ink(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: type['bg'] as Color,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  type['icon'] as IconData,
-                  color: type['color'] as Color,
-                  size: 22,
+        final gradient = type['gradient'] as List<Color>;
+        return Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _children.isEmpty
+                ? null
+                : () => _openRequestForm(type: type['label'] as String),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: gradient,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        type['label'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: type['color'] as Color,
-                        ),
-                      ),
-                      Text(
-                        type['desc'] as String,
-                        style: GoogleFonts.dmSans(
-                          fontSize: 10,
-                          color: context.appTheme.muted,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: gradient[0].withAlpha(60),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withAlpha(35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      type['icon'] as IconData,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          type['label'] as String,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        Text(
+                          type['desc'] as String,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            color: Colors.white.withAlpha(210),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -338,20 +358,57 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
   }
 
   Widget _buildNewRequestButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _children.isEmpty ? null : () => _openRequestForm(),
-        icon: const Icon(Icons.add_rounded, size: 18),
-        label: Text(
-          'Submit New Leave Request',
-          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        style: OutlinedButton.styleFrom(
-          padding: EdgeInsets.symmetric(vertical: 14),
-          side: BorderSide(color: context.appTheme.primary, width: 1.5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: _children.isEmpty ? null : () => _openRequestForm(),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          decoration: BoxDecoration(
+            gradient: _children.isEmpty
+                ? null
+                : const LinearGradient(
+                    colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+            color: _children.isEmpty ? context.appTheme.surfaceVariant : null,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: _children.isEmpty
+                ? null
+                : [
+                    BoxShadow(
+                      color: const Color(0xFF1A6B4A).withAlpha(60),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_circle_rounded,
+                size: 20,
+                color: _children.isEmpty
+                    ? context.appTheme.muted
+                    : Colors.white,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Submit New Leave Request',
+                style: GoogleFonts.dmSans(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: _children.isEmpty
+                      ? context.appTheme.muted
+                      : Colors.white,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -393,11 +450,6 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
         : isPending
         ? context.appTheme.warning
         : context.appTheme.error;
-    final statusBg = isApproved
-        ? context.appTheme.successContainer
-        : isPending
-        ? context.appTheme.warningContainer
-        : context.appTheme.errorContainer;
     final leaveType = request['leave_type']?.toString() ?? 'Leave';
     final studentName = _requestStudentName(request);
     final fromDate = _dateLabel(request['from_date'] ?? request['start_date']);
@@ -412,131 +464,178 @@ class _ParentLeaveScreenState extends State<ParentLeaveScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: context.appTheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withAlpha(20),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Accent left bar
+            Container(
+              width: 4,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [statusColor, statusColor.withAlpha(160)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
+            ),
+            // Card content
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            leaveType,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                statusColor.withAlpha(30),
+                                statusColor.withAlpha(18),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: statusColor.withAlpha(60),
+                            ),
+                          ),
+                          child: Text(
+                            status,
+                            style: GoogleFonts.dmSans(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    _infoRow(Icons.person_rounded, 'Child: $studentName'),
+                    _infoRow(
+                      Icons.calendar_today_rounded,
+                      'Date: $fromDate${days > 1 ? ' – $toDate' : ''}',
+                    ),
+                    _infoRow(
+                      Icons.schedule_rounded,
+                      'Days: ${days.toStringAsFixed(days.truncateToDouble() == days ? 0 : 1)}',
+                    ),
+                    if (reason.isNotEmpty)
+                      _infoRow(Icons.notes_rounded, 'Reason: $reason'),
+                    if (isApproved && decidedBy.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            color: context.appTheme.success,
+                            size: 13,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Approved by $decidedBy',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: context.appTheme.success,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (status == 'Rejected' && rejectionReason.isNotEmpty)
+                      _infoRow(
+                        Icons.cancel_rounded,
+                        'Rejected: $rejectionReason',
+                        color: context.appTheme.error,
+                      ),
+                    if (isPending)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.pending_actions_rounded,
+                              size: 13,
+                              color: context.appTheme.warning,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Awaiting teacher/admin approval',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                color: context.appTheme.warning,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Submitted: $submittedOn',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 11,
+                        color: context.appTheme.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String text, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  leaveType,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Child: $studentName',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: context.appTheme.muted,
-            ),
-          ),
-          Text(
-            'Date: $fromDate${days > 1 ? ' - $toDate' : ''}',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: context.appTheme.muted,
-            ),
-          ),
-          Text(
-            'Days: ${days.toStringAsFixed(days.truncateToDouble() == days ? 0 : 1)}',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: context.appTheme.muted,
-            ),
-          ),
-          Text(
-            'Reason: $reason',
-            style: GoogleFonts.dmSans(
-              fontSize: 12,
-              color: context.appTheme.onSurfaceVariant,
-            ),
-          ),
-          if (isApproved && decidedBy.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  Icons.check_circle_rounded,
-                  color: context.appTheme.success,
-                  size: 14,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    'Approved by $decidedBy',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: context.appTheme.success,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (status == 'Rejected' && rejectionReason.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Rejected: $rejectionReason',
+          Icon(icon, size: 13, color: color ?? context.appTheme.muted),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              text,
               style: GoogleFonts.dmSans(
-                fontSize: 11,
-                color: context.appTheme.error,
+                fontSize: 12,
+                color: color ?? context.appTheme.onSurfaceVariant,
               ),
-            ),
-          ],
-          if (isPending)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.pending_actions_rounded,
-                    size: 13,
-                    color: context.appTheme.warning,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Awaiting teacher/admin approval',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 11,
-                      color: context.appTheme.warning,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 4),
-          Text(
-            'Submitted: $submittedOn',
-            style: GoogleFonts.dmSans(
-              fontSize: 11,
-              color: context.appTheme.muted,
             ),
           ),
         ],

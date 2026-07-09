@@ -210,6 +210,14 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                     color: _ink,
                   ),
                 ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _ink.withOpacity(0.6),
+                  ),
+                ),
               ],
             ),
           ),

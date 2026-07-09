@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
-import 'package:schooldesk1/core/widgets/operations_workspace.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
@@ -2969,12 +2968,10 @@ class _ClassIssueLine extends StatelessWidget {
 
 class _ClassDetailCard extends StatelessWidget {
   final String title;
-  final Widget? trailing;
   final List<Widget> children;
 
   const _ClassDetailCard({
     required this.title,
-    this.trailing,
     required this.children,
   });
 
@@ -3012,7 +3009,6 @@ class _ClassDetailCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (trailing != null) trailing!,
             ],
           ),
           const SizedBox(height: 14),

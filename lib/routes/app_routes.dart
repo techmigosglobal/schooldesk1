@@ -149,6 +149,10 @@ class AppRoutes {
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
   static const String parentPaymentSelection =
       '/parent-fees-screen/payment-selection';
+  static const String parentPaymentFlow = '/parent/payment-flow';
+  static const String parentPaymentHistory = '/parent/payment-history';
+  static const String parentReceipt = '/parent/receipt';
+  static const String principalFees = '/principal/fees';
   static const String parentLeave = '/parent-leave-screen';
   static const String parentLeaveRequestForm = '/parent-leave-screen/request';
   static const String parentCalendar = '/parent-calendar-screen';
@@ -181,14 +185,20 @@ class AppRoutes {
     staffForm: (context) => StaffFormScreen(args: _staffFormArgs(context)),
     studentOversight: (context) => const StudentOversightScreen(),
     approvalCenter: (context) => const ApprovalCenterScreen(),
-    feeMonitoring: (context) => const FeeHomeScreen(),
-    feeHome: (context) => const FeeHomeScreen(),
-    feeStructures: (context) => const FeeStructuresScreen(),
-    feeCollect: (context) => const FeeCollectScreen(),
+    feeMonitoring: (context) => const PrincipalFeeDashboard(),
+    feeHome: (context) => const PrincipalFeeDashboard(),
+    principalFees: (context) => const PrincipalFeeDashboard(),
+    feeStructures: (context) => const PrincipalFeeStructures(),
+    '/principal/fee-structures': (context) => const PrincipalFeeStructures(),
+    feeCollect: (context) => const PrincipalCollectFee(),
+    '/principal/collect-fee': (context) => const PrincipalCollectFee(),
     feeLedger: (context) => const FeeLedgerScreen(),
-    feeReports: (context) => const FeeReportsScreen(),
-    feePaymentConfig: (context) => const FeePaymentConfigScreen(),
-    principalPaymentRequests: (context) => const AdminPaymentRequestsScreen(),
+    feeReports: (context) => const PrincipalReports(),
+    '/principal/fee-reports': (context) => const PrincipalReports(),
+    feePaymentConfig: (context) => const PrincipalPaymentConfig(),
+    '/principal/payment-config': (context) => const PrincipalPaymentConfig(),
+    principalPaymentRequests: (context) => const PrincipalPaymentRequests(),
+    '/principal/payment-requests': (context) => const PrincipalPaymentRequests(),
     principalPaymentRequestDecision: (context) =>
         AdminPaymentRequestDecisionScreen(
           args: _principalPaymentRequestDecisionArgs(context),
@@ -197,7 +207,11 @@ class AppRoutes {
       args: _principalFeeStructureFormArgs(context),
     ),
     principalInvoiceGenerationForm: (context) =>
-        AdminInvoiceGenerationFormScreen(
+        PrincipalInvoiceGenerate(
+          args: _principalInvoiceGenerationFormArgs(context),
+        ),
+    '/principal/invoice-generate': (context) =>
+        PrincipalInvoiceGenerate(
           args: _principalInvoiceGenerationFormArgs(context),
         ),
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
@@ -312,17 +326,17 @@ class AppRoutes {
     ),
     parentTeacherChat: (context) => const ParentTeacherChatScreen(),
     parentComplaints: (context) => const ParentComplaintScreen(),
-    parentFees: (context) => const ParentFeesScreen(),
+    parentFees: (context) => const ParentFeeHub(),
+    '/parent/fees': (context) => const ParentFeeHub(),
     parentPaymentRequestForm: (context) =>
-        ParentPaymentRequestFormScreen(args: _parentPaymentFormArgs(context)),
-    parentPaymentSelection: (context) {
-      final args = _parentPaymentSelectionArgs(context);
-      return ParentPaymentSelectionScreen(
-        fees: args.fees,
-        student: args.student,
-        paymentRequest: args.paymentRequest,
-      );
-    },
+        ParentPaymentFlow(args: _parentPaymentSelectionArgs(context)),
+    parentPaymentSelection: (context) =>
+        ParentPaymentFlow(args: _parentPaymentSelectionArgs(context)),
+    parentPaymentFlow: (context) =>
+        ParentPaymentFlow(args: _parentPaymentSelectionArgs(context)),
+    parentPaymentHistory: (context) => const ParentPaymentHistoryV2(),
+    parentReceipt: (context) =>
+        ParentReceiptViewV2(args: _parentPaymentSelectionArgs(context)),
     parentLeave: (context) => const ParentLeaveScreen(),
     parentLeaveRequestForm: (context) =>
         ParentLeaveRequestFormScreen(args: _parentLeaveFormArgs(context)),
@@ -543,13 +557,6 @@ class AppRoutes {
     );
   }
 
-  static ParentPaymentRequestFormArgs _parentPaymentFormArgs(
-    BuildContext context,
-  ) {
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is ParentPaymentRequestFormArgs) return args;
-    return const ParentPaymentRequestFormArgs(fees: []);
-  }
 
   static ParentPaymentSelectionArgs _parentPaymentSelectionArgs(
     BuildContext context,

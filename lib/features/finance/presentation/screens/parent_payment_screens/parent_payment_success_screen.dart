@@ -41,15 +41,26 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 24),
               Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(22),
                 decoration: BoxDecoration(
-                  color: context.appTheme.success,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
                   shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF1A6B4A).withAlpha(80),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                child: Icon(
-                  Icons.check_circle,
-                  color: context.appTheme.onPrimary,
-                  size: 64,
+                child: const Icon(
+                  Icons.check_rounded,
+                  color: Colors.white,
+                  size: 60,
                 ),
               ),
               const SizedBox(height: 32),
@@ -186,7 +197,7 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
             style: GoogleFonts.ibmPlexSans(
               fontSize: isHighlight ? 18 : 14,
               fontWeight: isHighlight ? FontWeight.w700 : FontWeight.w600,
-              color: isHighlight ? Colors.blue : context.appTheme.onSurface,
+              color: isHighlight ? const Color(0xFF0F766E) : context.appTheme.onSurface,
             ),
           ),
         ),

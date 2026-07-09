@@ -395,20 +395,52 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     Color bg,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
       decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: [color.withAlpha(22), color.withAlpha(10)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withAlpha(45)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withAlpha(18),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(height: 4),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [color, color.withAlpha(200)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withAlpha(50),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 17),
+          ),
+          const SizedBox(height: 6),
           Text(
             value,
             style: GoogleFonts.dmSans(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
               color: color,
             ),
           ),
@@ -416,6 +448,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             label,
             style: GoogleFonts.dmSans(
               fontSize: 10,
+              fontWeight: FontWeight.w600,
               color: context.appTheme.muted,
             ),
           ),
@@ -428,52 +461,116 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     final now = DateTime.now();
     final monthLabel = DateFormat('MMMM yyyy').format(now);
     return Container(
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.appTheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1A6B4A).withAlpha(15),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            monthLabel,
-            style: GoogleFonts.dmSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+          // Gradient month header
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF0F766E), Color(0xFF1A6B4A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.calendar_month_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  monthLabel,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const Spacer(),
+                // Legend
+                _legendDot(Colors.green, 'Present'),
+                const SizedBox(width: 8),
+                _legendDot(Colors.red, 'Absent'),
+                const SizedBox(width: 8),
+                _legendDot(Colors.orange, 'Late'),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-                .map(
-                  (d) => Text(
-                    d,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+                      .map(
+                        (d) => Text(
+                          d,
+                          style: GoogleFonts.dmSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: 8),
+                _buildCalendarGrid(),
+                if (_attendanceDayStatus.isEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Day-wise attendance will appear after the school publishes it.',
                     style: GoogleFonts.dmSans(
                       fontSize: 11,
-                      fontWeight: FontWeight.w600,
                       color: context.appTheme.muted,
                     ),
                   ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          _buildCalendarGrid(),
-          if (_attendanceDayStatus.isEmpty) ...[
-            const SizedBox(height: 10),
-            Text(
-              'Day-wise attendance will appear after the school publishes it.',
-              style: GoogleFonts.dmSans(
-                fontSize: 11,
-                color: context.appTheme.muted,
-              ),
+                ],
+              ],
             ),
-          ],
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _legendDot(Color color, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 3),
+        Text(
+          label,
+          style: GoogleFonts.dmSans(
+            fontSize: 9,
+            color: Colors.white.withAlpha(210),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
@@ -596,9 +693,29 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Recent Attendance',
-          style: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
+        Row(
+          children: [
+            Container(
+              width: 4,
+              height: 18,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1A6B4A), Color(0xFF0F766E)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Recent Attendance',
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         Container(
@@ -606,6 +723,13 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
             color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: context.appTheme.outlineVariant),
+            boxShadow: [
+              BoxShadow(
+                color: context.appTheme.onSurface.withAlpha(8),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Column(
             children: _attendanceHistory.isEmpty
@@ -626,7 +750,11 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                     final rec = e.value;
                     return Column(
                       children: [
-                        if (i > 0) const Divider(height: 1),
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            color: context.appTheme.outlineVariant,
+                          ),
                         _attendanceRow(rec),
                       ],
                     );
@@ -919,7 +1047,7 @@ Color _statusColor(String status) {
     case 'Late':
       return Colors.orange;
     case 'Leave':
-      return Colors.blue;
+      return const Color(0xFF0284C7); // info blue — matches appTheme.info
     case 'Half Day':
       return Colors.purple;
   }

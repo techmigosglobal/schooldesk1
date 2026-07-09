@@ -276,6 +276,7 @@ interface EventProcessResult {
   invalidTokenCount: number;
   transientFailureCount: number;
   reason?: string;
+  debug_info?: any;
 }
 
 type ActiveDeviceToken = {
@@ -519,7 +520,6 @@ async function sendFcmNotification(
           priority: "high" as const,
           notification: {
             channel_id: "schooldesk_updates",
-            priority: "high" as const,
             ...(template.image ? { image: template.image } : {}),
           },
         },
@@ -590,9 +590,7 @@ function isInvalidFcmTokenError(raw: string): boolean {
     ) ?? [];
     if (
       status === "NOT_FOUND" ||
-      status === "INVALID_ARGUMENT" ||
-      detailCodes.includes("UNREGISTERED") ||
-      detailCodes.includes("INVALID_ARGUMENT")
+      detailCodes.includes("UNREGISTERED")
     ) {
       return true;
     }
@@ -723,9 +721,16 @@ async function processNotificationEvent(
     const invalidTokens: ActiveDeviceToken[] = [];
     let transientFailureCount = 0;
     let lastError = "";
+    const tokenResults: any[] = [];
 
     for (const device of devices) {
       const result = await sendFcmNotification(device.token, template);
+      tokenResults.push({
+        token_preview: device.token.slice(0, 10) + "..." + device.token.slice(-10),
+        sent: result.sent,
+        invalidToken: result.invalidToken,
+        error: result.error,
+      });
       if (result.sent) {
         sentCount++;
       } else if (result.invalidToken) {
@@ -751,6 +756,7 @@ async function processNotificationEvent(
         sentCount,
         invalidTokenCount: invalidTokens.length,
         transientFailureCount,
+        debug_info: tokenResults,
       };
     }
 
@@ -765,6 +771,7 @@ async function processNotificationEvent(
         invalidTokenCount: invalidTokens.length,
         transientFailureCount,
         reason: "all_tokens_invalid",
+        debug_info: tokenResults,
       };
     }
 
@@ -777,6 +784,7 @@ async function processNotificationEvent(
       invalidTokenCount: invalidTokens.length,
       transientFailureCount,
       reason: lastError.slice(0, 240),
+      debug_info: tokenResults,
     };
   } catch (error) {
     console.error(`Error processing notification event ${event.id}: ${error}`);
@@ -836,17 +844,25 @@ Deno.serve(async (req: Request) => {
     let sentCount = 0;
     let invalidTokenCount = 0;
     let transientFailureCount = 0;
-    const failures: Array<{ event_id: string; reason: string }> = [];
+    const failures: Array<{ event_id: string; reason: string; debug_info?: any }> = [];
+    const debug_details: any[] = [];
     for (const event of events as NotificationEvent[]) {
       const result = await processNotificationEvent(event);
       if (result.processed) processedCount++;
       sentCount += result.sentCount;
       invalidTokenCount += result.invalidTokenCount;
       transientFailureCount += result.transientFailureCount;
+      debug_details.push({
+        event_id: event.id,
+        processed: result.processed,
+        results: result.debug_info,
+        reason: result.reason,
+      });
       if (!result.processed) {
         failures.push({
           event_id: event.id,
           reason: result.reason ?? "unknown",
+          debug_info: result.debug_info,
         });
       }
     }
@@ -860,6 +876,7 @@ Deno.serve(async (req: Request) => {
         invalid_tokens: invalidTokenCount,
         transient_failures: transientFailureCount,
         failures,
+        debug_details,
       }),
       { status: 200 },
     );

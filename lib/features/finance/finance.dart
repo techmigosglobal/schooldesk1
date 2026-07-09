@@ -12,3 +12,15 @@ export 'presentation/screens/admin_fees_screen/admin_fee_form_screens.dart';
 export 'presentation/screens/parent_payment_screens/parent_payment_selection_screen.dart';
 export 'presentation/screens/parent_payment_screens/parent_payment_success_screen.dart';
 export 'presentation/screens/parent_payment_screens/receipt_view_screen.dart';
+export 'presentation/screens/parent_hub/parent_fee_hub.dart';
+export 'presentation/screens/parent_hub/parent_payment_flow.dart';
+export 'presentation/screens/parent_hub/parent_payment_history_v2.dart';
+export 'presentation/screens/parent_hub/parent_receipt_view_v2.dart';
+export 'presentation/screens/principal_dashboard/principal_fee_dashboard.dart';
+export 'presentation/screens/principal_dashboard/principal_fee_structures.dart';
+export 'presentation/screens/principal_dashboard/principal_invoice_generate.dart';
+export 'presentation/screens/principal_dashboard/principal_collect_fee.dart';
+export 'presentation/screens/principal_dashboard/principal_payment_requests.dart';
+export 'presentation/screens/principal_dashboard/principal_reports_v2.dart';
+export 'presentation/screens/principal_dashboard/principal_payment_config.dart';
+

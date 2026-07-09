@@ -6,10 +6,10 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 
-const Color principalDirectoryBackground = Color(0xFFEFF8FD);
-const Color principalDirectoryAccent = Color(0xFF0887F2);
-const Color principalDirectoryText = Color(0xFF1A2A33);
-const Color principalDirectoryMuted = Color(0xFF64727E);
+const Color principalDirectoryBackground = Color(0xFFF0F4F8);
+const Color principalDirectoryAccent = Color(0xFF1D4ED8);
+const Color principalDirectoryText = Color(0xFF0F172A);
+const Color principalDirectoryMuted = Color(0xFF64748B);
 
 class PrincipalDirectoryScaffold extends StatelessWidget {
   final String title;
@@ -137,57 +137,101 @@ class PrincipalDirectoryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
-      child: Column(
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                  tooltip: 'Back',
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          title,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          style: GoogleFonts.dmSans(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
-                            color: principalDirectoryText,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (actions.isNotEmpty)
-                  ...actions
-                else
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Top bar: back + actions ────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 6, 12, 0),
+              child: Row(
+                children: [
                   IconButton(
-                    onPressed: onRefresh == null ? null : () => onRefresh!(),
-                    icon: const Icon(Icons.refresh_rounded, size: 22),
-                    tooltip: 'Refresh',
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                    tooltip: 'Back',
                   ),
-              ],
+                  const Spacer(),
+                  if (actions.isNotEmpty)
+                    ...actions.map(
+                      (w) => IconTheme(
+                        data: const IconThemeData(color: Colors.white),
+                        child: w,
+                      ),
+                    )
+                  else
+                    IconButton(
+                      onPressed: onRefresh == null ? null : () => onRefresh!(),
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        size: 22,
+                        color: Colors.white,
+                      ),
+                      tooltip: 'Refresh',
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+            // ── Title block ────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        height: 1.1,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withAlpha(200),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class PrincipalDirectorySearchBox extends StatelessWidget {
+class PrincipalDirectorySearchBox extends StatefulWidget {
   final String hint;
   final ValueChanged<String> onChanged;
 
@@ -198,34 +242,60 @@ class PrincipalDirectorySearchBox extends StatelessWidget {
   });
 
   @override
+  State<PrincipalDirectorySearchBox> createState() =>
+      _PrincipalDirectorySearchBoxState();
+}
+
+class _PrincipalDirectorySearchBoxState
+    extends State<PrincipalDirectorySearchBox> {
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: context.appTheme.onSurface.withAlpha(12),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        decoration: BoxDecoration(
+          color: context.appTheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _focused
+                ? principalDirectoryAccent
+                : const Color(0xFFE2E8F0),
+            width: _focused ? 2 : 1,
           ),
-        ],
-      ),
-      child: TextField(
-        onChanged: onChanged,
-        style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
-        decoration: InputDecoration(
-          hintText: hint,
-          prefixIcon: const Icon(Icons.search_rounded),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          filled: true,
-          fillColor: context.appTheme.surface,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
+          boxShadow: [
+            BoxShadow(
+              color: _focused
+                  ? principalDirectoryAccent.withAlpha(20)
+                  : context.appTheme.onSurface.withAlpha(10),
+              blurRadius: _focused ? 12 : 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: TextField(
+          onChanged: widget.onChanged,
+          style: GoogleFonts.dmSans(fontWeight: FontWeight.w600),
+          decoration: InputDecoration(
+            hintText: widget.hint,
+            prefixIcon: Icon(
+              Icons.search_rounded,
+              color: _focused
+                  ? principalDirectoryAccent
+                  : principalDirectoryMuted,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
+            ),
+            filled: true,
+            fillColor: context.appTheme.surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
           ),
         ),
       ),
@@ -249,26 +319,30 @@ class PrincipalDirectoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = selected ? principalDirectoryAccent : context.appTheme.surface;
-    final foreground = selected ? context.appTheme.surface : principalDirectoryText;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         constraints: const BoxConstraints(minHeight: 36),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: background,
+          gradient: selected
+              ? const LinearGradient(
+                  colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+          color: selected ? null : context.appTheme.surface,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected
-                ? principalDirectoryAccent
-                : const Color(0xFFD8E4EA),
+            color: selected ? Colors.transparent : const Color(0xFFD1D5DB),
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: principalDirectoryAccent.withAlpha(44),
+                    color: const Color(0xFF1D4ED8).withAlpha(50),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -279,7 +353,11 @@ class PrincipalDirectoryChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 16, color: foreground),
+              Icon(
+                icon,
+                size: 15,
+                color: selected ? Colors.white : principalDirectoryMuted,
+              ),
               const SizedBox(width: 6),
             ],
             Text(
@@ -287,9 +365,9 @@ class PrincipalDirectoryChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
-                color: foreground,
+                color: selected ? Colors.white : principalDirectoryText,
                 fontSize: 12,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
@@ -355,13 +433,28 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       constraints: const BoxConstraints(minHeight: 86),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: metric.tone == context.appTheme.surface ? context.appTheme.surface : metric.tone,
-        borderRadius: BorderRadius.circular(8),
+        gradient: LinearGradient(
+          colors: [
+            metric.color.withAlpha(isDark ? 45 : 22),
+            metric.color.withAlpha(isDark ? 25 : 12),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: metric.color.withAlpha(55)),
+        boxShadow: [
+          BoxShadow(
+            color: metric.color.withAlpha(isDark ? 30 : 20),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -369,10 +462,21 @@ class _MetricTile extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: context.appTheme.surface.withAlpha(210),
-              borderRadius: BorderRadius.circular(8),
+              gradient: LinearGradient(
+                colors: [metric.color, metric.color.withAlpha(200)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: metric.color.withAlpha(60),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            child: Icon(metric.icon, color: metric.color, size: 22),
+            child: Icon(metric.icon, color: Colors.white, size: 22),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -388,7 +492,7 @@ class _MetricTile extends StatelessWidget {
                     style: GoogleFonts.dmSans(
                       fontSize: 20,
                       fontWeight: FontWeight.w900,
-                      color: const Color(0xFF111827),
+                      color: principalDirectoryText,
                     ),
                   ),
                 ),
@@ -399,8 +503,8 @@ class _MetricTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.dmSans(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: context.appTheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    color: principalDirectoryMuted,
                   ),
                 ),
               ],
@@ -444,7 +548,7 @@ class PrincipalDirectoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final borderColor = selected
         ? principalDirectoryAccent
-        : const Color(0xFFE0E8F0);
+        : const Color(0xFFE2E8F0);
     final semanticLabel = status == null || status!.isEmpty
         ? title
         : '$title, $status';
@@ -453,83 +557,133 @@ class PrincipalDirectoryCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: context.appTheme.surface,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: borderColor, width: selected ? 2 : 1),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF7FA6BD).withAlpha(selected ? 70 : 36),
-                blurRadius: selected ? 18 : 12,
+                color: const Color(0xFF7FA6BD).withAlpha(selected ? 70 : 30),
+                blurRadius: selected ? 20 : 12,
                 offset: const Offset(0, 5),
               ),
             ],
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: principalDirectoryAccent.withAlpha(24),
-                  borderRadius: BorderRadius.circular(8),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Accent left bar ──────────────────────────────────
+                Container(
+                  width: 4,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        principalDirectoryAccent,
+                        principalDirectoryAccent.withAlpha(140),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(14),
+                      bottomLeft: Radius.circular(14),
+                    ),
+                  ),
                 ),
-                child: Icon(icon, color: principalDirectoryAccent, size: 24),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                // ── Card content ─────────────────────────────────────
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.dmSans(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                              color: principalDirectoryText,
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                principalDirectoryAccent.withAlpha(30),
+                                principalDirectoryAccent.withAlpha(18),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: principalDirectoryAccent.withAlpha(40),
                             ),
                           ),
-                        ),
-                        if (status != null)
-                          PrincipalStatusPill(
-                            label: status!,
-                            color: statusColor,
+                          child: Icon(
+                            icon,
+                            color: principalDirectoryAccent,
+                            size: 24,
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.dmSans(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w900,
+                                        color: principalDirectoryText,
+                                      ),
+                                    ),
+                                  ),
+                                  if (status != null)
+                                    PrincipalStatusPill(
+                                      label: status!,
+                                      color: statusColor,
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                subtitle,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.4,
+                                  color: principalDirectoryMuted,
+                                ),
+                              ),
+                              if (chips.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Wrap(spacing: 8, runSpacing: 8, children: chips),
+                              ],
+                              if (body != null) ...[
+                                const SizedBox(height: 12),
+                                body!,
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (trailing != null) ...[
+                          const SizedBox(width: 8),
+                          trailing!,
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        height: 1.35,
-                        color: principalDirectoryMuted,
-                      ),
-                    ),
-                    if (chips.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Wrap(spacing: 8, runSpacing: 8, children: chips),
-                    ],
-                    if (body != null) ...[const SizedBox(height: 12), body!],
-                  ],
+                  ),
                 ),
-              ),
-              if (trailing != null) ...[const SizedBox(width: 8), trailing!],
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -560,14 +714,19 @@ class PrincipalStatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withAlpha(24),
+        gradient: LinearGradient(
+          colors: [color.withAlpha(30), color.withAlpha(18)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withAlpha(60)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, color: color, size: 13),
+            Icon(icon, color: color, size: 12),
             const SizedBox(width: 4),
           ],
           Text(
@@ -577,7 +736,7 @@ class PrincipalStatusPill extends StatelessWidget {
             style: GoogleFonts.dmSans(
               color: color,
               fontSize: 11,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -644,21 +803,40 @@ class PrincipalDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: principalDirectoryBackground,
       appBar: AppBar(
-        backgroundColor: principalDirectoryBackground,
+        backgroundColor: const Color(0xFF1D4ED8),
+        foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
         actions: [
           if (menuItems.isNotEmpty)
             PopupMenuButton<String>(
               tooltip: 'Options',
               onSelected: onMenuSelected,
+              icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
               itemBuilder: (_) => menuItems,
             ),
         ],
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 96),
+          padding: const EdgeInsets.fromLTRB(22, 16, 22, 96),
           children: children,
         ),
       ),
@@ -682,14 +860,14 @@ class PrincipalDetailCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF7FA6BD).withAlpha(45),
-            blurRadius: 14,
+            color: const Color(0xFF7FA6BD).withAlpha(30),
+            blurRadius: 16,
             offset: const Offset(0, 5),
           ),
         ],
@@ -697,25 +875,48 @@ class PrincipalDetailCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: principalDirectoryText,
-                  ),
-                ),
+          // ── Gradient top accent strip ──────────────────────────────
+          Container(
+            height: 4,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
               ),
-              if (trailing != null) trailing!,
-            ],
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+            ),
           ),
-          const SizedBox(height: 14),
-          ...children,
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: principalDirectoryText,
+                        ),
+                      ),
+                    ),
+                    if (trailing != null) trailing!,
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ...children,
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -790,59 +991,70 @@ class PrincipalActionTile extends StatelessWidget {
       enabled: onTap != null,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
         child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: color.withAlpha(22),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 21),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      color: principalDirectoryText,
-                      fontWeight: FontWeight.w900,
-                    ),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [color, color.withAlpha(180)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.dmSans(
-                      color: principalDirectoryMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      height: 1.25,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withAlpha(55),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
-                  ),
-                ],
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
               ),
-            ),
-            if (onTap != null)
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: principalDirectoryMuted,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryText,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        color: principalDirectoryMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-          ],
+              if (onTap != null)
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: principalDirectoryMuted,
+                ),
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -864,17 +1076,38 @@ class PrincipalInputPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: principalDirectoryBackground,
       appBar: AppBar(
-        backgroundColor: principalDirectoryBackground,
+        backgroundColor: const Color(0xFF1D4ED8),
+        foregroundColor: Colors.white,
         elevation: 0,
-        title: Text(title),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF103869), Color(0xFF1D4ED8), Color(0xFF0F766E)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        title: Text(
+          title,
+          style: GoogleFonts.dmSans(
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Icon(icon, color: Colors.white.withAlpha(200), size: 22),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 32),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
             PrincipalDetailCard(
               title: title,
-              trailing: Icon(icon, color: principalDirectoryAccent),
               children: [child],
             ),
           ],

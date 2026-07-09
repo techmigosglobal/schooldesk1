@@ -15,7 +15,6 @@ class TeacherClassesScreen extends StatefulWidget {
 class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
   bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _classes = const [];
   List<Map<String, dynamic>> _students = const [];
 
   @override
@@ -32,9 +31,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
     try {
       await RoleAccessService.initialize();
       if (!mounted) return;
-      final assignedClasses = RoleAccessService.teacherAssignedClasses;
       setState(() {
-        _classes = assignedClasses;
         _students = RoleAccessService.teacherClassStudents;
         _loading = false;
       });

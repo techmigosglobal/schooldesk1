@@ -125,71 +125,152 @@ class _PlannerCard extends StatelessWidget {
     final weekEnd = _shortDate(planner['week_end_date']);
     final note = planner['note']?.toString() ?? '';
     final attachments = _lessonPlannerAttachments(planner);
+    final accentColor = isCompleted
+        ? const Color(0xFF16A34A)
+        : const Color(0xFF0284C7);
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 14),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: accentColor.withAlpha(50),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withAlpha(20),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Gradient header
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isCompleted
+                    ? [const Color(0xFF15803D), const Color(0xFF22C55E)]
+                    : [const Color(0xFF0369A1), const Color(0xFF0EA5E9)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
               children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(35),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.auto_stories_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     classLabel.isEmpty ? 'Lesson Plan' : classLabel,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-                Chip(
-                  label: Text(
-                    isCompleted ? 'Completed' : 'Uploaded',
-                    style: const TextStyle(fontSize: 11, color: Colors.white),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                  backgroundColor: isCompleted ? Colors.green : Colors.orange,
-                  padding: EdgeInsets.zero,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(35),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isCompleted
+                            ? Icons.check_circle_rounded
+                            : Icons.upload_rounded,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isCompleted ? 'Completed' : 'Uploaded',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            _InfoRow(
-              icon: Icons.calendar_today_outlined,
-              text: 'Week: $weekStart – $weekEnd',
-            ),
-            _InfoRow(icon: Icons.person_outlined, text: 'Teacher: $teacher'),
-            if (note.isNotEmpty)
-              _InfoRow(icon: Icons.notes_outlined, text: note),
-            if (attachments.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final attachment in attachments)
-                    OutlinedButton.icon(
-                      onPressed: () => _openAttachment(
-                      context,
-                      _text(attachment['url']),
-                      name: _text(attachment['name']),
-                    ),
-                      icon: const Icon(Icons.attach_file_rounded, size: 18),
-                      label: Text(
-                        _text(attachment['name'], fallback: 'View Attachment'),
-                      ),
-                    ),
+          ),
+          // Body
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(
+                  icon: Icons.calendar_today_outlined,
+                  text: 'Week: $weekStart – $weekEnd',
+                ),
+                _InfoRow(
+                  icon: Icons.person_outlined,
+                  text: 'Teacher: $teacher',
+                ),
+                if (note.isNotEmpty)
+                  _InfoRow(icon: Icons.notes_outlined, text: note),
+                if (attachments.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final attachment in attachments)
+                        OutlinedButton.icon(
+                          onPressed: () => _openAttachment(
+                            context,
+                            _text(attachment['url']),
+                            name: _text(attachment['name']),
+                          ),
+                          icon: const Icon(
+                            Icons.attach_file_rounded,
+                            size: 16,
+                          ),
+                          label: Text(
+                            _text(
+                              attachment['name'],
+                              fallback: 'View Attachment',
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: accentColor,
+                            side: BorderSide(color: accentColor.withAlpha(80)),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
-              ),
-            ],
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
