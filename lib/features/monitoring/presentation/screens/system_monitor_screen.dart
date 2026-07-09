@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'dart:convert';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
@@ -51,15 +53,201 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
     }
   }
 
+  Future<void> _backupDb() async {
+    setState(() => _loading = true);
+    try {
+      final data = await _api.backupDatabase();
+      final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
+      await Clipboard.setData(ClipboardData(text: jsonStr));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Database backup copied to clipboard! Save it as a JSON file.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      // Show backup dialog so they can copy it manually if needed
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Database Backup'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('The backup JSON has been copied to your clipboard.'),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 150,
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    jsonStr,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (err) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Backup failed: $err'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _restoreDb() async {
+    final controller = TextEditingController();
+    final restoreConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restore Database'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Paste the JSON backup string below:'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '{\n  "students": [...]\n}',
+              ),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+
+    if (restoreConfirmed != true || controller.text.trim().isEmpty) return;
+
+    setState(() => _loading = true);
+    try {
+      final Map<String, dynamic> parsed = Map<String, dynamic>.from(
+        jsonDecode(controller.text.trim()) as Map,
+      );
+      await _api.restoreDatabase(parsed);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Database restored successfully!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _load();
+    } catch (err) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Restore failed: $err'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _wipeDb() async {
+    final wipeConfirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Wipe Database Storage'),
+        content: const Text(
+          'Are you sure you want to wipe all transaction, students, academic, and attendance records for this school?\n\n'
+          'Active user accounts and school profile metadata will be preserved so you do not get locked out.\n\n'
+          'THIS ACTION CANNOT BE UNDONE!',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Wipe Database'),
+          ),
+        ],
+      ),
+    );
+
+    if (wipeConfirmed != true) return;
+
+    setState(() => _loading = true);
+    try {
+      await _api.wipeDatabase();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Database storage wiped successfully!'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _load();
+    } catch (err) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Wipe failed: $err'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final role = _api.currentRoleName?.trim().toLowerCase() ?? '';
+    final isSuperAdmin = role == 'super_admin';
+
     return Scaffold(
       key: _scaffoldKey,
-      drawer: PrincipalDrawer(
-        selectedIndex: PrincipalNav.dashboard,
-        onDestinationSelected: (_) {},
-      ),
-      bottomNavigationBar: const PrincipalShellBottomBar(),
+      drawer: isSuperAdmin
+          ? SuperAdminDrawer(
+              selectedIndex: SuperAdminNav.systemMonitor,
+              onDestinationSelected: (_) {},
+            )
+          : PrincipalDrawer(
+              selectedIndex: PrincipalNav.dashboard,
+              onDestinationSelected: (_) {},
+            ),
+      bottomNavigationBar: isSuperAdmin
+          ? const SuperAdminShellBottomBar()
+          : const PrincipalShellBottomBar(),
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.menu_rounded),
@@ -81,6 +269,69 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
           children: [
             _buildFilters(),
             const SizedBox(height: 16),
+            if (isSuperAdmin) ...[
+              Card(
+                color: Colors.white,
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey.shade200),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.storage_rounded, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Database Administration',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Perform backups, restorations, or clear transaction/student records for this school.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey.shade600,
+                            ),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.download_rounded),
+                            label: const Text('Backup DB'),
+                            onPressed: _loading ? null : _backupDb,
+                          ),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.upload_rounded),
+                            label: const Text('Restore DB'),
+                            onPressed: _loading ? null : _restoreDb,
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              foregroundColor: Theme.of(context).colorScheme.error,
+                            ),
+                            icon: const Icon(Icons.delete_forever_rounded),
+                            label: const Text('Wipe DB'),
+                            onPressed: _loading ? null : _wipeDb,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_loading)
               const Center(
                 child: Padding(

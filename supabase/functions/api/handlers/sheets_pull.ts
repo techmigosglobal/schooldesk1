@@ -143,19 +143,31 @@ export async function handleSheetsPullStudents(
     for (let i = 0; i < records.length; i++) {
       const r = records[i];
       const payload: Record<string, unknown> = {
-        school_id:         schoolId,
-        student_id_number: r.student_id_number ?? r.student_id ?? r.id_number ?? r.roll_no ?? r.roll_number ?? "",
-        first_name:        r.first_name ?? r.firstname ?? (r.name ?? "").split(" ")[0] ?? "",
-        last_name:         r.last_name  ?? r.lastname  ?? (r.name ?? "").split(" ").slice(1).join(" ") ?? "",
-        section_name:      r.section_name ?? r.class ?? r.section ?? r.grade ?? "",
-        parent_username:   r.parent_username ?? r.parent_user ?? "",
-        parent_name:       r.parent_name ?? r.parent ?? "",
-        parent_email:      r.parent_email ?? "",
-        parent_phone:      r.parent_phone ?? r.phone ?? "",
-        date_of_birth:     r.date_of_birth ?? r.dob ?? "",
-        gender:            r.gender ?? "",
-        admission_date:    r.admission_date ?? "",
-        status:            r.status ?? "active",
+        school_id:                   schoolId,
+        // Student ID — new name first, then legacy fallbacks
+        student_id:                  r.student_id ?? r.student_id_number ?? r.id_number ?? r.roll_no ?? r.roll_number ?? "",
+        // Name — new column names first, then legacy
+        std_first_name:              r.std_first_name ?? r.first_name ?? r.firstname ?? (r.name ?? "").split(" ")[0] ?? "",
+        std_last_name:               r.std_last_name  ?? r.last_name  ?? r.lastname  ?? (r.name ?? "").split(" ").slice(1).join(" ") ?? "",
+        // Class & Section
+        class_name:                  r.class_name ?? r.class ?? r.grade ?? "",
+        section_name:                r.section_name ?? r.section ?? "",
+        // Father details — new column names first
+        father_parent_first_name:    r.father_parent_first_name ?? r.father_first_name ?? "",
+        father_parent_last_name:     r.father_parent_last_name  ?? r.father_last_name  ?? "",
+        // Mother details — new column names first
+        mother_first_name:           r.mother_first_name ?? "",
+        mother_last_name:            r.mother_last_name  ?? "",
+        // Parent login credentials
+        parent_username:             r.parent_username ?? r.parent_user ?? "",
+        parent_email:                r.parent_email ?? "",
+        parent_password:             r.parent_password ?? "",
+        parent_phone:                r.parent_phone ?? r.phone ?? "",
+        // Student personal info — new column names first
+        std_dob:                     r.std_dob ?? r.date_of_birth ?? r.dob ?? "",
+        std_gender:                  r.std_gender ?? r.gender ?? "",
+        std_adm_date:                r.std_adm_date ?? r.admission_date ?? "",
+        status:                      r.status ?? "active",
       };
       const res     = await handleSheetsSyncStudent(makeRequest(payload), svc);
       const resBody = await res.json();

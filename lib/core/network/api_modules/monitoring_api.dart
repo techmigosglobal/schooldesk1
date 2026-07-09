@@ -67,4 +67,48 @@ extension MonitoringApi on BackendApiClient {
       throw _handleError(e);
     }
   }
+
+  Future<Map<String, dynamic>> backupDatabase() async {
+    try {
+      final response = await _dio.get('/monitoring/database/backup');
+      final data = _asMap(response.data);
+      if (data['success'] == true) return _asMap(data['data']);
+      throw ServerException(
+        message: data['message'] ?? 'Failed to backup database',
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> restoreDatabase(Map<String, dynamic> dump) async {
+    try {
+      final response = await _dio.post(
+        '/monitoring/database/restore',
+        data: dump,
+      );
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['message'] ?? 'Failed to restore database',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> wipeDatabase() async {
+    try {
+      final response = await _dio.post('/monitoring/database/wipe');
+      final data = _asMap(response.data);
+      if (data['success'] != true) {
+        throw ServerException(
+          message: data['message'] ?? 'Failed to wipe database storage',
+        );
+      }
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
 }

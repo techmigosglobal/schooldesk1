@@ -30,36 +30,52 @@ export async function handleSheetsSyncStudent(
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const schoolId = text(body.school_id);
-    const studentIdNumber = text(body.student_id_number);
-    const firstName = text(body.first_name);
-    const lastName = text(body.last_name);
+    // Accept both new Google-Sheets column names and legacy names
+    const studentIdNumber = text(body.student_id ?? body.student_id_number);
+    const firstName = text(body.std_first_name ?? body.first_name);
+    const lastName = text(body.std_last_name ?? body.last_name);
 
     if (!schoolId) return fail("school_id required");
-    if (!studentIdNumber) return fail("student_id_number required");
-    if (!firstName) return fail("first_name required");
+    if (!studentIdNumber) return fail("student_id required");
+    if (!firstName) return fail("std_first_name required");
 
     // 1. Resolve or Create Section (Class)
     let sectionId: string | null = null;
     const sectionName = text(body.section_name);
-    if (sectionName) {
-      const { data: sectionData, error: sectionError } = await svc
-        .from("sections")
-        .select("id")
-        .eq("school_id", schoolId)
-        .eq("name", sectionName)
-        .maybeSingle();
+    const className = text(body.class_name);
+    // Build a combined label for section lookup: "ClassName SectionName"
+    const combinedSectionName = className && sectionName
+      ? `${className} ${sectionName}`
+      : sectionName || className;
 
-      if (sectionError) return fail(`Section lookup error: ${sectionError.message}`);
+    if (combinedSectionName) {
+      // Try exact combined name first, then fall back to section_name only
+      const lookupNames = combinedSectionName !== sectionName && sectionName
+        ? [combinedSectionName, sectionName]
+        : [combinedSectionName];
 
-      if (sectionData) {
-        sectionId = sectionData.id;
-      } else {
-        // Create the section
+      for (const nameToTry of lookupNames) {
+        const { data: sectionData, error: sectionError } = await svc
+          .from("sections")
+          .select("id")
+          .eq("school_id", schoolId)
+          .eq("name", nameToTry)
+          .maybeSingle();
+
+        if (sectionError) return fail(`Section lookup error: ${sectionError.message}`);
+
+        if (sectionData) {
+          sectionId = sectionData.id;
+          break;
+        }
+      }
+
+      if (!sectionId) {
         const { data: newSec, error: createSecErr } = await svc
           .from("sections")
           .insert({
             school_id: schoolId,
-            name: sectionName,
+            name: combinedSectionName,
           })
           .select("id")
           .single();
@@ -71,7 +87,13 @@ export async function handleSheetsSyncStudent(
     // 2. Resolve or Create Parent User
     let parentUserId: string | null = null;
     const parentUsername = text(body.parent_username);
-    const parentName = text(body.parent_name || body.parent_username);
+    // Compose parent display name from father fields (primary) or legacy parent_name
+    const fatherFirstName = text(body.father_parent_first_name ?? body.father_first_name ?? "");
+    const fatherLastName = text(body.father_parent_last_name ?? body.father_last_name ?? "");
+    const motherFirstName = text(body.mother_first_name ?? "");
+    const motherLastName = text(body.mother_last_name ?? "");
+    const fatherFullName = [fatherFirstName, fatherLastName].filter(Boolean).join(" ");
+    const parentName = fatherFullName || text(body.parent_name ?? body.parent_username);
     const parentPassword = text(body.parent_password) || "Parent@12345"; // fallback
 
     if (parentUsername) {
@@ -147,9 +169,14 @@ export async function handleSheetsSyncStudent(
       first_name: firstName,
       last_name: lastName,
       student_id_number: studentIdNumber,
-      date_of_birth: nullableText(body.date_of_birth),
-      gender: nullableText(body.gender),
-      admission_date: nullableText(body.admission_date) || new Date().toISOString().slice(0, 10),
+      class_name: className || null,
+      father_first_name: fatherFirstName || null,
+      father_last_name: fatherLastName || null,
+      mother_first_name: motherFirstName || null,
+      mother_last_name: motherLastName || null,
+      date_of_birth: nullableText(body.std_dob ?? body.date_of_birth),
+      gender: nullableText(body.std_gender ?? body.gender),
+      admission_date: nullableText(body.std_adm_date ?? body.admission_date) || new Date().toISOString().slice(0, 10),
       current_section_id: sectionId,
       status: text(body.status) || "active",
       photo_url: nullableText(body.photo_url),
@@ -183,6 +210,64 @@ export async function handleSheetsSyncStudent(
         }, { onConflict: "parent_user_id,student_id" });
 
       if (linkErr) return fail(`Failed to link parent and student: ${linkErr.message}`);
+    }
+
+    // 5. Upsert Father Guardian record
+    if (fatherFirstName) {
+      const fatherName = [fatherFirstName, fatherLastName].filter(Boolean).join(" ");
+      const { data: existingFather } = await svc
+        .from("guardians")
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("student_id", studentId)
+        .eq("relationship", "father")
+        .maybeSingle();
+
+      if (existingFather) {
+        await svc.from("guardians").update({
+          full_name: fatherName,
+          phone: nullableText(body.parent_phone),
+          email: nullableText(body.parent_email),
+          updated_at: new Date().toISOString(),
+        }).eq("id", existingFather.id);
+      } else {
+        await svc.from("guardians").insert({
+          school_id: schoolId,
+          student_id: studentId,
+          full_name: fatherName,
+          relationship: "father",
+          phone: nullableText(body.parent_phone),
+          email: nullableText(body.parent_email),
+          is_primary: true,
+        });
+      }
+    }
+
+    // 6. Upsert Mother Guardian record
+    if (motherFirstName) {
+      const motherName = [motherFirstName, motherLastName].filter(Boolean).join(" ");
+      const { data: existingMother } = await svc
+        .from("guardians")
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("student_id", studentId)
+        .eq("relationship", "mother")
+        .maybeSingle();
+
+      if (existingMother) {
+        await svc.from("guardians").update({
+          full_name: motherName,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existingMother.id);
+      } else {
+        await svc.from("guardians").insert({
+          school_id: schoolId,
+          student_id: studentId,
+          full_name: motherName,
+          relationship: "mother",
+          is_primary: false,
+        });
+      }
     }
 
     return ok({ success: true, student_id: studentId });

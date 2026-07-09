@@ -85,6 +85,117 @@ export async function handleMonitoring(
 ): Promise<Response> {
   const school = schoolId(user);
 
+  // ── Database Backup ───────────────────────────────────────
+  if (path === "/monitoring/database/backup" && method === "GET") {
+    if (user.app_metadata?.role_name !== "super_admin") {
+      return fail("Unauthorized: SuperAdmin role required", 403);
+    }
+    try {
+      const tables = [
+        "academic_years", "terms", "grades", "rooms", "subjects", "staff",
+        "staff_qualifications", "staff_subjects", "sections", "grade_subjects",
+        "students", "guardians", "student_guardians", "medical_records",
+        "student_documents", "attendance_sessions", "student_attendances",
+        "attendance_summaries", "fee_categories", "fee_structures",
+        "fee_invoices", "fee_invoice_items", "parent_payment_requests",
+        "school_payment_settings", "leave_types", "leave_balances",
+        "student_leave_applications", "announcements", "events",
+        "parent_teacher_meetings", "timetable_slots", "frontend_records"
+      ];
+      const backup: Record<string, unknown[]> = {};
+      for (const table of tables) {
+        const { data, error } = await svc.from(table).select("*").eq("school_id", school);
+        if (error) {
+          if (error.message.includes("column \"school_id\" does not exist")) {
+            const { data: allData, error: allErr } = await svc.from(table).select("*");
+            if (allErr) return fail(`Backup failed on table ${table}: ${allErr.message}`);
+            backup[table] = allData ?? [];
+          } else {
+            return fail(`Backup failed on table ${table}: ${error.message}`);
+          }
+        } else {
+          backup[table] = data ?? [];
+        }
+      }
+      return ok(backup);
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // ── Database Restore ──────────────────────────────────────
+  if (path === "/monitoring/database/restore" && method === "POST") {
+    if (user.app_metadata?.role_name !== "super_admin") {
+      return fail("Unauthorized: SuperAdmin role required", 403);
+    }
+    try {
+      const body = await req.json().catch(() => ({})) as Record<string, unknown[]>;
+      for (const [table, rows] of Object.entries(body)) {
+        if (!Array.isArray(rows) || rows.length === 0) continue;
+        const { error } = await svc.from(table).upsert(rows);
+        if (error) {
+          return fail(`Restore failed on table ${table}: ${error.message}`);
+        }
+      }
+      return ok({ success: true, message: "Database restored successfully" });
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // ── Database Wipe ─────────────────────────────────────────
+  if (path === "/monitoring/database/wipe" && method === "POST") {
+    if (user.app_metadata?.role_name !== "super_admin") {
+      return fail("Unauthorized: SuperAdmin role required", 403);
+    }
+    try {
+      // Wipe in reverse dependency order to prevent foreign key errors
+      const tablesToClean = [
+        "student_attendances",
+        "attendance_summaries",
+        "attendance_sessions",
+        "student_leave_applications",
+        "leave_balances",
+        "leave_types",
+        "parent_payment_requests",
+        "fee_invoice_items",
+        "fee_invoices",
+        "fee_structures",
+        "fee_categories",
+        "student_documents",
+        "medical_records",
+        "student_guardians",
+        "guardians",
+        "students",
+        "staff_subjects",
+        "grade_subjects",
+        "timetable_slots",
+        "parent_teacher_meetings",
+        "sections",
+        "staff_qualifications",
+        "staff",
+        "subjects",
+        "rooms",
+        "terms",
+        "academic_years"
+      ];
+      for (const table of tablesToClean) {
+        const { error } = await svc.from(table).delete().eq("school_id", school);
+        if (error) {
+          if (error.message.includes("column \"school_id\" does not exist")) {
+            const { error: delErr } = await svc.from(table).delete().neq("id", "00000000-0000-0000-0000-000000000000");
+            if (delErr) return fail(`Wipe failed on table ${table}: ${delErr.message}`);
+          } else {
+            return fail(`Wipe failed on table ${table}: ${error.message}`);
+          }
+        }
+      }
+      return ok({ success: true, message: "Database wiped successfully" });
+    } catch (err) {
+      return fail(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   if (path === "/monitoring/error-events" && method === "POST") {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const context = {

@@ -30,12 +30,12 @@ class RouteAccessGuard {
   };
 
   static const Map<String, Set<String>> _routeRoles = {
-    AppRoutes.idCardGeneration: {'principal'},
+    AppRoutes.idCardGeneration: {'principal', 'super_admin'},
     // Principal routes
     AppRoutes.principalDashboard: {'principal'},
-    AppRoutes.staffManagement: {'principal'},
-    AppRoutes.staffForm: {'principal'},
-    AppRoutes.studentOversight: {'principal'},
+    AppRoutes.staffManagement: {'principal', 'super_admin'},
+    AppRoutes.staffForm: {'principal', 'super_admin'},
+    AppRoutes.studentOversight: {'principal', 'super_admin'},
     AppRoutes.approvalCenter: {'principal'},
     AppRoutes.feeMonitoring: {'principal'},
     AppRoutes.principalPaymentRequests: {'principal'},
@@ -59,7 +59,7 @@ class RouteAccessGuard {
     AppRoutes.academicCurriculumForm: {'principal'},
     AppRoutes.principalAcademicInfo: {'principal'},
     AppRoutes.principalAnalytics: {'principal'},
-    AppRoutes.principalUserManagement: {'principal'},
+    AppRoutes.principalUserManagement: {'principal', 'super_admin'},
     AppRoutes.principalClasses: {'principal'},
     AppRoutes.principalAttendance: {'principal'},
     AppRoutes.principalSubjects: {'principal'},
@@ -69,10 +69,10 @@ class RouteAccessGuard {
     AppRoutes.principalDocuments: {'principal'},
     AppRoutes.principalAuditLogs: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},
-    AppRoutes.principalAccountCreate: {'principal'},
-    AppRoutes.principalAccountEdit: {'principal'},
-    AppRoutes.principalParentChildAssignment: {'principal'},
-    AppRoutes.principalSchoolProfile: {'principal'},
+    AppRoutes.principalAccountCreate: {'principal', 'super_admin'},
+    AppRoutes.principalAccountEdit: {'principal', 'super_admin'},
+    AppRoutes.principalParentChildAssignment: {'principal', 'super_admin'},
+    AppRoutes.principalSchoolProfile: {'principal', 'super_admin'},
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes
     AppRoutes.superAdminDashboard: {'super_admin'},

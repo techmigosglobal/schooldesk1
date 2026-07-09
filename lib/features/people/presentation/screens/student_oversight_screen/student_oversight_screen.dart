@@ -1093,7 +1093,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         username: input.parentUsername.trim(),
         password: input.parentPassword.trim(),
         role: 'Parent',
-        fullName: input.parentName.trim(),
+        // Use father full name as the account display name
+        fullName: input.fatherFullName.isNotEmpty
+            ? input.fatherFullName
+            : input.fatherFirstName.trim(),
         email: input.parentEmail.trim(),
         phone: input.parentPhone.trim(),
         isActive: true,
@@ -1108,8 +1111,9 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       );
     }
 
-    if (input.shouldCreateParentLogin && input.parentName.trim().isNotEmpty) {
-      await _createGuardianProfileForStudent(savedStudentId, input);
+    if (input.shouldCreateParentLogin &&
+        (input.fatherFirstName.isNotEmpty || input.motherFirstName.isNotEmpty)) {
+      await _createGuardianProfilesForStudent(savedStudentId, input);
     }
 
     if ((input.photoPath ?? '').isNotEmpty ||
@@ -1149,28 +1153,55 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     );
   }
 
-  Future<void> _createGuardianProfileForStudent(
+  /// Creates separate guardian records for father and mother.
+  Future<void> _createGuardianProfilesForStudent(
     String studentId,
     _AddStudentInput input,
   ) async {
-    final created = await api.BackendApiClient.instance
-        .createRaw('/guardians', {
-          'student_id': studentId,
-          'full_name': input.parentName.trim(),
-          'relationship': 'parent',
-          'phone': input.parentPhone.trim(),
-          'email': input.parentEmail.trim(),
-          'is_primary': true,
-        });
-    final record = created['data'] is Map ? created['data'] as Map : created;
-    final guardianId = '${record['id'] ?? ''}'.trim();
-    if (guardianId.isEmpty) return;
-    await api.BackendApiClient.instance.linkGuardianToStudent(
-      studentId: studentId,
-      guardianId: guardianId,
-      isPrimary: true,
-      canPickup: true,
-    );
+    // Father guardian
+    if (input.fatherFirstName.isNotEmpty) {
+      final created = await api.BackendApiClient.instance
+          .createRaw('/guardians', {
+            'student_id': studentId,
+            'full_name': input.fatherFullName,
+            'relationship': 'father',
+            'phone': input.parentPhone.trim(),
+            'email': input.parentEmail.trim(),
+            'is_primary': true,
+          });
+      final record =
+          created['data'] is Map ? created['data'] as Map : created;
+      final guardianId = '${record['id'] ?? ''}'.trim();
+      if (guardianId.isNotEmpty) {
+        await api.BackendApiClient.instance.linkGuardianToStudent(
+          studentId: studentId,
+          guardianId: guardianId,
+          isPrimary: true,
+          canPickup: true,
+        );
+      }
+    }
+    // Mother guardian
+    if (input.motherFirstName.isNotEmpty) {
+      final created = await api.BackendApiClient.instance
+          .createRaw('/guardians', {
+            'student_id': studentId,
+            'full_name': input.motherFullName,
+            'relationship': 'mother',
+            'is_primary': false,
+          });
+      final record =
+          created['data'] is Map ? created['data'] as Map : created;
+      final guardianId = '${record['id'] ?? ''}'.trim();
+      if (guardianId.isNotEmpty) {
+        await api.BackendApiClient.instance.linkGuardianToStudent(
+          studentId: studentId,
+          guardianId: guardianId,
+          isPrimary: false,
+          canPickup: false,
+        );
+      }
+    }
   }
 
   Future<void> _assignStudentFees(
@@ -1584,7 +1615,11 @@ class _AddStudentInput {
   final String admissionNumber;
   final String? parentUserId;
   final bool shouldCreateParentLogin;
-  final String parentName;
+  // Father / Mother names (replaces single parentName)
+  final String fatherFirstName;
+  final String fatherLastName;
+  final String motherFirstName;
+  final String motherLastName;
   final String parentUsername;
   final String parentPassword;
   final String parentEmail;
@@ -1607,7 +1642,10 @@ class _AddStudentInput {
     required this.admissionNumber,
     required this.parentUserId,
     required this.shouldCreateParentLogin,
-    required this.parentName,
+    required this.fatherFirstName,
+    required this.fatherLastName,
+    required this.motherFirstName,
+    required this.motherLastName,
     required this.parentUsername,
     required this.parentPassword,
     required this.parentEmail,
@@ -1620,6 +1658,18 @@ class _AddStudentInput {
     required this.concessionAmount,
     required this.concessionReason,
   });
+
+  /// Helper: full father name for display / guardian creation
+  String get fatherFullName =>
+      [fatherFirstName.trim(), fatherLastName.trim()]
+          .where((s) => s.isNotEmpty)
+          .join(' ');
+
+  /// Helper: full mother name for display / guardian creation
+  String get motherFullName =>
+      [motherFirstName.trim(), motherLastName.trim()]
+          .where((s) => s.isNotEmpty)
+          .join(' ');
 }
 
 class _StudentDocumentInput {
@@ -1671,12 +1721,15 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   late final TextEditingController _dobCtrl;
   late final TextEditingController _systemIdCtrl;
   late final TextEditingController _admissionCtrl;
-  late final TextEditingController _parentNameCtrl;
+  // Father / Mother name controllers (replaces single _parentNameCtrl)
+  late final TextEditingController _fatherFirstNameCtrl;
+  late final TextEditingController _fatherLastNameCtrl;
+  late final TextEditingController _motherFirstNameCtrl;
+  late final TextEditingController _motherLastNameCtrl;
   late final TextEditingController _parentUsernameCtrl;
   late final TextEditingController _parentPasswordCtrl;
   final _parentEmailCtrl = TextEditingController();
   final _parentPhoneCtrl = TextEditingController();
-  final _documentTypeCtrl = TextEditingController(text: 'admission_document');
   final _concessionAmountCtrl = TextEditingController();
   final _concessionReasonCtrl = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -1689,6 +1742,8 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
   bool _assignFees = true;
   XFile? _photoFile;
   final List<_StudentDocumentInput> _documents = [];
+  // A label controller for each document in _documents (editable in the UI)
+  final List<TextEditingController> _documentLabelControllers = [];
   bool _saving = false;
   String? _error;
   bool get _isEdit => widget.initialStudent != null;
@@ -1724,7 +1779,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
         : widget.sections.isNotEmpty
         ? widget.sections.first.id
         : null;
-    _parentNameCtrl = TextEditingController();
+    _fatherFirstNameCtrl = TextEditingController();
+    _fatherLastNameCtrl = TextEditingController();
+    _motherFirstNameCtrl = TextEditingController();
+    _motherLastNameCtrl = TextEditingController();
     _parentUsernameCtrl = TextEditingController();
     _parentPasswordCtrl = TextEditingController();
   }
@@ -1736,14 +1794,19 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     _dobCtrl.dispose();
     _systemIdCtrl.dispose();
     _admissionCtrl.dispose();
-    _parentNameCtrl.dispose();
+    _fatherFirstNameCtrl.dispose();
+    _fatherLastNameCtrl.dispose();
+    _motherFirstNameCtrl.dispose();
+    _motherLastNameCtrl.dispose();
     _parentUsernameCtrl.dispose();
     _parentPasswordCtrl.dispose();
     _parentEmailCtrl.dispose();
     _parentPhoneCtrl.dispose();
-    _documentTypeCtrl.dispose();
     _concessionAmountCtrl.dispose();
     _concessionReasonCtrl.dispose();
+    for (final c in _documentLabelControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -1771,28 +1834,50 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       withData: kIsWeb,
     );
     if (result == null || !mounted) return;
-    final docType = _documentTypeCtrl.text.trim().isEmpty
-        ? 'admission_document'
-        : _documentTypeCtrl.text.trim();
-    final documents = result.files
+    final newDocs = result.files
         .where(
           (file) =>
               (file.path ?? '').trim().isNotEmpty ||
               (file.bytes?.isNotEmpty ?? false),
         )
         .map(
-          (file) => _StudentDocumentInput(
-            filePath: (file.path ?? '').trim().isEmpty
-                ? null
-                : file.path!.trim(),
-            fileBytes: file.bytes,
-            fileName: file.name,
-            docType: docType,
-          ),
+          (file) {
+            // Default label is filename without extension
+            final nameWithoutExt =
+                file.name.contains('.')
+                    ? file.name.substring(0, file.name.lastIndexOf('.'))
+                    : file.name;
+            return (
+              doc: _StudentDocumentInput(
+                filePath: (file.path ?? '').trim().isEmpty
+                    ? null
+                    : file.path!.trim(),
+                fileBytes: file.bytes,
+                fileName: file.name,
+                docType: 'student_document',
+              ),
+              label: nameWithoutExt,
+            );
+          },
         )
         .toList();
-    if (documents.isEmpty) return;
-    setState(() => _documents.addAll(documents));
+    if (newDocs.isEmpty) return;
+    setState(() {
+      for (final item in newDocs) {
+        _documents.add(item.doc);
+        _documentLabelControllers.add(
+          TextEditingController(text: item.label),
+        );
+      }
+    });
+  }
+
+  void _removeDocument(int index) {
+    setState(() {
+      _documents.removeAt(index);
+      final ctrl = _documentLabelControllers.removeAt(index);
+      ctrl.dispose();
+    });
   }
 
   Future<void> _pickDate() async {
@@ -1826,12 +1911,12 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       return;
     }
     if (_createParentLogin &&
-        (_parentNameCtrl.text.trim().isEmpty ||
+        (_fatherFirstNameCtrl.text.trim().isEmpty ||
             _parentUsernameCtrl.text.trim().isEmpty ||
             _parentPasswordCtrl.text.trim().length < 8)) {
       setState(
         () => _error =
-            'Parent name, username, and an 8+ character password are required',
+            'Father first name, username, and an 8+ character password are required',
       );
       return;
     }
@@ -1845,6 +1930,20 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       final photoBytes = _photoFile == null
           ? null
           : await _photoFile!.readAsBytes();
+      // Merge editable labels from UI controllers into document list
+      final labelledDocuments = _documents.asMap().entries.map((entry) {
+        final index = entry.key;
+        final doc = entry.value;
+        final label = index < _documentLabelControllers.length
+            ? _documentLabelControllers[index].text.trim()
+            : '';
+        return _StudentDocumentInput(
+          filePath: doc.filePath,
+          fileBytes: doc.fileBytes,
+          fileName: doc.fileName,
+          docType: label.isEmpty ? 'student_document' : label,
+        );
+      }).toList();
       await widget.onSubmit(
         _AddStudentInput(
           studentId: widget.initialStudent?.id,
@@ -1856,7 +1955,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           admissionNumber: _admissionCtrl.text.trim(),
           parentUserId: _parentUserId,
           shouldCreateParentLogin: _createParentLogin,
-          parentName: _parentNameCtrl.text.trim(),
+          fatherFirstName: _fatherFirstNameCtrl.text.trim(),
+          fatherLastName: _fatherLastNameCtrl.text.trim(),
+          motherFirstName: _motherFirstNameCtrl.text.trim(),
+          motherLastName: _motherLastNameCtrl.text.trim(),
           parentUsername: _parentUsernameCtrl.text.trim(),
           parentPassword: _parentPasswordCtrl.text.trim(),
           parentEmail: _parentEmailCtrl.text.trim(),
@@ -1864,13 +1966,14 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           photoPath: _photoFile?.path,
           photoBytes: photoBytes,
           photoName: _photoFile?.name,
-          documents: List<_StudentDocumentInput>.unmodifiable(_documents),
+          documents: List<_StudentDocumentInput>.unmodifiable(labelledDocuments),
           assignFees: _assignFees,
           concessionAmount:
               double.tryParse(_concessionAmountCtrl.text.trim()) ?? 0,
           concessionReason: _concessionReasonCtrl.text.trim(),
         ),
       );
+
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
@@ -1912,14 +2015,20 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       _assignFees = true;
       _photoFile = null;
       _documents.clear();
+      for (final c in _documentLabelControllers) {
+        c.dispose();
+      }
+      _documentLabelControllers.clear();
       _systemIdCtrl.clear();
       _admissionCtrl.clear();
-      _parentNameCtrl.clear();
+      _fatherFirstNameCtrl.clear();
+      _fatherLastNameCtrl.clear();
+      _motherFirstNameCtrl.clear();
+      _motherLastNameCtrl.clear();
       _parentUsernameCtrl.clear();
       _parentPasswordCtrl.clear();
       _parentEmailCtrl.clear();
       _parentPhoneCtrl.clear();
-      _documentTypeCtrl.text = 'admission_document';
       _concessionAmountCtrl.clear();
       _concessionReasonCtrl.clear();
       _error = null;
@@ -2134,20 +2243,106 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                           ),
                         ),
                         if (_createParentLogin) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
+                          // ── Father ───────────────────────────────
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Father Details',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF307E92),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           _ResponsiveFieldRow(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Parent Name'),
+                                  _FieldLabel('Father First Name *'),
                                   _TextInput(
-                                    controller: _parentNameCtrl,
+                                    controller: _fatherFirstNameCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Required',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Father Last Name'),
+                                  _TextInput(
+                                    controller: _fatherLastNameCtrl,
                                     enabled: !_saving,
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // ── Mother ───────────────────────────────
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Mother Details',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF307E92),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Mother First Name'),
+                                  _TextInput(
+                                    controller: _motherFirstNameCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Optional',
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Mother Last Name'),
+                                  _TextInput(
+                                    controller: _motherLastNameCtrl,
+                                    enabled: !_saving,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          // ── Login Credentials ─────────────────────
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Parent Login Credentials',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: const Color(0xFF307E92),
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -2158,12 +2353,6 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   ),
                                 ],
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _ResponsiveFieldRow(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -2174,6 +2363,23 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _ResponsiveFieldRow(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _FieldLabel('Parent Email'),
+                                  _TextInput(
+                                    controller: _parentEmailCtrl,
+                                    enabled: !_saving,
+                                    hint: 'Optional',
+                                  ),
+                                ],
+                              ),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -2181,99 +2387,114 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                   _TextInput(
                                     controller: _parentPhoneCtrl,
                                     enabled: !_saving,
+                                    hint: 'Optional',
                                   ),
                                 ],
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 12),
-                          _FieldLabel('Parent Email'),
-                          _TextInput(
-                            controller: _parentEmailCtrl,
-                            enabled: !_saving,
                           ),
                         ],
                       ],
                     ),
                     const SizedBox(height: 14),
                     _FormCard(
-                      title: 'Upload Documents if any',
+                      title: 'Student Documents',
+                      trailing: _saving
+                          ? null
+                          : IconButton(
+                              tooltip: 'Add student document',
+                              icon: const Icon(
+                                Icons.add_circle_rounded,
+                                color: Color(0xFF307E92),
+                              ),
+                              onPressed: _pickAdmissionDocument,
+                            ),
                       children: [
-                        _ResponsiveFieldRow(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                        if (_documents.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
                               children: [
-                                _FieldLabel('Document Type'),
-                                _TextInput(
-                                  controller: _documentTypeCtrl,
-                                  enabled: !_saving,
-                                  hint: 'admission_document',
+                                const Icon(
+                                  Icons.upload_file_rounded,
+                                  size: 18,
+                                  color: Color(0xFF7AA5B8),
                                 ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _FieldLabel('Upload Document'),
-                                OutlinedButton.icon(
-                                  onPressed: _saving
-                                      ? null
-                                      : _pickAdmissionDocument,
-                                  icon: const Icon(
-                                    Icons.upload_file_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    _documents.isEmpty
-                                        ? 'PDF / Image'
-                                        : '${_documents.length} selected',
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Tap + to add Aadhaar, Birth Certificate, TC…',
+                                  style: GoogleFonts.dmSans(
+                                    fontSize: 12,
+                                    color: const Color(0xFF7AA5B8),
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        if (_documents.isNotEmpty) ...[
-                          const SizedBox(height: 10),
+                          )
+                        else
                           ..._documents.asMap().entries.map((entry) {
                             final index = entry.key;
                             final document = entry.value;
-                            return Material(
-                              color: Colors.transparent,
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(
-                                  Icons.description_outlined,
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  document.docType,
-                                  style: GoogleFonts.dmSans(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
+                            // Each document entry has an editable label
+                            final labelCtrl = _documentLabelControllers[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF0FAFF),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: const Color(0xFFB6DDF0),
                                   ),
                                 ),
-                                subtitle: Text(
-                                  document.fileName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                trailing: IconButton(
-                                  tooltip: 'Remove document',
-                                  onPressed: _saving
-                                      ? null
-                                      : () => setState(
-                                          () => _documents.removeAt(index),
-                                        ),
-                                  icon: const Icon(Icons.close_rounded),
+                                child: ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.fromLTRB(
+                                    10, 4, 4, 4,
+                                  ),
+                                  leading: const Icon(
+                                    Icons.description_rounded,
+                                    size: 20,
+                                    color: Color(0xFF307E92),
+                                  ),
+                                  title: TextField(
+                                    controller: labelCtrl,
+                                    enabled: !_saving,
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF1C2A32),
+                                    ),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    document.fileName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.dmSans(
+                                      fontSize: 11,
+                                      color: const Color(0xFF4E7585),
+                                    ),
+                                  ),
+                                  trailing: IconButton(
+                                    tooltip: 'Remove',
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 18,
+                                    ),
+                                    onPressed: _saving
+                                        ? null
+                                        : () => _removeDocument(index),
+                                  ),
                                 ),
                               ),
                             );
                           }),
-                        ],
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -2683,9 +2904,14 @@ class _ResponsiveFieldRow extends StatelessWidget {
 
 class _FormCard extends StatelessWidget {
   final String title;
+  final Widget? trailing;
   final List<Widget> children;
 
-  const _FormCard({required this.title, required this.children});
+  const _FormCard({
+    required this.title,
+    required this.children,
+    this.trailing,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2705,13 +2931,20 @@ class _FormCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: GoogleFonts.dmSans(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              color: const Color(0xFF24323A),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.dmSans(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF24323A),
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
           ),
           const SizedBox(height: 14),
           ...children,
