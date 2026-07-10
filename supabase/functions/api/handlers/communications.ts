@@ -1026,20 +1026,22 @@ async function lessonPlannerParentSectionIds(
 ) {
   const sectionIds = new Set<string>();
   const { data: links } = await svc.from("parent_student_links")
-    .select("student_id, students(current_section_id)")
+    .select("student_id")
     .eq("parent_user_id", user.id)
     .eq("school_id", school);
 
-  for (const link of links ?? []) {
-    const record = link as unknown as {
-      student?: Record<string, unknown>;
-      students?: Record<string, unknown> | Record<string, unknown>[];
-    };
-    const student = Array.isArray(record.students)
-      ? record.students[0]
-      : record.students ?? record.student;
-    const sectionId = text(student?.current_section_id);
-    if (sectionId) sectionIds.add(sectionId);
+  const studentIds = (links ?? []).map((l: any) => l.student_id).filter(Boolean);
+  
+  if (studentIds.length > 0) {
+    const { data: students } = await svc.from("students")
+      .select("current_section_id")
+      .eq("school_id", school)
+      .in("id", studentIds);
+      
+    for (const student of students ?? []) {
+      const sectionId = text(student.current_section_id);
+      if (sectionId) sectionIds.add(sectionId);
+    }
   }
 
   return sectionIds;

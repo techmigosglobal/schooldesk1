@@ -2140,8 +2140,6 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
                     const SizedBox(height: 14),
                     _loginAccessCard(),
                     const SizedBox(height: 14),
-                    _assignmentCard(),
-                    const SizedBox(height: 14),
                     _documentCard(),
                     const SizedBox(height: 14),
                     _InlineNotice(

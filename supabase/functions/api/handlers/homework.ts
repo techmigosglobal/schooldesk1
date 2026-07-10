@@ -194,6 +194,7 @@ export async function handleHomework(
           const studentIds = students.map((s: { id: string }) => s.id);
           const { data: links } = await svc.from("parent_student_links")
             .select("parent_user_id")
+            .eq("school_id", school)
             .in("student_id", studentIds);
 
           if (links && links.length > 0) {
@@ -384,13 +385,14 @@ export async function handleHomework(
       }: ${hwTitle}`;
 
       // Lookup teacher user_id from staff record
-      const { data: staffRows } = await svc.from("staff")
-        .select("user_id")
-        .eq("id", staffId)
+      const { data: userRow } = await svc.from("users")
+        .select("id")
+        .eq("linked_id", staffId)
+        .eq("linked_type", "staff")
         .eq("school_id", school)
         .limit(1)
         .maybeSingle();
-      const teacherUserId = text(staffRows?.user_id);
+      const teacherUserId = text(userRow?.id);
 
       const notifBase = {
         school_id: school,

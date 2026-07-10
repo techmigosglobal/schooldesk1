@@ -439,13 +439,27 @@ class _ParentLeaveRequestFormScreenState
     final name = (explicit?.toString().trim().isNotEmpty ?? false)
         ? explicit.toString().trim()
         : [first, last].where((part) => part.isNotEmpty).join(' ');
-    final classLabel =
-        [
-              row['class'] ?? row['grade_name'],
-              row['section'] ?? row['section_name'],
-            ]
-            .where((part) => part != null && part.toString().trim().isNotEmpty)
-            .join(' ');
+
+    String className = '';
+    String sectionName = '';
+    
+    if (row['class'] is Map) {
+      final c = row['class'] as Map;
+      if (c['grade'] is Map) {
+        className = c['grade']['grade_name']?.toString() ?? '';
+      } else {
+        className = c['grade_name']?.toString() ?? '';
+      }
+      sectionName = c['section_name']?.toString() ?? c['section']?.toString() ?? '';
+    } else {
+      className = row['class']?.toString() ?? row['grade_name']?.toString() ?? '';
+      sectionName = row['section']?.toString() ?? row['section_name']?.toString() ?? '';
+    }
+
+    final classLabel = [className, sectionName]
+        .where((part) => part.trim().isNotEmpty)
+        .join(' ');
+
     if (classLabel.isEmpty) return name.isEmpty ? 'Student' : name;
     return '${name.isEmpty ? 'Student' : name} - $classLabel';
   }
