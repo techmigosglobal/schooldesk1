@@ -33,6 +33,7 @@ import { handleBirthdayAlerts } from "./handlers/birthday_alerts.ts";
 import { handleNotifications } from "./handlers/notifications.ts";
 import { handleSheetsSyncStudent, handleSheetsSyncTimetable } from "./handlers/sheets_sync.ts";
 import { handleSheetsPullAll, handleSheetsPullStudents, handleSheetsPullTimetable } from "./handlers/sheets_pull.ts";
+import { handleHelp } from "./handlers/help.ts";
 
 let schemaReloadPromise: Promise<void> | null = null;
 
@@ -453,6 +454,9 @@ Deno.serve(async (req: Request) => {
   }
   if (path.startsWith("/me/students") || path.startsWith("/parents")) {
     return handleParent(req, path, method, url, client, svc, user);
+  }
+  if (path.startsWith("/help")) {
+    return handleHelp(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/monitoring")) {
     return handleMonitoring(req, path, method, url, client, svc, user);

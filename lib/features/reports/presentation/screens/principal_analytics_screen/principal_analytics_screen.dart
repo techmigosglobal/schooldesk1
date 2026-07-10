@@ -65,7 +65,7 @@ class _PrincipalAnalyticsScreenState extends State<PrincipalAnalyticsScreen>
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loadError = '$e';

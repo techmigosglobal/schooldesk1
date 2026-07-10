@@ -45,74 +45,65 @@ class ServiceLocator {
   }
 
   static BackendApiClient get apiClient {
-    assert(
-      _apiClient != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_apiClient == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _apiClient!;
   }
 
   static BackendDataService get storage {
-    assert(
-      _storage != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_storage == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _storage!;
   }
 
   static StudentRepository get studentRepository {
-    assert(
-      _studentRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_studentRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _studentRepository!;
   }
 
   static TeacherRepository get teacherRepository {
-    assert(
-      _teacherRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_teacherRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _teacherRepository!;
   }
 
   static FeeRepository get feeRepository {
-    assert(
-      _feeRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_feeRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _feeRepository!;
   }
 
   static AttendanceRepository get attendanceRepository {
-    assert(
-      _attendanceRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_attendanceRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _attendanceRepository!;
   }
 
   static LeaveRepository get leaveRepository {
-    assert(
-      _leaveRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_leaveRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _leaveRepository!;
   }
 
   static NoticeRepository get noticeRepository {
-    assert(
-      _noticeRepository != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_noticeRepository == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _noticeRepository!;
   }
 
   static AuthController get authController {
-    assert(
-      _authController != null,
-      'ServiceLocator.initialize() must be called first.',
-    );
+    if (_authController == null) {
+      throw StateError('ServiceLocator.initialize() must be called first.');
+    }
     return _authController!;
   }
 }

@@ -22,11 +22,13 @@ extension BackendAuthApi on BackendApiClient {
         final resp = LoginResponse.fromJson(loginData);
         setAuthToken(resp.token);
         setCurrentRole(resp.user.roleName);
+        setCurrentUserId(resp.user.id);
         await TokenStorageService.saveTokens(
           accessToken: resp.token,
           refreshToken: resp.refreshToken,
           roleName: resp.user.roleName,
         );
+        await TokenStorageService.saveUserId(resp.user.id);
         return resp;
       }
       throw ServerException(message: data['error'] ?? 'Login failed');
@@ -47,11 +49,13 @@ extension BackendAuthApi on BackendApiClient {
         final resp = LoginResponse.fromJson(_asMap(setupData['auth']));
         setAuthToken(resp.token);
         setCurrentRole(resp.user.roleName);
+        setCurrentUserId(resp.user.id);
         await TokenStorageService.saveTokens(
           accessToken: resp.token,
           refreshToken: resp.refreshToken,
           roleName: resp.user.roleName,
         );
+        await TokenStorageService.saveUserId(resp.user.id);
         return resp;
       }
       throw ServerException(message: data['error'] ?? 'School setup failed');
@@ -65,7 +69,7 @@ extension BackendAuthApi on BackendApiClient {
     if (_authToken != null) {
       try {
         await _dio.post('/auth/logout', data: {'refresh_token': refresh ?? ''});
-      } catch (_) {
+      } on Object catch (_) {
         // Ignore logout network failures; client-side token clear is mandatory.
       }
     }
@@ -96,6 +100,13 @@ extension BackendAuthApi on BackendApiClient {
     }
   }
 
+  /// Refreshes the JWT using the stored refresh token.
+  ///
+  /// **Deduplication**: If a refresh is already in flight when a second 401
+  /// fires, callers short-circuit to `_refreshCompleter!.future` so only
+  /// **one** network request is made. `_refreshCompleter` is reset to `null`
+  /// in `finally` *after* the Completer has been completed, meaning waiting
+  /// callers receive the result of the single in-flight request.
   Future<bool> refreshSession() async {
     if (_refreshCompleter != null) {
       return _refreshCompleter!.future;
@@ -133,7 +144,7 @@ extension BackendAuthApi on BackendApiClient {
       );
       if (!completer.isCompleted) completer.complete(true);
       return true;
-    } catch (_) {
+    } on Object catch (_) {
       if (!completer.isCompleted) completer.complete(false);
       return false;
     } finally {
@@ -163,10 +174,10 @@ extension BackendAuthApi on BackendApiClient {
         setCurrentRole(profile.roleName);
         await TokenStorageService.saveRoleName(profile.roleName);
         return true;
-      } catch (_) {
+      } on Object catch (_) {
         return currentRoleName != null;
       }
-    } catch (_) {
+    } on Object catch (_) {
       return currentRoleName != null;
     }
   }

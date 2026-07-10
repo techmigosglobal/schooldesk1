@@ -49,7 +49,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
   List<Map<String, dynamic>> get _submitted => _homework
       .where(
         (h) =>
-            (h['status'] == 'submitted' || h['submission_status']?.toString().isNotEmpty == true) &&
+            (h['status'] == 'submitted' ||
+                h['submission_status']?.toString().isNotEmpty == true) &&
             h['student_id'].toString() == _activeStudentId,
       )
       .toList();
@@ -94,7 +95,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         _homework = rows.map(_mapHomeworkFromApi).toList();
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load homework from the server.';
@@ -115,9 +116,9 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
         .toList();
     final fromList = (h['attachment_urls'] is List)
         ? (h['attachment_urls'] as List)
-            .map((e) => e?.toString().trim() ?? '')
-            .where((s) => s.isNotEmpty)
-            .toList()
+              .map((e) => e?.toString().trim() ?? '')
+              .where((s) => s.isNotEmpty)
+              .toList()
         : <String>[];
     final allAttachments = {...fromUrl, ...fromList}.toList();
     return {
@@ -271,7 +272,10 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isActive
                       ? _headerColor
@@ -310,7 +314,9 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isActive ? Colors.white : context.appTheme.onSurface,
+                        color: isActive
+                            ? Colors.white
+                            : context.appTheme.onSurface,
                       ),
                     ),
                   ],
@@ -569,7 +575,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               ),
             ),
           ],
-          if (hw['attachments'] != null && (hw['attachments'] as List).isNotEmpty) ...[
+          if (hw['attachments'] != null &&
+              (hw['attachments'] as List).isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
               'Homework Attachments:',
@@ -634,7 +641,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                       Icon(
                         Icons.rate_review_rounded,
                         size: 14,
-                        color: _text(hw['submission_status']) == 'needs_revision'
+                        color:
+                            _text(hw['submission_status']) == 'needs_revision'
                             ? context.appTheme.warning
                             : context.appTheme.success,
                       ),
@@ -644,7 +652,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
                         style: GoogleFonts.dmSans(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: _text(hw['submission_status']) == 'needs_revision'
+                          color:
+                              _text(hw['submission_status']) == 'needs_revision'
                               ? context.appTheme.warning
                               : context.appTheme.success,
                         ),
@@ -663,7 +672,8 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
               ),
             ),
           ],
-          if (isPending || _text(hw['submission_status']) == 'needs_revision') ...[
+          if (isPending ||
+              _text(hw['submission_status']) == 'needs_revision') ...[
             const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
@@ -682,6 +692,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       ),
     );
   }
+
   Widget _submissionStatusChip(Map<String, dynamic> hw) {
     final status = _text(hw['submission_status']);
     final color = status == 'reviewed'
@@ -738,7 +749,7 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
             ? 'pending'
             : 'submitted',
       };
-    } catch (_) {
+    } on Object catch (_) {
       return row;
     }
   }
@@ -769,7 +780,6 @@ class _ParentHomeworkScreenState extends State<ParentHomeworkScreen>
       await _loadData();
     }
   }
-
 
   String _studentName(Map<String, dynamic> child) {
     final name = _text(child['name']);

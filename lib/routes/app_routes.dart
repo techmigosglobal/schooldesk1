@@ -24,6 +24,8 @@ import 'package:schooldesk1/features/shared/presentation/screens/school_gallery_
 import 'package:schooldesk1/features/communication/presentation/screens/principal_event_approval_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/principal_audit_logs_screen.dart';
 import 'package:schooldesk1/features/monitoring/presentation/screens/system_monitor_screen.dart';
+import 'package:schooldesk1/features/dashboard/presentation/screens/super_admin_dashboard_screen/super_admin_dashboard_screen.dart';
+import 'package:schooldesk1/features/shared/presentation/screens/help_screen/help_screen.dart';
 
 class AppRoutes {
   static const String initial = '/';
@@ -108,8 +110,10 @@ class AppRoutes {
   // Super Admin Module Routes
   static const String superAdminDashboard = '/super-admin-dashboard-screen';
   static const String superAdminAuditLogs = '/super-admin-audit-logs-screen';
-  static const String superAdminSystemMonitor = '/super-admin-system-monitor-screen';
-  static const String superAdminErrorReporting = '/super-admin-error-reporting-screen';
+  static const String superAdminSystemMonitor =
+      '/super-admin-system-monitor-screen';
+  static const String superAdminErrorReporting =
+      '/super-admin-error-reporting-screen';
 
   // Teacher Module Routes
   static const String teacherLogin = '/teacher-login-screen';
@@ -147,6 +151,21 @@ class AppRoutes {
   static const String parentComplaints = '/parent-complaints-screen';
   static const String parentFees = '/parent-fees-screen';
   static const String parentPaymentRequestForm = '/parent-fees-screen/payment';
+
+  // Legacy short-form fee route aliases — registered alongside the primary routes
+  // above. These constants exist solely to give the route guard type-safe keys;
+  // never navigate to them directly. Use the primary constants instead.
+  static const String legacyParentFees = '/parent/fees';
+  static const String legacyPrincipalPaymentRequests =
+      '/principal/payment-requests';
+  static const String legacyPrincipalFeeStructures =
+      '/principal/fee-structures';
+  static const String legacyPrincipalInvoiceGenerate =
+      '/principal/invoice-generate';
+  static const String legacyPrincipalCollectFee = '/principal/collect-fee';
+  static const String legacyPrincipalFeeReports = '/principal/fee-reports';
+  static const String legacyPrincipalPaymentConfig =
+      '/principal/payment-config';
   static const String parentPaymentSelection =
       '/parent-fees-screen/payment-selection';
   static const String parentPaymentFlow = '/parent/payment-flow';
@@ -170,6 +189,7 @@ class AppRoutes {
   static const String profileScreen = '/profile-screen';
   static const String globalSearch = '/global-search-screen';
   static const String homeworkMessaging = '/homework-messaging-screen';
+  static const String help = '/help-screen';
 
   static Map<String, WidgetBuilder> routes = {
     initial: (context) => const LandingPageScreen(),
@@ -198,7 +218,8 @@ class AppRoutes {
     feePaymentConfig: (context) => const PrincipalPaymentConfig(),
     '/principal/payment-config': (context) => const PrincipalPaymentConfig(),
     principalPaymentRequests: (context) => const PrincipalPaymentRequests(),
-    '/principal/payment-requests': (context) => const PrincipalPaymentRequests(),
+    '/principal/payment-requests': (context) =>
+        const PrincipalPaymentRequests(),
     principalPaymentRequestDecision: (context) =>
         AdminPaymentRequestDecisionScreen(
           args: _principalPaymentRequestDecisionArgs(context),
@@ -206,14 +227,12 @@ class AppRoutes {
     principalFeeStructureForm: (context) => AdminFeeStructureFormScreen(
       args: _principalFeeStructureFormArgs(context),
     ),
-    principalInvoiceGenerationForm: (context) =>
-        PrincipalInvoiceGenerate(
-          args: _principalInvoiceGenerationFormArgs(context),
-        ),
-    '/principal/invoice-generate': (context) =>
-        PrincipalInvoiceGenerate(
-          args: _principalInvoiceGenerationFormArgs(context),
-        ),
+    principalInvoiceGenerationForm: (context) => PrincipalInvoiceGenerate(
+      args: _principalInvoiceGenerationFormArgs(context),
+    ),
+    '/principal/invoice-generate': (context) => PrincipalInvoiceGenerate(
+      args: _principalInvoiceGenerationFormArgs(context),
+    ),
     principalPaymentRecordForm: (context) => AdminPaymentRecordFormScreen(
       args: _principalPaymentRecordFormArgs(context),
     ),
@@ -274,13 +293,13 @@ class AppRoutes {
     principalTimetable: (context) => const AdminTimetableScreen(),
     principalDocuments: (context) => const AdminDocumentsScreen(),
     principalAuditLogs: (context) => const PrincipalAuditLogsScreen(),
-    principalAnalytics: (context) => PrincipalAnalyticsScreen(),
+    principalAnalytics: (context) => const PrincipalAnalyticsScreen(),
     systemMonitor: (context) => const SystemMonitorScreen(),
 
     idCardGeneration: (context) => const IdCardGenerationScreen(),
 
     // Super Admin
-    superAdminDashboard: (context) => const PrincipalDashboardScreen(),
+    superAdminDashboard: (context) => const SuperAdminDashboardScreen(),
     superAdminAuditLogs: (context) => const PrincipalAuditLogsScreen(),
     superAdminSystemMonitor: (context) => const SystemMonitorScreen(),
     superAdminErrorReporting: (context) => const SystemMonitorScreen(),
@@ -366,6 +385,7 @@ class AppRoutes {
       return ProfileManagementScreen(role: role);
     },
     globalSearch: (context) => const GlobalSearchScreen(),
+    help: (context) => const HelpScreen(),
     homeworkMessaging: (context) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
@@ -556,7 +576,6 @@ class AppRoutes {
       balances: [],
     );
   }
-
 
   static ParentPaymentSelectionArgs _parentPaymentSelectionArgs(
     BuildContext context,

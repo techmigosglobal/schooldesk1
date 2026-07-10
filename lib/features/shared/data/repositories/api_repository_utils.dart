@@ -5,7 +5,7 @@ import 'package:schooldesk1/core/utils/result.dart';
 Future<Result<T>> guardApi<T>(Future<T> Function() action) async {
   try {
     return Result.ok(await action());
-  } catch (error) {
+  } on Object catch (error) {
     return Result.err(failureFrom(error));
   }
 }

@@ -44,7 +44,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
       } else {
         setState(() => _loading = false);
       }
-    } catch (e) {
+    } on Object catch (e) {
       setState(() {
         _loading = false;
         _error = 'Failed to load data: $e';
@@ -70,7 +70,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
             .toList();
         _loading = false;
       });
-    } catch (_) {
+    } on Object catch (_) {
       setState(() {
         _healthRecords = [];
         _loading = false;
@@ -244,7 +244,7 @@ class _ParentHealthUpdateScreenState extends State<ParentHealthUpdateScreen> {
                             );
                             _loadHealthRecords(student['id'].toString());
                           }
-                        } catch (e) {
+                        } on Object catch (e) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -686,15 +686,12 @@ class _HealthRecordCard extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             '$label: ',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
           ),
         ],
       ),

@@ -3,8 +3,10 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fail, ok } from "../index.ts";
 
 function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
 }
+
 
 function nullableText(value: unknown): string | null {
   const clean = text(value);
@@ -43,13 +45,35 @@ export async function handleSheetsSyncStudent(
     let sectionId: string | null = null;
     const sectionName = text(body.section_name);
     const className = text(body.class_name);
-    // Build a combined label for section lookup: "ClassName SectionName"
+
+    if (className && sectionName) {
+      // Look up section matching both section_name and the grade's grade_name
+      const { data: sectionData, error: sectionError } = await svc
+        .from("sections")
+        .select(`
+          id,
+          grades!inner (grade_name)
+        `)
+        .eq("school_id", schoolId)
+        .eq("section_name", sectionName)
+        .eq("grades.grade_name", className)
+        .maybeSingle();
+
+      if (sectionError) {
+        if (sectionError.code !== "PGRST116") {
+          return fail(`Section lookup error: ${sectionError.message}`);
+        }
+      } else if (sectionData) {
+        sectionId = sectionData.id;
+      }
+    }
+
+    // Try combined name or fallbacks
     const combinedSectionName = className && sectionName
       ? `${className} ${sectionName}`
       : sectionName || className;
 
-    if (combinedSectionName) {
-      // Try exact combined name first, then fall back to section_name only
+    if (!sectionId && combinedSectionName) {
       const lookupNames = combinedSectionName !== sectionName && sectionName
         ? [combinedSectionName, sectionName]
         : [combinedSectionName];
@@ -59,29 +83,80 @@ export async function handleSheetsSyncStudent(
           .from("sections")
           .select("id")
           .eq("school_id", schoolId)
-          .eq("name", nameToTry)
+          .eq("section_name", nameToTry)
           .maybeSingle();
 
-        if (sectionError) return fail(`Section lookup error: ${sectionError.message}`);
-
-        if (sectionData) {
+        if (sectionError) {
+          if (sectionError.code === "PGRST116") {
+            const { data: multipleSections } = await svc
+              .from("sections")
+              .select("id")
+              .eq("school_id", schoolId)
+              .eq("section_name", nameToTry)
+              .limit(1);
+            if (multipleSections && multipleSections.length > 0) {
+              sectionId = multipleSections[0].id;
+              break;
+            }
+          } else {
+            return fail(`Section lookup error: ${sectionError.message}`);
+          }
+        } else if (sectionData) {
           sectionId = sectionData.id;
           break;
         }
       }
+    }
 
-      if (!sectionId) {
-        const { data: newSec, error: createSecErr } = await svc
-          .from("sections")
-          .insert({
-            school_id: schoolId,
-            name: combinedSectionName,
-          })
+    if (!sectionId && (sectionName || className)) {
+      const acadYear = await svc
+        .from("academic_years")
+        .select("id")
+        .eq("school_id", schoolId)
+        .eq("is_current", true)
+        .maybeSingle();
+
+      let gradeId: string | null = null;
+      if (className) {
+        const { data: gradeData } = await svc
+          .from("grades")
           .select("id")
-          .single();
-        if (createSecErr) return fail(`Failed to create section: ${createSecErr.message}`);
-        sectionId = newSec.id;
+          .eq("school_id", schoolId)
+          .eq("grade_name", className)
+          .maybeSingle();
+        if (gradeData) {
+          gradeId = gradeData.id;
+        }
       }
+
+      if (!gradeId) {
+        const { data: defaultGrade } = await svc
+          .from("grades")
+          .select("id")
+          .eq("school_id", schoolId)
+          .limit(1)
+          .maybeSingle();
+        if (defaultGrade) {
+          gradeId = defaultGrade.id;
+        }
+      }
+
+      if (!acadYear.data || !gradeId) {
+        return fail("Failed to auto-create section: current academic year or grades are not set up.");
+      }
+
+      const { data: newSec, error: createSecErr } = await svc
+        .from("sections")
+        .insert({
+          school_id: schoolId,
+          grade_id: gradeId,
+          academic_year_id: acadYear.data.id,
+          section_name: sectionName || className || "Default Section",
+        })
+        .select("id")
+        .single();
+      if (createSecErr) return fail(`Failed to create section: ${createSecErr.message}`);
+      sectionId = newSec.id;
     }
 
     // 2. Resolve or Create Parent User
@@ -307,24 +382,51 @@ export async function handleSheetsSyncTimetable(
     if (acadYearErr) return fail(`Academic year lookup error: ${acadYearErr.message}`);
 
     // 2. Resolve or Create Section (Class)
-    let sectionId: string;
+    let sectionId: string | null = null;
     const { data: sectionData, error: sectionError } = await svc
       .from("sections")
       .select("id")
       .eq("school_id", schoolId)
-      .eq("name", sectionName)
+      .eq("section_name", sectionName)
       .maybeSingle();
 
-    if (sectionError) return fail(`Section lookup error: ${sectionError.message}`);
-
-    if (sectionData) {
+    if (sectionError) {
+      if (sectionError.code === "PGRST116") {
+        const { data: multipleSections } = await svc
+          .from("sections")
+          .select("id")
+          .eq("school_id", schoolId)
+          .eq("section_name", sectionName)
+          .limit(1);
+        if (multipleSections && multipleSections.length > 0) {
+          sectionId = multipleSections[0].id;
+        }
+      } else {
+        return fail(`Section lookup error: ${sectionError.message}`);
+      }
+    } else if (sectionData) {
       sectionId = sectionData.id;
-    } else {
+    }
+
+    if (!sectionId) {
+      const { data: gradeData } = await svc
+        .from("grades")
+        .select("id")
+        .eq("school_id", schoolId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!acadYear || !gradeData) {
+        return fail("Failed to auto-create section: current academic year or grades are not set up.");
+      }
+
       const { data: newSec, error: createSecErr } = await svc
         .from("sections")
         .insert({
           school_id: schoolId,
-          name: sectionName,
+          grade_id: gradeData.id,
+          academic_year_id: acadYear.id,
+          section_name: sectionName,
         })
         .select("id")
         .single();

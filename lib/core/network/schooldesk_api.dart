@@ -12,8 +12,8 @@ class SchoolDeskApi {
     dio = Dio(
       BaseOptions(
         baseUrl: EnvConfig.apiBaseUrl,
-        connectTimeout: Duration(seconds: EnvConfig.apiTimeoutSeconds),
-        receiveTimeout: Duration(seconds: EnvConfig.apiTimeoutSeconds),
+        connectTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
+        receiveTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
         headers: const {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -59,7 +59,7 @@ class SchoolDeskApi {
       );
       _refreshCompleter!.complete(true);
       return true;
-    } catch (_) {
+    } on Object catch (_) {
       await TokenStorageService.clear();
       _refreshCompleter!.complete(false);
       return false;

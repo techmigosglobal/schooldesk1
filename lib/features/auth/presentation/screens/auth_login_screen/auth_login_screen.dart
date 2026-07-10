@@ -63,7 +63,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       unawaited(
         PushNotificationService.instance.registerDeviceTokenIfPossible(),
       );
-      
+
       // Set up notification topics for the user's role
       final role = _roleFromRoleName(response.user.roleName);
       if (role != null) {
@@ -80,7 +80,7 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       );
       await PushNotificationService.instance
           .handlePendingNotificationAfterLogin();
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -109,7 +109,8 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
       case 'student':
         return SchoolDeskRole.student;
       case 'kiosk':
-        return SchoolDeskRole.student; // Map kiosk to student for notification purposes
+        return SchoolDeskRole
+            .student; // Map kiosk to student for notification purposes
       default:
         return null;
     }
@@ -173,12 +174,12 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
             width: expanded ? 180 : 132,
             height: expanded ? 180 : 132,
             fit: BoxFit.cover,
-            semanticLabel: 'Arish Ville logo',
+            semanticLabel: '${AppConstants.appName} logo',
           ),
         ),
         const SizedBox(height: 22),
         Text(
-          'Arish Ville',
+          AppConstants.appName,
           style: GoogleFonts.dmSans(
             fontSize: expanded ? 44 : 34,
             height: 1.05,
@@ -196,10 +197,10 @@ class _AuthLoginScreenState extends State<AuthLoginScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        Wrap(
+        const Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: const [
+          children: [
             _RoleChip(label: 'Principal', icon: Icons.account_balance_rounded),
             _RoleChip(label: 'Teacher', icon: Icons.cast_for_education_rounded),
             _RoleChip(label: 'Parent', icon: Icons.family_restroom_rounded),

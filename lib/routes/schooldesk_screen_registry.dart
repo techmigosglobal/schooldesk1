@@ -86,6 +86,37 @@ class SchoolDeskScreenRegistry {
       portal: 'kiosk',
     ),
     SchoolDeskScreenMetadata(
+      route: '/super-admin-dashboard-screen',
+      title: 'Super Admin Dashboard',
+      module: 'System Administration',
+      portal: 'super_admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/super-admin-audit-logs-screen',
+      title: 'Audit Logs',
+      module: 'System Administration',
+      portal: 'super_admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/super-admin-system-monitor-screen',
+      title: 'System Monitor',
+      module: 'System Administration',
+      portal: 'super_admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/super-admin-error-reporting-screen',
+      title: 'Error Reporting',
+      module: 'System Administration',
+      portal: 'super_admin',
+    ),
+    SchoolDeskScreenMetadata(
+      route: '/help-screen',
+      title: 'Help & Tutorials',
+      module: 'General Support',
+      portal: 'shared',
+      isShared: true,
+    ),
+    SchoolDeskScreenMetadata(
       route: '/principal-dashboard-screen',
       title: 'Principal Dashboard',
       module: 'Overview',

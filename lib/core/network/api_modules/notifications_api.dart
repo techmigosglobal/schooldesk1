@@ -6,10 +6,7 @@ extension NotificationsApi on BackendApiClient {
     try {
       await _dio.post(
         '/notifications/register-token',
-        data: {
-          'fcm_token': token,
-          'device_type': _getDeviceType(),
-        },
+        data: {'fcm_token': token, 'device_type': _getDeviceType()},
       );
       if (EnvConfig.enableLogging) {
         developer.log(
@@ -55,10 +52,7 @@ extension NotificationsApi on BackendApiClient {
     Map<String, dynamic> preferences,
   ) async {
     try {
-      await _dio.put(
-        '/notifications/preferences',
-        data: preferences,
-      );
+      await _dio.put('/notifications/preferences', data: preferences);
       if (EnvConfig.enableLogging) {
         developer.log(
           'Notification preferences updated',
@@ -128,9 +122,10 @@ extension NotificationsApi on BackendApiClient {
   }
 
   String _getDeviceType() {
-    if (_dio.httpClientAdapter.toString().contains('SocketHttpClientAdapter')) {
-      return 'android';
-    }
+    // Use proper platform detection instead of inspecting adapter class names,
+    // which are implementation details that can change across dio versions.
+    if (kIsWeb) return 'web';
+    if (Platform.isAndroid) return 'android';
     return 'ios';
   }
 }

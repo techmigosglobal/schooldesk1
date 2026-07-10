@@ -1977,6 +1977,21 @@ export async function handleCommunications(
       data: payload,
     }).select().single();
     if (error) return fail(error.message);
+
+    // Trigger push and in-app notifications asynchronously
+    const promise = notifyLessonPlannerUploaded(
+      svc,
+      school,
+      payload.id,
+      payload.teacher_name,
+      payload.subject_name,
+      payload.section_id,
+    );
+    const runtime = (globalThis as any).EdgeRuntime;
+    if (runtime?.waitUntil) {
+      runtime.waitUntil(promise);
+    }
+
     return ok(normalizeLessonPlannerRow(data));
   }
 
@@ -2034,4 +2049,128 @@ export async function handleCommunications(
   }
 
   return fail("not found", 404);
+}
+
+async function notifyLessonPlannerUploaded(
+  svc: SupabaseClient,
+  school: string,
+  lessonPlannerId: string,
+  teacherName: string,
+  subjectName: string,
+  sectionId: string,
+) {
+  try {
+    // 1. Get class/section name
+    const { data } = await svc
+      .from("sections")
+      .select("section_name, grade:grades(grade_name)")
+      .eq("id", sectionId)
+      .eq("school_id", school)
+      .maybeSingle();
+    const sectionData = data as any;
+    const className = sectionData
+      ? `${sectionData.grade?.grade_name ?? ""} - ${sectionData.section_name ?? ""}`
+      : "Assigned Class";
+
+    const eventIds: string[] = [];
+
+    // 2. Notify principal(s)
+    const { data: principalUsers } = await svc
+      .from("users")
+      .select("id")
+      .eq("school_id", school)
+      .eq("role_name", "principal");
+
+    if (principalUsers && principalUsers.length > 0) {
+      for (const p of principalUsers) {
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: p.id,
+          target_role: "principal",
+          title: "New Lesson Planner",
+          body: `Teacher ${teacherName} uploaded a lesson planner for ${subjectName} in Class ${className}.`,
+          type: "lesson_planner",
+          entity_type: "lesson_planner",
+          entity_id: lessonPlannerId,
+          route: "/principal-lesson-planner-screen",
+          priority: "medium",
+          is_read: false,
+        });
+
+        const { data: evData } = await svc.from("notification_events").insert({
+          school_id: school,
+          user_id: p.id,
+          event_type: "lesson_planner",
+          event_data: {
+            title: "New Lesson Planner",
+            message: `Teacher ${teacherName} uploaded a lesson planner for ${subjectName} in Class ${className}.`,
+            reference_type: "lesson_planner",
+            reference_id: lessonPlannerId,
+            route: "/principal-lesson-planner-screen",
+          },
+        }).select("id").maybeSingle();
+        if (evData?.id) {
+          eventIds.push(evData.id);
+        }
+      }
+    }
+
+    // 3. Notify parents of student(s) in this class section
+    const { data: students } = await svc
+      .from("students")
+      .select("id")
+      .eq("school_id", school)
+      .eq("current_section_id", sectionId);
+
+    const studentIds = (students ?? []).map((s: any) => s.id);
+    if (studentIds.length > 0) {
+      const { data: links } = await svc
+        .from("parent_student_links")
+        .select("parent_user_id")
+        .eq("school_id", school)
+        .in("student_id", studentIds);
+
+      const parentUserIds = Array.from(
+        new Set((links ?? []).map((l: any) => l.parent_user_id).filter(Boolean)),
+      );
+
+      for (const pid of parentUserIds) {
+        await svc.from("notification_logs").insert({
+          school_id: school,
+          user_id: pid,
+          target_role: "parent",
+          title: "New Lesson Planner",
+          body: `A new lesson planner has been uploaded for Class ${className} for this week.`,
+          type: "lesson_planner",
+          entity_type: "lesson_planner",
+          entity_id: lessonPlannerId,
+          route: "/parent-lesson-planner-screen",
+          priority: "medium",
+          is_read: false,
+        });
+
+        const { data: evData } = await svc.from("notification_events").insert({
+          school_id: school,
+          user_id: pid,
+          event_type: "lesson_planner",
+          event_data: {
+            title: "New Lesson Planner",
+            message: `A new lesson planner has been uploaded for Class ${className} for this week.`,
+            reference_type: "lesson_planner",
+            reference_id: lessonPlannerId,
+            route: "/parent-lesson-planner-screen",
+          },
+        }).select("id").maybeSingle();
+        if (evData?.id) {
+          eventIds.push(evData.id);
+        }
+      }
+    }
+
+    if (eventIds.length > 0) {
+      triggerPushProcessing(eventIds);
+    }
+  } catch (err) {
+    console.error("Failed to trigger lesson planner notifications:", err);
+  }
 }

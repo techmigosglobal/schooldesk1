@@ -36,12 +36,14 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
       if (!mounted) return;
       setState(() {
         _complaints = data
-            .where((c) => c['role'] == 'parent' || c['reported_by_role'] == 'parent')
+            .where(
+              (c) => c['role'] == 'parent' || c['reported_by_role'] == 'parent',
+            )
             .toList();
         _loading = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -64,12 +66,12 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
           complaint,
         );
         if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
-        
+
         // Report to super admin if it's an error
         if (complaint['type'] == 'error') {
           await _reportToSuperAdmin(saved);
         }
-        
+
         final localIndex = _complaints.indexWhere((c) => c['id'] == id);
         if (localIndex != -1) {
           setState(() => _complaints[localIndex] = saved);
@@ -86,7 +88,7 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
         setState(() => _complaints[localIndex] = saved);
       }
       return true;
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -109,7 +111,7 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
         'reported_by_role': 'parent',
         'severity': 'high',
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -137,10 +139,10 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return SchoolDeskModuleScaffold(
+      return const SchoolDeskModuleScaffold(
         title: 'Complaints',
         subtitle: 'Submit support tickets and track resolution',
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
     if (_error != null) {
@@ -271,9 +273,7 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
       decoration: BoxDecoration(
         color: context.appTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: statusColor.withAlpha(50),
-        ),
+        border: Border.all(color: statusColor.withAlpha(50)),
         boxShadow: [
           BoxShadow(
             color: statusColor.withAlpha(18),
@@ -372,7 +372,9 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
                         ),
                       ],
                     ),
-                    if ((complaint['category'] ?? '').toString().isNotEmpty) ...[
+                    if ((complaint['category'] ?? '')
+                        .toString()
+                        .isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -483,9 +485,12 @@ class _ParentComplaintScreenState extends State<ParentComplaintScreen>
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: selectedCategory,
-              items: ['Academic', 'Facility', 'Staff', 'Other']
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
+              items: [
+                'Academic',
+                'Facility',
+                'Staff',
+                'Other',
+              ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) {
                 if (v != null) selectedCategory = v;
               },

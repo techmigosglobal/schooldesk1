@@ -76,7 +76,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         } else if (years.isNotEmpty) {
           effectiveAcademicYearId = years.first.id;
         }
-      } catch (_) {
+      } on Object catch (_) {
         // If we can't get academic year, proceed with empty — backend may still accept.
       }
 
@@ -135,7 +135,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
         _students = attendanceRows;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -226,7 +226,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       setState(() => _saving = false);
       await _loadFlow();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -285,7 +285,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
       setState(() => _saving = false);
       await _loadFlow();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -297,8 +297,6 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
       );
     }
   }
-
-
 
   void _markAll(String status) {
     if (_session?.isFinalized ?? false) return;
@@ -442,7 +440,7 @@ class _TeacherAttendanceScreenState extends State<TeacherAttendanceScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          TeacherFlowSectionHeader(title: 'Swipe-free Quick Marking'),
+          const TeacherFlowSectionHeader(title: 'Swipe-free Quick Marking'),
           if (unmarkedCount > 0 && !locked) ...[
             const SizedBox(height: 8),
             TeacherInfoPill(

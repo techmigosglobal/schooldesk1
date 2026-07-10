@@ -107,9 +107,7 @@ class _PrincipalChatCommunicationsScreenState
             monitor: true,
           ),
         ),
-        _safeChatRows(
-          () => api.getUnifiedChatContacts(role: 'principal'),
-        ),
+        _safeChatRows(() => api.getUnifiedChatContacts(role: 'principal')),
       ]);
       final profile = results[0] as dynamic;
       final monitor = results[1] as List<Map<String, dynamic>>;
@@ -189,7 +187,7 @@ class _PrincipalChatCommunicationsScreenState
           !_isContactPlaceholder(selected)) {
         unawaited(_markConversationRead(selected, monitorMode));
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -203,7 +201,7 @@ class _PrincipalChatCommunicationsScreenState
   ) async {
     try {
       return await load();
-    } catch (_) {
+    } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
@@ -213,7 +211,7 @@ class _PrincipalChatCommunicationsScreenState
   ) async {
     try {
       return await load();
-    } catch (_) {
+    } on Object catch (_) {
       return const <dynamic>[];
     }
   }
@@ -295,7 +293,7 @@ class _PrincipalChatCommunicationsScreenState
       await BackendApiClient.instance.markUnifiedChatConversationRead(
         conversationId,
       );
-    } catch (_) {
+    } on Object catch (_) {
       // Keep the UI responsive; the next refresh can retry the backend state.
     }
     if (!mounted) return;
@@ -406,6 +404,10 @@ class _PrincipalChatCommunicationsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 840;
+    final hasSelection = _tabController.index == 0
+        ? _selectedMonitorConversation != null
+        : _selectedDirectConversation != null;
     return SchoolDeskModuleScaffold(
       title: 'Messages',
       subtitle: 'Monitor parent-teacher chats and message staff or parents',
@@ -413,9 +415,9 @@ class _PrincipalChatCommunicationsScreenState
         selectedIndex: PrincipalNav.messages,
         onDestinationSelected: (_) {},
       ),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.principal,
-      ),
+      floatingActionButton: (!isWide && hasSelection)
+          ? null
+          : const DashboardFabWidget(role: DashboardRole.principal),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       bottom: TabBar(
         controller: _tabController,
@@ -679,7 +681,22 @@ class _PrincipalChatCommunicationsScreenState
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
           selected: selected,
-          leading: CircleAvatar(child: Text(_initials(title))),
+          leading: CircleAvatar(
+            backgroundColor: monitorMode
+                ? const Color(0xFFF5F3FF)
+                : _directRoleLabel(row) == 'Teacher'
+                ? const Color(0xFFDCFCE7)
+                : const Color(0xFFDBEAFE),
+            foregroundColor: monitorMode
+                ? const Color(0xFF7C3AED)
+                : _directRoleLabel(row) == 'Teacher'
+                ? const Color(0xFF16A34A)
+                : const Color(0xFF2563EB),
+            child: Text(
+              _initials(title),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           title: Text(
             monitorMode ? title : '${_directRoleLabel(row)}: $title',
             maxLines: 1,
@@ -688,7 +705,9 @@ class _PrincipalChatCommunicationsScreenState
           subtitle: Text(
             monitorMode
                 ? '${_studentLine(row)} - ${_text(row['last_message']).isEmpty ? 'Parent-teacher chat' : _text(row['last_message'])}'
-                : _text(row['last_message']).isEmpty ? subtitle : _text(row['last_message']),
+                : _text(row['last_message']).isEmpty
+                ? subtitle
+                : _text(row['last_message']),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -929,7 +948,7 @@ class _PrincipalChatCommunicationsScreenState
     if (contact is Map) return _text(contact['id']);
     try {
       return _text(contact.id);
-    } catch (_) {
+    } on Object catch (_) {
       return '';
     }
   }
@@ -946,7 +965,7 @@ class _PrincipalChatCommunicationsScreenState
     }
     try {
       return _text(contact.name, fallback: _text(contact.username));
-    } catch (_) {
+    } on Object catch (_) {
       return [
         _contactFirstName(contact),
         _contactLastName(contact),
@@ -958,7 +977,7 @@ class _PrincipalChatCommunicationsScreenState
     if (contact is Map) return _text(contact['first_name']);
     try {
       return _text(contact.firstName);
-    } catch (_) {
+    } on Object catch (_) {
       return '';
     }
   }
@@ -967,7 +986,7 @@ class _PrincipalChatCommunicationsScreenState
     if (contact is Map) return _text(contact['last_name']);
     try {
       return _text(contact.lastName);
-    } catch (_) {
+    } on Object catch (_) {
       return '';
     }
   }

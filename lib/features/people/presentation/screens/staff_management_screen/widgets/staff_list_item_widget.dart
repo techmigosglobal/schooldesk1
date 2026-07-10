@@ -123,7 +123,10 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
             decoration: BoxDecoration(
               color: context.appTheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.appTheme.outlineVariant, width: 1),
+              border: Border.all(
+                color: context.appTheme.outlineVariant,
+                width: 1,
+              ),
             ),
             clipBehavior: Clip.hardEdge,
             child: Column(
@@ -434,7 +437,9 @@ class _StaffListItemWidgetState extends State<StaffListItemWidget>
   }
 
   Widget _buildAttendanceChip(double percent) {
-    final color = percent >= 90 ? context.appTheme.success : context.appTheme.warning;
+    final color = percent >= 90
+        ? context.appTheme.success
+        : context.appTheme.warning;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

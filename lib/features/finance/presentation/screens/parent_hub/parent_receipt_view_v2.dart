@@ -27,8 +27,12 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   Future<void> _loadReceipt() async {
     final pr = widget.args.paymentRequest;
     if (pr != null) {
-      final invoice = pr['invoice'] is Map ? Map<String, dynamic>.from(pr['invoice'] as Map) : const <String, dynamic>{};
-      final student = pr['student'] is Map ? Map<String, dynamic>.from(pr['student'] as Map) : const <String, dynamic>{};
+      final invoice = pr['invoice'] is Map
+          ? Map<String, dynamic>.from(pr['invoice'] as Map)
+          : const <String, dynamic>{};
+      final student = pr['student'] is Map
+          ? Map<String, dynamic>.from(pr['student'] as Map)
+          : const <String, dynamic>{};
 
       setState(() {
         _receiptData = {
@@ -36,10 +40,14 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           'school_name': invoice['school_name'] ?? 'School',
           'amount': (pr['amount'] as num?)?.toDouble() ?? 0.0,
           'payment_mode': pr['payment_mode'] ?? 'UPI',
-          'paid_at': pr['reviewed_at'] ?? pr['updated_at'] ?? pr['created_at'] ?? '',
-          'student_name': '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim(),
+          'paid_at':
+              pr['reviewed_at'] ?? pr['updated_at'] ?? pr['created_at'] ?? '',
+          'student_name':
+              '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+                  .trim(),
           'invoice_number': invoice['invoice_number'] ?? '',
-          'transaction_ref': pr['transaction_ref'] ?? pr['transaction_id'] ?? '',
+          'transaction_ref':
+              pr['transaction_ref'] ?? pr['transaction_id'] ?? '',
         };
         _loading = false;
       });
@@ -58,8 +66,12 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       );
       if (list.isNotEmpty) {
         final prMatch = list.first;
-        final invoice = prMatch['invoice'] is Map ? Map<String, dynamic>.from(prMatch['invoice'] as Map) : const <String, dynamic>{};
-        final student = prMatch['student'] is Map ? Map<String, dynamic>.from(prMatch['student'] as Map) : const <String, dynamic>{};
+        final invoice = prMatch['invoice'] is Map
+            ? Map<String, dynamic>.from(prMatch['invoice'] as Map)
+            : const <String, dynamic>{};
+        final student = prMatch['student'] is Map
+            ? Map<String, dynamic>.from(prMatch['student'] as Map)
+            : const <String, dynamic>{};
 
         setState(() {
           _receiptData = {
@@ -67,10 +79,17 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
             'school_name': invoice['school_name'] ?? 'School',
             'amount': (prMatch['amount'] as num?)?.toDouble() ?? 0.0,
             'payment_mode': prMatch['payment_mode'] ?? 'UPI',
-            'paid_at': prMatch['reviewed_at'] ?? prMatch['updated_at'] ?? prMatch['created_at'] ?? '',
-            'student_name': '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim(),
+            'paid_at':
+                prMatch['reviewed_at'] ??
+                prMatch['updated_at'] ??
+                prMatch['created_at'] ??
+                '',
+            'student_name':
+                '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+                    .trim(),
             'invoice_number': invoice['invoice_number'] ?? '',
-            'transaction_ref': prMatch['transaction_ref'] ?? prMatch['transaction_id'] ?? '',
+            'transaction_ref':
+                prMatch['transaction_ref'] ?? prMatch['transaction_id'] ?? '',
           };
           _loading = false;
         });
@@ -80,7 +99,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
           _loading = false;
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -105,8 +124,8 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? _buildError()
-                : _buildReceiptContent(),
+            ? _buildError()
+            : _buildReceiptContent(),
       ),
     );
   }
@@ -118,11 +137,18 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded, color: context.appTheme.error, size: 48),
+            Icon(
+              Icons.error_outline_rounded,
+              color: context.appTheme.error,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'Failed to Load Receipt',
-              style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 18),
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -131,10 +157,7 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
               style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _loadReceipt,
-              child: const Text('Retry'),
-            ),
+            ElevatedButton(onPressed: _loadReceipt, child: const Text('Retry')),
           ],
         ),
       ),
@@ -174,7 +197,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1A6B4A).withOpacity(0.1),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(16),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -190,12 +215,19 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                           children: [
                             Text(
                               schoolName,
-                              style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.bold),
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               'Payment Receipt',
-                              style: GoogleFonts.ibmPlexSans(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF1A6B4A)),
+                              style: GoogleFonts.ibmPlexSans(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1A6B4A),
+                              ),
                             ),
                           ],
                         ),
@@ -232,11 +264,18 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                         children: [
                           Text(
                             'Amount Paid',
-                            style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15),
+                            style: GoogleFonts.ibmPlexSans(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
                           Text(
                             '₹${amount.toStringAsFixed(2)}',
-                            style: GoogleFonts.ibmPlexSans(fontSize: 18, fontWeight: FontWeight.w800, color: const Color(0xFF1A6B4A)),
+                            style: GoogleFonts.ibmPlexSans(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFF1A6B4A),
+                            ),
                           ),
                         ],
                       ),
@@ -248,12 +287,18 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: context.appTheme.surfaceVariant.withOpacity(0.2),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(16),
+                    ),
                   ),
                   child: Text(
                     'This is a computer generated receipt and does not require a physical signature.',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted, fontStyle: FontStyle.italic),
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 11,
+                      color: context.appTheme.muted,
+                      fontStyle: FontStyle.italic,
+                    ),
                   ),
                 ),
               ],
@@ -267,7 +312,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                   onPressed: () {
                     // Simulating Share
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Receipt shared successfully')),
+                      const SnackBar(
+                        content: Text('Receipt shared successfully'),
+                      ),
                     );
                   },
                   icon: const Icon(Icons.share_rounded),
@@ -276,7 +323,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                     foregroundColor: const Color(0xFF1A6B4A),
                     side: const BorderSide(color: Color(0xFF1A6B4A)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -292,7 +341,9 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
                     backgroundColor: const Color(0xFF1A6B4A),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     elevation: 0,
                   ),
                 ),
@@ -314,12 +365,19 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
             ),
             child: Text(
               value,
-              style: GoogleFonts.ibmPlexSans(fontSize: 12, fontWeight: FontWeight.bold, color: context.appTheme.success),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: context.appTheme.success,
+              ),
             ),
           )
         : Text(
             value,
-            style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 13),
+            style: GoogleFonts.ibmPlexSans(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
           );
 
     return Row(
@@ -327,7 +385,10 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
       children: [
         Text(
           label,
-          style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted, fontSize: 13),
+          style: GoogleFonts.ibmPlexSans(
+            color: context.appTheme.muted,
+            fontSize: 13,
+          ),
         ),
         valWidget,
       ],
@@ -343,7 +404,20 @@ class _ParentReceiptViewV2State extends State<ParentReceiptViewV2> {
   String _formatDateTime(String raw) {
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return raw.isEmpty ? '-' : raw;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${parsed.day.toString().padLeft(2, '0')} ${months[parsed.month - 1]} ${parsed.year} · ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
   }
 }

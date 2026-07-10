@@ -64,7 +64,7 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
             )
             .toList();
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _teachers = [];
@@ -95,7 +95,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: context.appTheme.background,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       appBar: AppBar(
         backgroundColor: context.appTheme.surface,
@@ -204,7 +206,9 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                   style: GoogleFonts.dmSans(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: isOnLeave ? context.appTheme.warning : context.appTheme.primary,
+                    color: isOnLeave
+                        ? context.appTheme.warning
+                        : context.appTheme.primary,
                   ),
                 ),
               ),
@@ -351,7 +355,8 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
                               ? context.appTheme.warningContainer
                               : context.appTheme.successContainer,
                           borderRadius: BorderRadius.circular(6),
-                        ),                          child: Text(
+                        ),
+                        child: Text(
                           _titleCase(l['status']?.toString() ?? ''),
                           style: GoogleFonts.dmSans(
                             fontSize: 10,
@@ -567,7 +572,10 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appTheme.success,
+      ),
     );
   }
 
@@ -593,7 +601,10 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appTheme.success,
+      ),
     );
   }
 
@@ -619,7 +630,10 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
     );
     if (!mounted || message == null) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: context.appTheme.success),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: context.appTheme.success,
+      ),
     );
   }
 
@@ -655,10 +669,13 @@ class _AdminTeachersScreenState extends State<AdminTeachersScreen>
               : context.appTheme.error,
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: context.appTheme.error),
+        SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
       );
     }
   }
@@ -725,7 +742,7 @@ class _TeacherFormPageState extends State<_TeacherFormPage> {
         ),
       );
       if (mounted) Navigator.pop(context, message);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -849,7 +866,7 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
     try {
       final message = await widget.onSubmit(_selected);
       if (mounted) Navigator.pop(context, message);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -908,7 +925,9 @@ class _TeacherSubjectPageState extends State<_TeacherSubjectPage> {
                     )
                   : const Icon(Icons.assignment_ind_rounded),
               label: Text(_saving ? 'Assigning...' : 'Assign'),
-              style: FilledButton.styleFrom(backgroundColor: context.appTheme.primary),
+              style: FilledButton.styleFrom(
+                backgroundColor: context.appTheme.primary,
+              ),
             ),
           ],
         ),

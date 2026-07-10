@@ -82,7 +82,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
         _invoices = raw.map(normalizeInvoice).toList();
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
@@ -212,9 +212,9 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
             },
             child: Row(
               children: [
-                FeeIconBadge(
+                const FeeIconBadge(
                   icon: Icons.person_outlined,
-                  color: const Color(0xFF2563EB),
+                  color: Color(0xFF2563EB),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -254,9 +254,9 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
         FeeCard(
           child: Row(
             children: [
-              FeeIconBadge(
+              const FeeIconBadge(
                 icon: Icons.person_outlined,
-                color: const Color(0xFF2563EB),
+                color: Color(0xFF2563EB),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -538,7 +538,7 @@ class _FeeCollectScreenState extends State<FeeCollectScreen> {
       _transactionController.clear();
       _notesController.clear();
       await _loadData();
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(

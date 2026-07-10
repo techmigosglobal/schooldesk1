@@ -44,6 +44,10 @@ class AdminTimetablePeriodFormArgs {
   final List<Map<String, dynamic>> rooms;
   final Map<String, dynamic>? period;
 
+  /// Existing slot type when editing ('regular', 'free', 'break').
+  /// Defaults to 'regular' for new periods.
+  final String slotType;
+
   const AdminTimetablePeriodFormArgs({
     required this.classLabel,
     required this.section,
@@ -56,6 +60,7 @@ class AdminTimetablePeriodFormArgs {
     required this.staff,
     required this.rooms,
     this.period,
+    this.slotType = 'regular',
   });
 
   bool get isEditing => period != null;
@@ -348,7 +353,7 @@ class _AdminTimetableGenerationFormScreenState
       );
       if (!mounted) return;
       setState(() => _preview = preview);
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, 'Suggestion preview failed: ${_cleanError(error)}');
     } finally {
       if (mounted) setState(() => _loadingPreview = false);
@@ -376,7 +381,7 @@ class _AdminTimetableGenerationFormScreenState
           'Generated ${result.created} periods, skipped ${result.skipped}',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, 'Timetable generation failed: ${_cleanError(error)}');
     } finally {
       if (mounted) setState(() => _applying = false);
@@ -642,29 +647,50 @@ class _AdminTimetablePeriodFormScreenState
       );
       return;
     }
-    final payload = {
-      'section_id': widget.args.section!.id,
-      'academic_year_id': widget.args.academicYear!.id,
-      'term_id': widget.args.termId,
-      'day_of_week': widget.args.dayNumber,
-      'period_number': int.parse(_periodController.text.trim()),
-      'subject_id': _subjectId,
-      'staff_id': _staffId,
-      'room_id': _roomId,
-      'start_time': _startController.text.trim(),
-      'end_time': _endController.text.trim(),
-    };
+    // Preserve the existing slot_type from the backend record when editing;
+    // fall back to the value passed via args (defaults to 'regular').
+    final existingSlotType = widget.args.isEditing
+        ? '${widget.args.period?['slot_type'] ?? widget.args.slotType}'
+                  .trim()
+                  .isEmpty
+              ? widget.args.slotType
+              : '${widget.args.period?['slot_type']}'.trim()
+        : widget.args.slotType;
+
     setState(() => _saving = true);
     try {
+      final api = BackendApiClient.instance;
       if (widget.args.isEditing) {
         final id = '${widget.args.period?['id'] ?? ''}'.trim();
         if (id.isEmpty) throw Exception('Backend timetable slot ID is missing');
-        await BackendApiClient.instance.updateRaw(
-          '/timetable/slots/$id',
-          payload,
+        await api.updateTimetableSlot(
+          id: id,
+          sectionId: widget.args.section!.id,
+          academicYearId: widget.args.academicYear!.id,
+          termId: widget.args.termId,
+          dayOfWeek: widget.args.dayNumber,
+          periodNumber: int.parse(_periodController.text.trim()),
+          subjectId: _subjectId,
+          staffId: _staffId,
+          startTime: _startController.text.trim(),
+          endTime: _endController.text.trim(),
+          roomId: _roomId,
+          slotType: existingSlotType,
         );
       } else {
-        await BackendApiClient.instance.createRaw('/timetable/slots', payload);
+        await api.createTimetableSlot(
+          sectionId: widget.args.section!.id,
+          academicYearId: widget.args.academicYear!.id,
+          termId: widget.args.termId,
+          dayOfWeek: widget.args.dayNumber,
+          periodNumber: int.parse(_periodController.text.trim()),
+          subjectId: _subjectId,
+          staffId: _staffId,
+          startTime: _startController.text.trim(),
+          endTime: _endController.text.trim(),
+          roomId: _roomId,
+          slotType: existingSlotType,
+        );
       }
       if (!mounted) return;
       Navigator.pop(
@@ -675,7 +701,7 @@ class _AdminTimetablePeriodFormScreenState
               : 'Period saved to backend',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, 'Period save failed: ${_cleanError(error)}');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -878,7 +904,7 @@ class _AdminTimetableSubstitutionFormScreenState
         context,
         const AdminTimetableFormResult('Substitute assignment saved'),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(
         context,
         'Substitute assignment failed: ${_cleanError(error)}',

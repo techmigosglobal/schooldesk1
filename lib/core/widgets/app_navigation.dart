@@ -79,7 +79,7 @@ class _PrincipalDrawerState extends State<PrincipalDrawer> {
             ? 'Principal'
             : profile.roleName.trim();
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
     }
   }
@@ -497,7 +497,7 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
             ? 'Super Administrator'
             : profile.roleName.trim();
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
     }
   }

@@ -21,14 +21,14 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   bool _loadingConfig = true;
   bool _creatingIntent = false;
   bool _submitting = false;
-  
+
   Map<String, dynamic> _paymentConfig = const {};
   Map<String, dynamic>? _paymentIntent;
-  
+
   final Set<String> _selectedMonthNames = <String>{};
   final _remarksController = TextEditingController();
   final _utrController = TextEditingController();
-  
+
   String? _proofName;
   String? _proofPath;
   String? _configError;
@@ -48,18 +48,29 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   bool get _isTuition => _text(_selectedFee['fee_type']) == 'tuition';
 
   static const List<String> _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   List<String> get _allowedMonthNames {
-    final configured = (_selectedFee['allowed_month_names'] is List
-            ? (_selectedFee['allowed_month_names'] as List)
-                .map((value) => '$value'.trim())
-                .where((value) => value.isNotEmpty)
-                .toList()
-            : const <String>[])
-        .cast<String>();
+    final configured =
+        (_selectedFee['allowed_month_names'] is List
+                ? (_selectedFee['allowed_month_names'] as List)
+                      .map((value) => '$value'.trim())
+                      .where((value) => value.isNotEmpty)
+                      .toList()
+                : const <String>[])
+            .cast<String>();
     if (configured.isEmpty && _isTuition) {
       return _monthNames;
     }
@@ -69,9 +80,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   List<String> get _paidMonthNames =>
       (_selectedFee['paid_month_names'] is List
               ? (_selectedFee['paid_month_names'] as List)
-                  .map((value) => '$value'.trim())
-                  .where((value) => value.isNotEmpty)
-                  .toList()
+                    .map((value) => '$value'.trim())
+                    .where((value) => value.isNotEmpty)
+                    .toList()
               : const <String>[])
           .cast<String>();
 
@@ -82,28 +93,32 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   double get _totalAmount {
     final balance = (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
     if (_isTuition) {
-      final monthly = (_selectedFee['monthly_amount'] as num?)?.toDouble() ?? (balance / 12);
+      final monthly =
+          (_selectedFee['monthly_amount'] as num?)?.toDouble() ??
+          (balance / 12);
       return monthly * _selectedMonthNames.length;
     }
     return balance;
   }
 
   String get _upiId => _text(_paymentConfig['upi_id']);
-  String get _payeeName => _text(_paymentConfig['payee_name'], fallback: 'School');
+  String get _payeeName =>
+      _text(_paymentConfig['payee_name'], fallback: 'School');
   String get _qrImageUrl => _text(_paymentConfig['qr_image_url']);
-  
+
   Map<String, dynamic> get _resubmissionRequest =>
       widget.args.paymentRequest == null
-          ? const <String, dynamic>{}
-          : Map<String, dynamic>.from(widget.args.paymentRequest!);
+      ? const <String, dynamic>{}
+      : Map<String, dynamic>.from(widget.args.paymentRequest!);
 
   bool get _isClarificationResubmit =>
-      _text(_resubmissionRequest['status']).toLowerCase() == 'clarification_required';
+      _text(_resubmissionRequest['status']).toLowerCase() ==
+      'clarification_required';
 
   String get _intentId => _text(_paymentIntent?['id']);
   String get _intentReference => _text(_paymentIntent?['request_reference']);
   String get _intentUpiUri => _text(_paymentIntent?['upi_uri']);
-  
+
   String get _effectiveUpiUri {
     if (_intentUpiUri.isNotEmpty) {
       return _intentUpiUri;
@@ -155,14 +170,16 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       final invoiceId = _fees.isEmpty ? '' : _text(_fees.first['id']);
       final config = await BackendApiClient.instance.getPaymentConfig(
         invoiceId: invoiceId,
-        refreshNonce: forceRefresh ? DateTime.now().millisecondsSinceEpoch : null,
+        refreshNonce: forceRefresh
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
       );
       if (!mounted) return;
       setState(() {
         _paymentConfig = config;
         _loadingConfig = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _configError = e.toString();
@@ -175,7 +192,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
     if (_fees.isEmpty) return;
     if (_isTuition && _selectedMonthNames.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select at least one month to pay.')),
+        const SnackBar(
+          content: Text('Please select at least one month to pay.'),
+        ),
       );
       return;
     }
@@ -185,7 +204,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       final intent = await BackendApiClient.instance.createFeePaymentIntent(
         invoiceId: '${_selectedFee['id']}',
         paymentMethod: 'upi',
-        selectedMonthNames: _isTuition ? _selectedMonthNames.toList() : const [],
+        selectedMonthNames: _isTuition
+            ? _selectedMonthNames.toList()
+            : const [],
         selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
         selectedTerms: 0,
         remarks: _remarksController.text.trim(),
@@ -196,7 +217,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         _creatingIntent = false;
         _currentStep = 2;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         setState(() => _creatingIntent = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -221,11 +242,11 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           });
         }
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to pick file: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick file: $e')));
       }
     }
   }
@@ -233,7 +254,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   Future<void> _submitPaymentProof() async {
     if (_proofPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload your payment screenshot proof.')),
+        const SnackBar(
+          content: Text('Please upload your payment screenshot proof.'),
+        ),
       );
       return;
     }
@@ -259,7 +282,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           transactionRef: _utrController.text.trim(),
           screenshotPath: _proofPath!,
           screenshotName: _proofName!,
-          selectedMonthNames: _isTuition ? _selectedMonthNames.toList() : const [],
+          selectedMonthNames: _isTuition
+              ? _selectedMonthNames.toList()
+              : const [],
           selectedMonths: _isTuition ? _selectedMonthNames.length : 0,
           remarks: _remarksController.text.trim(),
         );
@@ -269,7 +294,7 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         _submitting = false;
         _currentStep = 3;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         setState(() => _submitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -308,11 +333,11 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               child: _loadingConfig
                   ? const Center(child: CircularProgressIndicator())
                   : _configError != null
-                      ? _buildConfigError()
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(20),
-                          child: _buildCurrentStepView(),
-                        ),
+                  ? _buildConfigError()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: _buildCurrentStepView(),
+                    ),
             ),
           ],
         ),
@@ -327,23 +352,43 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _stepNode(1, 'Confirm', isActive: _currentStep >= 1, isCompleted: _currentStep > 1),
+          _stepNode(
+            1,
+            'Confirm',
+            isActive: _currentStep >= 1,
+            isCompleted: _currentStep > 1,
+          ),
           _stepDivider(isActive: _currentStep > 1),
-          _stepNode(2, 'Pay', isActive: _currentStep >= 2, isCompleted: _currentStep > 2),
+          _stepNode(
+            2,
+            'Pay',
+            isActive: _currentStep >= 2,
+            isCompleted: _currentStep > 2,
+          ),
           _stepDivider(isActive: _currentStep > 2),
-          _stepNode(3, 'Done', isActive: _currentStep >= 3, isCompleted: _currentStep > 3),
+          _stepNode(
+            3,
+            'Done',
+            isActive: _currentStep >= 3,
+            isCompleted: _currentStep > 3,
+          ),
         ],
       ),
     );
   }
 
-  Widget _stepNode(int index, String label, {required bool isActive, required bool isCompleted}) {
-    final activeColor = Color(0xFF1A6B4A);
+  Widget _stepNode(
+    int index,
+    String label, {
+    required bool isActive,
+    required bool isCompleted,
+  }) {
+    final activeColor = const Color(0xFF1A6B4A);
     final color = isCompleted
         ? activeColor
         : isActive
-            ? activeColor
-            : context.appTheme.muted;
+        ? activeColor
+        : context.appTheme.muted;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -386,7 +431,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       child: Container(
         height: 2,
         margin: const EdgeInsets.symmetric(horizontal: 16),
-        color: isActive ? const Color(0xFF1A6B4A) : context.appTheme.outlineVariant,
+        color: isActive
+            ? const Color(0xFF1A6B4A)
+            : context.appTheme.outlineVariant,
       ),
     );
   }
@@ -398,11 +445,18 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.warning_amber_rounded, color: context.appTheme.error, size: 48),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: context.appTheme.error,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'UPI Payment Unconfigured',
-              style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 18),
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -436,13 +490,16 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
   Widget _buildStep1() {
     final componentName = _selectedFee['component'] ?? 'Fee Component';
     final amountDue = (_selectedFee['amount'] as num?)?.toDouble() ?? 0.0;
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           componentName,
-          style: GoogleFonts.ibmPlexSans(fontSize: 18, fontWeight: FontWeight.w700),
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 8),
         Container(
@@ -456,7 +513,13 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               _infoRow('Total Outstanding', _money(amountDue)),
               if (_isTuition) ...[
                 const Divider(height: 24),
-                _infoRow('Monthly Rate', _money((_selectedFee['monthly_amount'] as num?)?.toDouble() ?? amountDue / 12)),
+                _infoRow(
+                  'Monthly Rate',
+                  _money(
+                    (_selectedFee['monthly_amount'] as num?)?.toDouble() ??
+                        amountDue / 12,
+                  ),
+                ),
               ],
             ],
           ),
@@ -465,7 +528,10 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
           const SizedBox(height: 20),
           Text(
             'Select Months to Pay',
-            style: GoogleFonts.ibmPlexSans(fontSize: 15, fontWeight: FontWeight.w700),
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -490,7 +556,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                 selectedColor: const Color(0xFF1A6B4A).withOpacity(0.15),
                 checkmarkColor: const Color(0xFF1A6B4A),
                 labelStyle: GoogleFonts.ibmPlexSans(
-                  color: isSelected ? const Color(0xFF1A6B4A) : context.appTheme.onSurface,
+                  color: isSelected
+                      ? const Color(0xFF1A6B4A)
+                      : context.appTheme.onSurface,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                   fontSize: 12,
                 ),
@@ -513,11 +581,18 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                 _isTuition
                     ? 'Paying for ${_selectedMonthNames.length} month(s)'
                     : 'Paying full installment',
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w600, color: context.appTheme.primary),
+                style: GoogleFonts.ibmPlexSans(
+                  fontWeight: FontWeight.w600,
+                  color: context.appTheme.primary,
+                ),
               ),
               Text(
                 _money(_totalAmount),
-                style: GoogleFonts.ibmPlexSans(fontSize: 20, fontWeight: FontWeight.w800, color: context.appTheme.primary),
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: context.appTheme.primary,
+                ),
               ),
             ],
           ),
@@ -531,17 +606,25 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               backgroundColor: const Color(0xFF1A6B4A),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               elevation: 0,
             ),
             child: _creatingIntent
                 ? const SizedBox.square(
                     dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(
                     'Continue to Pay',
-                    style: GoogleFonts.ibmPlexSans(fontSize: 15, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
         ),
@@ -568,12 +651,18 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                   children: [
                     Text(
                       'Scan School UPI QR Code',
-                      style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w700, fontSize: 14),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Copy UPI ID to pay manually, or scan QR below. No auto redirection is required.',
-                      style: GoogleFonts.ibmPlexSans(fontSize: 12, color: context.appTheme.muted),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 12,
+                        color: context.appTheme.muted,
+                      ),
                     ),
                   ],
                 ),
@@ -617,12 +706,19 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               const SizedBox(height: 12),
               SelectableText(
                 _upiId,
-                style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.bold),
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 'Payee: $_payeeName',
-                style: GoogleFonts.ibmPlexSans(fontSize: 12, color: context.appTheme.muted, fontWeight: FontWeight.w600),
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -647,7 +743,10 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
         const SizedBox(height: 20),
         Text(
           'Enter Transaction Proof',
-          style: GoogleFonts.ibmPlexSans(fontSize: 15, fontWeight: FontWeight.w700),
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         const SizedBox(height: 12),
         TextFormField(
@@ -669,16 +768,24 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               color: context.appTheme.surfaceVariant.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: _proofPath != null ? const Color(0xFF1A6B4A) : context.appTheme.outlineVariant,
-                style: _proofPath != null ? BorderStyle.solid : BorderStyle.none,
+                color: _proofPath != null
+                    ? const Color(0xFF1A6B4A)
+                    : context.appTheme.outlineVariant,
+                style: _proofPath != null
+                    ? BorderStyle.solid
+                    : BorderStyle.none,
                 width: _proofPath != null ? 1.5 : 1.0,
               ),
             ),
             child: Row(
               children: [
                 Icon(
-                  _proofPath != null ? Icons.check_circle_rounded : Icons.add_photo_alternate_rounded,
-                  color: _proofPath != null ? const Color(0xFF1A6B4A) : context.appTheme.muted,
+                  _proofPath != null
+                      ? Icons.check_circle_rounded
+                      : Icons.add_photo_alternate_rounded,
+                  color: _proofPath != null
+                      ? const Color(0xFF1A6B4A)
+                      : context.appTheme.muted,
                   size: 28,
                 ),
                 const SizedBox(width: 14),
@@ -687,17 +794,26 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _proofPath != null ? 'Screenshot Uploaded' : 'Upload Payment Screenshot *',
+                        _proofPath != null
+                            ? 'Screenshot Uploaded'
+                            : 'Upload Payment Screenshot *',
                         style: GoogleFonts.ibmPlexSans(
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
-                          color: _proofPath != null ? const Color(0xFF1A6B4A) : context.appTheme.onSurface,
+                          color: _proofPath != null
+                              ? const Color(0xFF1A6B4A)
+                              : context.appTheme.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _proofPath != null ? '$_proofName' : 'JPEG, PNG format accepted',
-                        style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted),
+                        _proofPath != null
+                            ? '$_proofName'
+                            : 'JPEG, PNG format accepted',
+                        style: GoogleFonts.ibmPlexSans(
+                          fontSize: 11,
+                          color: context.appTheme.muted,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -712,7 +828,10 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                         _proofName = null;
                       });
                     },
-                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.red,
+                    ),
                   )
                 else
                   const Icon(Icons.arrow_forward_ios_rounded, size: 14),
@@ -729,17 +848,25 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               backgroundColor: const Color(0xFF1A6B4A),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               elevation: 0,
             ),
             child: _submitting
                 ? const SizedBox.square(
                     dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(
                     'Submit Verification Request — ${_money(_totalAmount)}',
-                    style: GoogleFonts.ibmPlexSans(fontSize: 14, fontWeight: FontWeight.w700),
+                    style: GoogleFonts.ibmPlexSans(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
           ),
         ),
@@ -760,18 +887,29 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                 color: Color(0xFF16A34A),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.check_rounded, size: 54, color: Colors.white),
+              child: const Icon(
+                Icons.check_rounded,
+                size: 54,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 28),
             Text(
               'Payment Request Submitted!',
-              style: GoogleFonts.ibmPlexSans(fontSize: 20, fontWeight: FontWeight.bold),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               'We have received your proof for ${_money(_totalAmount)}. The principal will review your submission shortly.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted, fontSize: 14, height: 1.4),
+              style: GoogleFonts.ibmPlexSans(
+                color: context.appTheme.muted,
+                fontSize: 14,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 32),
             Container(
@@ -784,7 +922,11 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _infoRow('Status', 'Pending Verification', valColor: context.appTheme.warning),
+                  _infoRow(
+                    'Status',
+                    'Pending Verification',
+                    valColor: context.appTheme.warning,
+                  ),
                   if (_intentReference.isNotEmpty) ...[
                     const Divider(height: 20),
                     _infoRow('Reference ID', _intentReference),
@@ -802,7 +944,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF1A6B4A),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: const Text('Back to Fees'),
               ),
@@ -819,7 +963,9 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
                   foregroundColor: const Color(0xFF1A6B4A),
                   side: const BorderSide(color: Color(0xFF1A6B4A)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: const Text('View Payment History'),
               ),
@@ -836,7 +982,11 @@ class _ParentPaymentFlowState extends State<ParentPaymentFlow> {
       children: [
         Text(
           label,
-          style: GoogleFonts.ibmPlexSans(fontSize: 13, color: context.appTheme.muted, fontWeight: FontWeight.w500),
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 13,
+            color: context.appTheme.muted,
+            fontWeight: FontWeight.w500,
+          ),
         ),
         Text(
           value,

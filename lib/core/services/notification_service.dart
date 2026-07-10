@@ -63,7 +63,7 @@ class NotificationService extends ChangeNotifier {
     if (!id.startsWith('transient_')) {
       try {
         await _api.markNotificationRead(id);
-      } catch (_) {
+      } on Object catch (_) {
         // If the backend fails, still mark it locally so the user isn't stuck
       }
     }
@@ -82,7 +82,7 @@ class NotificationService extends ChangeNotifier {
       if (!notification.id.startsWith('transient_')) {
         try {
           await _api.markNotificationRead(notification.id);
-        } catch (_) {
+        } on Object catch (_) {
           // Ignore individual failures to ensure all are marked locally
         }
       }
@@ -259,7 +259,7 @@ class NotificationService extends ChangeNotifier {
         'reference_type': 'health',
         if (referenceId.trim().isNotEmpty) 'reference_id': referenceId.trim(),
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Notification delivery is best-effort.
     }
   }
@@ -351,7 +351,7 @@ class NotificationService extends ChangeNotifier {
         'priority': 'high',
         'reference_type': 'fee_invoice',
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Notification delivery is best-effort
     }
   }
@@ -481,10 +481,16 @@ class AppNotification {
     if (sentAtRaw.trim().isNotEmpty) {
       var normalized = sentAtRaw.trim();
       normalized = normalized.replaceAll(' ', 'T');
+      // Only append Z (UTC) when there is truly no timezone indicator.
+      // A bare '-' regex like r'-\d{2}:?\d{2}$' also matches the date part
+      // of timestamps such as "2024-01-15T10:30:00" — use a stricter pattern
+      // that only matches a timezone offset (±HH:MM or ±HHMM at end).
       if (normalized.contains('T') &&
           !normalized.endsWith('Z') &&
           !normalized.contains('+') &&
-          !RegExp(r'-\d{2}:?\d{2}$').hasMatch(normalized)) {
+          !RegExp(
+            r'[+-]\d{2}:?\d{2}$',
+          ).hasMatch(normalized.substring(normalized.indexOf('T')))) {
         normalized = '${normalized}Z';
       }
       parsedTimestamp =

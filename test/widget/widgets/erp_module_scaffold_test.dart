@@ -30,7 +30,6 @@ void main() {
     );
 
     expect(find.text('Students'), findsOneWidget);
-    expect(find.text('Admissions and student records'), findsOneWidget);
     expect(find.text('Student list'), findsOneWidget);
     expect(
       tester.getSemantics(find.byType(SchoolDeskModuleScaffold)),

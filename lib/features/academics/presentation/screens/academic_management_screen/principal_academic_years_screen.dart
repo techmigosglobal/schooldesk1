@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
@@ -60,7 +61,7 @@ class _PrincipalAcademicYearsScreenState
           );
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
       _snack(context, 'Unable to load academic years: $error', error: true);
@@ -184,7 +185,7 @@ class _PrincipalAcademicYearsScreenState
       if (mounted) {
         _snack(context, '${_yearLabel(year)} set as current');
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         _snack(context, 'Unable to update year: $error', error: true);
       }
@@ -205,7 +206,7 @@ class _PrincipalAcademicYearsScreenState
       if (mounted) {
         _snack(context, '${_yearLabel(year)} deleted');
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         _snack(context, 'Unable to delete year: $error', error: true);
       }
@@ -316,7 +317,7 @@ class _AcademicYearClasswiseExportScreenState
         _studentCount = (results[2] as PaginatedList<StudentModel>).total;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
       _snack(context, 'Unable to load export data: $error', error: true);
@@ -496,7 +497,7 @@ class _AcademicYearClasswiseExportScreenState
           title: 'Classwise ${_labelize(_exportType)}',
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         _snack(context, 'Unable to queue export: $error', error: true);
       }
@@ -545,7 +546,7 @@ class _AcademicYearUsersExportScreenState
         total += result.total;
       }
       if (mounted) setState(() => _total = total);
-    } catch (error) {
+    } on Object catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
           'Failed to load user count for export: $error',
@@ -697,7 +698,7 @@ class _AcademicYearUsersExportScreenState
           title: 'Users-wise Data Export',
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         _snack(context, 'Unable to queue export: $error', error: true);
       }
@@ -757,7 +758,7 @@ class _AcademicYearFeesExportScreenState
             (results[3] as PaginatedList<Map<String, dynamic>>).total;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
       _snack(context, 'Unable to load fees data: $error', error: true);
@@ -933,7 +934,7 @@ class _AcademicYearFeesExportScreenState
           title: _labelize(_reportType),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         _snack(context, 'Unable to queue export: $error', error: true);
       }
@@ -1058,7 +1059,7 @@ class _YearListCard extends StatelessWidget {
                   children: [
                     if (_isCurrent(year)) const _CurrentChip(compact: true),
                     _OutlineButton(
-                      label: 'View', 
+                      label: 'View',
                       onPressed: onView,
                       height: 36,
                       width: 76,
@@ -1694,7 +1695,9 @@ class _OutlineButton extends StatelessWidget {
     final style = OutlinedButton.styleFrom(
       padding: EdgeInsets.zero,
       side: const BorderSide(color: _ayBlue, width: 1.4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(radius),
+      ),
     );
     return SizedBox(
       height: height,
@@ -2079,9 +2082,7 @@ class _FinalDeleteDialogState extends State<_FinalDeleteDialog> {
         ),
         FilledButton(
           onPressed: _canDelete ? () => Navigator.pop(context, true) : null,
-          style: FilledButton.styleFrom(
-            backgroundColor: Colors.red.shade700,
-          ),
+          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
           child: const Text('Delete'),
         ),
       ],
@@ -2112,7 +2113,7 @@ Future<void> _downloadExportArtifact(
     mimeType: _exportMimeType(format),
     title: title,
     subject: title,
-    text: '$title generated from Arish Ville.',
+    text: '$title generated from ${AppConstants.appName}.',
   );
   if (context.mounted) {
     _snack(context, '$title downloaded');

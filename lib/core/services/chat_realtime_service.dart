@@ -3,7 +3,7 @@ import 'package:schooldesk1/core/services/token_storage_service.dart';
 
 class ChatRealtimeService {
   ChatRealtimeService._();
-  
+
   static final ChatRealtimeService instance = ChatRealtimeService._();
 
   RealtimeChannel subscribe({
@@ -11,7 +11,7 @@ class ChatRealtimeService {
     required void Function() onUpdate,
   }) {
     final client = Supabase.instance.client;
-    
+
     // Set token dynamically on subscribe
     TokenStorageService.getAccessToken().then((token) {
       if (token != null && token.isNotEmpty) {
@@ -20,22 +20,24 @@ class ChatRealtimeService {
     });
 
     final channel = client.channel(channelName);
-    
-    channel.onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'messages',
-      callback: (payload) {
-        onUpdate();
-      },
-    ).onPostgresChanges(
-      event: PostgresChangeEvent.all,
-      schema: 'public',
-      table: 'message_conversations',
-      callback: (payload) {
-        onUpdate();
-      },
-    );
+
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'messages',
+          callback: (payload) {
+            onUpdate();
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'message_conversations',
+          callback: (payload) {
+            onUpdate();
+          },
+        );
 
     channel.subscribe();
     return channel;

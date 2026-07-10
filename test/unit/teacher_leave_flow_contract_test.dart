@@ -10,28 +10,31 @@ void main() {
     late String source;
 
     setUpAll(() {
-      source = File('supabase/functions/api/handlers/leave.ts')
-          .readAsStringSync();
+      source = File(
+        'supabase/functions/api/handlers/leave.ts',
+      ).readAsStringSync();
     });
 
     test('POST /leave/applications inserts with status=pending', () {
       expect(source, contains('status: "pending"'));
       expect(
         source,
-        contains('const { data, error } = await svc.from("leave_applications").insert(payload)'),
+        contains(
+          'const { data, error } = await svc.from("leave_applications").insert(payload)',
+        ),
       );
     });
 
     test('staff_id is required for leave submission', () {
-      expect(source, contains('if (!staffId) return fail("staff_id required", 400)'));
+      expect(
+        source,
+        contains('if (!staffId) return fail("staff_id required", 400)'),
+      );
     });
 
     test('recall endpoint updates status to recalled', () {
       expect(source, contains('status: "recalled"'));
-      expect(
-        source,
-        contains('/leave\\/applications\\/([^/]+)\\/recall'),
-      );
+      expect(source, contains('/leave\\/applications\\/([^/]+)\\/recall'));
     });
 
     test('approve endpoint supports both POST and PUT', () {
@@ -41,10 +44,7 @@ void main() {
         contains('/leave\\/applications\\/([^/]+)\\/(approve|reject)'),
       );
       // PUT /approve (alias)
-      expect(
-        source,
-        contains('/leave\\/applications\\/([^/]+)\\/approve'),
-      );
+      expect(source, contains('/leave\\/applications\\/([^/]+)\\/approve'));
     });
 
     test('approve handler creates notification_events for teacher', () {
@@ -72,9 +72,12 @@ void main() {
       expect(source, contains('dateRange'));
     });
 
-    test('resolvePrincipalUserId queries users table with linked_type=principal', () {
-      expect(source, contains('linked_type\", \"principal\"'));
-    });
+    test(
+      'resolvePrincipalUserId queries users table with linked_type=principal',
+      () {
+        expect(source, contains('linked_type\", \"principal\"'));
+      },
+    );
 
     test('resolvePrincipalUserId has fallback to role_name ilike', () {
       expect(source, contains('ilike'));
@@ -118,8 +121,9 @@ void main() {
     late String modelSource;
 
     setUpAll(() {
-      modelSource = File('lib/features/shared/data/models/backend_models.dart')
-          .readAsStringSync();
+      modelSource = File(
+        'lib/features/shared/data/models/backend_models.dart',
+      ).readAsStringSync();
     });
 
     test('LeaveApplicationModel has staffName field', () {
@@ -168,23 +172,30 @@ void main() {
     late String apiSource;
 
     setUpAll(() {
-      apiSource = File('lib/core/network/api_modules/leave_api.dart')
-          .readAsStringSync();
+      apiSource = File(
+        'lib/core/network/api_modules/leave_api.dart',
+      ).readAsStringSync();
     });
 
     test('submitLeaveApplication sends POST to /leave/applications', () {
       expect(apiSource, contains("'/leave/applications'"));
-      expect(apiSource, contains('method: "POST"') );
+      expect(apiSource, contains('method: "POST"'));
     });
 
-    test('recallLeaveApplication sends POST to /leave/applications/:id/recall', () {
-      expect(apiSource, contains("'/leave/applications/\$id/recall'"));
-    });
+    test(
+      'recallLeaveApplication sends POST to /leave/applications/:id/recall',
+      () {
+        expect(apiSource, contains("'/leave/applications/\$id/recall'"));
+      },
+    );
 
-    test('decideLeaveApplication sends PUT to /leave/applications/:id/approve', () {
-      expect(apiSource, contains("'/leave/applications/\$id/approve'"));
-      expect(apiSource, contains('method: "PUT"') );
-    });
+    test(
+      'decideLeaveApplication sends PUT to /leave/applications/:id/approve',
+      () {
+        expect(apiSource, contains("'/leave/applications/\$id/approve'"));
+        expect(apiSource, contains('method: "PUT"'));
+      },
+    );
 
     test('getLeaveApplications fetches GET /leave/applications', () {
       expect(apiSource, contains("'/leave/applications'"));
@@ -207,9 +218,9 @@ void main() {
     late String entitySource;
 
     setUpAll(() {
-      entitySource =
-          File('lib/features/shared/domain/entities/leave_request.dart')
-              .readAsStringSync();
+      entitySource = File(
+        'lib/features/shared/domain/entities/leave_request.dart',
+      ).readAsStringSync();
     });
 
     test('LeaveRequest has status field defaulting to Pending', () {
@@ -238,9 +249,12 @@ void main() {
       ).readAsStringSync();
     });
 
-    test('leave records use staffName instead of staffId for teacher display', () {
-      expect(screenSource, contains("l.staffName"));
-    });
+    test(
+      'leave records use staffName instead of staffId for teacher display',
+      () {
+        expect(screenSource, contains("l.staffName"));
+      },
+    );
 
     test('leave records populate from/to/reason keys', () {
       expect(screenSource, contains("'from': l.fromDate"));

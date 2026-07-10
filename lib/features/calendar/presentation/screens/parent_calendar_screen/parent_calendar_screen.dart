@@ -66,7 +66,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
         _loading = false;
         _error = null;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -114,10 +114,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabController,
-              children: [
-                _buildEventsTab(),
-                _buildHolidaysTab(),
-              ],
+              children: [_buildEventsTab(), _buildHolidaysTab()],
             ),
     );
   }
@@ -366,11 +363,7 @@ class _ParentCalendarScreenState extends State<ParentCalendarScreen>
             child: const Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.celebration_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                Icon(Icons.celebration_rounded, color: Colors.white, size: 24),
               ],
             ),
           ),

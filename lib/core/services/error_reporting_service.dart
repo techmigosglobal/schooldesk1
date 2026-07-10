@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -11,7 +12,10 @@ class ErrorReportingService {
   static final ErrorReportingService instance = ErrorReportingService._();
 
   bool _initialized = false;
-  bool _sending = false;
+  // Queue-based delivery: errors are never dropped while a send is in-flight.
+  // Each payload is enqueued and a single flush loop drains the queue serially.
+  final Queue<Map<String, dynamic>> _pendingReports = Queue();
+  bool _flushing = false;
   static const String monitoringEndpoint = '/monitoring/error-events';
 
   Future<void> initialize() async {
@@ -68,26 +72,39 @@ class ErrorReportingService {
   }
 
   Future<void> _submit(Map<String, dynamic> payload) async {
-    if (_sending || !BackendApiClient.instance.isAuthenticated) return;
-    _sending = true;
+    _pendingReports.add(payload);
+    if (!_flushing) {
+      unawaited(_flush());
+    }
+  }
+
+  Future<void> _flush() async {
+    if (_flushing) return;
+    _flushing = true;
     try {
-      final enriched = {
-        ...payload,
-        'route_name': PlatformDispatcher.instance.defaultRouteName,
-        'app_version': 'schooldesk-flutter',
-        'device_info': defaultTargetPlatform.name,
-        'occurred_at': DateTime.now().toUtc().toIso8601String(),
-        'metadata': {
-          ...Map<String, dynamic>.from(payload['metadata'] as Map? ?? {}),
-          'role': BackendApiClient.instance.currentRoleName,
-          'debug_mode': kDebugMode,
-        },
-      };
-      await BackendApiClient.instance.submitErrorEvent(enriched);
-    } catch (_) {
-      // Reporting must never break the user flow or recurse into itself.
+      while (_pendingReports.isNotEmpty) {
+        if (!BackendApiClient.instance.isAuthenticated) break;
+        final payload = _pendingReports.removeFirst();
+        try {
+          final enriched = {
+            ...payload,
+            'route_name': PlatformDispatcher.instance.defaultRouteName,
+            'app_version': 'schooldesk-flutter',
+            'device_info': defaultTargetPlatform.name,
+            'occurred_at': DateTime.now().toUtc().toIso8601String(),
+            'metadata': {
+              ...Map<String, dynamic>.from(payload['metadata'] as Map? ?? {}),
+              'role': BackendApiClient.instance.currentRoleName,
+              'debug_mode': kDebugMode,
+            },
+          };
+          await BackendApiClient.instance.submitErrorEvent(enriched);
+        } on Object catch (_) {
+          // Reporting must never break the user flow or recurse into itself.
+        }
+      }
     } finally {
-      _sending = false;
+      _flushing = false;
     }
   }
 

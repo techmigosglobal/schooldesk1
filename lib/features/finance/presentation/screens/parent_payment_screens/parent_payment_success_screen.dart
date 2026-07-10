@@ -197,7 +197,9 @@ class ParentPaymentSuccessScreen extends StatelessWidget {
             style: GoogleFonts.ibmPlexSans(
               fontSize: isHighlight ? 18 : 14,
               fontWeight: isHighlight ? FontWeight.w700 : FontWeight.w600,
-              color: isHighlight ? const Color(0xFF0F766E) : context.appTheme.onSurface,
+              color: isHighlight
+                  ? const Color(0xFF0F766E)
+                  : context.appTheme.onSurface,
             ),
           ),
         ),

@@ -46,7 +46,7 @@ class _TeacherDocumentsScreenState extends State<TeacherDocumentsScreen> {
       }
       if (!mounted) return;
       setState(() => _documents = rows);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {

@@ -107,7 +107,10 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
           ),
           actions: [
             IconButton(
-              icon: Icon(Icons.refresh_rounded, color: context.appTheme.primary),
+              icon: Icon(
+                Icons.refresh_rounded,
+                color: context.appTheme.primary,
+              ),
               onPressed: () {
                 setState(() => _loading = true);
                 _loadData();
@@ -200,12 +203,18 @@ class _AcademicInfoScreenState extends State<AcademicInfoScreen>
             const SizedBox(height: 12),
             Text(
               'No curriculum published yet',
-              style: GoogleFonts.dmSans(fontSize: 14, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                color: context.appTheme.muted,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'Principal will publish curriculum soon',
-              style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+              style: GoogleFonts.dmSans(
+                fontSize: 12,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),

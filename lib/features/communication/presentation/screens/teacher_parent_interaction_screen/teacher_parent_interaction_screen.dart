@@ -68,7 +68,7 @@ class _TeacherParentInteractionScreenState
             .toList();
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -143,7 +143,7 @@ class _TeacherParentInteractionScreenState
       );
       setState(() => _saving = false);
       await _loadParentFlow();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(

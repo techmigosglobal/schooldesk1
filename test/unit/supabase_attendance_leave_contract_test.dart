@@ -143,12 +143,30 @@ void main() {
       'lib/features/leave/presentation/screens/parent_leave_screen/parent_leave_screen.dart',
     ).readAsStringSync();
 
-    expect(attendanceScreen, contains("request['from_date'] ?? request['start_date']"));
-    expect(attendanceScreen, contains("request['to_date'] ?? request['end_date']"));
-    expect(attendanceScreen, contains('Future<Map<String, dynamic>> _safeAttendanceSummary'));
-    expect(attendanceScreen, contains('Future<List<Map<String, dynamic>>> _safeAttendanceRecords'));
-    expect(attendanceScreen, contains('Future<List<Map<String, dynamic>>> _safeLeaveRequests'));
-    expect(leaveScreen, contains("request['from_date'] ?? request['start_date']"));
+    expect(
+      attendanceScreen,
+      contains("request['from_date'] ?? request['start_date']"),
+    );
+    expect(
+      attendanceScreen,
+      contains("request['to_date'] ?? request['end_date']"),
+    );
+    expect(
+      attendanceScreen,
+      contains('Future<Map<String, dynamic>> _safeAttendanceSummary'),
+    );
+    expect(
+      attendanceScreen,
+      contains('Future<List<Map<String, dynamic>>> _safeAttendanceRecords'),
+    );
+    expect(
+      attendanceScreen,
+      contains('Future<List<Map<String, dynamic>>> _safeLeaveRequests'),
+    );
+    expect(
+      leaveScreen,
+      contains("request['from_date'] ?? request['start_date']"),
+    );
     expect(leaveScreen, contains("request['to_date'] ?? request['end_date']"));
   });
 

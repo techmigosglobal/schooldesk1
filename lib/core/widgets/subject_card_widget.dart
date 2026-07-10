@@ -180,9 +180,10 @@ class _SubjectCardState extends State<_SubjectCard>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -214,10 +215,8 @@ class _SubjectCardState extends State<_SubjectCard>
       onTap: widget.enabled ? widget.onTap : null,
       child: AnimatedBuilder(
         animation: _scaleAnimation,
-        builder: (context, child) => Transform.scale(
-          scale: _scaleAnimation.value,
-          child: child,
-        ),
+        builder: (context, child) =>
+            Transform.scale(scale: _scaleAnimation.value, child: child),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
@@ -250,14 +249,12 @@ class _SubjectCardState extends State<_SubjectCard>
               // Animated check / subject icon
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, animation) => ScaleTransition(
-                  scale: animation,
-                  child: child,
-                ),
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
                 child: widget.isSelected
-                    ? Icon(
+                    ? const Icon(
                         Icons.check_circle_rounded,
-                        key: const ValueKey('check'),
+                        key: ValueKey('check'),
                         size: 20,
                         color: SubjectCardGrid._accent,
                       )
@@ -274,8 +271,9 @@ class _SubjectCardState extends State<_SubjectCard>
                   widget.subject,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        widget.isSelected ? FontWeight.w700 : FontWeight.w500,
+                    fontWeight: widget.isSelected
+                        ? FontWeight.w700
+                        : FontWeight.w500,
                     color: widget.isSelected
                         ? const Color(0xFF0A5C4E)
                         : const Color(0xFF183037),
@@ -339,11 +337,7 @@ class SubjectChips extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                _subjectIcon(subject),
-                size: 12,
-                color: _accent,
-              ),
+              Icon(_subjectIcon(subject), size: 12, color: _accent),
               const SizedBox(width: 4),
               Text(
                 subject,

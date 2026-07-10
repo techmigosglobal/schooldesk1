@@ -67,7 +67,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         _loading = false;
       });
       _maybeOpenAutoScanner();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -117,7 +117,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
         _submitting = false;
         _message = 'Attendance punch recorded';
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -165,7 +165,7 @@ class _TeacherMyAttendanceScreenState extends State<TeacherMyAttendanceScreen> {
           _AttendanceLogCard(records: _attendanceLog),
           if (_submitting) ...[
             const SizedBox(height: 18),
-            TeacherFlowCard(
+            const TeacherFlowCard(
               icon: Icons.hourglass_top_rounded,
               title: 'Recording punch...',
               subtitle: 'Saving your attendance to the system.',
@@ -202,8 +202,8 @@ class _AttendanceLogCard extends StatelessWidget {
       status: '${records.length}',
       statusColor: teacherFlowAccent,
       body: records.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.only(top: 14),
+          ? const Padding(
+              padding: EdgeInsets.only(top: 14),
               child: Text(
                 'No recorded punch-ins in the last 30 days.',
                 style: TextStyle(
@@ -361,13 +361,13 @@ class _FullScreenScannerScreenState extends State<FullScreenScannerScreen> {
               ],
             ),
           ),
-          Align(
+          const Align(
             alignment: Alignment.center,
             child: SizedBox(
               height: 280,
               width: 280,
               child: Stack(
-                children: const [
+                children: [
                   _ScannerCorner(alignment: Alignment.topLeft),
                   _ScannerCorner(alignment: Alignment.topRight),
                   _ScannerCorner(alignment: Alignment.bottomLeft),

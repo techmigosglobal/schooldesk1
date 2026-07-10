@@ -42,7 +42,7 @@ class _PrincipalLessonPlannerScreenState
         _planners = rows;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = error.toString();
@@ -172,29 +172,29 @@ class _LessonPlannerSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-          child: _SummaryTile(
-            label: 'Plans',
-            value: planners.length.toString(),
-            icon: Icons.auto_stories_rounded,
+            child: _SummaryTile(
+              label: 'Plans',
+              value: planners.length.toString(),
+              icon: Icons.auto_stories_rounded,
+            ),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _SummaryTile(
-            label: 'Needs review',
-            value: needsReview.toString(),
-            icon: Icons.rate_review_rounded,
+          const SizedBox(width: 10),
+          Expanded(
+            child: _SummaryTile(
+              label: 'Needs review',
+              value: needsReview.toString(),
+              icon: Icons.rate_review_rounded,
+            ),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _SummaryTile(
-            label: 'Completion',
-            value: completion,
-            icon: Icons.task_alt_rounded,
+          const SizedBox(width: 10),
+          Expanded(
+            child: _SummaryTile(
+              label: 'Completion',
+              value: completion,
+              icon: Icons.task_alt_rounded,
+            ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -234,12 +234,12 @@ class _SummaryTile extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            label, 
-            maxLines: 2, 
+            label,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 12.5, 
-              height: 1.15, 
+              fontSize: 12.5,
+              height: 1.15,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -306,10 +306,10 @@ class _LessonPlannerCard extends StatelessWidget {
                   for (final attachment in attachments)
                     OutlinedButton.icon(
                       onPressed: () => _openAttachment(
-                      context,
-                      _text(attachment['url']),
-                      name: _text(attachment['name']),
-                    ),
+                        context,
+                        _text(attachment['url']),
+                        name: _text(attachment['name']),
+                      ),
                       icon: const Icon(Icons.attach_file_rounded, size: 18),
                       label: Text(
                         _text(attachment['name'], fallback: 'Open attachment'),
@@ -331,11 +331,7 @@ class _LessonPlannerCard extends StatelessWidget {
   }) {
     final item = EventPostMediaItem.fromUrl(attachmentUrl);
     final namedItem = name.isNotEmpty && item.displayName.isEmpty
-        ? EventPostMediaItem(
-            url: item.url,
-            name: name,
-            kind: item.kind,
-          )
+        ? EventPostMediaItem(url: item.url, name: name, kind: item.kind)
         : item;
     openEventPostMediaPreview(context, namedItem);
   }
@@ -475,7 +471,7 @@ String _shortDate(Object? raw) {
   try {
     final dt = DateTime.parse(raw.toString());
     return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-  } catch (_) {
+  } on Object catch (_) {
     return raw.toString();
   }
 }

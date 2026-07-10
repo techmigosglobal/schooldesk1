@@ -115,7 +115,7 @@ class BulkCsvImportService {
     Map<String, dynamic> dryRun;
     try {
       dryRun = await api.dryRunPrincipalClassCsvImport(csvText: csvText);
-    } catch (error) {
+    } on Object catch (error) {
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
       await dryRunProgress;
       if (context.mounted) {
@@ -155,7 +155,7 @@ class BulkCsvImportService {
     Map<String, dynamic> imported;
     try {
       imported = await api.importPrincipalClassCsv(csvText: csvText);
-    } catch (error) {
+    } on Object catch (error) {
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
       await importProgress;
       if (context.mounted) {
@@ -265,8 +265,8 @@ class BulkCsvImportService {
     final text = utf8.decode(bytes, allowMalformed: true);
     final parsed = _parseCsv(text);
     if (parsed.length < 2) {
-      return _BulkImportResult(
-        failures: const ['CSV must include headers and at least one data row.'],
+      return const _BulkImportResult(
+        failures: ['CSV must include headers and at least one data row.'],
       );
     }
 
@@ -316,7 +316,7 @@ class BulkCsvImportService {
             suggestions.addAll(outcome.suggestions);
         }
         created++;
-      } catch (error) {
+      } on Object catch (error) {
         failures.add('Row $rowNumber: $error');
       }
     }
@@ -748,10 +748,10 @@ class BulkCsvImportService {
   static _CsvSchema _schema(BulkCsvImportTarget target) {
     switch (target) {
       case BulkCsvImportTarget.students:
-        return _CsvSchema(
+        return const _CsvSchema(
           label: 'students',
-          required: const ['first_name'],
-          displayHeaders: const [
+          required: ['first_name'],
+          displayHeaders: [
             'first_name',
             'last_name',
             'date_of_birth',
@@ -767,10 +767,10 @@ class BulkCsvImportService {
               'first_name,last_name,date_of_birth,gender,admission_number,student_code,class,section,parent_email\nAsha,Rao,2012-04-12,female,ADM-101,STU-101,5,A,parent@example.com',
         );
       case BulkCsvImportTarget.staff:
-        return _CsvSchema(
+        return const _CsvSchema(
           label: 'staff',
-          required: const ['first_name'],
-          displayHeaders: const [
+          required: ['first_name'],
+          displayHeaders: [
             'first_name',
             'last_name',
             'staff_code',
@@ -786,10 +786,10 @@ class BulkCsvImportService {
               'first_name,last_name,staff_code,username,email,phone,designation,password,account_role\nMeera,Nair,T-101,meera.nair,meera@example.com,9876543210,Teacher,Welcome@123,Teacher',
         );
       case BulkCsvImportTarget.parents:
-        return _CsvSchema(
+        return const _CsvSchema(
           label: 'parents and guardians',
-          required: const ['full_name', 'username', 'password'],
-          displayHeaders: const [
+          required: ['full_name', 'username', 'password'],
+          displayHeaders: [
             'full_name',
             'username',
             'password',
@@ -805,10 +805,10 @@ class BulkCsvImportService {
               'full_name,username,password,email,phone,admission_numbers,relationship,is_primary,can_pickup\nRaj Rao,raj.rao,Welcome@123,raj@example.com,9876500011,ADM-101,Father,true,true',
         );
       case BulkCsvImportTarget.classes:
-        return _CsvSchema(
+        return const _CsvSchema(
           label: 'classes',
-          required: const ['grade_name', 'section_name'],
-          displayHeaders: const [
+          required: ['grade_name', 'section_name'],
+          displayHeaders: [
             'grade_name',
             'grade_number',
             'section_name',
@@ -855,10 +855,10 @@ class BulkCsvImportService {
               'grade_name,grade_number,section_name,capacity,room_number,room_type,room_capacity,year_label,academic_year_id,term_id,term_name,class_teacher_id,class_teacher_staff_code,class_teacher_email,subject_names,subject_codes,subject_types,subject_departments,subject_teacher_staff_codes,subject_teacher_emails,periods_per_week,fee_categories,fee_amounts,fee_frequencies,fee_due_days,fee_late_fines,working_days,periods_per_day,start_time,period_duration_minutes,gap_minutes,short_break_period,short_break_label,short_break_start_time,short_break_end_time,long_break_period,long_break_label,long_break_start_time,long_break_end_time,regenerate_scope\n5,5,A,40,5-A,classroom,40,2026-2027,,,Term 1,,T-101,,Mathematics;English,MATH;ENG,core;core,Academics;Languages,T-101;T-102,,6;5,Tuition;Transport,25000;8000,term;monthly,10;5,0;0,Mon;Tue;Wed;Thu;Fri,6,09:00,40,5,3,Interval,10:45,11:00,5,Lunch Break,12:20,12:50,true',
         );
       case BulkCsvImportTarget.classTimetables:
-        return _CsvSchema(
+        return const _CsvSchema(
           label: 'class timetables',
-          required: const ['grade_name', 'section_name'],
-          displayHeaders: const [
+          required: ['grade_name', 'section_name'],
+          displayHeaders: [
             'grade_name',
             'grade_number',
             'section_name',
@@ -1425,7 +1425,7 @@ class _ImportLookup {
   static Future<List<T>> _safe<T>(Future<List<T>> Function() load) async {
     try {
       return await load();
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }
@@ -1435,7 +1435,7 @@ class _ImportLookup {
   ) async {
     try {
       return (await load()).data;
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }

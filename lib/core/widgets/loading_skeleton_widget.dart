@@ -89,17 +89,13 @@ class SkeletonCardWidget extends StatelessWidget {
         border: Border.all(color: tokens.panelBorder, width: 1),
         boxShadow: tokens.elevation.card,
       ),
-      child: Column(
+      child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const LoadingSkeletonWidget(
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-              ),
-              const SizedBox(width: 12),
+              LoadingSkeletonWidget(width: 40, height: 40, borderRadius: 20),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,8 +105,8 @@ class SkeletonCardWidget extends StatelessWidget {
                       height: 14,
                       borderRadius: 7,
                     ),
-                    const SizedBox(height: 8),
-                    const LoadingSkeletonWidget(
+                    SizedBox(height: 8),
+                    LoadingSkeletonWidget(
                       width: 120,
                       height: 12,
                       borderRadius: 6,
@@ -120,14 +116,14 @@ class SkeletonCardWidget extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           LoadingSkeletonWidget(
             width: double.infinity,
             height: 12,
             borderRadius: 6,
           ),
-          const SizedBox(height: 8),
-          const LoadingSkeletonWidget(width: 180, height: 12, borderRadius: 6),
+          SizedBox(height: 8),
+          LoadingSkeletonWidget(width: 180, height: 12, borderRadius: 6),
         ],
       ),
     );

@@ -97,7 +97,7 @@ class _PrincipalSubjectsScreenState extends State<PrincipalSubjectsScreen> {
         _classes = result;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = error.toString();

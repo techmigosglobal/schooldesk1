@@ -46,7 +46,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
     {
       'type': 'ID Card',
       'icon': Icons.badge_rounded,
-      'color': Color(0xFF6C3483),
+      'color': const Color(0xFF6C3483),
       'desc': 'Student identity card',
     },
     {
@@ -83,7 +83,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
         _loading = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -216,7 +216,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
             ),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.pending_actions_rounded,
                   size: 16,
                   color: Colors.orange,
@@ -309,7 +309,11 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
           const SizedBox(height: 6),
           Row(
             children: [
-              Icon(Icons.description_rounded, size: 14, color: Colors.grey),
+              const Icon(
+                Icons.description_rounded,
+                size: 14,
+                color: Colors.grey,
+              ),
               const SizedBox(width: 4),
               Text(
                 r['type'] as String,
@@ -335,7 +339,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       foregroundColor: Colors.red,
-                      side: BorderSide(color: Colors.red),
+                      side: const BorderSide(color: Colors.red),
                     ),
                     child: Text(
                       'Reject',
@@ -500,7 +504,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
                   color: context.appTheme.successContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.check_circle_rounded,
                   size: 18,
                   color: Colors.green,
@@ -591,7 +595,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Document request $status')));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -674,7 +678,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Document print requested')));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -687,7 +691,7 @@ class _AdminDocumentsScreenState extends State<AdminDocumentsScreen>
 
   void _showDocumentRequestSaved() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Document request saved'),
         backgroundColor: Colors.green,
       ),
@@ -747,7 +751,7 @@ class _DocumentRequestPageState extends State<_DocumentRequestPage> {
       });
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

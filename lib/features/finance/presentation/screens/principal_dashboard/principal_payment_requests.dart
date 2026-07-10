@@ -8,17 +8,19 @@ class PrincipalPaymentRequests extends StatefulWidget {
   const PrincipalPaymentRequests({super.key});
 
   @override
-  State<PrincipalPaymentRequests> createState() => _PrincipalPaymentRequestsState();
+  State<PrincipalPaymentRequests> createState() =>
+      _PrincipalPaymentRequestsState();
 }
 
 class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   bool _loading = true;
   String _statusFilter = 'pending';
   List<Map<String, dynamic>> _requests = [];
-  
+
   final Map<String, TextEditingController> _remarksControllers = {};
   final Map<String, bool> _submittingMap = {};
-  final Map<String, String> _decisionMap = {}; // 'approved', 'rejected', 'clarification_required'
+  final Map<String, String> _decisionMap =
+      {}; // 'approved', 'rejected', 'clarification_required'
 
   @override
   void initState() {
@@ -41,9 +43,11 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       });
     }
     try {
-      final rows = await BackendApiClient.instance.getParentPaymentRequests(pageSize: 200);
+      final rows = await BackendApiClient.instance.getParentPaymentRequests(
+        pageSize: 200,
+      );
       if (!mounted) return;
-      
+
       // Seed controllers
       for (final r in rows) {
         final id = '${r['id'] ?? ''}';
@@ -57,7 +61,7 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         _requests = rows;
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -70,10 +74,14 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     if (_statusFilter == 'pending') {
       return _requests.where((r) {
         final status = _text(r['status']).toLowerCase();
-        return status == 'pending' || status == 'pending_verification' || status == 'submitted';
+        return status == 'pending' ||
+            status == 'pending_verification' ||
+            status == 'submitted';
       }).toList();
     }
-    return _requests.where((r) => _text(r['status']).toLowerCase() == _statusFilter).toList();
+    return _requests
+        .where((r) => _text(r['status']).toLowerCase() == _statusFilter)
+        .toList();
   }
 
   Future<void> _submitDecision(Map<String, dynamic> request) async {
@@ -81,9 +89,12 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     final decision = _decisionMap[id] ?? 'approved';
     final remarks = _remarksControllers[id]?.text.trim() ?? '';
 
-    if ((decision == 'rejected' || decision == 'clarification_required') && remarks.length < 3) {
+    if ((decision == 'rejected' || decision == 'clarification_required') &&
+        remarks.length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter remarks/reason (min 3 chars).')),
+        const SnackBar(
+          content: Text('Please enter remarks/reason (min 3 chars).'),
+        ),
       );
       return;
     }
@@ -102,17 +113,20 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             decision == 'approved'
                 ? 'Payment request approved.'
                 : decision == 'clarification_required'
-                    ? 'Clarification requested from parent.'
-                    : 'Payment request rejected.',
+                ? 'Clarification requested from parent.'
+                : 'Payment request rejected.',
           ),
         ),
       );
       _remarksControllers[id]?.clear();
       await _loadRequests(showSpinner: false);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Submit failed: $e'), backgroundColor: context.appTheme.error),
+        SnackBar(
+          content: Text('Submit failed: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
       );
     } finally {
       if (mounted) {
@@ -126,7 +140,10 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
     return Scaffold(
       backgroundColor: context.appTheme.surface,
       appBar: AppBar(
-        title: const Text('Review Payment Proofs', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Review Payment Proofs',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: context.appTheme.onSurface,
@@ -155,7 +172,9 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                               padding: const EdgeInsets.all(16),
                               itemCount: _visibleRequests.length,
                               itemBuilder: (context, index) {
-                                return _buildRequestCard(_visibleRequests[index]);
+                                return _buildRequestCard(
+                                  _visibleRequests[index],
+                                );
                               },
                             ),
                     ),
@@ -171,9 +190,17 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
       final s = _text(r['status']).toLowerCase();
       return s == 'pending' || s == 'pending_verification' || s == 'submitted';
     }).length;
-    final approved = _requests.where((r) => _text(r['status']).toLowerCase() == 'approved').length;
-    final rejected = _requests.where((r) => _text(r['status']).toLowerCase() == 'rejected').length;
-    final clarify = _requests.where((r) => _text(r['status']).toLowerCase() == 'clarification_required').length;
+    final approved = _requests
+        .where((r) => _text(r['status']).toLowerCase() == 'approved')
+        .length;
+    final rejected = _requests
+        .where((r) => _text(r['status']).toLowerCase() == 'rejected')
+        .length;
+    final clarify = _requests
+        .where(
+          (r) => _text(r['status']).toLowerCase() == 'clarification_required',
+        )
+        .length;
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -195,12 +222,20 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         children: [
           Text(
             '$count',
-            style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w800, fontSize: 18, color: color),
+            style: GoogleFonts.ibmPlexSans(
+              fontWeight: FontWeight.w800,
+              fontSize: 18,
+              color: color,
+            ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: GoogleFonts.ibmPlexSans(fontSize: 10, color: context.appTheme.muted, fontWeight: FontWeight.w600),
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 10,
+              color: context.appTheme.muted,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -242,11 +277,18 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline_rounded, size: 48, color: context.appTheme.muted),
+            Icon(
+              Icons.check_circle_outline_rounded,
+              size: 48,
+              color: context.appTheme.muted,
+            ),
             const SizedBox(height: 12),
             Text(
               'No requests found',
-              style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, color: context.appTheme.muted),
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                color: context.appTheme.muted,
+              ),
             ),
           ],
         ),
@@ -257,12 +299,22 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   Widget _buildRequestCard(Map<String, dynamic> r) {
     final id = '${r['id'] ?? ''}';
     final status = _text(r['status']).toLowerCase();
-    final isPending = status == 'pending' || status == 'pending_verification' || status == 'submitted';
-    final invoice = r['invoice'] is Map ? Map<String, dynamic>.from(r['invoice'] as Map) : const <String, dynamic>{};
-    final student = r['student'] is Map ? Map<String, dynamic>.from(r['student'] as Map) : const <String, dynamic>{};
-    final parent = r['parent_user'] is Map ? Map<String, dynamic>.from(r['parent_user'] as Map) : const <String, dynamic>{};
-    
-    final studentName = '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+    final isPending =
+        status == 'pending' ||
+        status == 'pending_verification' ||
+        status == 'submitted';
+    final invoice = r['invoice'] is Map
+        ? Map<String, dynamic>.from(r['invoice'] as Map)
+        : const <String, dynamic>{};
+    final student = r['student'] is Map
+        ? Map<String, dynamic>.from(r['student'] as Map)
+        : const <String, dynamic>{};
+    final parent = r['parent_user'] is Map
+        ? Map<String, dynamic>.from(r['parent_user'] as Map)
+        : const <String, dynamic>{};
+
+    final studentName =
+        '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
     final parentName = '${parent['name'] ?? parent['email'] ?? ''}'.trim();
     final invoiceNumber = '${invoice['invoice_number'] ?? ''}';
     final amount = (r['amount'] as num?)?.toDouble() ?? 0.0;
@@ -308,15 +360,28 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                 Expanded(
                   child: Text(
                     studentName.isEmpty ? 'Student' : studentName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(6)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
                   child: Text(
                     _statusLabel(status),
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: badgeColor),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      color: badgeColor,
+                    ),
                   ),
                 ),
               ],
@@ -329,13 +394,18 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             _infoRow('Mode / Ref', '$method (Ref: $ref)'),
             if (utr.isNotEmpty) _infoRow('UTR Reference', utr),
             if (remarks.isNotEmpty) _infoRow('Parent Note', remarks),
-            if (adminRemarks.isNotEmpty) _infoRow('Reviewer Remarks', adminRemarks),
-            
+            if (adminRemarks.isNotEmpty)
+              _infoRow('Reviewer Remarks', adminRemarks),
+
             if (proofUrl.isNotEmpty) ...[
               const Divider(height: 24),
               Text(
                 'Payment Receipt Screenshot',
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 12, color: context.appTheme.muted),
+                style: GoogleFonts.ibmPlexSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 8),
               GestureDetector(
@@ -353,7 +423,9 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => Container(
                       color: context.appTheme.surfaceVariant,
-                      child: const Center(child: Icon(Icons.broken_image_rounded, size: 24)),
+                      child: const Center(
+                        child: Icon(Icons.broken_image_rounded, size: 24),
+                      ),
                     ),
                   ),
                 ),
@@ -364,13 +436,22 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
               const Divider(height: 24),
               Text(
                 'Record Verification Decision',
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 12, color: context.appTheme.muted),
+                style: GoogleFonts.ibmPlexSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   _decisionRadio(id, 'approved', 'Approve', Colors.green),
-                  _decisionRadio(id, 'clarification_required', 'Clarify', Colors.blue),
+                  _decisionRadio(
+                    id,
+                    'clarification_required',
+                    'Clarify',
+                    Colors.blue,
+                  ),
                   _decisionRadio(id, 'rejected', 'Reject', Colors.red),
                 ],
               ),
@@ -382,8 +463,8 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                   labelText: activeDecision == 'approved'
                       ? 'Internal approval notes (Optional)'
                       : activeDecision == 'clarification_required'
-                          ? 'What clarification is needed? *'
-                          : 'Rejection reason *',
+                      ? 'What clarification is needed? *'
+                      : 'Rejection reason *',
                   alignLabelWithHint: true,
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -399,22 +480,33 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
                     backgroundColor: activeDecision == 'approved'
                         ? Colors.green
                         : activeDecision == 'clarification_required'
-                            ? Colors.blue
-                            : Colors.red,
+                        ? Colors.blue
+                        : Colors.red,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   child: isSubmitting
-                      ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox.square(
+                          dimension: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : Text(
                           activeDecision == 'approved'
                               ? 'Approve Payment & Record'
                               : activeDecision == 'clarification_required'
-                                  ? 'Request Parent Clarification'
-                                  : 'Reject & Notify Parent',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ? 'Request Parent Clarification'
+                              : 'Reject & Notify Parent',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                 ),
               ),
@@ -442,12 +534,18 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
           decoration: BoxDecoration(
             color: selected ? color.withOpacity(0.1) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? color : context.appTheme.outlineVariant),
+            border: Border.all(
+              color: selected ? color : context.appTheme.outlineVariant,
+            ),
           ),
           alignment: Alignment.center,
           child: Text(
             label,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: selected ? color : context.appTheme.onSurface),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: selected ? color : context.appTheme.onSurface,
+            ),
           ),
         ),
       ),
@@ -464,7 +562,11 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
             width: 80,
             child: Text(
               label,
-              style: TextStyle(fontSize: 11, color: context.appTheme.muted, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.appTheme.muted,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           Expanded(
@@ -540,7 +642,20 @@ class _PrincipalPaymentRequestsState extends State<PrincipalPaymentRequests> {
   String _formatDate(String raw) {
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return raw.isEmpty ? '-' : raw;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${parsed.day.toString().padLeft(2, '0')} ${months[parsed.month - 1]} ${parsed.year}';
   }
 

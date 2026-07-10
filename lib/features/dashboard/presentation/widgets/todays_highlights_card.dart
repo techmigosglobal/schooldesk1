@@ -621,9 +621,9 @@ class _AcknowledgeButtonState extends State<_AcknowledgeButton>
                     color: Color(0xFFFF9800),
                   ),
                 )
-              : Row(
+              : const Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(
                       Icons.check_rounded,
                       size: 12,

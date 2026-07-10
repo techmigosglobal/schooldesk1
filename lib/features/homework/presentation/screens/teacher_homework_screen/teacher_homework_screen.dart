@@ -58,8 +58,8 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       for (final row in rows.take(12)) {
         final id = _homeworkId(row);
         if (id.isEmpty) continue;
-        final submissions =
-            await BackendApiClient.instance.getHomeworkSubmissions(id);
+        final submissions = await BackendApiClient.instance
+            .getHomeworkSubmissions(id);
         counts[id] = teacherFlowList(
           submissions['submissions'] ?? submissions['data'],
         ).length;
@@ -77,7 +77,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
         _skippedToday = _reminderStatus == 'skipped';
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -91,17 +91,18 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       return await BackendApiClient.instance.getTodayHomeworkReminderStatus(
         sectionId: RoleAccessService.teacherClassId,
       );
-    } catch (_) {
+    } on Object catch (_) {
       return const {};
     }
   }
 
   Future<void> _skipToday() async {
     try {
-      final reminder = await BackendApiClient.instance.skipTodayHomeworkReminder(
-        sectionId: RoleAccessService.teacherClassId,
-        reason: 'Teacher skipped homework assignment for today',
-      );
+      final reminder = await BackendApiClient.instance
+          .skipTodayHomeworkReminder(
+            sectionId: RoleAccessService.teacherClassId,
+            reason: 'Teacher skipped homework assignment for today',
+          );
       if (!mounted) return;
       setState(() {
         _reminderStatus = teacherFlowText(
@@ -113,7 +114,7 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Homework reminder skipped for today')),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to skip homework reminder: $error')),
@@ -156,17 +157,20 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
     if (confirmed != true) return;
     try {
       final id = _homeworkId(row);
-      if (id.isEmpty) throw Exception('Homework record is missing its server id.');
+      if (id.isEmpty) {
+        throw Exception('Homework record is missing its server id.');
+      }
       await BackendApiClient.instance.deleteHomework(id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Homework deleted successfully')),
       );
       await _loadHomework(forceRefresh: true);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
     }
   }
 
@@ -290,7 +294,8 @@ class _TeacherHomeworkScreenState extends State<TeacherHomeworkScreen>
   bool _isHomeworkSubmittedTodayFromRows(List<Map<String, dynamic>> rows) {
     final today = DateTime.now();
     for (final row in rows) {
-      final dateStr = row['created_at'] ?? row['homework_date'] ?? row['due_date'];
+      final dateStr =
+          row['created_at'] ?? row['homework_date'] ?? row['due_date'];
       final date = DateTime.tryParse(teacherFlowDateOnly(dateStr));
       if (date != null &&
           date.year == today.year &&
@@ -371,7 +376,8 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
             .map((e) {
               if (e is Map) {
                 return teacherFlowText(
-                    e['subject_name'] ?? e['name'] ?? e['subject_id'] ?? e['id']);
+                  e['subject_name'] ?? e['name'] ?? e['subject_id'] ?? e['id'],
+                );
               }
               return teacherFlowText(e);
             })
@@ -447,7 +453,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         _attachments.add(_AttachmentItem(name: name, url: url));
         _uploading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _uploading = false;
@@ -511,7 +517,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
         ),
       );
       widget.onHomeworkCreated();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -647,7 +653,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                 const SizedBox(height: 16),
 
                 // ── Homework Type ─────────────────────────────────
-                _FormLabel(label: 'Type', icon: Icons.category_rounded),
+                const _FormLabel(label: 'Type', icon: Icons.category_rounded),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
                   value: _homeworkType,
@@ -663,7 +669,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                 const SizedBox(height: 16),
 
                 // ── Title ─────────────────────────────────────────
-                _FormLabel(label: 'Title', icon: Icons.title_rounded),
+                const _FormLabel(label: 'Title', icon: Icons.title_rounded),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _titleController,
@@ -675,7 +681,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                 const SizedBox(height: 16),
 
                 // ── Instructions ──────────────────────────────────
-                _FormLabel(label: 'Instructions / Description', icon: Icons.notes_rounded),
+                const _FormLabel(
+                  label: 'Instructions / Description',
+                  icon: Icons.notes_rounded,
+                ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _descriptionController,
@@ -685,31 +694,38 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                   decoration: _inputDecoration(
                     hint: 'Write what students need to do...',
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Enter instructions' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Enter instructions'
+                      : null,
                 ),
                 const SizedBox(height: 16),
 
                 // ── Due Date ──────────────────────────────────────
-                _FormLabel(label: 'Due Date', icon: Icons.event_rounded),
+                const _FormLabel(label: 'Due Date', icon: Icons.event_rounded),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _dueDateController,
                   enabled: !_saving,
                   readOnly: true,
                   onTap: _pickDueDate,
-                  decoration: _inputDecoration(
-                    hint: 'Tap to pick due date',
-                  ).copyWith(
-                    suffixIcon: const Icon(Icons.calendar_today_rounded, size: 18),
-                  ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Pick a due date' : null,
+                  decoration: _inputDecoration(hint: 'Tap to pick due date')
+                      .copyWith(
+                        suffixIcon: const Icon(
+                          Icons.calendar_today_rounded,
+                          size: 18,
+                        ),
+                      ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Pick a due date'
+                      : null,
                 ),
                 const SizedBox(height: 20),
 
                 // ── Attachments ───────────────────────────────────
-                _FormLabel(label: 'Attachments (Images / PDF)', icon: Icons.attach_file_rounded),
+                const _FormLabel(
+                  label: 'Attachments (Images / PDF)',
+                  icon: Icons.attach_file_rounded,
+                ),
                 const SizedBox(height: 8),
 
                 // Attachment list
@@ -720,7 +736,9 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF4FAFB),
                         borderRadius: BorderRadius.circular(10),
@@ -748,9 +766,14 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                             ),
                           ),
                           IconButton(
-                            onPressed: _saving ? null : () => _removeAttachment(i),
-                            icon: const Icon(Icons.close_rounded,
-                                size: 18, color: Colors.red),
+                            onPressed: _saving
+                                ? null
+                                : () => _removeAttachment(i),
+                            icon: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.red,
+                            ),
                             tooltip: 'Remove',
                           ),
                         ],
@@ -782,9 +805,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                         )
                       : const Icon(Icons.upload_file_rounded),
                   label: Text(
-                    _uploading
-                        ? 'Uploading...'
-                        : 'Attach Image or PDF',
+                    _uploading ? 'Uploading...' : 'Attach Image or PDF',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -801,8 +822,11 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline_rounded,
-                            color: Colors.red.shade600, size: 18),
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.red.shade600,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
@@ -892,8 +916,9 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                   fallback: subject,
                 ),
                 status: due.isEmpty ? 'Open' : 'Due $due',
-                statusColor:
-                    widget.isDueSoon(row) ? Colors.orange : teacherFlowAccent,
+                statusColor: widget.isDueSoon(row)
+                    ? Colors.orange
+                    : teacherFlowAccent,
                 body: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -902,11 +927,18 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Row(
                           children: [
-                            const Icon(Icons.access_time_rounded, size: 14, color: Colors.grey),
+                            const Icon(
+                              Icons.access_time_rounded,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(width: 4),
                             Text(
                               'Assigned: $createdDate at $createdTime',
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         ),
@@ -920,7 +952,10 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                           children: attachments.map((url) {
                             final isPdf = url.toLowerCase().contains('.pdf');
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(6),
@@ -930,12 +965,19 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    isPdf ? Icons.picture_as_pdf_rounded : Icons.image_rounded,
+                                    isPdf
+                                        ? Icons.picture_as_pdf_rounded
+                                        : Icons.image_rounded,
                                     size: 14,
-                                    color: isPdf ? Colors.red : teacherFlowAccent,
+                                    color: isPdf
+                                        ? Colors.red
+                                        : teacherFlowAccent,
                                   ),
                                   const SizedBox(width: 4),
-                                  const Text('Attachment', style: TextStyle(fontSize: 11)),
+                                  const Text(
+                                    'Attachment',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
                                 ],
                               ),
                             );
@@ -966,8 +1008,7 @@ class _AssignHomeworkTabState extends State<_AssignHomeworkTab> {
       hintStyle: const TextStyle(color: Color(0xFF9DB5BC), fontSize: 14),
       filled: true,
       fillColor: const Color(0xFFF4FAFB),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: Color(0xFFD0EDEA)),
@@ -1111,7 +1152,9 @@ class _ReviewTab extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: count > 0
                               ? const Color(0xFFEAF0FF)
@@ -1124,8 +1167,9 @@ class _ReviewTab extends StatelessWidget {
                             Icon(
                               Icons.people_rounded,
                               size: 14,
-                              color:
-                                  count > 0 ? Colors.indigo : teacherFlowMuted,
+                              color: count > 0
+                                  ? Colors.indigo
+                                  : teacherFlowMuted,
                             ),
                             const SizedBox(width: 4),
                             Text(

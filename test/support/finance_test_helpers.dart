@@ -25,8 +25,7 @@ class TestBackendAdapter implements HttpClientAdapter {
     seenRequests.add(options);
     final key = '${options.method.toUpperCase()} ${options.path}';
     final handler = handlers[key];
-    final payload =
-        handler != null ? await handler(options) : routes[key];
+    final payload = handler != null ? await handler(options) : routes[key];
     if (payload == null) {
       return ResponseBody.fromString(
         jsonEncode({'success': false, 'error': 'Missing fake route $key'}),

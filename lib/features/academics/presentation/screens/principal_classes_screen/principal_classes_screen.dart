@@ -122,7 +122,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         _loading = false;
       });
       _openPendingHubAction();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load Classes Hub from backend. $error';
@@ -145,7 +145,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       if (row == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Open a class first to continue this setup.'),
+            content: const Text('Open a class first to continue this setup.'),
             backgroundColor: context.appTheme.warning,
           ),
         );
@@ -192,7 +192,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   ) async {
     try {
       return await request;
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }
@@ -432,7 +432,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       );
       if (!mounted) return;
       setState(() => _academicYears = academicYears);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -455,6 +455,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
           staffSubjects: _staffSubjects,
           saving: _saving,
           onSubmit: _createClass,
+          existingClasses: _classes,
         ),
       ),
     );
@@ -518,14 +519,14 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Class created'),
+            content: const Text('Class created'),
             backgroundColor: context.appTheme.success,
           ),
         );
       }
 
       return created;
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -572,13 +573,13 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Class updated'),
+            content: const Text('Class updated'),
             backgroundColor: context.appTheme.success,
           ),
         );
       }
       return true;
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -630,7 +631,7 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
         ),
       );
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -756,14 +757,26 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
               onPressed: () async {
                 final message = controller.text.trim();
                 if (message.isEmpty) return;
-                await BackendApiClient.instance.createPrincipalClassInstruction(
-                  sectionId: _text(row['section_id']),
-                  title: 'Class observation',
-                  message: message,
-                  type: 'observation',
-                  priority: 'normal',
-                );
-                if (context.mounted) Navigator.pop(context, true);
+                try {
+                  await BackendApiClient.instance
+                      .createPrincipalClassInstruction(
+                        sectionId: _text(row['section_id']),
+                        title: 'Class observation',
+                        message: message,
+                        type: 'observation',
+                        priority: 'normal',
+                      );
+                  if (context.mounted) Navigator.pop(context, true);
+                } on Object catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to save observation: $e'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                }
               },
               icon: const Icon(Icons.send_outlined),
               label: const Text('Save observation'),
@@ -809,7 +822,9 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
       final capacity = _int(row['capacity']);
       final issues = _int(row['pending_issues']);
       final matchesFilter = switch (_capacityFilter) {
-        'Healthy' => issues == 0 && (capacity == 0 || students < capacity),
+        // Require capacity > 0 so classes without a set capacity limit are
+        // not erroneously treated as "Healthy" (capacity==0 is unknown, not OK).
+        'Healthy' => issues == 0 && capacity > 0 && students < capacity,
         'Full' => capacity > 0 && students >= capacity,
         'Issues' => issues > 0,
         _ => true,
@@ -2581,9 +2596,7 @@ class _ClassDetailPage extends StatelessWidget {
                 ),
                 _ClassDetailRow(
                   label: 'Academic Year',
-                  value: _resolveAcademicYearLabel(
-                    row['academic_year_id'],
-                  ),
+                  value: _resolveAcademicYearLabel(row['academic_year_id']),
                 ),
                 _ClassDetailRow(
                   label: 'Latest Instruction',
@@ -2653,8 +2666,9 @@ class _ClassDetailPage extends StatelessWidget {
                           subtitle: teacherForSubject(subject),
                         ),
                     ],
-            ),            ],
-          ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2970,10 +2984,7 @@ class _ClassDetailCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const _ClassDetailCard({
-    required this.title,
-    required this.children,
-  });
+  const _ClassDetailCard({required this.title, required this.children});
 
   @override
   Widget build(BuildContext context) {
@@ -3174,6 +3185,7 @@ class _CreateClassSetupPage extends StatefulWidget {
   final List<Map<String, dynamic>> subjects;
   final List<Map<String, dynamic>> gradeSubjects;
   final List<Map<String, dynamic>> staffSubjects;
+  final List<Map<String, dynamic>>? existingClasses;
   final bool saving;
   final Future<Map<String, dynamic>?> Function({
     required String academicYearId,
@@ -3198,6 +3210,7 @@ class _CreateClassSetupPage extends StatefulWidget {
     required this.staffSubjects,
     required this.saving,
     required this.onSubmit,
+    this.existingClasses = const [],
   });
 
   @override
@@ -3221,6 +3234,8 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
   String _academicYearId = '';
   String _teacherId = '';
   bool _saving = false;
+  bool _submitted = false; // synchronous re-entry guard
+  List<Map<String, dynamic>> get _existing => widget.existingClasses ?? [];
   String _coTeacherId = "";
 
   bool get _busy => _saving || widget.saving;
@@ -3474,37 +3489,93 @@ class _CreateClassSetupPageState extends State<_CreateClassSetupPage> {
   }
 
   Future<void> _save() async {
+    if (_submitted) return; // prevent double-tap / re-entry
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
-    final created = await widget.onSubmit(
-      academicYearId: _academicYearId,
-      sectionName: _section.text.trim(),
-      capacity: int.tryParse(_capacity.text.trim()) ?? 40,
-      gradeId: '',
-      gradeName: _gradeName.text.trim(),
-      gradeNumber: _gradeOrderValue(),
-      coTeacherId: _coTeacherId,
-      classTeacherId: _teacherId,
-      roomNumber: _roomNumber.text.trim(),
-      roomType: _roomType.text.trim(),
-      roomCapacity: int.tryParse(_capacity.text.trim()) ?? 40,
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (created != null && context.mounted) {
-      Navigator.of(context).pushReplacement<bool, bool>(
-        MaterialPageRoute(
-          builder: (_) => _AssignSubjectsSetupPage(
-            classRow: _createdClassRow(created),
-            setupPayload: created,
-            academicYears: widget.academicYears,
-            initialSubjects: widget.subjects,
-            initialGradeSubjects: widget.gradeSubjects,
-            initialStaffSubjects: widget.staffSubjects,
+    try {
+      // Pre-submit check: warn about similar existing classes
+      final gradeName = _gradeName.text.trim();
+      final sectionName = _section.text.trim();
+      final duplicate = _existing.any((row) {
+        final existingGrade = (row['grade_name'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final existingSection = (row['section_name'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        return existingGrade == gradeName.toLowerCase() &&
+            existingSection == sectionName.toLowerCase();
+      });
+      if (duplicate && mounted) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Class already exists'),
+            content: const Text(
+              'A class named "\$gradeName - \$sectionName" already exists. Do you want to create another one?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Create anyway'),
+              ),
+            ],
           ),
-        ),
-        result: true,
+        );
+        if (confirmed != true) {
+          _submitted = false;
+          return;
+        }
+      }
+
+      _submitted = true;
+      setState(() => _saving = true);
+      final created = await widget.onSubmit(
+        academicYearId: _academicYearId,
+        sectionName: _section.text.trim(),
+        capacity: int.tryParse(_capacity.text.trim()) ?? 40,
+        gradeId: '',
+        gradeName: _gradeName.text.trim(),
+        gradeNumber: _gradeOrderValue(),
+        coTeacherId: _coTeacherId,
+        classTeacherId: _teacherId,
+        roomNumber: _roomNumber.text.trim(),
+        roomType: _roomType.text.trim(),
+        roomCapacity: int.tryParse(_capacity.text.trim()) ?? 40,
       );
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _submitted = false;
+      });
+      if (created != null && context.mounted) {
+        Navigator.of(context).pushReplacement<bool, bool>(
+          MaterialPageRoute(
+            builder: (_) => _AssignSubjectsSetupPage(
+              classRow: _createdClassRow(created),
+              setupPayload: created,
+              academicYears: widget.academicYears,
+              initialSubjects: widget.subjects,
+              initialGradeSubjects: widget.gradeSubjects,
+              initialStaffSubjects: widget.staffSubjects,
+            ),
+          ),
+          result: true,
+        );
+      }
+    } on Object catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _submitted = false;
+        });
+      }
+      rethrow;
     }
   }
 
@@ -4003,7 +4074,6 @@ class _ClassSetupFieldShell extends StatelessWidget {
   }
 }
 
-
 class _ClassSetupActionButton extends StatelessWidget {
   final bool saving;
   final VoidCallback? onPressed;
@@ -4213,7 +4283,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         _staffSubjects = results[2];
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load subject setup from backend. $error';
@@ -4317,7 +4387,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         ],
       );
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -4347,7 +4417,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
         updated,
       );
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -4389,7 +4459,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
     try {
       await BackendApiClient.instance.deleteRaw('/subjects/$subjectId');
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -4413,7 +4483,7 @@ class _AssignSubjectsSetupPageState extends State<_AssignSubjectsSetupPage> {
       body: SafeArea(
         child: Column(
           children: [
-            _SetupFlowHeader(
+            const _SetupFlowHeader(
               title: 'Assign Subjects',
               subtitle:
                   'Add class subjects. Class teacher and co-teacher teach these subjects.',
@@ -4616,7 +4686,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         _feeCategories = results[1];
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load existing backend fee structures. $error';
@@ -4750,7 +4820,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
         _stage = 3;
       });
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       _showFeeError('Unable to save fee structures: $error');
     } finally {
@@ -4803,7 +4873,7 @@ class _FeesSetupPageState extends State<_FeesSetupPage> {
       if (!mounted) return;
       setState(() => _invoiceGenerationResult = result);
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       _showFeeError('Unable to generate invoices: $error');
     } finally {
@@ -5261,7 +5331,7 @@ class _AddSelectSubjectSetupPageState
         _subjects = subjects;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load available subjects from backend. $error';
@@ -5303,7 +5373,7 @@ class _AddSelectSubjectSetupPageState
       );
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _addingSubjectId = '');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -5473,7 +5543,7 @@ class _CreateSubjectSetupPageState extends State<_CreateSubjectSetupPage> {
       );
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -6905,7 +6975,7 @@ class _BottomSheetPanel extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
       ),
       child: SingleChildScrollView(
         child: Column(

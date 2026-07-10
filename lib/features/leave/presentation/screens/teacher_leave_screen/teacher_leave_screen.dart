@@ -65,7 +65,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
             .toList();
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -117,7 +117,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Leave request recalled')));
       await _loadLeave();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to recall leave request: $error')),
@@ -190,7 +190,7 @@ class _TeacherLeaveScreenState extends State<TeacherLeaveScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          TeacherFlowSectionHeader(title: 'Leave History'),
+          const TeacherFlowSectionHeader(title: 'Leave History'),
           const SizedBox(height: 10),
           if (_applications.isEmpty)
             const TeacherFlowCard(

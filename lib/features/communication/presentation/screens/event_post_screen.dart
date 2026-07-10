@@ -137,7 +137,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
           );
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -161,7 +161,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         _posts = response;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         if (showSpinner) _loading = false;
@@ -224,7 +224,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       _clearForm();
       try {
         await BackendApiClient.instance.invalidateCachedReads();
-      } catch (_) {
+      } on Object catch (_) {
         // The write succeeded; cache cleanup should not turn it into an error.
       }
       unawaited(
@@ -235,7 +235,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         _tabController.animateTo(1);
       });
       unawaited(_loadPosts(showSpinner: false));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -319,7 +319,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
       await BackendApiClient.instance.deleteEventPost(id);
       try {
         await BackendApiClient.instance.invalidateCachedReads();
-      } catch (_) {
+      } on Object catch (_) {
         // The delete succeeded; keep the UI refresh path alive.
       }
       unawaited(
@@ -337,7 +337,7 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
         context,
       ).showSnackBar(const SnackBar(content: Text('Event post deleted.')));
       unawaited(_loadPosts(showSpinner: false));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -494,10 +494,13 @@ class _TeacherEventPostScreenState extends State<TeacherEventPostScreen>
                             IconButton(
                               icon: const Icon(Icons.close, size: 16),
                               onPressed: () => setState(() {
-                                _uploadedUrls.removeAt(entry.key);
-                                if (entry.key < _uploadedMedia.length) {
-                                  _uploadedMedia.removeAt(entry.key);
-                                }
+                                final url = entry.value;
+                                final idx = entry.key;
+                                _uploadedUrls.removeAt(idx);
+                                // Remove the matching media item by URL so the
+                                // two lists stay in sync even if they diverge
+                                // in length (e.g. after a failed upload).
+                                _uploadedMedia.removeWhere((m) => m.url == url);
                               }),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),

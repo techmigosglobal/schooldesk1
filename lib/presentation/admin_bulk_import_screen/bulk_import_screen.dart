@@ -72,7 +72,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
           _selectedFile = result.files.first;
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -113,7 +113,7 @@ class _BulkImportScreenState extends State<BulkImportScreen>
           _showPreview = true;
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -284,7 +284,11 @@ class _BulkImportScreenState extends State<BulkImportScreen>
             padding: const EdgeInsets.all(32),
             child: Column(
               children: [
-                Icon(Icons.cloud_upload, size: 48, color: AppTheme.primary),
+                const Icon(
+                  Icons.cloud_upload,
+                  size: 48,
+                  color: AppTheme.primary,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _selectedFile?.name ?? 'Select CSV file',

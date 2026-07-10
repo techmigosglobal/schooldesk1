@@ -50,7 +50,7 @@ class _PrincipalAuditLogsScreenState extends State<PrincipalAuditLogsScreen> {
       );
       if (!mounted) return;
       setState(() => _logs = logs);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _error = error.toString());
     } finally {

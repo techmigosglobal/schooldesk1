@@ -211,7 +211,7 @@ class _ParentPaymentRequestFormScreenState
       updated.remove('tr');
       updated.remove('tid');
       return uri.replace(queryParameters: updated).toString();
-    } catch (_) {
+    } on Object catch (_) {
       return uriText;
     }
   }
@@ -224,7 +224,7 @@ class _ParentPaymentRequestFormScreenState
           uri.host == 'pay' &&
           params['pa']?.trim().isNotEmpty == true &&
           params['am']?.trim().isNotEmpty == true;
-    } catch (_) {
+    } on Object catch (_) {
       return false;
     }
   }
@@ -302,7 +302,7 @@ class _ParentPaymentRequestFormScreenState
         _paymentConfig = config;
         _loadingConfig = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _configError = error.toString();
@@ -838,7 +838,9 @@ class _ParentPaymentRequestFormScreenState
             width: double.infinity,
             child: FilledButton.icon(
               onPressed:
-                  (_creatingIntent || _submitting || _intentReference.isNotEmpty)
+                  (_creatingIntent ||
+                      _submitting ||
+                      _intentReference.isNotEmpty)
                   ? null
                   : () => _createPaymentIntent(),
               icon: _creatingIntent
@@ -1262,7 +1264,7 @@ class _ParentPaymentRequestFormScreenState
         );
       }
       return intent;
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         setState(() => _creatingIntent = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1371,7 +1373,9 @@ class _ParentPaymentRequestFormScreenState
             size: 48,
           ),
           title: Text(
-            _isClarificationResubmit ? 'Proof Resubmitted' : 'Payment Proof Submitted',
+            _isClarificationResubmit
+                ? 'Proof Resubmitted'
+                : 'Payment Proof Submitted',
             textAlign: TextAlign.center,
             style: GoogleFonts.dmSans(fontWeight: FontWeight.w700),
           ),
@@ -1396,7 +1400,11 @@ class _ParentPaymentRequestFormScreenState
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.receipt_rounded, size: 16, color: context.appTheme.primary),
+                      Icon(
+                        Icons.receipt_rounded,
+                        size: 16,
+                        color: context.appTheme.primary,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1443,7 +1451,7 @@ class _ParentPaymentRequestFormScreenState
           ],
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
       ScaffoldMessenger.of(context).showSnackBar(

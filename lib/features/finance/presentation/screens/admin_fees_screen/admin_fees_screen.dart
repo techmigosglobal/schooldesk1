@@ -106,7 +106,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         _recentPayments = invoices.expand(_normalizePayments).toList();
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load finance workspace from backend. $error';
@@ -518,7 +518,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         label: const Text('Create Fee Structure'),
       ),
       child: _feeStructures.isEmpty
-          ? OpsEmptyState(
+          ? const OpsEmptyState(
               icon: Icons.price_change_outlined,
               title: 'No fee structures',
               message: 'Create fee structures before generating invoices.',
@@ -564,15 +564,12 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         label: const Text('Generate Invoices'),
       ),
       child: _pendingDues.isEmpty
-          ? OpsListRow(
+          ? const OpsListRow(
               icon: Icons.verified_outlined,
               title: 'No outstanding balances',
               subtitle:
                   'Backend invoice balances are clear for the current result set.',
-              trailing: const OpsStatusPill(
-                label: 'Clear',
-                color: Colors.green,
-              ),
+              trailing: OpsStatusPill(label: 'Clear', color: Colors.green),
             )
           : Column(
               children: [
@@ -659,7 +656,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         children: [
           _buildPaymentFilters(),
           if (filteredPayments.isEmpty)
-            OpsEmptyState(
+            const OpsEmptyState(
               icon: Icons.payments_outlined,
               title: 'No payments found',
               message: 'No payments match the current filters.',
@@ -826,7 +823,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           ),
           const SizedBox(height: 8),
           if (filtered.isEmpty)
-            OpsEmptyState(
+            const OpsEmptyState(
               icon: Icons.volunteer_activism_outlined,
               title: 'No concession requests',
               message:
@@ -931,7 +928,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             : 'Concession rejected successfully.',
         success: true,
       );
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to update concession: $error');
     } finally {
       if (mounted) {
@@ -1194,7 +1191,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             ? 'Delete failed: ${e.message}'
             : 'Unable to delete fee component.',
       );
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to delete fee component: $error');
     }
   }
@@ -1268,7 +1265,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             'Payment reminder for outstanding balance ${_money(_numValue(due['balance']))}',
       });
       _snack('Reminder request saved', success: true);
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to send reminder: $error');
     }
   }
@@ -1288,7 +1285,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         },
       );
       _snack('Report export queued', success: true);
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to queue report export: $error');
     }
   }
@@ -1308,7 +1305,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
         },
       );
       _snack('Receipt export queued', success: true);
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to queue receipt export: $error');
     }
   }
@@ -1340,7 +1337,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
           } else {
             throw Exception('No items in invoice');
           }
-        } catch (_) {
+        } on Object catch (_) {
           feeItems = [
             {'description': 'Fee payment', 'amount': amount, 'status': 'Paid'},
           ];
@@ -1366,7 +1363,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Receipt');
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to preview receipt: $error');
     }
   }
@@ -1398,7 +1395,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
             };
           }).toList();
         }
-      } catch (_) {}
+      } on Object catch (_) {}
 
       if (feeItems.isEmpty) {
         feeItems = [
@@ -1428,7 +1425,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
 
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Invoice');
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to preview invoice: $error');
     }
   }
@@ -1507,7 +1504,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       );
       if (!mounted) return;
       await pdfService.previewDocument(context, bytes, 'Fee Collection Report');
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) _snack('Unable to generate report: $error');
     } finally {
       if (mounted) setState(() => _generatingInAppReport = false);
@@ -1530,7 +1527,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       if (!mounted) return;
       setState(() => _paymentConfig = config);
       _snack('Payment details saved for parent fee payments.', success: true);
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to save payment details: $error');
     } finally {
       if (mounted) setState(() => _savingPaymentConfig = false);
@@ -1561,7 +1558,7 @@ class _AdminFeesScreenState extends State<AdminFeesScreen> {
       final config = Map<String, dynamic>.from(data);
       setState(() => _paymentConfig = config);
       _snack('Payment QR updated for parents.', success: true);
-    } catch (error) {
+    } on Object catch (error) {
       _snack('Unable to upload payment QR: $error');
     } finally {
       if (mounted) setState(() => _uploadingQr = false);

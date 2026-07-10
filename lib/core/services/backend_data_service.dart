@@ -82,21 +82,33 @@ class BackendDataService {
         final students = await _fetchAll(
           (page, pageSize) => _api.getStudents(page: page, pageSize: pageSize),
         );
+        // Fetch attendance summaries in parallel batches of 10 to avoid an N+1
+        // pattern. 200 students → 20 parallel batches instead of 200 sequential
+        // requests, reducing wall-clock time by ~10×.
+        const batchSize = 10;
         final rows = <Map<String, dynamic>>[];
-        for (final student in students) {
-          final summary = await _api.getStudentAttendanceSummary(
-            studentId: student.id,
+        for (var i = 0; i < students.length; i += batchSize) {
+          final batch = students.sublist(
+            i,
+            (i + batchSize).clamp(0, students.length),
           );
-          rows.add({
-            'class': (student.currentSectionId ?? '').isEmpty
-                ? 'Unassigned'
-                : student.currentSectionId,
-            'student_id': student.id,
-            'student_name': student.fullName,
-            'present': summary['present_days'] ?? 0,
-            'total': summary['total_days'] ?? 0,
-            'percent': summary['percentage'] ?? 0,
-          });
+          final summaries = await Future.wait(
+            batch.map((s) => _api.getStudentAttendanceSummary(studentId: s.id)),
+          );
+          for (var j = 0; j < batch.length; j++) {
+            final student = batch[j];
+            final summary = summaries[j];
+            rows.add({
+              'class': (student.currentSectionId ?? '').isEmpty
+                  ? 'Unassigned'
+                  : student.currentSectionId,
+              'student_id': student.id,
+              'student_name': student.fullName,
+              'present': summary['present_days'] ?? 0,
+              'total': summary['total_days'] ?? 0,
+              'percent': summary['percentage'] ?? 0,
+            });
+          }
         }
         return rows;
       case kAcademicYears:

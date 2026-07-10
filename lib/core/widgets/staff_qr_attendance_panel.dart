@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -77,7 +78,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       });
       _startLiveTicker();
       unawaited(_loadRecentScans());
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = error.toString();
@@ -96,7 +97,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
       if (!mounted) return;
       setState(() => _recent = rows);
-    } catch (error) {
+    } on Object catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
           'Staff QR polling failed: $error',
@@ -114,7 +115,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
       final rows = await BackendApiClient.instance.getStaffAttendanceForDate();
       if (!mounted) return;
       setState(() => _recent = rows);
-    } catch (error) {
+    } on Object catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
           'Staff QR poll scan check failed: $error',
@@ -153,7 +154,8 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
         mimeType: 'text/csv',
         title: 'Staff QR logs',
         subject: 'Staff QR logs for $date',
-        text: 'Daily staff QR attendance log exported from Arish Ville.',
+        text:
+            'Daily staff QR attendance log exported from ${AppConstants.appName}.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -162,7 +164,7 @@ class _StaffQrAttendancePanelState extends State<StaffQrAttendancePanel> {
           backgroundColor: Theme.of(context).schoolDesk.success,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

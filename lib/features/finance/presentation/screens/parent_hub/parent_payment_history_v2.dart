@@ -43,16 +43,18 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         });
         return;
       }
-      
+
       final child = children[_activeChildIndex];
       final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
-      
+
       final invoices = studentId.isEmpty
           ? <Map<String, dynamic>>[]
           : await BackendApiClient.instance.getInvoices(studentId: studentId);
       final paymentRequests = studentId.isEmpty
           ? <Map<String, dynamic>>[]
-          : await BackendApiClient.instance.getParentPaymentRequests(studentId: studentId);
+          : await BackendApiClient.instance.getParentPaymentRequests(
+              studentId: studentId,
+            );
 
       final List<Map<String, dynamic>> historyList = [];
 
@@ -89,9 +91,11 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         historyList.add({
           'id': request['id'] ?? '',
           'invoiceId': request['invoice_id'] ?? '',
-          'component': 'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
+          'component':
+              'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
           'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
-          'date': (request['payment_date'] ?? request['created_at'] ?? '').toString(),
+          'date': (request['payment_date'] ?? request['created_at'] ?? '')
+              .toString(),
           'method': (request['payment_mode'] ?? '').toString(),
           'receiptNo': (request['request_reference'] ?? '').toString(),
           'student': _studentName(child),
@@ -104,7 +108,9 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
       }
 
       historyList.sort(
-        (a, b) => (b['date'] ?? '').toString().compareTo((a['date'] ?? '').toString()),
+        (a, b) => (b['date'] ?? '').toString().compareTo(
+          (a['date'] ?? '').toString(),
+        ),
       );
 
       setState(() {
@@ -112,7 +118,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         _paymentHistory = historyList;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -129,28 +135,30 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         selectedIndex: ParentNav.fees,
         onDestinationSelected: (_) {},
       ),
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.parent),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.parent,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? _buildError()
-              : RefreshIndicator(
-                  onRefresh: _loadHistory,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      if (_childrenData.length > 1) ...[
-                        _buildChildSelector(),
-                        const SizedBox(height: 16),
-                      ],
-                      if (_paymentHistory.isEmpty)
-                        _buildEmptyState()
-                      else
-                        ..._paymentHistory.map((item) => _buildHistoryCard(item)),
-                    ],
-                  ),
-                ),
+          ? _buildError()
+          : RefreshIndicator(
+              onRefresh: _loadHistory,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  if (_childrenData.length > 1) ...[
+                    _buildChildSelector(),
+                    const SizedBox(height: 16),
+                  ],
+                  if (_paymentHistory.isEmpty)
+                    _buildEmptyState()
+                  else
+                    ..._paymentHistory.map((item) => _buildHistoryCard(item)),
+                ],
+              ),
+            ),
     );
   }
 
@@ -173,9 +181,13 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isActive ? const Color(0xFF1A6B4A) : context.appTheme.surfaceVariant,
+                color: isActive
+                    ? const Color(0xFF1A6B4A)
+                    : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(20),
-                border: isActive ? null : Border.all(color: context.appTheme.outlineVariant),
+                border: isActive
+                    ? null
+                    : Border.all(color: context.appTheme.outlineVariant),
               ),
               child: Text(
                 _studentName(_childrenData[i]).split(' ').first,
@@ -199,11 +211,18 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline_rounded, color: context.appTheme.error, size: 48),
+            Icon(
+              Icons.error_outline_rounded,
+              color: context.appTheme.error,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             Text(
               'Error Loading Payments',
-              style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 18),
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -212,10 +231,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
               style: GoogleFonts.ibmPlexSans(color: context.appTheme.muted),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _loadHistory,
-              child: const Text('Retry'),
-            ),
+            ElevatedButton(onPressed: _loadHistory, child: const Text('Retry')),
           ],
         ),
       ),
@@ -229,11 +245,18 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.history_rounded, size: 64, color: context.appTheme.muted),
+            Icon(
+              Icons.history_rounded,
+              size: 64,
+              color: context.appTheme.muted,
+            ),
             const SizedBox(height: 16),
             Text(
               'No Payment Records',
-              style: GoogleFonts.ibmPlexSans(fontSize: 18, fontWeight: FontWeight.bold),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
@@ -259,7 +282,9 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     Color statusBg = context.appTheme.warningContainer;
     IconData statusIcon = Icons.pending_actions_rounded;
 
-    if (rawStatus == 'completed' || rawStatus == 'approved' || status == 'Paid') {
+    if (rawStatus == 'completed' ||
+        rawStatus == 'approved' ||
+        status == 'Paid') {
       statusColor = context.appTheme.success;
       statusBg = context.appTheme.successContainer;
       statusIcon = Icons.check_circle_rounded;
@@ -301,19 +326,28 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                   children: [
                     Text(
                       item['component'],
-                      style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Paid via ${method.toUpperCase()} · $dateStr',
-                      style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 11,
+                        color: context.appTheme.muted,
+                      ),
                     ),
                   ],
                 ),
               ),
               Text(
                 '₹${amount.toStringAsFixed(0)}',
-                style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.w800),
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
@@ -323,9 +357,14 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
             children: [
               Text(
                 'Ref: $reference',
-                style: GoogleFonts.ibmPlexSans(fontSize: 12, color: context.appTheme.muted),
+                style: GoogleFonts.ibmPlexSans(
+                  fontSize: 12,
+                  color: context.appTheme.muted,
+                ),
               ),
-              if (rawStatus == 'completed' || rawStatus == 'approved' || status == 'Paid')
+              if (rawStatus == 'completed' ||
+                  rawStatus == 'approved' ||
+                  status == 'Paid')
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.pushNamed(
@@ -343,10 +382,15 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF1A6B4A),
                     side: const BorderSide(color: Color(0xFF1A6B4A)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 )
               else if (rawStatus == 'clarification_required')
@@ -357,10 +401,15 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
                   style: FilledButton.styleFrom(
                     backgroundColor: context.appTheme.error,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 ),
             ],
@@ -375,8 +424,10 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
     final request = payment['paymentRequest'] is Map
         ? Map<String, dynamic>.from(payment['paymentRequest'] as Map)
         : <String, dynamic>{};
-    
-    final student = _childrenData.isEmpty ? null : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
+
+    final student = _childrenData.isEmpty
+        ? null
+        : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
     final result = await Navigator.pushNamed(
       context,
       '/parent/payment-flow',
@@ -387,7 +438,7 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
             'component': payment['component'],
             'amount': payment['amount'],
             'fee_type': 'tuition',
-          }
+          },
         ],
         student: student,
         paymentRequest: request,
@@ -434,13 +485,27 @@ class _ParentPaymentHistoryV2State extends State<ParentPaymentHistoryV2> {
   String _studentName(Map<String, dynamic> student) {
     final name = '${student['name'] ?? ''}'.trim();
     if (name.isNotEmpty) return name;
-    return '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+    return '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+        .trim();
   }
 
   String _formatDate(String raw) {
     final parsed = DateTime.tryParse(raw);
     if (parsed == null) return raw.isEmpty ? '-' : raw;
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${parsed.day.toString().padLeft(2, '0')} ${months[parsed.month - 1]} ${parsed.year}';
   }
 }

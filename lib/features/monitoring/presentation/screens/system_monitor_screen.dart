@@ -46,7 +46,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                   .toList()
             : const [];
       });
-    } catch (error) {
+    } on Object catch (error) {
       setState(() => _error = error.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -62,7 +62,9 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Database backup copied to clipboard! Save it as a JSON file.'),
+          content: Text(
+            'Database backup copied to clipboard! Save it as a JSON file.',
+          ),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
         ),
@@ -83,7 +85,10 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                 child: SingleChildScrollView(
                   child: SelectableText(
                     jsonStr,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 10),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 10,
+                    ),
                   ),
                 ),
               ),
@@ -97,7 +102,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
           ],
         ),
       );
-    } catch (err) {
+    } on Object catch (err) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Backup failed: $err'),
@@ -163,7 +168,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
       _load();
-    } catch (err) {
+    } on Object catch (err) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Restore failed: $err'),
@@ -216,7 +221,7 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
         ),
       );
       _load();
-    } catch (err) {
+    } on Object catch (err) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Wipe failed: $err'),
@@ -288,9 +293,8 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                           const SizedBox(width: 8),
                           Text(
                             'Database Administration',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -298,8 +302,8 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                       Text(
                         'Perform backups, restorations, or clear transaction/student records for this school.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey.shade600,
-                            ),
+                          color: Colors.grey.shade600,
+                        ),
                       ),
                       const SizedBox(height: 14),
                       Wrap(
@@ -318,7 +322,9 @@ class _SystemMonitorScreenState extends State<SystemMonitorScreen> {
                           ),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              foregroundColor: Theme.of(context).colorScheme.error,
+                              foregroundColor: Theme.of(
+                                context,
+                              ).colorScheme.error,
                             ),
                             icon: const Icon(Icons.delete_forever_rounded),
                             label: const Text('Wipe DB'),

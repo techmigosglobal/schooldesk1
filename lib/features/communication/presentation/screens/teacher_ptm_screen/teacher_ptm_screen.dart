@@ -64,7 +64,7 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
         _meetings = meetings;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -150,7 +150,7 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
       );
       setState(() => _saving = false);
       await _loadPTMFlow();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -172,9 +172,10 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
       final payload = <String, dynamic>{'status': status};
       final notes = teacherFlowText(meeting['notes']).trim();
       final teacherId = RoleAccessService.teacherStaffId.trim();
-      final sectionId = teacherFlowText(meeting['section_id'],
-          fallback: RoleAccessService.teacherClassId)
-          .trim();
+      final sectionId = teacherFlowText(
+        meeting['section_id'],
+        fallback: RoleAccessService.teacherClassId,
+      ).trim();
       if (notes.isNotEmpty) payload['notes'] = notes;
       if (teacherId.isNotEmpty) payload['teacher_id'] = teacherId;
       if (sectionId.isNotEmpty) payload['section_id'] = sectionId;
@@ -184,7 +185,7 @@ class _TeacherPTMScreenState extends State<TeacherPTMScreen>
         payload,
       );
       await _loadPTMFlow();
-    } catch (error) {
+    } on Object catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update meeting status: $error'),

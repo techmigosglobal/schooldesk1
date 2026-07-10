@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/pdf_service.dart';
 import 'package:schooldesk1/core/services/share_export_service.dart';
+
 enum _AttendanceView { staff, students, classes, monitor, reports }
 
 class PrincipalAttendanceScreen extends StatefulWidget {
@@ -73,7 +75,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       setState(() {
         _staffAttendance = staffAttendance;
       });
-    } catch (error) {
+    } on Object {
       // Silently ignore polling errors
     }
   }
@@ -108,7 +110,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       if (_selectedSectionId.isNotEmpty) {
         await _loadSectionStudents(_selectedSectionId);
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load attendance dashboard. $error';
@@ -150,7 +152,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         _detailLoading = false;
       });
       await _loadRecordsForStudents(response.data);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _sectionStudents = const [];
@@ -179,7 +181,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         _studentAttendanceRecords = records;
         _detailLoading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _studentAttendanceRecords = const [];
@@ -205,7 +207,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 year: DateTime.now().year,
               );
           return _StudentRecordLoad.success(student.id, records);
-        } catch (error) {
+        } on Object catch (error) {
           return _StudentRecordLoad.failure(student.id, error);
         }
       }),
@@ -408,8 +410,6 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
     setState(() => _view = view);
   }
 
-
-
   Widget _staffView() {
     final attendanceByStaffId = {
       for (final row in _staffAttendance) row.staffId: row,
@@ -425,9 +425,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           _SoftCard(
             child: Row(
               children: [
-                _IconBubble(
+                const _IconBubble(
                   icon: Icons.verified_rounded,
-                  color: const Color(0xFF24A765),
+                  color: Color(0xFF24A765),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -665,9 +665,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
               color: const Color(0xFFEAF5FF),
               child: Row(
                 children: [
-                  _IconBubble(
+                  const _IconBubble(
                     icon: Icons.fact_check_rounded,
-                    color: const Color(0xFF1976E8),
+                    color: Color(0xFF1976E8),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -762,11 +762,11 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SoftCard(
-            color: const Color(0xFFEAF5FF),
+          const _SoftCard(
+            color: Color(0xFFEAF5FF),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -781,7 +781,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
                 ),
                 _IconBubble(
                   icon: Icons.analytics_outlined,
-                  color: const Color(0xFF1976E8),
+                  color: Color(0xFF1976E8),
                   large: true,
                 ),
               ],
@@ -957,7 +957,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
       if (!mounted) return;
       _showSnack('Attendance reopened', success: true);
       await _load();
-    } catch (error) {
+    } on Object catch (error) {
       _showSnack('Unable to reopen attendance: $error');
     }
   }
@@ -1023,14 +1023,14 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
           mimeType: 'text/csv',
           title: title,
           subject: title,
-          text: 'Attendance export generated from Arish Ville.',
+          text: 'Attendance export generated from ${AppConstants.appName}.',
         );
       } else {
         final bytes = await PdfService.getInstance().generateAttendanceReport(
           className: _sectionLabel(_selectedSectionId),
           month: DateFormat('dd MMM yyyy').format(DateTime.now()),
           students: rows,
-          schoolName: 'Arish Ville',
+          schoolName: AppConstants.appName,
         );
         if (!mounted) return;
         await PdfService.getInstance().previewDocument(context, bytes, title);
@@ -1040,7 +1040,7 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         'Export ready${_text(export['download_url']).isEmpty ? '' : ': ${export['download_url']}'}',
         success: true,
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showSnack('Unable to export report: $error');
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -1072,7 +1072,9 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
   }
 
   DateTime _recordDateTime(Map<String, dynamic> row) {
-    final marked = DateTime.tryParse(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
+    final marked = DateTime.tryParse(
+      _text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']),
+    );
     if (marked != null) return marked;
     final session = row['session'] is Map
         ? Map<String, dynamic>.from(row['session'] as Map)
@@ -1085,12 +1087,18 @@ class _PrincipalAttendanceScreenState extends State<PrincipalAttendanceScreen> {
         ? Map<String, dynamic>.from(row['session'] as Map)
         : const <String, dynamic>{};
     final raw = _text(session['date'], fallback: _text(row['date']));
-    if (raw.isEmpty) return _dateOnly(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
+    if (raw.isEmpty) {
+      return _dateOnly(
+        _text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']),
+      );
+    }
     return raw.split('T').first;
   }
 
   String _recordTime(Map<String, dynamic> row) {
-    final markedAt = DateTime.tryParse(_text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']));
+    final markedAt = DateTime.tryParse(
+      _text(row['marked_at'] ?? row['created_at'] ?? row['updated_at']),
+    );
     if (markedAt == null) return 'Time not recorded';
     return DateFormat('hh:mm a').format(markedAt.toLocal());
   }
@@ -1576,7 +1584,9 @@ class _StudentDetailPage extends StatelessWidget {
       fallback: _detailText(row['date']),
     );
     if (raw.isNotEmpty) return raw.split('T').first;
-    return _detailText(row['marked_at'] ?? row['created_at'] ?? row['updated_at']).split('T').first;
+    return _detailText(
+      row['marked_at'] ?? row['created_at'] ?? row['updated_at'],
+    ).split('T').first;
   }
 
   static String _detailText(Object? value, {String fallback = ''}) {
@@ -1939,7 +1949,9 @@ class _AttendanceHistoryLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = _StudentDetailPage._detailRecordDate(record);
     final markedAt = DateTime.tryParse(
-      _StudentDetailPage._detailText(record['marked_at'] ?? record['created_at'] ?? record['updated_at']),
+      _StudentDetailPage._detailText(
+        record['marked_at'] ?? record['created_at'] ?? record['updated_at'],
+      ),
     );
     final time = markedAt == null
         ? 'Time not recorded'

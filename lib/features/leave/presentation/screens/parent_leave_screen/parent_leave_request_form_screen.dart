@@ -359,7 +359,7 @@ class _ParentLeaveRequestFormScreenState
         ),
       );
       Navigator.pop(context, true);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
       _showError(error.toString());
@@ -402,7 +402,7 @@ class _ParentLeaveRequestFormScreenState
             ? 'Using default parent leave categories because school leave types are not configured yet.'
             : null;
       });
-    } catch (error) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         final labels = _defaultParentLeaveTypes();

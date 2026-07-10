@@ -139,7 +139,7 @@ class _TeacherLeaveRequestFormScreenState
           const TeacherLeaveRequestResult('Leave request submitted'),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -314,7 +314,7 @@ class _TeacherLeaveRequestFormScreenState
                     balances: _balances,
                   ),
                 if (_error != null) ...[
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     _error!,
                     style: TextStyle(color: context.appTheme.error),
@@ -410,7 +410,7 @@ class _TeacherLeaveRequestFormScreenState
           balances = await BackendApiClient.instance.getLeaveBalances(
             staffId: staffId,
           );
-        } catch (_) {
+        } on Object catch (_) {
           balances = const [];
         }
       }
@@ -435,7 +435,7 @@ class _TeacherLeaveRequestFormScreenState
         }
       });
       return;
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loadingContext = false;

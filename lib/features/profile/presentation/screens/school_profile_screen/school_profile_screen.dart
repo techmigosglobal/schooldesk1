@@ -105,7 +105,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _logoPath = _text(school['logo_url']);
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
@@ -152,7 +152,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _saving = false;
       });
       _showSnack('School profile saved.');
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Save failed: $e', isError: true);
@@ -185,7 +185,7 @@ class _SchoolProfileScreenState extends State<SchoolProfileScreen> {
         _saving = false;
       });
       _showSnack('School logo uploaded.');
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Logo upload failed: $e', isError: true);

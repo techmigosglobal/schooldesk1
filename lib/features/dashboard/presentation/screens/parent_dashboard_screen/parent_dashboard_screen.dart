@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -99,8 +101,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
           .whereType<Map>()
           .map((row) => Map<String, dynamic>.from(row))
           .toList();
-      final children =
-          dashboardChildren.isNotEmpty ? dashboardChildren : linkedChildren;
+      final children = dashboardChildren.isNotEmpty
+          ? dashboardChildren
+          : linkedChildren;
       final selectedChildIndex = await ParentChildSelectionService.indexFor(
         children,
         fallback: _activeChildIndex,
@@ -118,7 +121,7 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
         _activeChildIndex = selectedChildIndex;
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load parent dashboard.';
@@ -212,14 +215,34 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
       );
     }
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        horizontal,
-        tokens.spacing.md,
-        horizontal,
-        tokens.spacing.xxl,
-      ),
-      child: AnimatedSwitcher(duration: tokens.motion.normal, child: child),
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFFFFFDF9), // Extremely soft warm cream
+                  Color(0xFFFFF4F4), // Extremely soft warm rose
+                  Color(0xFFF2F7FD), // Extremely soft clean blue
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ),
+        const Positioned.fill(child: _ParentHomePattern()),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            horizontal,
+            tokens.spacing.md,
+            horizontal,
+            tokens.spacing.xxl,
+          ),
+          child: AnimatedSwitcher(duration: tokens.motion.normal, child: child),
+        ),
+      ],
     );
   }
 
@@ -436,7 +459,7 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 260,
+          height: 380,
           child: PageView.builder(
             controller: _pageController,
             itemCount: widget.eventPosts.length,
@@ -447,9 +470,38 @@ class _SchoolFeedCarouselState extends State<_SchoolFeedCarousel> {
                     ? widget.eventPosts[index] as Map
                     : <String, dynamic>{},
               );
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: _PostCard(post: post),
+              return AnimatedBuilder(
+                animation: _pageController,
+                builder: (context, child) {
+                  double value = 1.0;
+                  if (_pageController.position.haveDimensions) {
+                    value = (_pageController.page ?? 0) - index;
+                    value = (1 - (value.abs() * 0.3)).clamp(0.0, 1.0);
+                  } else {
+                    value = index == _currentPage ? 1.0 : 0.7;
+                  }
+                  final opacity = value.clamp(0.0, 1.0);
+                  return Opacity(
+                    opacity: opacity,
+                    child: Transform.scale(
+                      scale: 0.94 + (value * 0.06),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: _InteractiveBouncingCard(
+                    onTap: () {
+                      _showPostDetailsBottomSheet(
+                        context,
+                        post,
+                        _gradientFor(post['title'] ?? ''),
+                      );
+                    },
+                    child: _PostCard(post: post),
+                  ),
+                ),
               );
             },
           ),
@@ -557,7 +609,11 @@ class _EmptyFeed extends StatelessWidget {
                 color: parentColor.withAlpha(20),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.campaign_outlined, size: 32, color: parentColor),
+              child: Icon(
+                Icons.campaign_outlined,
+                size: 32,
+                color: parentColor,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -586,192 +642,271 @@ class _EmptyFeed extends StatelessWidget {
 // Redesigned post card — tall, vivid, card-style
 // ---------------------------------------------------------------------------
 
+class _InteractiveBouncingCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const _InteractiveBouncingCard({required this.child, required this.onTap});
+
+  @override
+  State<_InteractiveBouncingCard> createState() =>
+      _InteractiveBouncingCardState();
+}
+
+class _InteractiveBouncingCardState extends State<_InteractiveBouncingCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 120),
+    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.96,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _controller.forward(),
+      onTapUp: (_) => _controller.reverse(),
+      onTapCancel: () => _controller.reverse(),
+      onTap: widget.onTap,
+      child: ScaleTransition(scale: _scale, child: widget.child),
+    );
+  }
+}
+
+class _ParentHomePattern extends StatelessWidget {
+  const _ParentHomePattern();
+
+  @override
+  Widget build(BuildContext context) {
+    return const CustomPaint(painter: _ParentHomePatternPainter());
+  }
+}
+
+class _ParentHomePatternPainter extends CustomPainter {
+  const _ParentHomePatternPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final icons = <IconData>[
+      Icons.favorite_outline_rounded,
+      Icons.child_care_rounded,
+      Icons.menu_book_rounded,
+      Icons.family_restroom_rounded,
+      Icons.star_outline_rounded,
+      Icons.chat_bubble_outline_rounded,
+    ];
+    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
+    var iconIndex = 0;
+    for (double y = 28; y < size.height; y += 128) {
+      for (double x = 20; x < size.width; x += 138) {
+        final icon = icons[iconIndex % icons.length];
+        iconIndex++;
+        textPainter.text = TextSpan(
+          text: String.fromCharCode(icon.codePoint),
+          style: TextStyle(
+            fontFamily: icon.fontFamily,
+            package: icon.fontPackage,
+            fontSize: 26,
+            color: const Color(0xFFF43F5E).withOpacity(0.035),
+          ),
+        );
+        textPainter.layout();
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate((iconIndex.isEven ? -1 : 1) * 0.18);
+        textPainter.paint(canvas, Offset.zero);
+        canvas.restore();
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+void _showPostDetailsBottomSheet(
+  BuildContext context,
+  Map<String, dynamic> post,
+  List<Color> gradient,
+) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      final title = _text(post['title']).isEmpty
+          ? 'School Post'
+          : _text(post['title']);
+      final description = _text(post['description']);
+      final author = _text(post['author']);
+      final category = _text(post['category']);
+      final rawDate = _text(post['date']);
+      final formattedDate = _formatPostDate(rawDate);
+
+      final mediaItems = EventPostMediaItem.parseList(
+        post['media'] ??
+            post['media_urls'] ??
+            post['mediaUrls'] ??
+            post['media_url'] ??
+            post['mediaUrl'] ??
+            post['attachments'],
+      );
+
+      return Container(
+        height: MediaQuery.sizeOf(context).height * 0.82,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                width: 38,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+                children: [
+                  Row(
+                    children: [
+                      if (category.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: gradient[0].withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            category.toUpperCase(),
+                            style: GoogleFonts.dmSans(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: gradient[0],
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                      Text(
+                        formattedDate,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    title,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
+                  if (author.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Posted by $author',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  if (mediaItems.isNotEmpty) ...[
+                    SizedBox(
+                      height: 240,
+                      child: PageView.builder(
+                        itemCount: mediaItems.length,
+                        itemBuilder: (context, idx) {
+                          final item = mediaItems[idx];
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: EventPostMediaPreview(
+                                item: item,
+                                height: 240,
+                                onImageTap: () =>
+                                    openEventPostMediaPreview(context, item),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  Text(
+                    description,
+                    style: GoogleFonts.dmSans(
+                      fontSize: 15,
+                      height: 1.6,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 class _PostCard extends StatelessWidget {
   final Map<String, dynamic> post;
 
   const _PostCard({required this.post});
-
-  // Gradient palette for posts (cycles by index via hashCode)
-  static const List<List<Color>> _gradients = [
-    [Color(0xFF0F766E), Color(0xFF0D9488)],
-    [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
-    [Color(0xFF7C3AED), Color(0xFFA78BFA)],
-    [Color(0xFFEA580C), Color(0xFFFB923C)],
-    [Color(0xFF0284C7), Color(0xFF38BDF8)],
-    [Color(0xFF15803D), Color(0xFF4ADE80)],
-    [Color(0xFFB91C1C), Color(0xFFF87171)],
-    [Color(0xFF92400E), Color(0xFFFBBF24)],
-  ];
-
-  List<Color> _gradientFor(String title) {
-    final index = title.hashCode.abs() % _gradients.length;
-    return _gradients[index];
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
 
-    final title =
-        _text(post['title']).isEmpty ? 'School Post' : _text(post['title']);
+    final title = _text(post['title']).isEmpty
+        ? 'School Post'
+        : _text(post['title']);
     final description = _text(post['description']);
     final rawDate = _text(post['date']);
     final category = _text(post['category']);
     final author = _text(post['author']);
     final formattedDate = _formatPostDate(rawDate);
-    final mediaType = _eventPostMediaType(post);
     final gradient = _gradientFor(title);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: tokens.panelBorder),
-        boxShadow: [
-          BoxShadow(
-            color: gradient[0].withAlpha(tokens.isDark ? 50 : 30),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Gradient header ─────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradient,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(40),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.campaign_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          height: 1.3,
-                        ),
-                      ),
-                      if (author.isNotEmpty || category.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            if (author.isNotEmpty) author,
-                            if (category.isNotEmpty) category,
-                          ].join(' • '),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white.withAlpha(200),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (formattedDate.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withAlpha(35),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      formattedDate,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // ── Media type badge ─────────────────────────────────────────
-          if (mediaType.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-              child: _FeedMediaTypeChip(type: mediaType, color: gradient[0]),
-            ),
-          // ── Media preview ─────────────────────────────────────────────
-          _SchoolFeedMediaPreview(post: post),
-          // ── Body description ──────────────────────────────────────────
-          if (description.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-              child: Text(
-                description,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  height: 1.6,
-                  color: theme.colorScheme.onSurface.withAlpha(200),
-                ),
-              ),
-            ),
-          if (description.isEmpty) const SizedBox(height: 10),
-        ],
-      ),
-    );
-  }
-
-  String _formatPostDate(String raw) {
-    if (raw.isEmpty) return '';
-    final parsed = DateTime.tryParse(raw);
-    if (parsed == null) return raw;
-    final now = DateTime.now();
-    final diff = now.difference(parsed);
-    if (diff.inDays == 0) {
-      if (diff.inHours == 0) return '${diff.inMinutes}m ago';
-      return '${diff.inHours}h ago';
-    }
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return DateFormat('d MMM').format(parsed);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Media preview (unchanged logic)
-// ---------------------------------------------------------------------------
-
-class _SchoolFeedMediaPreview extends StatelessWidget {
-  final Map<String, dynamic> post;
-
-  const _SchoolFeedMediaPreview({required this.post});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = Theme.of(context).schoolDesk;
     final mediaItems = EventPostMediaItem.parseList(
       post['media'] ??
           post['media_urls'] ??
@@ -780,96 +915,231 @@ class _SchoolFeedMediaPreview extends StatelessWidget {
           post['mediaUrl'] ??
           post['attachments'],
     );
-    if (mediaItems.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(tokens.radius.control),
-        child: SizedBox(
-          height: 160,
-          width: double.infinity,
-          child: PageView.builder(
-            itemCount: mediaItems.length,
-            itemBuilder: (context, index) {
-              final item = mediaItems[index];
-              return Stack(
-                fit: StackFit.expand,
-                children: [
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1.45,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (mediaItems.isNotEmpty)
                   EventPostMediaPreview(
-                    item: item,
-                    height: 160,
-                    onImageTap: () => openEventPostMediaPreview(context, item),
+                    item: mediaItems.first,
+                    height: 240,
+                    onImageTap: () =>
+                        openEventPostMediaPreview(context, mediaItems.first),
+                  )
+                else
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: gradient,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.campaign_rounded,
+                        color: Colors.white.withOpacity(0.9),
+                        size: 56,
+                      ),
+                    ),
                   ),
-                  if (mediaItems.length > 1)
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          child: Text(
-                            '${index + 1}/${mediaItems.length}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(color: Colors.white),
-                          ),
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black54,
+                          Colors.transparent,
+                          Colors.black45,
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                ),
+                if (category.isNotEmpty)
+                  Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        category.toUpperCase(),
+                        style: GoogleFonts.dmSans(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          color: gradient[0],
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                ],
-              );
-            },
+                  ),
+                if (formattedDate.isNotEmpty)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        formattedDate,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  bottom: 10,
+                  left: 12,
+                  right: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.dmSans(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          shadows: [
+                            const Shadow(
+                              color: Colors.black45,
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (author.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          'by $author',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 10,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      description.isEmpty
+                          ? 'No description available.'
+                          : description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: const Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        'Read More',
+                        style: GoogleFonts.dmSans(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.roleColor(SchoolDeskRole.parent),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 12,
+                        color: tokens.roleColor(SchoolDeskRole.parent),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _FeedMediaTypeChip extends StatelessWidget {
-  final String type;
-  final Color color;
+const List<List<Color>> _gradients = [
+  [Color(0xFFFE7A36), Color(0xFFF35F30)],
+  [Color(0xFF2196F3), Color(0xFF1976D2)],
+  [Color(0xFF9C27B0), Color(0xFF7B1FA2)],
+  [Color(0xFF4CAF50), Color(0xFF388E3C)],
+  [Color(0xFFFF9800), Color(0xFFF57C00)],
+  [Color(0xFFE91E63), Color(0xFFC2185B)],
+];
 
-  const _FeedMediaTypeChip({required this.type, required this.color});
+List<Color> _gradientFor(String title) {
+  final index = title.hashCode.abs() % _gradients.length;
+  return _gradients[index];
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final label = type.isEmpty ? 'Media' : type;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withAlpha(60)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(_eventPostMediaIcon(label), color: color, size: 13),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+String _formatPostDate(String raw) {
+  if (raw.isEmpty) return '';
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) return raw;
+  final now = DateTime.now();
+  final diff = now.difference(parsed);
+  if (diff.inDays == 0) {
+    if (diff.inHours == 0) return '${diff.inMinutes}m ago';
+    return '${diff.inHours}h ago';
   }
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  return DateFormat('d MMM').format(parsed);
 }
 
 // ---------------------------------------------------------------------------
@@ -1320,8 +1590,9 @@ String _number(dynamic value) {
 }
 
 String _money(dynamic value) {
-  final parsed =
-      value is num ? value.toDouble() : double.tryParse(_text(value));
+  final parsed = value is num
+      ? value.toDouble()
+      : double.tryParse(_text(value));
   final amount = parsed ?? 0;
   if (amount >= 100000) return '₹${(amount / 100000).toStringAsFixed(1)}L';
   if (amount >= 1000) return '₹${(amount / 1000).toStringAsFixed(1)}K';
@@ -1334,42 +1605,4 @@ String _firstText(Map<String, dynamic> row, List<String> keys) {
     if (text.isNotEmpty) return text;
   }
   return '';
-}
-
-String _eventPostMediaType(Map<String, dynamic> post) {
-  final explicit = _firstText(post, [
-    'media_type',
-    'mediaType',
-    'file_type',
-    'fileType',
-    'type',
-  ]).toLowerCase();
-  if (explicit.contains('video')) return 'Video';
-  if (explicit.contains('photo')) return 'Photo';
-  if (explicit.contains('image')) return 'Photo';
-
-  final media = EventPostMediaItem.parseList(
-    post['media'] ??
-        post['media_urls'] ??
-        post['mediaUrls'] ??
-        post['media_url'] ??
-        post['mediaUrl'] ??
-        post['attachments'],
-  );
-  if (media.isEmpty) return '';
-  return switch (media.first.kind) {
-    EventPostMediaKind.video => 'Video',
-    EventPostMediaKind.image => 'Photo',
-    EventPostMediaKind.pdf || EventPostMediaKind.document => 'Document',
-    EventPostMediaKind.media => 'Media',
-  };
-}
-
-IconData _eventPostMediaIcon(String type) {
-  final normalized = type.toLowerCase();
-  if (normalized.contains('video')) return Icons.play_circle_fill_rounded;
-  if (normalized.contains('photo') || normalized.contains('image')) {
-    return Icons.image_rounded;
-  }
-  return Icons.attach_file_rounded;
 }

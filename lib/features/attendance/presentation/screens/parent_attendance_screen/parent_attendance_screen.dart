@@ -69,7 +69,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
           _loading = false;
         });
       }
-    } catch (e) {
+    } on Object catch (e) {
       setState(() => _loading = false);
       if (mounted) {
         ScaffoldMessenger.of(
@@ -119,7 +119,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         _periodRowsByDay = _groupPeriodRowsByDay(periodRows);
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted &&
           requestToken == _attendanceRequestToken &&
           childIndex == _activeChildIndex) {
@@ -136,7 +136,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       return await BackendApiClient.instance.getStudentAttendanceSummary(
         studentId: studentId,
       );
-    } catch (_) {
+    } on Object catch (_) {
       return <String, dynamic>{
         'student_id': studentId,
         'present_days': 0,
@@ -158,7 +158,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
         month: DateTime.now().month,
         year: DateTime.now().year,
       );
-    } catch (_) {
+    } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
@@ -170,7 +170,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
       return await BackendApiClient.instance.getStudentLeaveApplications(
         studentId: studentId,
       );
-    } catch (_) {
+    } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
@@ -307,7 +307,9 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen>
                     style: GoogleFonts.dmSans(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: isActive ? Colors.white : context.appTheme.onSurface,
+                      color: isActive
+                          ? Colors.white
+                          : context.appTheme.onSurface,
                     ),
                   ),
                 ],
@@ -1103,5 +1105,3 @@ bool _leaveIsHalfDay(Map<String, dynamic> request) {
       .toLowerCase();
   return value == 'true' || value == '1' || value == 'yes';
 }
-
-

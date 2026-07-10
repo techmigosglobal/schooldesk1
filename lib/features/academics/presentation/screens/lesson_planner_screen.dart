@@ -66,7 +66,7 @@ class _TeacherLessonPlannerScreenState
         _planners = planners;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -100,7 +100,7 @@ class _TeacherLessonPlannerScreenState
             'section_name': section.sectionName,
         };
       }).toList();
-    } catch (_) {
+    } on Object catch (_) {
       return assigned;
     }
   }
@@ -172,7 +172,7 @@ class _TeacherLessonPlannerScreenState
           ),
         ];
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -224,7 +224,7 @@ class _TeacherLessonPlannerScreenState
       _noteController.clear();
       setState(() => _attachments = const []);
       await _loadPlanners();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -242,7 +242,7 @@ class _TeacherLessonPlannerScreenState
         context,
       ).showSnackBar(const SnackBar(content: Text('Marked as completed.')));
       await _loadPlanners();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -489,11 +489,7 @@ class _TeacherLessonPlannerScreenState
   }) {
     final item = EventPostMediaItem.fromUrl(attachmentUrl);
     final namedItem = name.isNotEmpty && item.displayName.isEmpty
-        ? EventPostMediaItem(
-            url: item.url,
-            name: name,
-            kind: item.kind,
-          )
+        ? EventPostMediaItem(url: item.url, name: name, kind: item.kind)
         : item;
     openEventPostMediaPreview(context, namedItem);
   }
@@ -526,7 +522,7 @@ class _TeacherLessonPlannerScreenState
     try {
       final date = DateTime.parse(raw.toString());
       return '${date.day}/${date.month}/${date.year}';
-    } catch (_) {
+    } on Object catch (_) {
       return raw.toString();
     }
   }

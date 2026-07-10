@@ -469,7 +469,8 @@ class _AdminFeeStructureFormScreenState
       'yearly' =>
         'One annual tuition invoice is created; parents can pay only the next continuous unpaid months.',
       'monthly' => 'Parents pay this as monthly dues.',
-      'term' => 'Use monthly tuition for the parent workflow; term plans are not used in this flow.',
+      'term' =>
+        'Use monthly tuition for the parent workflow; term plans are not used in this flow.',
       _ => 'Parents pay according to the saved frequency.',
     };
     return Container(
@@ -577,7 +578,7 @@ class _AdminFeeStructureFormScreenState
               : 'Fee structure created',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showErrorSnack(context, error.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -741,7 +742,8 @@ class _AdminInvoiceGenerationFormScreenState
   Widget build(BuildContext context) {
     return SchoolDeskModuleScaffold(
       title: 'Generate Invoices',
-      subtitle: 'Prepare class, section, or student invoices for the fees workflow',
+      subtitle:
+          'Prepare class, section, or student invoices for the fees workflow',
       drawer: _financeDrawer(widget.args.ownerRole),
       floatingActionButton: DashboardFabWidget(
         role: _dashboardRole(widget.args.ownerRole),
@@ -1060,7 +1062,7 @@ class _AdminInvoiceGenerationFormScreenState
             classLabel: gradeLabel,
             termLabel: _selectedTermLabel,
           );
-        } catch (_) {
+        } on Object catch (_) {
           // Notification is best-effort
         }
       }
@@ -1072,7 +1074,7 @@ class _AdminInvoiceGenerationFormScreenState
           skipped: (result['skipped'] as num?)?.toInt() ?? 0,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showErrorSnack(context, error.toString());
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -1127,7 +1129,7 @@ class _AdminInvoiceGenerationFormScreenState
         }
         _loadingTerms = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _loadingTerms = false);
       _showErrorSnack(context, 'Unable to load terms: $error');
@@ -1444,7 +1446,7 @@ class _AdminPaymentRecordFormScreenState
           amount: amount,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showErrorSnack(context, error.toString());
     } finally {
       if (mounted) setState(() => _saving = false);

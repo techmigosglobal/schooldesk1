@@ -364,7 +364,7 @@ class _AcademicYearFormScreenState extends State<AcademicYearFormScreen> {
               : 'Academic year created',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, _cleanError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -543,8 +543,12 @@ InputDecoration _yearInputDecoration({
 }) {
   return InputDecoration(
     hintText: hint,
-    prefixIcon: prefix == null ? null : Icon(prefix, color: Color(0xFF60708C)),
-    suffixIcon: suffix == null ? null : Icon(suffix, color: Color(0xFF60708C)),
+    prefixIcon: prefix == null
+        ? null
+        : Icon(prefix, color: const Color(0xFF60708C)),
+    suffixIcon: suffix == null
+        ? null
+        : Icon(suffix, color: const Color(0xFF60708C)),
     filled: true,
     fillColor: Colors.white,
     contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
@@ -680,7 +684,7 @@ class _AcademicSubjectFormScreenState extends State<AcademicSubjectFormScreen> {
           widget.args.isEditing ? 'Subject updated' : 'Subject added',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, _cleanError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -889,7 +893,7 @@ class _AcademicClassFormScreenState extends State<AcademicClassFormScreen> {
           isWarning: _isAdminOwner && !widget.args.isEditing,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, _cleanError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1110,7 +1114,7 @@ class _AcademicCurriculumFormScreenState
               : 'Curriculum entry added',
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showError(context, _cleanError(error));
     } finally {
       if (mounted) setState(() => _saving = false);

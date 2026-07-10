@@ -122,7 +122,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
       );
       _activeChildIndex = selectedIndex;
       var feeList = <Map<String, dynamic>>[];
-      var historyList = <Map<String, dynamic>>[];
+      final historyList = <Map<String, dynamic>>[];
 
       if (children.isNotEmpty) {
         final child = children[_activeChildIndex];
@@ -247,7 +247,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         _paymentHistory = historyList;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
@@ -410,7 +410,9 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
                       style: GoogleFonts.ibmPlexSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: isActive ? Colors.white : context.appTheme.onSurface,
+                        color: isActive
+                            ? Colors.white
+                            : context.appTheme.onSurface,
                       ),
                     ),
                   ],
@@ -525,45 +527,44 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
     return RefreshIndicator(
       onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
       child: SingleChildScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(horizontal, 16, horizontal, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildFeeStudentCard(child),
-          const SizedBox(height: 14),
-          _buildDueSummaryCard(),
-          const SizedBox(height: 14),
-          _buildWorkflowActionCard(),
-          const SizedBox(height: 16),
-          Text(
-            'Fee Items',
-            style: GoogleFonts.ibmPlexSans(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(horizontal, 16, horizontal, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildFeeStudentCard(child),
+            const SizedBox(height: 14),
+            _buildDueSummaryCard(),
+            const SizedBox(height: 14),
+            _buildWorkflowActionCard(),
+            const SizedBox(height: 16),
+            Text(
+              'Fee Items',
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          if (_feeStructure.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: context.appTheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.appTheme.outlineVariant),
-              ),
-              child: _emptyRow(
-                Icons.receipt_long_rounded,
-                'No fee invoices published yet.',
-                context.appTheme.muted,
-              ),
-            )
-          else ...[
-            ..._feeStructure.map((f) => _feeItemCard(f, true)),
-
+            const SizedBox(height: 10),
+            if (_feeStructure.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: context.appTheme.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.appTheme.outlineVariant),
+                ),
+                child: _emptyRow(
+                  Icons.receipt_long_rounded,
+                  'No fee invoices published yet.',
+                  context.appTheme.muted,
+                ),
+              )
+            else ...[
+              ..._feeStructure.map((f) => _feeItemCard(f, true)),
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }
@@ -1706,7 +1707,7 @@ class _ParentFeesScreenState extends State<ParentFeesScreen>
         pdfBytes,
         'Receipt ${_text(payment['receiptNo'], fallback: 'Preview')}',
       );
-    } catch (e) {
+    } on Object {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

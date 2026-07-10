@@ -327,7 +327,9 @@ class _ParentPaymentSelectionScreenState
               onPressed: _selectedInvoiceId.isEmpty || _selectedFee.isEmpty
                   ? null
                   : () {
-                      _onProceedToPay([Map<String, dynamic>.from(_selectedFee)]);
+                      _onProceedToPay([
+                        Map<String, dynamic>.from(_selectedFee),
+                      ]);
                     },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(

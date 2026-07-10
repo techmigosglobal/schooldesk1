@@ -41,7 +41,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
         _usingAssignedClassFallback = slots.usedClassFallback;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -123,7 +123,9 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
 
     return TeacherFlowScaffold(
       title: 'Weekly Timetable',
-      subtitle: _usingAssignedClassFallback ? 'Timetable source: assigned class' : 'Read-only schedule from Principal timetable setup',
+      subtitle: _usingAssignedClassFallback
+          ? 'Timetable source: assigned class'
+          : 'Read-only schedule from Principal timetable setup',
       selectedIndex: TeacherNav.timetable,
       loading: _loading,
       error: _error,
@@ -147,7 +149,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen> {
             ),
             const SizedBox(height: 16),
 
-            TeacherFlowSectionHeader(title: 'Weekly Timetable'),
+            const TeacherFlowSectionHeader(title: 'Weekly Timetable'),
             const SizedBox(height: 8),
             if (_slots.isEmpty)
               const TeacherFlowCard(

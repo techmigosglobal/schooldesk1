@@ -12,14 +12,11 @@ class ChatWallpaperBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: context.appTheme.surfaceVariant.withAlpha(80),
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            context.appTheme.surface,
-            context.appTheme.surfaceVariant.withAlpha(120),
-          ],
+        color: context.appTheme.surfaceVariant.withAlpha(50),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFF8FAFC), Color(0xFFEFF6FF)],
         ),
       ),
       child: Stack(
@@ -169,9 +166,11 @@ class ChatBubbleWidget extends StatelessWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withAlpha(15),
-                    blurRadius: 4,
-                    offset: const Offset(0, 1),
+                    color: isMe
+                        ? context.appTheme.primary.withAlpha(40)
+                        : Colors.black.withAlpha(15),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -298,14 +297,7 @@ class ChatInputBar extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(
-                      Icons.sentiment_satisfied_alt_rounded,
-                      color: context.appTheme.muted,
-                    ),
-                    onPressed: () {}, // Optional Emoji Picker Trigger
-                  ),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: TextField(
                       controller: controller,

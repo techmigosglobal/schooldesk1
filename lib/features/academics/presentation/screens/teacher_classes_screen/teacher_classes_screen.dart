@@ -35,7 +35,7 @@ class _TeacherClassesScreenState extends State<TeacherClassesScreen> {
         _students = RoleAccessService.teacherClassStudents;
         _loading = false;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _loading = false;

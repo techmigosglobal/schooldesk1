@@ -36,12 +36,15 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
       if (!mounted) return;
       setState(() {
         _complaints = data
-            .where((c) => c['role'] == 'teacher' || c['reported_by_role'] == 'teacher')
+            .where(
+              (c) =>
+                  c['role'] == 'teacher' || c['reported_by_role'] == 'teacher',
+            )
             .toList();
         _loading = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -64,12 +67,12 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
           complaint,
         );
         if (!mounted || '${saved['id'] ?? ''}'.isEmpty) return false;
-        
+
         // Report to super admin if it's an error
         if (complaint['type'] == 'error') {
           await _reportToSuperAdmin(saved);
         }
-        
+
         final localIndex = _complaints.indexWhere((c) => c['id'] == id);
         if (localIndex != -1) {
           setState(() => _complaints[localIndex] = saved);
@@ -86,7 +89,7 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
         setState(() => _complaints[localIndex] = saved);
       }
       return true;
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -109,7 +112,7 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
         'reported_by_role': 'teacher',
         'severity': 'high',
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -137,10 +140,10 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return SchoolDeskModuleScaffold(
+      return const SchoolDeskModuleScaffold(
         title: 'Complaints',
         subtitle: 'Submit support tickets and track resolution',
-        body: const Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
     if (_error != null) {
@@ -261,8 +264,8 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
     final statusColor = status == 'resolved' || status == 'closed'
         ? Colors.green
         : status == 'in_progress'
-            ? Colors.orange
-            : Colors.blue;
+        ? Colors.orange
+        : Colors.blue;
 
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -284,8 +287,10 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(4),
@@ -319,13 +324,7 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
-        children: [
-          'All',
-          'Academic',
-          'Facility',
-          'Admin',
-          'Other'
-        ]
+        children: ['All', 'Academic', 'Facility', 'Admin', 'Other']
             .map(
               (category) => Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -362,9 +361,12 @@ class _TeacherComplaintScreenState extends State<TeacherComplaintScreen>
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: selectedCategory,
-              items: ['Academic', 'Facility', 'Admin', 'Other']
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
+              items: [
+                'Academic',
+                'Facility',
+                'Admin',
+                'Other',
+              ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
               onChanged: (v) {
                 if (v != null) selectedCategory = v;
               },

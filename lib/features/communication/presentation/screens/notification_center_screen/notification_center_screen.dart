@@ -57,7 +57,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
       if (forceRefresh || widget.role.trim().toLowerCase() == 'principal') {
         await _service?.refresh();
       }
-    } catch (error) {
+    } on Object catch (error) {
       _error = error.toString();
     }
     if (mounted) setState(() => _loading = false);
@@ -411,7 +411,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
     setState(() => _markingAllRead = true);
     try {
       await _service?.markAllAsRead(role);
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -544,7 +544,8 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
             categoryLabel: _categoryLabel(category),
             hasBackendIssue: _error != null,
             runtimeStatus: PushNotificationService.instance.runtimeStatus,
-            showPushDiagnostics: widget.role.trim().toLowerCase() == 'principal',
+            showPushDiagnostics:
+                widget.role.trim().toLowerCase() == 'principal',
             diagnosticsInFlight: _runningPushDiagnostic,
             onRetryPush: () async {
               await PushNotificationService.instance
@@ -647,7 +648,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
         ),
       );
       await _init(forceRefresh: true);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -663,7 +664,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen>
   Future<void> _openNotification(AppNotification notif) async {
     try {
       await _service?.markAsRead(notif.id);
-    } catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -970,13 +971,13 @@ class _NotificationSummaryPanel extends StatelessWidget {
                   ? Icons.notifications_active_rounded
                   : Icons.notifications_off_rounded,
               size: 16,
-              ),
-              label: Text(
-                runtimeStatus.deviceRegistrationSucceeded
-                    ? 'Push Ready'
-                    : 'Enable Push',
-              ),
             ),
+            label: Text(
+              runtimeStatus.deviceRegistrationSucceeded
+                  ? 'Push Ready'
+                  : 'Enable Push',
+            ),
+          ),
           if (showPushDiagnostics)
             FilledButton.icon(
               onPressed: diagnosticsInFlight ? null : onRunPushDiagnostics,
@@ -1016,25 +1017,39 @@ class _PushDiagnosticsSheet extends StatelessWidget {
     final activeCount = summary['active_canonical_device_count'] ?? 0;
     final lines = <String>[];
     if (!runtimeStatus.firebaseAvailable) {
-      lines.add('Local Firebase initialization failed before any push work started.');
+      lines.add(
+        'Local Firebase initialization failed before any push work started.',
+      );
     }
     if (!runtimeStatus.hasDeviceToken) {
       lines.add('This device does not currently have an FCM token.');
     }
     if (!runtimeStatus.deviceRegistrationSucceeded) {
-      lines.add('The app has not confirmed backend token registration on this device.');
+      lines.add(
+        'The app has not confirmed backend token registration on this device.',
+      );
     }
     if ((summary['processor_health_ok'] ?? false) != true) {
-      lines.add('The notification processor healthcheck failed, so env or OAuth is broken server-side.');
+      lines.add(
+        'The notification processor healthcheck failed, so env or OAuth is broken server-side.',
+      );
     }
     if (activeCount == 0) {
-      lines.add('The backend has no active canonical device tokens for this user.');
+      lines.add(
+        'The backend has no active canonical device tokens for this user.',
+      );
     }
-    if ((summary['event_processed'] ?? false) == true && (sent ?? 0) == 0 && activeCount > 0) {
-      lines.add('The event reached the processor but no push send was recorded; inspect token validity and FCM response details in the full report.');
+    if ((summary['event_processed'] ?? false) == true &&
+        (sent ?? 0) == 0 &&
+        activeCount > 0) {
+      lines.add(
+        'The event reached the processor but no push send was recorded; inspect token validity and FCM response details in the full report.',
+      );
     }
     if (lines.isEmpty) {
-      lines.add('No obvious blocker was detected by the quick heuristics. Use the full report to inspect token state and processor output.');
+      lines.add(
+        'No obvious blocker was detected by the quick heuristics. Use the full report to inspect token state and processor output.',
+      );
     }
     return lines;
   }
@@ -1074,9 +1089,9 @@ class _PushDiagnosticsSheet extends StatelessWidget {
           children: [
             Text(
               'Push Diagnostics',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1166,9 +1181,9 @@ class _DiagnosticSection extends StatelessWidget {
         children: [
           Text(
             title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           if (lines.isNotEmpty) ...[
             const SizedBox(height: 8),

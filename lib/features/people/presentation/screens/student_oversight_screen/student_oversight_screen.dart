@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/utils/image_cropper_helper.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart' as api;
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
@@ -43,13 +44,8 @@ class StudentModel {
   final int pendingInvoices;
   final int overdueInvoices;
   final String feeStatus;
-  final double performanceScore;
-  final String performanceGrade;
-  final int weakSubjects;
-  final int marksCount;
   final List<Map<String, dynamic>> documents;
   final List<Map<String, dynamic>> parentAccounts;
-  final Map<String, dynamic> medicalRecord;
 
   const StudentModel({
     required this.id,
@@ -76,13 +72,8 @@ class StudentModel {
     required this.pendingInvoices,
     required this.overdueInvoices,
     required this.feeStatus,
-    required this.performanceScore,
-    required this.performanceGrade,
-    required this.weakSubjects,
-    required this.marksCount,
     required this.documents,
     required this.parentAccounts,
-    required this.medicalRecord,
   });
 
   String get directoryStatusLabel {
@@ -118,8 +109,8 @@ class StudentModel {
     }
   }
 
-  bool get hasPerformanceAlert =>
-      marksCount > 0 && (performanceScore < 40 || weakSubjects > 0);
+  // bool get hasPerformanceAlert =>
+  //     marksCount > 0 && (performanceScore < 40 || weakSubjects > 0);
 }
 
 class StudentOversightScreen extends StatefulWidget {
@@ -296,7 +287,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         _applyFilters(resetState: false);
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -332,7 +323,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         pageSize: 500,
       );
       return result.data;
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }
@@ -340,7 +331,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   Future<List<Map<String, dynamic>>> _loadFeeStructuresSafely() async {
     try {
       return await api.BackendApiClient.instance.getFeeStructures();
-    } catch (_) {
+    } on Object catch (_) {
       return const <Map<String, dynamic>>[];
     }
   }
@@ -398,17 +389,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       pendingInvoices: student.pendingInvoices,
       overdueInvoices: _intFromMap(student.feeSummary, 'overdue_invoices'),
       feeStatus: student.feeStatus,
-      performanceScore: student.performanceScore,
-      performanceGrade: student.performanceGrade.isEmpty
-          ? 'N/A'
-          : student.performanceGrade,
-      weakSubjects: _intFromMap(student.performanceSummary, 'weak_subjects'),
-      marksCount: _intFromMap(student.performanceSummary, 'marks_count'),
       documents: List<Map<String, dynamic>>.unmodifiable(student.documents),
       parentAccounts: List<Map<String, dynamic>>.unmodifiable(
         student.parentAccounts,
       ),
-      medicalRecord: Map<String, dynamic>.unmodifiable(student.medicalRecord),
     );
   }
 
@@ -580,7 +564,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       try {
         await api.BackendApiClient.instance.deleteStudent(student.id);
         removed++;
-      } catch (error) {
+      } on Object {
         failures.add(student.name);
       }
     }
@@ -884,7 +868,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     if (students.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('No students available for export'),
+          content: const Text('No students available for export'),
           backgroundColor: context.appTheme.warning,
         ),
       );
@@ -917,16 +901,17 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         mimeType: 'text/csv',
         title: 'Student Directory CSV',
         subject: 'Student Directory CSV',
-        text: 'Student directory export generated from Arish Ville.',
+        text:
+            'Student directory export generated from ${AppConstants.appName}.',
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Student directory CSV generated'),
+          content: const Text('Student directory CSV generated'),
           backgroundColor: context.appTheme.success,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -956,7 +941,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
           'total_count': _allStudents.length,
         },
       );
-    } catch (_) {
+    } on Object catch (_) {
       // The generated file is the user-facing export; backend audit is best-effort.
     }
   }
@@ -1112,7 +1097,8 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     }
 
     if (input.shouldCreateParentLogin &&
-        (input.fatherFirstName.isNotEmpty || input.motherFirstName.isNotEmpty)) {
+        (input.fatherFirstName.isNotEmpty ||
+            input.motherFirstName.isNotEmpty)) {
       await _createGuardianProfilesForStudent(savedStudentId, input);
     }
 
@@ -1169,8 +1155,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             'email': input.parentEmail.trim(),
             'is_primary': true,
           });
-      final record =
-          created['data'] is Map ? created['data'] as Map : created;
+      final record = created['data'] is Map ? created['data'] as Map : created;
       final guardianId = '${record['id'] ?? ''}'.trim();
       if (guardianId.isNotEmpty) {
         await api.BackendApiClient.instance.linkGuardianToStudent(
@@ -1190,8 +1175,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
             'relationship': 'mother',
             'is_primary': false,
           });
-      final record =
-          created['data'] is Map ? created['data'] as Map : created;
+      final record = created['data'] is Map ? created['data'] as Map : created;
       final guardianId = '${record['id'] ?? ''}'.trim();
       if (guardianId.isNotEmpty) {
         await api.BackendApiClient.instance.linkGuardianToStudent(
@@ -1255,7 +1239,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
       final gradeMap = {for (final g in _grades) g.id: g};
       final latest = await api.BackendApiClient.instance.getStudent(student.id);
       detailStudent = _mapApiStudentToUi(latest, sectionMap, gradeMap);
-    } catch (_) {
+    } on Object catch (_) {
       detailStudent = student;
     }
 
@@ -1337,7 +1321,7 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     try {
       await api.BackendApiClient.instance.deleteStudent(student.id);
       return true;
-    } catch (error) {
+    } on Object catch (error) {
       if (detailContext.mounted) {
         ScaffoldMessenger.of(detailContext).showSnackBar(
           SnackBar(content: Text('Failed to remove ${student.name}: $error')),
@@ -1660,16 +1644,16 @@ class _AddStudentInput {
   });
 
   /// Helper: full father name for display / guardian creation
-  String get fatherFullName =>
-      [fatherFirstName.trim(), fatherLastName.trim()]
-          .where((s) => s.isNotEmpty)
-          .join(' ');
+  String get fatherFullName => [
+    fatherFirstName.trim(),
+    fatherLastName.trim(),
+  ].where((s) => s.isNotEmpty).join(' ');
 
   /// Helper: full mother name for display / guardian creation
-  String get motherFullName =>
-      [motherFirstName.trim(), motherLastName.trim()]
-          .where((s) => s.isNotEmpty)
-          .join(' ');
+  String get motherFullName => [
+    motherFirstName.trim(),
+    motherLastName.trim(),
+  ].where((s) => s.isNotEmpty).join(' ');
 }
 
 class _StudentDocumentInput {
@@ -1753,7 +1737,11 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
     super.initState();
     final initial = widget.initialStudent;
     if (initial != null) {
-      final parts = initial.name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+      final parts = initial.name
+          .trim()
+          .split(RegExp(r'\s+'))
+          .where((part) => part.isNotEmpty)
+          .toList();
       _firstNameCtrl.text = parts.isEmpty ? initial.name.trim() : parts.first;
       _lastNameCtrl.text = parts.length > 1 ? parts.skip(1).join(' ') : '';
       _dob = DateTime.tryParse(initial.dateOfBirth) ?? DateTime(2010);
@@ -1840,34 +1828,29 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
               (file.path ?? '').trim().isNotEmpty ||
               (file.bytes?.isNotEmpty ?? false),
         )
-        .map(
-          (file) {
-            // Default label is filename without extension
-            final nameWithoutExt =
-                file.name.contains('.')
-                    ? file.name.substring(0, file.name.lastIndexOf('.'))
-                    : file.name;
-            return (
-              doc: _StudentDocumentInput(
-                filePath: (file.path ?? '').trim().isEmpty
-                    ? null
-                    : file.path!.trim(),
-                fileBytes: file.bytes,
-                fileName: file.name,
-                docType: 'student_document',
-              ),
-              label: nameWithoutExt,
-            );
-          },
-        )
+        .map((file) {
+          // Default label is filename without extension
+          final nameWithoutExt = file.name.contains('.')
+              ? file.name.substring(0, file.name.lastIndexOf('.'))
+              : file.name;
+          return (
+            doc: _StudentDocumentInput(
+              filePath: (file.path ?? '').trim().isEmpty
+                  ? null
+                  : file.path!.trim(),
+              fileBytes: file.bytes,
+              fileName: file.name,
+              docType: 'student_document',
+            ),
+            label: nameWithoutExt,
+          );
+        })
         .toList();
     if (newDocs.isEmpty) return;
     setState(() {
       for (final item in newDocs) {
         _documents.add(item.doc);
-        _documentLabelControllers.add(
-          TextEditingController(text: item.label),
-        );
+        _documentLabelControllers.add(TextEditingController(text: item.label));
       }
     });
   }
@@ -1905,9 +1888,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       return;
     }
     if (_systemIdCtrl.text.trim().isEmpty) {
-      setState(
-        () => _error = 'Student ID is required',
-      );
+      setState(() => _error = 'Student ID is required');
       return;
     }
     if (_createParentLogin &&
@@ -1947,7 +1928,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
       await widget.onSubmit(
         _AddStudentInput(
           studentId: widget.initialStudent?.id,
-          studentName: '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'.trim(),
+          studentName:
+              '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'
+                  .trim(),
           backendDateOfBirth: _backendDate(_dob),
           gender: _gender,
           sectionId: _sectionId ?? '',
@@ -1966,7 +1949,9 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
           photoPath: _photoFile?.path,
           photoBytes: photoBytes,
           photoName: _photoFile?.name,
-          documents: List<_StudentDocumentInput>.unmodifiable(labelledDocuments),
+          documents: List<_StudentDocumentInput>.unmodifiable(
+            labelledDocuments,
+          ),
           assignFees: _assignFees,
           concessionAmount:
               double.tryParse(_concessionAmountCtrl.text.trim()) ?? 0,
@@ -1976,7 +1961,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -2079,7 +2064,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('First Name'),
+                                const _FieldLabel('First Name'),
                                 _TextInput(
                                   controller: _firstNameCtrl,
                                   enabled: !_saving,
@@ -2090,7 +2075,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Last Name'),
+                                const _FieldLabel('Last Name'),
                                 _TextInput(
                                   controller: _lastNameCtrl,
                                   enabled: !_saving,
@@ -2105,7 +2090,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Date of Birth'),
+                                const _FieldLabel('Date of Birth'),
                                 _TextInput(
                                   controller: _dobCtrl,
                                   enabled: !_saving,
@@ -2121,7 +2106,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Gender'),
+                                const _FieldLabel('Gender'),
                                 _DropdownInput<String>(
                                   value: _gender,
                                   enabled: !_saving,
@@ -2147,7 +2132,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Class / Section'),
+                                const _FieldLabel('Class / Section'),
                                 _DropdownInput<String>(
                                   value: _sectionId,
                                   enabled:
@@ -2169,7 +2154,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Student ID'),
+                                const _FieldLabel('Student ID'),
                                 _TextInput(
                                   controller: _systemIdCtrl,
                                   enabled: !_saving,
@@ -2193,7 +2178,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Parent Association'),
+                                const _FieldLabel('Parent Association'),
                                 _DropdownInput<String?>(
                                   value: _parentUserId,
                                   enabled: !_saving && !_createParentLogin,
@@ -2264,7 +2249,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Father First Name *'),
+                                  const _FieldLabel('Father First Name *'),
                                   _TextInput(
                                     controller: _fatherFirstNameCtrl,
                                     enabled: !_saving,
@@ -2275,7 +2260,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Father Last Name'),
+                                  const _FieldLabel('Father Last Name'),
                                   _TextInput(
                                     controller: _fatherLastNameCtrl,
                                     enabled: !_saving,
@@ -2305,7 +2290,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Mother First Name'),
+                                  const _FieldLabel('Mother First Name'),
                                   _TextInput(
                                     controller: _motherFirstNameCtrl,
                                     enabled: !_saving,
@@ -2316,7 +2301,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Mother Last Name'),
+                                  const _FieldLabel('Mother Last Name'),
                                   _TextInput(
                                     controller: _motherLastNameCtrl,
                                     enabled: !_saving,
@@ -2346,7 +2331,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Login Username'),
+                                  const _FieldLabel('Login Username'),
                                   _TextInput(
                                     controller: _parentUsernameCtrl,
                                     enabled: !_saving,
@@ -2356,7 +2341,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Password'),
+                                  const _FieldLabel('Password'),
                                   _TextInput(
                                     controller: _parentPasswordCtrl,
                                     enabled: !_saving,
@@ -2372,7 +2357,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Parent Email'),
+                                  const _FieldLabel('Parent Email'),
                                   _TextInput(
                                     controller: _parentEmailCtrl,
                                     enabled: !_saving,
@@ -2383,7 +2368,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _FieldLabel('Parent Phone'),
+                                  const _FieldLabel('Parent Phone'),
                                   _TextInput(
                                     controller: _parentPhoneCtrl,
                                     enabled: !_saving,
@@ -2451,7 +2436,10 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                                 child: ListTile(
                                   dense: true,
                                   contentPadding: const EdgeInsets.fromLTRB(
-                                    10, 4, 4, 4,
+                                    10,
+                                    4,
+                                    4,
+                                    4,
                                   ),
                                   leading: const Icon(
                                     Icons.description_rounded,
@@ -2531,7 +2519,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Concession Amount'),
+                                const _FieldLabel('Concession Amount'),
                                 _TextInput(
                                   controller: _concessionAmountCtrl,
                                   enabled: !_saving,
@@ -2542,7 +2530,7 @@ class _AddStudentPhotoFormPageState extends State<_AddStudentPhotoFormPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _FieldLabel('Concession Reason'),
+                                const _FieldLabel('Concession Reason'),
                                 _TextInput(
                                   controller: _concessionReasonCtrl,
                                   enabled: !_saving,
@@ -2907,11 +2895,7 @@ class _FormCard extends StatelessWidget {
   final Widget? trailing;
   final List<Widget> children;
 
-  const _FormCard({
-    required this.title,
-    required this.children,
-    this.trailing,
-  });
+  const _FormCard({required this.title, required this.children, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -3229,33 +3213,7 @@ class _StudentDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             _FormCard(
-              title: 'Principal Signals',
-              children: [
-                _ResponsiveMetricGrid(
-                  children: [
-                    _SignalTile(
-                      icon: Icons.account_balance_wallet_outlined,
-                      label: 'Fees',
-                      value: student.feeStatusLabel,
-                      color: student.hasFeeAlert
-                          ? const Color(0xFFFFECEC)
-                          : const Color(0xFFE6F6ED),
-                    ),
-                    _SignalTile(
-                      icon: Icons.trending_up_rounded,
-                      label: 'Performance',
-                      value: student.performanceGrade,
-                      color: student.hasPerformanceAlert
-                          ? const Color(0xFFFFF2CE)
-                          : const Color(0xFFEAF2FF),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            _FormCard(
-              title: 'Parent / Guardian',
+              title: 'Parent',
               children: [
                 _DetailRow(label: 'Guardian', value: student.guardianName),
                 _DetailRow(label: 'Phone', value: student.guardianPhone),
@@ -3296,27 +3254,7 @@ class _StudentDetailPage extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            _FormCard(
-              title: 'Academic Performance',
-              children: [
-                _DetailRow(
-                  label: 'Average',
-                  value: student.marksCount == 0
-                      ? 'No marks yet'
-                      : '${student.performanceScore.toStringAsFixed(1)}%',
-                ),
-                _DetailRow(label: 'Grade', value: student.performanceGrade),
-                _DetailRow(
-                  label: 'Weak Subjects',
-                  value: '${student.weakSubjects}',
-                ),
-                _DetailRow(
-                  label: 'Marks Entered',
-                  value: '${student.marksCount}',
-                ),
-              ],
-            ),
+
             const SizedBox(height: 14),
             _FormCard(
               title: 'Documents',
@@ -3332,130 +3270,16 @@ class _StudentDetailPage extends StatelessWidget {
                         )
                         .toList(),
             ),
-            const SizedBox(height: 14),
-            _FormCard(
-              title: 'Medical Notes',
-              children: [
-                _DetailRow(
-                  label: 'Conditions',
-                  value: _medicalValue('conditions'),
-                ),
-                _DetailRow(
-                  label: 'Allergies',
-                  value: _medicalValue('allergies'),
-                ),
-                _DetailRow(
-                  label: 'Doctor',
-                  value: _medicalValue('doctor_name'),
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  String _medicalValue(String key) {
-    final value = '${student.medicalRecord[key] ?? ''}'.trim();
-    return value.isEmpty ? 'Not recorded' : value;
-  }
-
   static String _documentName(Map<String, dynamic> document) {
     final url = '${document['file_url'] ?? document['url'] ?? ''}'.trim();
     if (url.isEmpty) return 'Uploaded';
     return url.split('/').where((part) => part.isNotEmpty).last;
-  }
-}
-
-class _ResponsiveMetricGrid extends StatelessWidget {
-  final List<Widget> children;
-
-  const _ResponsiveMetricGrid({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 420) {
-          return Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                children[i],
-                if (i != children.length - 1) const SizedBox(height: 10),
-              ],
-            ],
-          );
-        }
-        return Row(
-          children: [
-            for (var i = 0; i < children.length; i++) ...[
-              Expanded(child: children[i]),
-              if (i != children.length - 1) const SizedBox(width: 10),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SignalTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  const _SignalTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: const Color(0xFF225B88)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: context.appTheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    color: context.appTheme.muted,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

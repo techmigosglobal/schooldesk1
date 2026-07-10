@@ -119,7 +119,7 @@ class _TeacherCommunicationScreenState
       if (selected != null && !_isContactPlaceholder(selected)) {
         unawaited(api.markUnifiedChatConversationRead(_text(selected['id'])));
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -230,7 +230,18 @@ class _TeacherCommunicationScreenState
         final unread = int.tryParse('${row['unread_count'] ?? 0}') ?? 0;
         return ListTile(
           selected: selected,
-          leading: CircleAvatar(child: Text(_initials(label))),
+          leading: CircleAvatar(
+            backgroundColor: _text(row['type']) == 'principal_teacher'
+                ? const Color(0xFFE0E7FF)
+                : const Color(0xFFDBEAFE),
+            foregroundColor: _text(row['type']) == 'principal_teacher'
+                ? const Color(0xFF4F46E5)
+                : const Color(0xFF2563EB),
+            child: Text(
+              _initials(label),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
           subtitle: Text(
             _text(row['last_message']).isEmpty
@@ -358,7 +369,8 @@ List<Map<String, dynamic>> _mergeConversationsWithContacts({
       if (parentId.isNotEmpty) {
         // Try to find a matching contact to surface parent and student names
         final match = contacts.firstWhere(
-          (c) => _text(c['id']) == parentId &&
+          (c) =>
+              _text(c['id']) == parentId &&
               (studentId.isEmpty || _text(c['student_id']) == studentId),
           orElse: () => <String, dynamic>{},
         );
@@ -449,8 +461,8 @@ String _conversationSubtitle(Map<String, dynamic> row) {
   final roleLabel = contactRole == 'class_teacher'
       ? 'Class teacher'
       : contactRole == 'co_teacher'
-          ? 'Co-teacher'
-          : '';
+      ? 'Co-teacher'
+      : '';
   if (_isContactPlaceholder(row)) {
     return roleLabel.isNotEmpty
         ? '$student - $roleLabel - tap to start direct chat'

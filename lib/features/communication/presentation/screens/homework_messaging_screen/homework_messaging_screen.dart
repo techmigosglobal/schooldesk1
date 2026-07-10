@@ -1047,7 +1047,7 @@ class _NewFeedbackThreadInputPageState
       );
       if (!mounted) return;
       Navigator.pop(context, convId);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

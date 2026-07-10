@@ -36,7 +36,15 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
 
     options.extra.addAll(
       cacheOptions
-          .copyWith(maxStale: Nullable(_ttlForPath(options.path)))
+          .copyWith(
+            maxStale: Nullable(_ttlForPath(options.path)),
+            // Long-lived structural data (academic years, grades…) uses
+            // forceCache to avoid unnecessary round-trips on every navigation.
+            // Volatile data (dashboard, students…) uses CachePolicy.request so
+            // the UI always tries the network first and falls back to cache on
+            // error.
+            policy: _policyForPath(options.path),
+          )
           .toExtra(),
     );
     handler.next(options);
@@ -78,6 +86,24 @@ class _ReadCacheOptionsInterceptor extends Interceptor {
     }
     if (clean.contains('/dashboard/')) return const Duration(minutes: 2);
     return const Duration(minutes: 5);
+  }
+
+  /// Returns [CachePolicy.forceCache] for structural data that rarely changes
+  /// (academic setup, timetables, fee structures) and [CachePolicy.networkFirst]
+  /// for volatile data like dashboard summaries.
+  CachePolicy _policyForPath(String path) {
+    final clean = path.toLowerCase();
+    if (clean.contains('/academic-years') ||
+        clean.contains('/grades') ||
+        clean.contains('/sections') ||
+        clean.contains('/subjects') ||
+        clean.contains('/fees/structures') ||
+        clean.contains('/fees/categories') ||
+        clean.contains('/timetable') ||
+        clean.contains('/lesson-planners')) {
+      return CachePolicy.forceCache;
+    }
+    return CachePolicy.request;
   }
 }
 
@@ -207,7 +233,7 @@ class _ErrorInterceptor extends Interceptor {
                 _client.clearAuthToken();
               }
               handler.next(retryErr);
-            } catch (error) {
+            } on Object catch (error) {
               developer.log(
                 'Unexpected error during retry: $error',
                 name: 'ErrorInterceptor',

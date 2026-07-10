@@ -44,17 +44,15 @@ void main() {
     addTearDown(() => FlutterError.onError = previousOnError);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: const ParentFeesScreen(),
-      ),
+      MaterialApp(theme: AppTheme.lightTheme, home: const ParentFeesScreen()),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
     final overflowErrors = flutterErrors
         .where(
-          (error) => error.exceptionAsString().contains('A RenderFlex overflowed'),
+          (error) =>
+              error.exceptionAsString().contains('A RenderFlex overflowed'),
         )
         .toList();
 
@@ -83,17 +81,15 @@ void main() {
     addTearDown(() => FlutterError.onError = previousOnError);
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: const ParentFeesScreen(),
-      ),
+      MaterialApp(theme: AppTheme.lightTheme, home: const ParentFeesScreen()),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
 
     final overflowErrors = flutterErrors
         .where(
-          (error) => error.exceptionAsString().contains('A RenderFlex overflowed'),
+          (error) =>
+              error.exceptionAsString().contains('A RenderFlex overflowed'),
         )
         .toList();
 
@@ -184,10 +180,7 @@ void _seedParentFeesRoutes(
         'term_amount': 41666.67,
         'term_count': 3,
         'items': [
-          {
-            'description': 'Tuition Fee',
-            'amount': 125000.0,
-          },
+          {'description': 'Tuition Fee', 'amount': 125000.0},
         ],
       },
     ],

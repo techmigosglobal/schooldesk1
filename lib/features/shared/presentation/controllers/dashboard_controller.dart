@@ -166,7 +166,7 @@ class PrincipalDashboardController extends BaseDashboardController {
           route: '/complaint-management-screen',
         ),
       ]);
-    } catch (e) {
+    } on Object {
       setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
@@ -249,7 +249,7 @@ class AdminDashboardController extends BaseDashboardController {
           route: '/admin-attendance-screen',
         ),
       ]);
-    } catch (e) {
+    } on Object {
       setError('Failed to load admin dashboard.');
     } finally {
       setLoading(false);

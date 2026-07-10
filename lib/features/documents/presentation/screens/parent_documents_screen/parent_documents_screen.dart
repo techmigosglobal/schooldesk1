@@ -97,7 +97,7 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
           ..addAll(docs);
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
@@ -128,11 +128,13 @@ class _ParentDocumentsScreenState extends State<ParentDocumentsScreen> {
           );
         }
       }
-    } catch (e) {
+    } on Object {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate document. Please try again.'),
+            content: const Text(
+              'Failed to generate document. Please try again.',
+            ),
             backgroundColor: context.appTheme.error,
             behavior: SnackBarBehavior.floating,
           ),

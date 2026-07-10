@@ -85,7 +85,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         _stateCtrl.text = '${school['state'] ?? ''}';
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
@@ -143,7 +143,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         _saving = false;
       });
       _showSnack('Profile saved to backend.');
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Save failed: $e', isError: true);
@@ -182,7 +182,7 @@ class _ProfileManagementScreenState extends State<ProfileManagementScreen> {
         _saving = false;
       });
       _showSnack('Profile picture uploaded.');
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Profile picture upload failed: $e', isError: true);

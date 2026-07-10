@@ -1,42 +1,63 @@
 import 'package:flutter/foundation.dart';
 
 /// Environment configuration — reads from --dart-define at build time.
-/// All sensitive values must be passed via environment, never hardcoded.
+///
+/// ALL sensitive values (Supabase URL/key, Firebase keys) MUST be injected
+/// via --dart-define or --dart-define-from-file during the build. There are
+/// NO hardcoded fallback values for any secret or production URL.
+///
+/// Local development:
+///   flutter run --dart-define-from-file=env.json
+///
+/// Production (APK / AAB):
+///   flutter build apk --release --dart-define-from-file=env.supabase.json
+///   scripts/build-android-supabase.sh apk
+///
+/// CI (Codemagic / GitHub Actions):
+///   Pass all keys as --dart-define=KEY=$SECRET_VAR_FROM_CI
 class EnvConfig {
   EnvConfig._();
 
-  static const String _defaultSupabaseApiBaseUrl =
-      'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api';
-
+  // ── API base URL ─────────────────────────────────────────────
+  // Explicitly configured URL wins. Falls back to the Supabase project URL
+  // if a bare project URL is supplied.  No hardcoded production fallback.
   static const String _configuredApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: '',
   );
   static const String _productionApiBaseUrl = String.fromEnvironment(
     'PRODUCTION_API_BASE_URL',
-    defaultValue: _defaultSupabaseApiBaseUrl,
+    defaultValue: '',
   );
 
-  // ── Supabase constants ───────────────────────────────────────
+  // ── Supabase ──────────────────────────────────────────────────
+  /// Supabase project URL. Must be supplied via --dart-define=SUPABASE_URL.
   static const String supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://ouvwogguttybmpgfgctc.supabase.co',
-  );
-  static const String supabaseAnonKey = String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: 'sb_publishable_qCKMNCupGkjnNwK77gWdbg_Yxe83REn',
+    defaultValue: '',
   );
 
+  /// Supabase anon (publishable) key. Must be supplied via
+  /// --dart-define=SUPABASE_ANON_KEY. Removing the hardcoded default
+  /// prevents the key from being baked into the binary at compile time.
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: '',
+  );
+
+  // ── App environment ───────────────────────────────────────────
   static const String appEnv = String.fromEnvironment(
     'APP_ENV',
     defaultValue: 'development',
   );
 
+  // ── Networking ────────────────────────────────────────────────
   static const int apiTimeoutSeconds = int.fromEnvironment(
     'API_TIMEOUT',
     defaultValue: 30,
   );
 
+  // ── Analytics / Logging ───────────────────────────────────────
   static const bool enableAnalytics = bool.fromEnvironment(
     'ENABLE_ANALYTICS',
     defaultValue: false,
@@ -48,6 +69,10 @@ class EnvConfig {
   );
   static const bool _hasEnableLogging = bool.hasEnvironment('ENABLE_LOGGING');
 
+  // ── Firebase ──────────────────────────────────────────────────
+  // All Firebase values are injected via --dart-define. They have no
+  // defaultValue so a missing key produces an empty string, which
+  // validate() will detect in production/staging builds.
   static const String firebaseApiKey = String.fromEnvironment(
     'FIREBASE_API_KEY',
   );
@@ -79,37 +104,42 @@ class EnvConfig {
     'FIREBASE_VAPID_KEY',
   );
 
+  // ── Environment helpers ───────────────────────────────────────
   static bool get isProduction => appEnv == 'production';
   static bool get isDevelopment => appEnv == 'development';
   static bool get isStaging => appEnv == 'staging';
+  static bool get isLocal => appEnv == 'local';
 
-  /// The backend base URL. This checkout is pinned to Supabase Edge.
-  /// Non-Supabase values from --dart-define are ignored to avoid attaching
-  /// APKs or local runs to the retired Go/local backend by mistake.
+  // ── API URL resolution ────────────────────────────────────────
+  /// The backend base URL, resolved from build-time defines.
+  /// Accepts either a full edge-function path or a bare Supabase project URL.
   static String get apiBaseUrl {
     if (_configuredApiBaseUrl.isNotEmpty) {
       return v1BaseUrlFrom(_configuredApiBaseUrl);
     }
-    return v1BaseUrlFrom(_productionApiBaseUrl);
+    if (_productionApiBaseUrl.isNotEmpty) {
+      return v1BaseUrlFrom(_productionApiBaseUrl);
+    }
+    // Derive from supabaseUrl if no explicit API_BASE_URL was given.
+    if (supabaseUrl.isNotEmpty) {
+      return v1BaseUrlFrom(supabaseUrl);
+    }
+    return '';
   }
 
   static String get apiOrigin => apiOriginFromBaseUrl(apiBaseUrl);
 
-  static String get _releaseApiBaseUrl {
-    if (_configuredApiBaseUrl.isNotEmpty) {
-      return v1BaseUrlFrom(_configuredApiBaseUrl);
-    }
-    return v1BaseUrlFrom(_productionApiBaseUrl);
-  }
+  static String get _releaseApiBaseUrl => apiBaseUrl;
 
   static String v1BaseUrlFrom(String value) {
     final clean = _withoutTrailingSlash(value);
-    if (clean.isEmpty) return _defaultSupabaseApiBaseUrl;
+    if (clean.isEmpty) return '';
     if (_isSupabaseFunctionsApi(clean)) return clean;
     if (_isLocalSupabaseFunctionsApi(clean)) return clean;
     if (_isSupabaseProjectUrl(clean)) return '$clean/functions/v1/api';
     if (_isLocalSupabaseProjectUrl(clean)) return '$clean/functions/v1/api';
-    return _defaultSupabaseApiBaseUrl;
+    // Unknown format — return as-is so validate() can surface the problem.
+    return clean;
   }
 
   static String apiOriginFromBaseUrl(String baseUrl) {
@@ -143,20 +173,91 @@ class EnvConfig {
     return value.endsWith('/') ? value.substring(0, value.length - 1) : value;
   }
 
-  /// Logging defaults to off in production unless explicitly enabled.
+  // ── Logging ───────────────────────────────────────────────────
+  /// Logging defaults to off in production/staging unless explicitly enabled.
   static bool get enableLogging {
     if (_hasEnableLogging) {
       return _enableLogging;
     }
-    return !isProduction;
+    return isDevelopment || isLocal;
   }
 
-  /// Validates that all required environment variables are set.
+  // ── Validation ────────────────────────────────────────────────
+  /// Validates that all required environment variables are present and sane.
+  ///
+  /// Called as the **first** operation in main() so the app fails fast with
+  /// a clear error message instead of crashing silently on the first API call.
+  ///
+  /// Rules:
+  ///  - In production or staging builds: Supabase URL, anon key, API URL,
+  ///    and core Firebase keys MUST be non-empty and use HTTPS.
+  ///  - In release mode (kReleaseMode): same rules apply regardless of APP_ENV.
+  ///  - In development/local: only a warning is logged for missing values.
   static void validate({bool isRelease = kReleaseMode}) {
-    final validatedBaseUrl = isRelease ? _releaseApiBaseUrl : apiBaseUrl;
-    if (isRelease && !validatedBaseUrl.startsWith('https://')) {
+    final enforceStrict = isRelease || isProduction || isStaging;
+
+    if (enforceStrict) {
+      _requireNonEmpty(
+        'SUPABASE_URL',
+        supabaseUrl,
+        hint: '--dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co',
+      );
+      _requireNonEmpty(
+        'SUPABASE_ANON_KEY',
+        supabaseAnonKey,
+        hint: '--dart-define=SUPABASE_ANON_KEY=<your_anon_key>',
+      );
+
+      final resolvedApiUrl = _releaseApiBaseUrl;
+      if (resolvedApiUrl.isEmpty) {
+        throw Exception(
+          '[EnvConfig] API_BASE_URL is required but not set.\n'
+          'Pass it via --dart-define=API_BASE_URL=https://YOUR_PROJECT.supabase.co/functions/v1/api\n'
+          'or use --dart-define-from-file=env.supabase.json',
+        );
+      }
+      if (!resolvedApiUrl.startsWith('https://')) {
+        throw Exception(
+          '[EnvConfig] API base URL must use HTTPS in production/staging/release builds.\n'
+          'Got: $resolvedApiUrl',
+        );
+      }
+      if (!supabaseUrl.startsWith('https://')) {
+        throw Exception(
+          '[EnvConfig] SUPABASE_URL must use HTTPS in production/staging/release builds.\n'
+          'Got: $supabaseUrl',
+        );
+      }
+
+      // Firebase keys are required for push notifications to function.
+      _requireNonEmpty(
+        'FIREBASE_PROJECT_ID',
+        firebaseProjectId,
+        hint: '--dart-define=FIREBASE_PROJECT_ID=your-project-id',
+      );
+      _requireNonEmpty(
+        'FIREBASE_MESSAGING_SENDER_ID',
+        firebaseMessagingSenderId,
+        hint: '--dart-define=FIREBASE_MESSAGING_SENDER_ID=<sender_id>',
+      );
+      _requireNonEmpty(
+        'FIREBASE_API_KEY',
+        firebaseApiKey,
+        hint: '--dart-define=FIREBASE_API_KEY=<api_key>',
+      );
+    }
+  }
+
+  static void _requireNonEmpty(
+    String name,
+    String value, {
+    required String hint,
+  }) {
+    if (value.isEmpty) {
       throw Exception(
-        'Release API base URL must use HTTPS. Got: $validatedBaseUrl',
+        '[EnvConfig] Required environment variable "$name" is not set.\n'
+        'How to fix: $hint\n'
+        'Or use --dart-define-from-file=env.supabase.json which includes all keys.',
       );
     }
   }

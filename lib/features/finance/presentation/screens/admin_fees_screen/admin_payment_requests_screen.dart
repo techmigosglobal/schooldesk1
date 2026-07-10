@@ -51,7 +51,7 @@ class _AdminPaymentRequestsScreenState
         _loading = false;
         _error = null;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;

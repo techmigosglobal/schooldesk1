@@ -120,7 +120,9 @@ void main() {
       await tester.pumpAndSettle();
 
       final overflowErrors = flutterErrors
-          .where((e) => e.exceptionAsString().contains('A RenderFlex overflowed'))
+          .where(
+            (e) => e.exceptionAsString().contains('A RenderFlex overflowed'),
+          )
           .toList();
 
       expect(overflowErrors, isEmpty);
@@ -212,10 +214,7 @@ void main() {
       expect(find.text('Book & Kit Fee'), findsOneWidget);
 
       // Search for tuition
-      await tester.enterText(
-        find.byType(TextField).first,
-        'tuition',
-      );
+      await tester.enterText(find.byType(TextField).first, 'tuition');
       await tester.pumpAndSettle();
 
       expect(find.text('Tuition Fee'), findsOneWidget);
@@ -233,10 +232,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -256,10 +252,7 @@ void main() {
       };
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -270,10 +263,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -287,15 +277,13 @@ void main() {
       expect(find.text('Confirm Payment'), findsOneWidget);
     });
 
-    testWidgets('shows tuition month selector for tuition invoices',
-        (tester) async {
+    testWidgets('shows tuition month selector for tuition invoices', (
+      tester,
+    ) async {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -311,10 +299,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -334,10 +319,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeCollectScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeCollectScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -355,10 +337,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -370,10 +349,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -386,10 +362,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -408,10 +381,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -428,10 +398,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -445,10 +412,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeLedgerScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeLedgerScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -471,10 +435,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeReportsScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -489,10 +450,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeReportsScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -503,10 +461,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeReportsScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -522,10 +477,7 @@ void main() {
       _setLargeSurface(tester);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeReportsScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -540,10 +492,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: const FeeReportsScreen(),
-        ),
+        MaterialApp(theme: AppTheme.lightTheme, home: const FeeReportsScreen()),
       );
       await tester.pumpAndSettle();
 
@@ -626,14 +575,8 @@ void _seedAllFeeRoutes(TestBackendAdapter adapter) {
           'category_name': 'Tuition Fee',
           'frequency': 'yearly',
         },
-        'grade': <String, dynamic>{
-          'id': 'grade-1',
-          'grade_name': 'Class 5',
-        },
-        'section': <String, dynamic>{
-          'id': 'section-1',
-          'section_name': 'A',
-        },
+        'grade': <String, dynamic>{'id': 'grade-1', 'grade_name': 'Class 5'},
+        'section': <String, dynamic>{'id': 'section-1', 'section_name': 'A'},
       },
       <String, dynamic>{
         'id': 'struct-2',
@@ -651,14 +594,8 @@ void _seedAllFeeRoutes(TestBackendAdapter adapter) {
           'category_name': 'Book & Kit Fee',
           'frequency': 'one_time',
         },
-        'grade': <String, dynamic>{
-          'id': 'grade-1',
-          'grade_name': 'Class 5',
-        },
-        'section': <String, dynamic>{
-          'id': 'section-1',
-          'section_name': 'A',
-        },
+        'grade': <String, dynamic>{'id': 'grade-1', 'grade_name': 'Class 5'},
+        'section': <String, dynamic>{'id': 'section-1', 'section_name': 'A'},
       },
     ],
   };
@@ -695,9 +632,7 @@ void _seedAllFeeRoutes(TestBackendAdapter adapter) {
           'last_name': 'Sharma',
           'current_section': <String, dynamic>{
             'section_name': 'A',
-            'grade': <String, dynamic>{
-              'grade_name': 'Class 5',
-            },
+            'grade': <String, dynamic>{'grade_name': 'Class 5'},
           },
         },
         'fee_type': 'tuition',
@@ -708,12 +643,34 @@ void _seedAllFeeRoutes(TestBackendAdapter adapter) {
         'status': 'partial',
         'monthly_amount': 10000.0,
         'allowed_month_names': <String>[
-          'January', 'February', 'March', 'April', 'May', 'June',
-          'July', 'August', 'September', 'October', 'November', 'December',
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
         ],
-        'paid_month_names': <String>['January', 'February', 'March', 'April', 'May'],
+        'paid_month_names': <String>[
+          'January',
+          'February',
+          'March',
+          'April',
+          'May',
+        ],
         'unpaid_month_names': <String>[
-          'June', 'July', 'August', 'September', 'October', 'November', 'December',
+          'June',
+          'July',
+          'August',
+          'September',
+          'October',
+          'November',
+          'December',
         ],
         'payments': <Map<String, dynamic>>[
           <String, dynamic>{

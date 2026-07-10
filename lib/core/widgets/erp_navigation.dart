@@ -262,7 +262,9 @@ class _NavigationHeader extends StatelessWidget {
           Container(
             padding: EdgeInsets.all(tokens.spacing.sm),
             decoration: BoxDecoration(
-              color: context.appTheme.surface.withAlpha(tokens.isDark ? 22 : 34),
+              color: context.appTheme.surface.withAlpha(
+                tokens.isDark ? 22 : 34,
+              ),
               borderRadius: BorderRadius.circular(tokens.radius.card),
               border: Border.all(color: context.appTheme.surface.withAlpha(46)),
             ),
@@ -333,7 +335,9 @@ class _HeaderIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(tokens.radius.control),
         border: Border.all(color: context.appTheme.surface.withAlpha(52)),
       ),
-      child: child ?? Icon(icon, color: _bestTextColor(context, roleColor), size: 24),
+      child:
+          child ??
+          Icon(icon, color: _bestTextColor(context, roleColor), size: 24),
     );
   }
 }
@@ -501,7 +505,8 @@ class _NavigationItemTile extends StatelessWidget {
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold != null && scaffold.isDrawerOpen) {
       navigator.pop();
     }
     if (currentRoute == item.route) return;
@@ -619,7 +624,8 @@ class _FooterActionTile extends StatelessWidget {
     }
     if (action.route == null) return;
     final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
+    final scaffold = Scaffold.maybeOf(context);
+    if (scaffold != null && scaffold.isDrawerOpen) {
       navigator.pop();
     }
     if (action.resetStack) {
@@ -710,5 +716,7 @@ String _initials(String initials, String fallbackName) {
 }
 
 Color _bestTextColor(BuildContext context, Color background) {
-  return background.computeLuminance() > 0.45 ? context.appTheme.onSurface : Colors.white;
+  return background.computeLuminance() > 0.45
+      ? context.appTheme.onSurface
+      : Colors.white;
 }

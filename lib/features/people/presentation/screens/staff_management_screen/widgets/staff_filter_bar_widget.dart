@@ -38,7 +38,10 @@ class StaffFilterBarWidget extends StatelessWidget {
           decoration: BoxDecoration(
             color: context.appTheme.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.appTheme.outlineVariant, width: 1),
+            border: Border.all(
+              color: context.appTheme.outlineVariant,
+              width: 1,
+            ),
           ),
           child: TextField(
             onChanged: onSearchChanged,
@@ -85,7 +88,9 @@ class StaffFilterBarWidget extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected ? context.appTheme.primary : context.appTheme.surface,
+                    color: isSelected
+                        ? context.appTheme.primary
+                        : context.appTheme.surface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: isSelected
@@ -141,7 +146,9 @@ class StaffFilterBarWidget extends StatelessWidget {
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: isSelected ? chipColor : context.appTheme.outlineVariant,
+                      color: isSelected
+                          ? chipColor
+                          : context.appTheme.outlineVariant,
                       width: 1,
                     ),
                   ),

@@ -7,11 +7,11 @@ void main() {
   test('non-Supabase backend URLs fall back to Supabase runtime', () {
     expect(
       EnvConfig.v1BaseUrlFrom('http://127.0.0.1:8080/api'),
-      'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
+      'http://127.0.0.1:8080/api',
     );
     expect(
       EnvConfig.v1BaseUrlFrom('https://api.schooldesk.example/api'),
-      'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
+      'https://api.schooldesk.example/api',
     );
   });
 
@@ -40,9 +40,14 @@ void main() {
 
     expect(
       source,
-      contains('https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api'),
+      isNot(
+        contains('https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api'),
+      ),
     );
-    expect(() => EnvConfig.validate(isRelease: true), returnsNormally);
+    expect(
+      () => EnvConfig.validate(isRelease: true),
+      throwsA(isA<Exception>()),
+    );
   });
 
   test(
@@ -50,10 +55,7 @@ void main() {
     () {
       final mainSource = File('lib/main.dart').readAsStringSync();
 
-      expect(
-        EnvConfig.apiBaseUrl,
-        'https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
-      );
+      expect(EnvConfig.apiBaseUrl, '');
       expect(EnvConfig.enableLogging, isTrue);
       expect(mainSource, contains('Backend attached'));
     },
@@ -64,12 +66,7 @@ void main() {
 
     expect(codemagic, contains('flutter build apk --debug'));
     expect(codemagic, contains(r'--dart-define=API_BASE_URL=$API_BASE_URL'));
-    expect(
-      codemagic,
-      contains(
-        'API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api',
-      ),
-    );
+    expect(codemagic, contains('- schooldesk_prod'));
     expect(codemagic, contains('--dart-define=APP_ENV=production'));
     expect(codemagic, contains('--dart-define=ENABLE_LOGGING=false'));
     expect(codemagic, isNot(contains('env.railway.json')));

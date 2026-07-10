@@ -70,12 +70,12 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
             .whereType<Map<String, dynamic>>()
             .where((r) => _isPendingRequest(r))
             .toList();
-      } catch (_) {}
+      } on Object catch (_) {}
 
       Map<String, dynamic> paymentConfig = const {};
       try {
         paymentConfig = await api.getPaymentConfig();
-      } catch (_) {}
+      } on Object catch (_) {}
 
       if (!mounted) return;
       final years = results[2] as List<AcademicYearModel>;
@@ -96,7 +96,7 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
         _selectedAcademicYearId = selectedYear;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load fee data. $error';
@@ -473,9 +473,9 @@ class _FeeHomeScreenState extends State<FeeHomeScreen> {
           FeeCard(
             child: Row(
               children: [
-                FeeIconBadge(
+                const FeeIconBadge(
                   icon: Icons.verified_outlined,
-                  color: const Color(0xFF16A34A),
+                  color: Color(0xFF16A34A),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

@@ -173,7 +173,7 @@ class MessagingService extends ChangeNotifier {
     final api = BackendApiClient.instance;
     final saved = await api.sendChatMessage(
       conversationId: conversationId,
-      senderId: senderName,
+      senderId: api.currentUserId ?? senderName,
       senderRole: sender,
       senderName: senderName,
       body: text,
@@ -236,7 +236,7 @@ class MessagingService extends ChangeNotifier {
           priority: NotificationPriority.medium,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
           'Failed to trigger notification: $error',

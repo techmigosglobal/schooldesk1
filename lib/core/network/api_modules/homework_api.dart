@@ -29,7 +29,7 @@ extension BackendHomeworkApi on BackendApiClient {
       if (response.success == true) {
         return _asListMap(response.data);
       }
-      throw ServerException(message: 'Failed to load homework');
+      throw const ServerException(message: 'Failed to load homework');
     } on DioException catch (e) {
       throw _handleError(e);
     }

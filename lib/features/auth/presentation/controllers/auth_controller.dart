@@ -58,7 +58,7 @@ class AuthController extends ChangeNotifier {
       );
       _setLoading(false);
       return AppRoutes.loginLoading;
-    } catch (e) {
+    } on Object catch (e) {
       _setError('Login failed. Please try again. $e');
       _setLoading(false);
       return null;
@@ -69,7 +69,7 @@ class AuthController extends ChangeNotifier {
     final navigator = Navigator.of(context, rootNavigator: true);
     try {
       await PushNotificationService.instance.revokeCurrentToken();
-    } catch (_) {
+    } on Object catch (_) {
       // Sign-out must still complete if token revocation cannot reach backend.
     }
     await BackendApiClient.instance.logout();

@@ -77,7 +77,7 @@ class AppSettingsProvider extends ChangeNotifier {
     if (raw != null) {
       try {
         provider._settings = Map<String, dynamic>.from(jsonDecode(raw) as Map);
-      } catch (error) {
+      } on Object catch (error) {
         if (EnvConfig.enableLogging) {
           developer.log(
             'Failed to parse saved settings: $error',

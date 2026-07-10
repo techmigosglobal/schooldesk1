@@ -78,7 +78,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
       _notificationService = service;
       _syncUnreadCount();
       service.addListener(_syncUnreadCount);
-    } catch (_) {
+    } on Object catch (_) {
       // Global chrome should never block a module when notifications are offline.
     }
   }
@@ -123,12 +123,12 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         ScaffoldMessenger.maybeOf(context)
           ?..hideCurrentSnackBar()
           ..showSnackBar(
-            SnackBar(
+            const SnackBar(
               content: Text(
                 'Use ${SchoolDeskGlossary.signOut} to leave this portal.',
               ),
               behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 2),
+              duration: Duration(seconds: 2),
             ),
           );
       },
@@ -206,6 +206,11 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
         onPressed: () => _navigateGlobal(AppRoutes.globalSearch),
       ),
       _ToolbarIconButton(
+        tooltip: 'Help',
+        icon: Icons.help_outline_rounded,
+        onPressed: () => _navigateGlobal(AppRoutes.help),
+      ),
+      _ToolbarIconButton(
         tooltip: SchoolDeskGlossary.notifications,
         icon: Icons.notifications_none_rounded,
         badgeCount: _unreadCount,
@@ -228,6 +233,11 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
     if (widget.actions.isEmpty && _role == 'parent') {
       return [
         _ToolbarIconButton(
+          tooltip: 'Help',
+          icon: Icons.help_outline_rounded,
+          onPressed: () => _navigateGlobal(AppRoutes.help),
+        ),
+        _ToolbarIconButton(
           tooltip: SchoolDeskGlossary.notifications,
           icon: Icons.notifications_none_rounded,
           badgeCount: _unreadCount,
@@ -237,6 +247,11 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
     }
     if (widget.actions.isEmpty && _role == 'principal') {
       return [
+        _ToolbarIconButton(
+          tooltip: 'Help',
+          icon: Icons.help_outline_rounded,
+          onPressed: () => _navigateGlobal(AppRoutes.help),
+        ),
         _ToolbarIconButton(
           tooltip: SchoolDeskGlossary.notifications,
           icon: Icons.notifications_none_rounded,

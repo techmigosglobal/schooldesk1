@@ -62,7 +62,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
           ),
         );
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
     }
   }
@@ -136,52 +136,52 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
             ),
           ],
         ),
-        SchoolDeskNavigationSection(
+        const SchoolDeskNavigationSection(
           label: 'Academic Work',
           items: [
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.attendance,
               icon: Icons.how_to_reg_outlined,
               activeIcon: Icons.how_to_reg_rounded,
               label: 'Attendance',
               route: AppRoutes.teacherAttendance,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.attendanceHistory,
               icon: Icons.fact_check_outlined,
               activeIcon: Icons.fact_check_rounded,
               label: 'Attendance History',
               route: AppRoutes.teacherAttendanceHistory,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.eventPosts,
               icon: Icons.post_add_outlined,
               activeIcon: Icons.post_add_rounded,
               label: 'Event Posts',
               route: AppRoutes.teacherEventPosts,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.lessonPlanner,
               icon: Icons.auto_stories_outlined,
               activeIcon: Icons.auto_stories_rounded,
               label: 'Lesson Planner',
               route: AppRoutes.teacherLessonPlanner,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.homework,
               icon: Icons.menu_book_outlined,
               activeIcon: Icons.menu_book_rounded,
               label: 'Homework',
               route: AppRoutes.teacherHomework,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.studentNotes,
               icon: Icons.sticky_note_2_outlined,
               activeIcon: Icons.sticky_note_2_rounded,
               label: 'Student Notes',
               route: AppRoutes.teacherStudentNotes,
             ),
-            const SchoolDeskNavigationItem(
+            SchoolDeskNavigationItem(
               index: TeacherNav.gallery,
               icon: Icons.photo_library_outlined,
               activeIcon: Icons.photo_library_rounded,
@@ -202,9 +202,9 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
               badgeCount: RoleAccessService.teacherUnreadMessages,
             ),
             // Show PTM only when backend feature is available
-            if (FeatureAvailabilityService
-                .stateFor(SchoolDeskFeature.teacherParentMeetings)
-                .isAvailable)
+            if (FeatureAvailabilityService.stateFor(
+              SchoolDeskFeature.teacherParentMeetings,
+            ).isAvailable)
               const SchoolDeskNavigationItem(
                 index: TeacherNav.ptm,
                 icon: Icons.event_available_outlined,
@@ -212,7 +212,7 @@ class _TeacherDrawerState extends State<TeacherDrawer> {
                 label: 'PTM Slots',
                 route: AppRoutes.teacherParentInteraction,
               ),
-            SchoolDeskNavigationItem(
+            const SchoolDeskNavigationItem(
               index: TeacherNav.documents,
               icon: Icons.description_outlined,
               activeIcon: Icons.description_rounded,

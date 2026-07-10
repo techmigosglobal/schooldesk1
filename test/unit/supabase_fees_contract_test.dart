@@ -102,7 +102,10 @@ void main() {
     expect(source, contains('deleteInvoiceWorkflowRows'));
     expect(source, contains('url.searchParams.get("remove_pending")'));
     expect(source, contains('svc.from("fee_receipts").delete()'));
-    expect(source, contains('svc.from("fee_receipts").delete().in("payment_id"'));
+    expect(
+      source,
+      contains('svc.from("fee_receipts").delete().in("payment_id"'),
+    );
     expect(source, contains('svc.from("parent_payment_requests").delete()'));
     expect(source, contains('svc.from("payments").delete()'));
     expect(source, contains('svc.from("fee_invoices").delete()'));
@@ -193,7 +196,6 @@ void main() {
       expect(section, isNot(contains('onConflict')));
     },
   );
-
 
   test(
     'payment approval decision keeps admin remarks separate and updates invoice balances',
@@ -326,9 +328,7 @@ void main() {
       ).readAsStringSync();
 
       // Find the DELETE handler section
-      final deleteStart = source.indexOf(
-        'if (seg && method === "DELETE") {',
-      );
+      final deleteStart = source.indexOf('if (seg && method === "DELETE") {');
       // Find the reconciliation sweep section (after the structure is deleted)
       final reconciliationStart = source.indexOf('Reconciliation sweep');
       expect(reconciliationStart, isPositive);
@@ -370,7 +370,9 @@ void main() {
         'supabase/functions/api/handlers/fees.ts',
       ).readAsStringSync();
 
-      final start = source.indexOf('async function deleteFeeStructureWorkflowRows');
+      final start = source.indexOf(
+        'async function deleteFeeStructureWorkflowRows',
+      );
       final end = source.indexOf('export async function handleFees');
       final section = source.substring(start, end);
 
@@ -388,30 +390,21 @@ void main() {
     },
   );
 
-  test(
-    'orphaned fee cleanup migration covers all affected tables',
-    () {
-      final migration = File(
-        'supabase/migrations/0024_orphaned_fee_cleanup.sql',
-      ).readAsStringSync();
+  test('orphaned fee cleanup migration covers all affected tables', () {
+    final migration = File(
+      'supabase/migrations/0024_orphaned_fee_cleanup.sql',
+    ).readAsStringSync();
 
-      // Must target fee_invoices with fee_structure_id IS NULL
-      expect(migration, contains('fee_structure_id IS NULL'));
-      expect(migration, contains('status NOT IN'));
-      // Must delete from all child tables in correct order
-      expect(migration, contains('DELETE FROM public.fee_receipts'));
-      expect(
-        migration,
-        contains('DELETE FROM public.parent_payment_requests'),
-      );
-      expect(migration, contains('DELETE FROM public.payments'));
-      expect(
-        migration,
-        contains('DELETE FROM public.fee_invoice_items'),
-      );
-      expect(migration, contains('DELETE FROM public.fee_invoices'));
-      // Must preserve paid and cancelled invoices
-      expect(migration, contains("'paid', 'cancelled'"));
-    },
-  );
+    // Must target fee_invoices with fee_structure_id IS NULL
+    expect(migration, contains('fee_structure_id IS NULL'));
+    expect(migration, contains('status NOT IN'));
+    // Must delete from all child tables in correct order
+    expect(migration, contains('DELETE FROM public.fee_receipts'));
+    expect(migration, contains('DELETE FROM public.parent_payment_requests'));
+    expect(migration, contains('DELETE FROM public.payments'));
+    expect(migration, contains('DELETE FROM public.fee_invoice_items'));
+    expect(migration, contains('DELETE FROM public.fee_invoices'));
+    // Must preserve paid and cancelled invoices
+    expect(migration, contains("'paid', 'cancelled'"));
+  });
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/errors/exceptions.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -87,7 +88,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         AppRoutes.loginLoading,
         (_) => false,
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -166,7 +167,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _SectionTitle(
+              const _SectionTitle(
                 title: 'Start Your School',
                 subtitle: 'Create the school and first operator account.',
               ),
@@ -231,7 +232,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ],
               ),
               const SizedBox(height: 22),
-              _SectionTitle(
+              const _SectionTitle(
                 title: 'First Login',
                 subtitle: 'This account is created and signed in immediately.',
               ),
@@ -394,7 +395,7 @@ class _IntroPanel extends StatelessWidget {
                   'assets/branding/ArishVilleLogo.png',
                   height: 150,
                   fit: BoxFit.contain,
-                  semanticLabel: 'Arish Ville Preschool',
+                  semanticLabel: AppConstants.schoolName,
                 ),
               ),
               const SizedBox(height: 14),
@@ -407,13 +408,13 @@ class _IntroPanel extends StatelessWidget {
                       width: 54,
                       height: 54,
                       fit: BoxFit.cover,
-                      semanticLabel: 'Arish Ville Preschool logo',
+                      semanticLabel: '${AppConstants.schoolName} logo',
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Arish Ville Preschool',
+                      AppConstants.schoolName,
                       style: GoogleFonts.dmSans(
                         fontSize: 18,
                         height: 1.15,

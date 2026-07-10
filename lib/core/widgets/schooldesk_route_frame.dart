@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -59,7 +60,7 @@ class _SchoolDeskRouteFrameState extends State<SchoolDeskRouteFrame> {
       ?..hideCurrentSnackBar()
       ..showSnackBar(
         const SnackBar(
-          content: Text('Press back again to exit Arish Ville'),
+          content: Text('Press back again to exit ${AppConstants.appName}'),
           behavior: SnackBarBehavior.floating,
           duration: Duration(seconds: 2),
         ),

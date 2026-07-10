@@ -117,7 +117,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         }).toList();
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       setState(() {
         _students = [];
         _loading = false;
@@ -136,7 +136,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
       return result.data
           .where((user) => user.roleName.toLowerCase() == 'parent')
           .toList();
-    } catch (_) {
+    } on Object catch (_) {
       return const <UserAccountModel>[];
     }
   }
@@ -162,7 +162,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
             'phone': parent.phone,
           };
         }
-      } catch (_) {
+      } on Object catch (_) {
         continue;
       }
     }
@@ -416,7 +416,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
         SchoolDeskRecordChip(label: '${s['class']}'),
         SchoolDeskRecordChip(label: 'Roll ${s['roll']}'),
         if ('${s['parent'] ?? ''}'.trim().isNotEmpty)
-          SchoolDeskRecordChip(
+          const SchoolDeskRecordChip(
             label: 'Parent linked',
             tone: RecordChipTone.info,
           ),
@@ -574,7 +574,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen>
           ),
         );
       }
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1184,7 +1184,7 @@ class _StudentFormPageState extends State<_StudentFormPage> {
       );
       if (!mounted) return;
       Navigator.of(context).pop(_StudentActionResult(message));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -1475,7 +1475,7 @@ class _StudentPromotePageState extends State<_StudentPromotePage> {
       final message = await widget.onSubmit(_selectedSectionId);
       if (!mounted) return;
       Navigator.of(context).pop(_StudentActionResult(message));
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

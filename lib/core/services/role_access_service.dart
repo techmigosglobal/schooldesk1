@@ -67,8 +67,11 @@ class RoleAccessService {
     );
     // If no staff-scoped timetable found, try section-scoped timetable as a
     // fallback (some backends store timetables by section rather than staff).
-    if ((timetable == null || timetable.isEmpty) && teacherSectionId.isNotEmpty) {
-      timetable = await _try(() => api.getTimetableSlots(sectionId: teacherSectionId));
+    if ((timetable == null || timetable.isEmpty) &&
+        teacherSectionId.isNotEmpty) {
+      timetable = await _try(
+        () => api.getTimetableSlots(sectionId: teacherSectionId),
+      );
     }
     final invoices = profileRole == 'teacher'
         ? <Map<String, dynamic>>[]
@@ -594,7 +597,12 @@ class RoleAccessService {
   static String _classLabelForTimetableSlot(Map<String, dynamic> slot) {
     final section = slot['section'];
     if (section is Map) {
-      final grade = _text(section['grade_name'] ?? (section['grade'] is Map ? (section['grade']['grade_name'] ?? section['grade']['name']) : null));
+      final grade = _text(
+        section['grade_name'] ??
+            (section['grade'] is Map
+                ? (section['grade']['grade_name'] ?? section['grade']['name'])
+                : null),
+      );
       final sectionName = _text(section['section_name']);
       final label = _joinGradeSectionLabel(grade, sectionName);
       if (label.isNotEmpty) return label;
@@ -609,8 +617,12 @@ class RoleAccessService {
     final grade = _text(
       row['grade_name'] ??
           row['class'] ??
-          (nestedGrade is Map ? (nestedGrade['grade_name'] ?? nestedGrade['name']) : null) ??
-          (gradeRow is Map ? (gradeRow['grade_name'] ?? gradeRow['name']) : null),
+          (nestedGrade is Map
+              ? (nestedGrade['grade_name'] ?? nestedGrade['name'])
+              : null) ??
+          (gradeRow is Map
+              ? (gradeRow['grade_name'] ?? gradeRow['name'])
+              : null),
     );
     final section = _text(
       row['section_name'] ??
@@ -718,7 +730,7 @@ class RoleAccessService {
   static Future<T?> _try<T>(Future<T> Function() loader) async {
     try {
       return await loader();
-    } catch (_) {
+    } on Object catch (_) {
       return null;
     }
   }

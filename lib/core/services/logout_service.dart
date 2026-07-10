@@ -88,14 +88,14 @@ class LogoutService {
     Future(() async {
       try {
         await PushNotificationService.instance.revokeCurrentToken();
-      } catch (_) {
+      } on Object catch (_) {
         // Ignore — token may already be stale.
       }
       try {
         for (final role in SchoolDeskRole.values) {
           await NotificationTopicManager().cleanupTopicsForRole(role);
         }
-      } catch (_) {
+      } on Object catch (_) {
         // Ignore — topic cleanup is best-effort.
       }
       // Notify the backend about the logout using the saved refresh token.
@@ -107,7 +107,7 @@ class LogoutService {
             '/auth/logout',
             data: {'refresh_token': refreshToken},
           );
-        } catch (_) {
+        } on Object catch (_) {
           // Ignore — backend logout is best-effort.
         }
       }

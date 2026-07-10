@@ -78,10 +78,24 @@ jq -e '
   and ((.ENABLE_LOGGING | tostring) == "false")
 ' "$env_file" >/dev/null || fail "$env_file must target the Supabase Edge API with SUPABASE_URL, SUPABASE_ANON_KEY, APP_ENV=production, and ENABLE_LOGGING=false"
 
+# Validate Firebase keys — required for push notifications to work.
+# A build with empty Firebase keys produces an APK/AAB where FCM is silently broken.
+jq -e '
+  type == "object"
+  and (.FIREBASE_API_KEY | type == "string" and length > 0)
+  and (.FIREBASE_PROJECT_ID | type == "string" and length > 0)
+  and (.FIREBASE_MESSAGING_SENDER_ID | type == "string" and length > 0)
+  and (.FIREBASE_ANDROID_APP_ID | type == "string" and length > 0)
+  and (.FIREBASE_AUTH_DOMAIN | type == "string" and length > 0)
+  and (.FIREBASE_STORAGE_BUCKET | type == "string" and length > 0)
+' "$env_file" > /dev/null || fail "$env_file is missing one or more required Firebase keys (FIREBASE_API_KEY, FIREBASE_PROJECT_ID, FIREBASE_MESSAGING_SENDER_ID, FIREBASE_ANDROID_APP_ID, FIREBASE_AUTH_DOMAIN, FIREBASE_STORAGE_BUCKET). Push notifications will not work without these."
+
 api_base_url="$(jq -r '.API_BASE_URL' "$env_file")"
 supabase_url="$(jq -r '.SUPABASE_URL' "$env_file")"
-log "Using Supabase backend: $api_base_url"
-log "Using Supabase project: $supabase_url"
+firebase_project="$(jq -r '.FIREBASE_PROJECT_ID' "$env_file")"
+log "Using Supabase backend : $api_base_url"
+log "Using Supabase project  : $supabase_url"
+log "Using Firebase project  : $firebase_project"
 
 cd "$repo_root"
 

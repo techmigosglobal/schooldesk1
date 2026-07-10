@@ -468,7 +468,7 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
         context,
         StaffFormResult(created: !_isEdit, staffName: _nameController.text),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

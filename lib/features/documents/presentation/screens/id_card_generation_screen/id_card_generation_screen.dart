@@ -104,7 +104,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
               'ID_Card_${student['name']?.toString().replaceAll(' ', '_') ?? 'Student'}',
         );
       }
-    } catch (e) {
+    } on Object {
       if (mounted) {
         setState(() => _generating = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -162,7 +162,7 @@ class _IdCardGenerationScreenState extends State<IdCardGenerationScreen> {
           ),
         );
       }
-    } catch (e) {
+    } on Object {
       if (mounted) {
         setState(() => _generating = false);
       }

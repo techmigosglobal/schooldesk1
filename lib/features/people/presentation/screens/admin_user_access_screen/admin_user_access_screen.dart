@@ -140,7 +140,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           ..clear()
           ..addAll(activities);
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
@@ -427,7 +427,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       'Locked': context.appTheme.error,
     };
     final roleColors = {
-      'Principal': Color(0xFF6C3483),
+      'Principal': const Color(0xFF6C3483),
       'Teacher': context.appTheme.success,
       'Parent': context.appTheme.warning,
     };
@@ -664,7 +664,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
         final role = _rolePermissions.keys.elementAt(i);
         final perms = _rolePermissions[role]!;
         final roleColors = {
-          'Principal': Color(0xFF6C3483),
+          'Principal': const Color(0xFF6C3483),
           'Admin': context.appTheme.primary,
           'Teacher': context.appTheme.success,
           'Parent': context.appTheme.warning,
@@ -891,7 +891,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Children assigned to parent account'),
+          content: const Text('Children assigned to parent account'),
           backgroundColor: context.appTheme.success,
         ),
       );
@@ -913,7 +913,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
               : context.appTheme.warning,
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -977,7 +977,7 @@ class _AdminUserAccessScreenState extends State<AdminUserAccessScreen>
           ),
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

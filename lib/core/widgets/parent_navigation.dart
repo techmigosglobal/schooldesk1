@@ -76,7 +76,7 @@ class _ParentDrawerState extends State<ParentDrawer> {
             ? 'Parent Portal'
             : 'Parent - ${childNames.join(', ')}';
       });
-    } catch (_) {
+    } on Object catch (_) {
       // Keep neutral labels if the backend is temporarily unavailable.
     }
   }
@@ -172,9 +172,9 @@ class _ParentDrawerState extends State<ParentDrawer> {
               route: AppRoutes.parentTeacherChat,
             ),
             // Show PTM only when backend feature is available
-            if (FeatureAvailabilityService
-                .stateFor(SchoolDeskFeature.teacherParentMeetings)
-                .isAvailable)
+            if (FeatureAvailabilityService.stateFor(
+              SchoolDeskFeature.teacherParentMeetings,
+            ).isAvailable)
               const SchoolDeskNavigationItem(
                 index: ParentNav.ptm,
                 icon: Icons.event_available_outlined,

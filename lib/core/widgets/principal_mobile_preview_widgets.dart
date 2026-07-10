@@ -743,16 +743,12 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final valueColor =
-        metric.valueColor ?? PrincipalPreviewColors.roleDark;
+    final valueColor = metric.valueColor ?? PrincipalPreviewColors.roleDark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            valueColor.withAlpha(22),
-            valueColor.withAlpha(10),
-          ],
+          colors: [valueColor.withAlpha(22), valueColor.withAlpha(10)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1048,9 +1044,7 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
         height: 72,
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(
-            top: BorderSide(color: Color(0xFFE5E7EB)),
-          ),
+          border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
           boxShadow: [
             BoxShadow(
               color: Color(0x180F172A),
@@ -1083,10 +1077,7 @@ class PrincipalPreviewBottomNav extends StatelessWidget {
                             margin: const EdgeInsets.only(bottom: 4),
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFF1D4ED8),
-                                  Color(0xFF0F766E),
-                                ],
+                                colors: [Color(0xFF1D4ED8), Color(0xFF0F766E)],
                               ),
                               borderRadius: BorderRadius.circular(999),
                             ),
@@ -1167,9 +1158,7 @@ class PrincipalPreviewEmpty extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFF1D4ED8).withAlpha(40),
-        ),
+        border: Border.all(color: const Color(0xFF1D4ED8).withAlpha(40)),
       ),
       child: Row(
         children: [

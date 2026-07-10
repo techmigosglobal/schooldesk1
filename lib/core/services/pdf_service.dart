@@ -347,7 +347,7 @@ class PdfService {
                 children: [
                   pw.Text(
                     'This is a computer-generated receipt.',
-                    style: pw.TextStyle(fontSize: 9, color: _mutedText),
+                    style: const pw.TextStyle(fontSize: 9, color: _mutedText),
                   ),
                   pw.Text(
                     'Authorised Signatory',
@@ -402,7 +402,7 @@ class PdfService {
               pw.Center(
                 child: pw.Text(
                   'Class: $className',
-                  style: pw.TextStyle(fontSize: 12, color: _mutedText),
+                  style: const pw.TextStyle(fontSize: 12, color: _mutedText),
                 ),
               ),
               pw.SizedBox(height: 16),
@@ -577,7 +577,7 @@ class PdfService {
                       ),
                       pw.Text(
                         'STUDENT ID CARD — $academicYear',
-                        style: pw.TextStyle(
+                        style: const pw.TextStyle(
                           fontSize: 7,
                           color: PdfColors.white,
                         ),

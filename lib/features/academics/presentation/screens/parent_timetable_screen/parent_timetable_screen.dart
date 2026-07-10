@@ -28,6 +28,11 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
   bool _loading = true;
   int _selectedDay = 1; // 1 = Monday, 2 = Tuesday, etc.
 
+  // Monotonically increasing token. Each _loadChildTimetable call captures the
+  // current token; if it no longer matches when the await returns, the result
+  // belongs to a stale load and is discarded.
+  int _loadToken = 0;
+
   final List<String> _days = [
     'Monday',
     'Tuesday',
@@ -87,7 +92,7 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
       } else {
         setState(() => _loading = false);
       }
-    } catch (e) {
+    } on Object catch (e) {
       setState(() => _loading = false);
       _showErrorSnackBar('Failed to load child list: $e');
     }
@@ -95,6 +100,10 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
 
   Future<void> _loadChildTimetable(int childIndex) async {
     if (childIndex >= _childRows.length) return;
+    // Capture a unique token for this load. If the user taps another child
+    // before this await resolves, _loadToken will have been incremented and
+    // the stale result is silently discarded.
+    final token = ++_loadToken;
     setState(() => _loading = true);
     try {
       final child = _childRows[childIndex];
@@ -106,11 +115,13 @@ class _ParentTimetableScreenState extends State<ParentTimetableScreen>
           : await BackendApiClient.instance.getTimetableSlots(
               sectionId: sectionId,
             );
+      if (!mounted || token != _loadToken) return; // stale load — discard
       setState(() {
         _allSlots = response;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
+      if (!mounted || token != _loadToken) return;
       setState(() => _loading = false);
       _showErrorSnackBar('Failed to load child timetable: $e');
     }

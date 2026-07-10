@@ -485,7 +485,7 @@ class _AccountAccessFormScreenState extends State<AccountAccessFormScreen> {
         context,
         AccountAccessFormResult(created: !_isEdit, role: _role),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

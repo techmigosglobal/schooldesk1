@@ -74,7 +74,7 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   Future<T?> _try<T>(Future<T> Function() loader) async {
     try {
       return await loader();
-    } catch (_) {
+    } on Object catch (_) {
       return null;
     }
   }
@@ -171,12 +171,18 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
+    final bgColor = isDark
+        ? const Color(0xFF151C26)
+        : context.appTheme.background;
+    final surfaceColor = isDark
+        ? const Color(0xFF1E2530)
+        : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
         : context.appTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
+    final mutedColor = isDark
+        ? const Color(0xFF90A4AE)
+        : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
         : context.appTheme.outlineVariant;

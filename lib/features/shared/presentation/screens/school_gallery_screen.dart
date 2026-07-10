@@ -38,7 +38,7 @@ class _SchoolGalleryScreenState extends State<SchoolGalleryScreen> {
         _posts = posts;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;

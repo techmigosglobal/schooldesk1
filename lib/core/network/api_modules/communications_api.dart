@@ -483,7 +483,7 @@ extension BackendCommunicationsApi on BackendApiClient {
       );
       final data = _asMap(response.data);
       return Map<String, dynamic>.from(data['data'] as Map? ?? {});
-    } catch (_) {
+    } on Object catch (_) {
       // Fire-and-forget: never crash or clear shared auth state.
       return <String, dynamic>{};
     }

@@ -278,7 +278,7 @@ class _AdminPaymentRequestDecisionScreenState
       } else {
         Navigator.pop(context, true);
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _submitting = false);
       _showError(error.toString());

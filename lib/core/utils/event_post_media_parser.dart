@@ -53,7 +53,7 @@ class EventPostMediaItem {
         if (decoded is List) {
           return parseList(decoded);
         }
-      } catch (_) {
+      } on Object catch (_) {
         // Fall through to legacy parsing.
       }
     }
@@ -164,7 +164,7 @@ List<String> parseEventPostMediaUrls(dynamic raw) {
             .where((e) => e.isNotEmpty)
             .toList();
       }
-    } catch (_) {
+    } on Object catch (_) {
       // Fallback parsing below.
     }
   }

@@ -3,7 +3,15 @@ import 'dart:convert';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 
 class BackupRestoreService {
-  static const _legacyAppName = 'School' 'Desk';
+  // Stable identifier used to tag and validate backup files.
+  // Must never change — changing it makes all existing backups unrestorable.
+  static const _appId = 'com.schooldesk1.app';
+
+  // Legacy identifiers accepted during restore for backward compatibility.
+  static const _legacyAppName =
+      'School'
+      'Desk';
+  static const _legacyArishVilleName = 'Arish Ville';
 
   static BackupRestoreService? _instance;
 
@@ -21,7 +29,7 @@ class BackupRestoreService {
     final payload = {
       'version': '1.0',
       'timestamp': DateTime.now().toIso8601String(),
-      'appName': 'Arish Ville',
+      'appId': _appId,
       'data': {
         'students': (await api.getStudents(page: 1, pageSize: 100)).data.length,
         'staff': (await api.getStaff(page: 1, pageSize: 100)).data.length,
@@ -36,7 +44,8 @@ class BackupRestoreService {
   Future<bool> restoreBackup(String jsonString) async {
     final decoded = jsonDecode(jsonString);
     return decoded is Map &&
-        (decoded['appName'] == 'Arish Ville' ||
+        (decoded['appId'] == _appId ||
+            decoded['appName'] == _legacyArishVilleName ||
             decoded['appName'] == _legacyAppName);
   }
 

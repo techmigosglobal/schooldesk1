@@ -12,21 +12,22 @@ class PrincipalInvoiceGenerate extends StatefulWidget {
   const PrincipalInvoiceGenerate({super.key, required this.args});
 
   @override
-  State<PrincipalInvoiceGenerate> createState() => _PrincipalInvoiceGenerateState();
+  State<PrincipalInvoiceGenerate> createState() =>
+      _PrincipalInvoiceGenerateState();
 }
 
 class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _labelController;
   late final TextEditingController _dueDateController;
-  
+
   String _scope = 'class';
   late String _selectedYearId;
   late String _selectedGradeId;
   String _selectedTermId = '';
   String _selectedSectionId = '';
   String _selectedStudentId = '';
-  
+
   List<Map<String, dynamic>> _terms = [];
   bool _loadingTerms = false;
   bool _includeOneTime = false;
@@ -35,8 +36,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
   int _selectedInstallmentCount = 3;
 
   bool get _hasReferenceData =>
-      widget.args.academicYears.isNotEmpty &&
-      widget.args.grades.isNotEmpty;
+      widget.args.academicYears.isNotEmpty && widget.args.grades.isNotEmpty;
 
   double get _estimatedTotal {
     return widget.args.feeStructures
@@ -61,10 +61,9 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         });
   }
 
-  List<SectionModel> get _sectionOptions => widget.args.sections
-      .where((s) => s.gradeId == _selectedGradeId)
-      .toList()
-    ..sort((a, b) => a.sectionName.compareTo(b.sectionName));
+  List<SectionModel> get _sectionOptions =>
+      widget.args.sections.where((s) => s.gradeId == _selectedGradeId).toList()
+        ..sort((a, b) => a.sectionName.compareTo(b.sectionName));
 
   List<StudentModel> get _studentOptions {
     final sectionIds = _sectionOptions.map((s) => s.id).toSet();
@@ -74,12 +73,13 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         return sectionId == _selectedSectionId;
       }
       return sectionIds.contains(sectionId);
-    }).toList()
-      ..sort((a, b) => a.fullName.compareTo(b.fullName));
+    }).toList()..sort((a, b) => a.fullName.compareTo(b.fullName));
   }
 
   String get _selectedTermLabel {
-    final match = _terms.firstWhereOrNull((t) => '${t['id']}' == _selectedTermId);
+    final match = _terms.firstWhereOrNull(
+      (t) => '${t['id']}' == _selectedTermId,
+    );
     return match != null ? '${match['term_name'] ?? ''}'.trim() : '';
   }
 
@@ -95,10 +95,12 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
       '${seed['grade_id'] ?? ''}',
       widget.args.grades.map((grade) => grade.id),
     );
-    
+
     _labelController = TextEditingController();
-    _dueDateController = TextEditingController(text: _defaultDueDate(dueDay: seed['due_day'] as int?));
-    
+    _dueDateController = TextEditingController(
+      text: _defaultDueDate(dueDay: seed['due_day'] as int?),
+    );
+
     _loadTerms().then((_) {
       if (mounted) {
         setState(() {
@@ -117,8 +119,12 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
 
   String _initialId(String seedValue, Iterable<String> options) {
     if (options.contains(seedValue)) return seedValue;
-    final currentOption = widget.args.academicYears.firstWhereOrNull((y) => y.isCurrent)?.id;
-    if (currentOption != null && options.contains(currentOption)) return currentOption;
+    final currentOption = widget.args.academicYears
+        .firstWhereOrNull((y) => y.isCurrent)
+        ?.id;
+    if (currentOption != null && options.contains(currentOption)) {
+      return currentOption;
+    }
     return options.isEmpty ? '' : options.first;
   }
 
@@ -136,7 +142,7 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         _selectedTermId = list.isEmpty ? '' : '${list.first['id'] ?? ''}';
         _loadingTerms = false;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (mounted) setState(() => _loadingTerms = false);
     }
   }
@@ -145,36 +151,43 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
     if (!_formKey.currentState!.validate()) return;
     if (_estimatedTotal <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No fee structures found for this class/year.')),
+        const SnackBar(
+          content: Text('No fee structures found for this class/year.'),
+        ),
       );
       return;
     }
     setState(() => _generating = true);
     try {
-      final result = await BackendApiClient.instance.createRaw('/fees/invoices/generate', {
-        'academic_year_id': _selectedYearId,
-        'grade_id': _selectedGradeId,
-        if (_scope == 'section') 'section_id': _selectedSectionId,
-        if (_scope == 'student') 'student_id': _selectedStudentId,
-        'term_id': _selectedTermId,
-        'installment_count': _selectedInstallmentCount,
-        'include_one_time': _includeOneTime,
-        'include_yearly': _includeYearly,
-        'invoice_label': _labelController.text.trim(),
-        'due_date': _dueDateController.text.trim(),
-      });
+      final result = await BackendApiClient.instance
+          .createRaw('/fees/invoices/generate', {
+            'academic_year_id': _selectedYearId,
+            'grade_id': _selectedGradeId,
+            if (_scope == 'section') 'section_id': _selectedSectionId,
+            if (_scope == 'student') 'student_id': _selectedStudentId,
+            'term_id': _selectedTermId,
+            'installment_count': _selectedInstallmentCount,
+            'include_one_time': _includeOneTime,
+            'include_yearly': _includeYearly,
+            'invoice_label': _labelController.text.trim(),
+            'due_date': _dueDateController.text.trim(),
+          });
       if (!mounted) return;
       final createdCount = (result['created'] as num?)?.toInt() ?? 0;
       if (createdCount > 0) {
         try {
-          final gradeLabel = widget.args.grades.firstWhereOrNull((g) => g.id == _selectedGradeId)?.gradeName ?? 'Class';
+          final gradeLabel =
+              widget.args.grades
+                  .firstWhereOrNull((g) => g.id == _selectedGradeId)
+                  ?.gradeName ??
+              'Class';
           final notifService = await NotificationService.getInstance();
           await notifService.triggerInvoiceGeneratedAlert(
             invoiceCount: createdCount,
             classLabel: gradeLabel,
             termLabel: _selectedTermLabel,
           );
-        } catch (_) {}
+        } on Object catch (_) {}
       }
       Navigator.pop(
         context,
@@ -183,9 +196,12 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
           skipped: (result['skipped'] as num?)?.toInt() ?? 0,
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: context.appTheme.error),
+        SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: context.appTheme.error,
+        ),
       );
     } finally {
       if (mounted) setState(() => _generating = false);
@@ -195,7 +211,9 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
   String _defaultInvoiceLabel() {
     final now = DateTime.now();
     if (_selectedTermId.isNotEmpty) return _selectedTermLabel;
-    final current = widget.args.academicYears.firstWhereOrNull((year) => year.isCurrent);
+    final current = widget.args.academicYears.firstWhereOrNull(
+      (year) => year.isCurrent,
+    );
     return '${_monthName(now.month)} ${current?.yearLabel ?? '${now.year}'}';
   }
 
@@ -210,7 +228,20 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
   }
 
   String _monthName(int month) {
-    const list = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const list = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return (month >= 1 && month <= 12) ? list[month - 1] : '';
   }
 
@@ -219,14 +250,19 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
     if (!_hasReferenceData) {
       return Scaffold(
         appBar: AppBar(title: const Text('Generate Invoices')),
-        body: const Center(child: Text('Reference metadata is incomplete. Please wait...')),
+        body: const Center(
+          child: Text('Reference metadata is incomplete. Please wait...'),
+        ),
       );
     }
 
     return Scaffold(
       backgroundColor: context.appTheme.surface,
       appBar: AppBar(
-        title: const Text('Generate Invoices', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Generate Invoices',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: context.appTheme.onSurface,
@@ -236,7 +272,13 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Step 1: Scope', style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(
+              'Step 1: Scope',
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
             const SizedBox(height: 10),
             Card(
               elevation: 0,
@@ -250,8 +292,17 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                   children: [
                     DropdownButtonFormField<String>(
                       value: _selectedYearId,
-                      decoration: const InputDecoration(labelText: 'Academic Year'),
-                      items: widget.args.academicYears.map((y) => DropdownMenuItem(value: y.id, child: Text(y.yearLabel))).toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Academic Year',
+                      ),
+                      items: widget.args.academicYears
+                          .map(
+                            (y) => DropdownMenuItem(
+                              value: y.id,
+                              child: Text(y.yearLabel),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) {
                         if (v == null) return;
                         setState(() => _selectedYearId = v);
@@ -261,8 +312,17 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: _selectedGradeId,
-                      decoration: const InputDecoration(labelText: 'Class / Grade'),
-                      items: widget.args.grades.map((g) => DropdownMenuItem(value: g.id, child: Text(g.gradeName))).toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Class / Grade',
+                      ),
+                      items: widget.args.grades
+                          .map(
+                            (g) => DropdownMenuItem(
+                              value: g.id,
+                              child: Text(g.gradeName),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) {
                         if (v == null) return;
                         setState(() {
@@ -277,9 +337,18 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                       value: _scope,
                       decoration: const InputDecoration(labelText: 'Scope'),
                       items: const [
-                        DropdownMenuItem(value: 'class', child: Text('Entire Class')),
-                        DropdownMenuItem(value: 'section', child: Text('Specific Section')),
-                        DropdownMenuItem(value: 'student', child: Text('Single Student')),
+                        DropdownMenuItem(
+                          value: 'class',
+                          child: Text('Entire Class'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'section',
+                          child: Text('Specific Section'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'student',
+                          child: Text('Single Student'),
+                        ),
                       ],
                       onChanged: (v) {
                         if (v == null) return;
@@ -293,28 +362,50 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                     if (_scope != 'class') ...[
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: _selectedSectionId.isEmpty ? null : _selectedSectionId,
+                        value: _selectedSectionId.isEmpty
+                            ? null
+                            : _selectedSectionId,
                         decoration: const InputDecoration(labelText: 'Section'),
-                        items: _sectionOptions.map((s) => DropdownMenuItem(value: s.id, child: Text(s.sectionName))).toList(),
+                        items: _sectionOptions
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(s.sectionName),
+                              ),
+                            )
+                            .toList(),
                         onChanged: (v) {
                           setState(() {
                             _selectedSectionId = v ?? '';
                             _selectedStudentId = '';
                           });
                         },
-                        validator: (v) => (v == null || v.isEmpty) ? 'Please select a section' : null,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select a section'
+                            : null,
                       ),
                     ],
                     if (_scope == 'student') ...[
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
-                        value: _selectedStudentId.isEmpty ? null : _selectedStudentId,
+                        value: _selectedStudentId.isEmpty
+                            ? null
+                            : _selectedStudentId,
                         decoration: const InputDecoration(labelText: 'Student'),
-                        items: _studentOptions.map((s) => DropdownMenuItem(value: s.id, child: Text(s.fullName))).toList(),
+                        items: _studentOptions
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.id,
+                                child: Text(s.fullName),
+                              ),
+                            )
+                            .toList(),
                         onChanged: (v) {
                           setState(() => _selectedStudentId = v ?? '');
                         },
-                        validator: (v) => (v == null || v.isEmpty) ? 'Please select a student' : null,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select a student'
+                            : null,
                       ),
                     ],
                   ],
@@ -322,7 +413,13 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('Step 2: Settings', style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(
+              'Step 2: Settings',
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+            ),
             const SizedBox(height: 10),
             Card(
               elevation: 0,
@@ -339,50 +436,86 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                     else
                       DropdownButtonFormField<String>(
                         value: _selectedTermId.isEmpty ? null : _selectedTermId,
-                        decoration: const InputDecoration(labelText: 'Installment Term'),
-                        items: _terms.map((t) => DropdownMenuItem(value: '${t['id']}', child: Text('${t['term_name']}'))).toList(),
+                        decoration: const InputDecoration(
+                          labelText: 'Installment Term',
+                        ),
+                        items: _terms
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: '${t['id']}',
+                                child: Text('${t['term_name']}'),
+                              ),
+                            )
+                            .toList(),
                         onChanged: (v) {
                           setState(() {
                             _selectedTermId = v ?? '';
                             _labelController.text = _defaultInvoiceLabel();
                           });
                         },
-                        validator: (v) => (v == null || v.isEmpty) ? 'Please select a term' : null,
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Please select a term'
+                            : null,
                       ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _labelController,
-                      decoration: const InputDecoration(labelText: 'Invoice Description Label'),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Label is required' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Invoice Description Label',
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Label is required'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: _dueDateController,
-                      decoration: const InputDecoration(labelText: 'Due Date (YYYY-MM-DD)', prefixIcon: Icon(Icons.calendar_month_rounded)),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Due date is required' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Due Date (YYYY-MM-DD)',
+                        prefixIcon: Icon(Icons.calendar_month_rounded),
+                      ),
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Due date is required'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<int>(
                       value: _selectedInstallmentCount,
-                      decoration: const InputDecoration(labelText: 'Installments Count (for tuition)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Installments Count (for tuition)',
+                      ),
                       items: List.generate(12, (index) => index + 1)
-                          .map((val) => DropdownMenuItem(value: val, child: Text('$val installment(s)'))).toList(),
+                          .map(
+                            (val) => DropdownMenuItem(
+                              value: val,
+                              child: Text('$val installment(s)'),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) {
                         setState(() => _selectedInstallmentCount = v ?? 3);
                       },
                     ),
                     const SizedBox(height: 16),
                     CheckboxListTile(
-                      title: const Text('Include One-Time Fees', style: TextStyle(fontSize: 13)),
+                      title: const Text(
+                        'Include One-Time Fees',
+                        style: TextStyle(fontSize: 13),
+                      ),
                       value: _includeOneTime,
-                      onChanged: (val) => setState(() => _includeOneTime = val ?? false),
+                      onChanged: (val) =>
+                          setState(() => _includeOneTime = val ?? false),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
                     CheckboxListTile(
-                      title: const Text('Include Yearly Fees', style: TextStyle(fontSize: 13)),
+                      title: const Text(
+                        'Include Yearly Fees',
+                        style: TextStyle(fontSize: 13),
+                      ),
                       value: _includeYearly,
-                      onChanged: (val) => setState(() => _includeYearly = val ?? false),
+                      onChanged: (val) =>
+                          setState(() => _includeYearly = val ?? false),
                       controlAffinity: ListTileControlAffinity.leading,
                       contentPadding: EdgeInsets.zero,
                     ),
@@ -391,29 +524,15 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('Step 3: Preview Estimation', style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15)),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.appTheme.primaryContainer.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: context.appTheme.primary.withAlpha(40)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Estimated Fee per Student:',
-                    style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w600, color: context.appTheme.primary),
-                  ),
-                  Text(
-                    '₹${_estimatedTotal.toStringAsFixed(0)}',
-                    style: GoogleFonts.ibmPlexSans(fontSize: 18, fontWeight: FontWeight.bold, color: context.appTheme.primary),
-                  ),
-                ],
+            Text(
+              'Step 3: Invoice Preview',
+              style: GoogleFonts.ibmPlexSans(
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
               ),
             ),
+            const SizedBox(height: 10),
+            _buildFeeBreakdownPreview(),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -423,17 +542,224 @@ class _PrincipalInvoiceGenerateState extends State<PrincipalInvoiceGenerate> {
                   backgroundColor: const Color(0xFF1A6B4A),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
                 child: _generating
-                    ? const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Generate Invoices', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        'Generate Invoices',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 48),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Fee Breakdown Preview ─────────────────────────────────────────────────
+
+  Widget _buildFeeBreakdownPreview() {
+    final matchingFees = widget.args.feeStructures
+        .where(
+          (fee) =>
+              '${fee['academic_year_id']}' == _selectedYearId &&
+              '${fee['grade_id']}' == _selectedGradeId,
+        )
+        .toList();
+
+    if (matchingFees.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.appTheme.errorContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          'No fee structures found for this class and academic year. '
+          'Please set up fee structures first.',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 12,
+            color: context.appTheme.onSurface,
+          ),
+        ),
+      );
+    }
+
+    // Categorise each fee entry
+    const catColors = {
+      'tuition': (
+        color: Color(0xFF1A6B4A),
+        bg: Color(0xFFDCFCE7),
+        icon: Icons.school_rounded,
+      ),
+      'books': (
+        color: Color(0xFF1D4ED8),
+        bg: Color(0xFFDBEAFE),
+        icon: Icons.menu_book_rounded,
+      ),
+      'kit': (
+        color: Color(0xFF92400E),
+        bg: Color(0xFFFEF3C7),
+        icon: Icons.backpack_rounded,
+      ),
+    };
+
+    ({Color color, Color bg, IconData icon}) feeColor(String name) {
+      final n = name.toLowerCase();
+      if (n.contains('tuition') || n.contains('monthly')) {
+        return catColors['tuition']!;
+      }
+      if (n.contains('book')) return catColors['books']!;
+      if (n.contains('kit') || n.contains('uniform')) return catColors['kit']!;
+      return (
+        color: const Color(0xFF7C3AED),
+        bg: const Color(0xFFF5F3FF),
+        icon: Icons.receipt_outlined,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  size: 16,
+                  color: Color(0xFF1A6B4A),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Fee Components for Selected Class',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: const Color(0xFF1A6B4A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Fee rows
+          for (final fee in matchingFees) ...[
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  () {
+                    final meta = feeColor(
+                      '${fee['category_name'] ?? fee['category'] ?? fee['fee_item_name'] ?? 'Fee'}',
+                    );
+                    return Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: meta.bg,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(meta.icon, size: 12, color: meta.color),
+                    );
+                  }(),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${fee['category_name'] ?? fee['category'] ?? fee['fee_item_name'] ?? 'Fee'}',
+                          style: GoogleFonts.ibmPlexSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          _feeFrequency(fee).replaceAll('_', ' '),
+                          style: GoogleFonts.ibmPlexSans(
+                            fontSize: 11,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '₹${_numValue(fee['amount']).toStringAsFixed(0)}',
+                    style: GoogleFonts.ibmPlexSans(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: const Color(0xFF1A6B4A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          // Total row
+          const Divider(height: 1),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: const BoxDecoration(
+              color: Color(0xFFDCFCE7),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(12)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Estimated Total per Student',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: const Color(0xFF1A6B4A),
+                  ),
+                ),
+                Text(
+                  '₹${_estimatedTotal.toStringAsFixed(0)}',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1A6B4A),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

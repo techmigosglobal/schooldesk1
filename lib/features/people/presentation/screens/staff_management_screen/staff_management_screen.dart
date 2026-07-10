@@ -276,7 +276,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         _applyFilters(resetState: false);
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -294,12 +294,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
 
     try {
       grades = await api.BackendApiClient.instance.getGrades();
-    } catch (_) {
+    } on Object catch (_) {
       grades = const [];
     }
     try {
       sections = await api.BackendApiClient.instance.getSections();
-    } catch (_) {
+    } on Object catch (_) {
       sections = const [];
     }
     try {
@@ -307,7 +307,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         '/subjects',
         queryParameters: const {'page_size': 500},
       );
-    } catch (_) {
+    } on Object catch (_) {
       subjects = const [];
     }
     try {
@@ -315,14 +315,14 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         '/staff-subjects',
         queryParameters: const {'page_size': 500},
       );
-    } catch (_) {
+    } on Object catch (_) {
       staffSubjects = const [];
     }
     try {
       users = (await api.BackendApiClient.instance.getUsers(
         pageSize: 500,
       )).data;
-    } catch (_) {
+    } on Object catch (_) {
       users = const [];
     }
 
@@ -676,7 +676,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           await api.BackendApiClient.instance.deleteStaff(staff.id);
         }
         removed++;
-      } catch (_) {
+      } on Object catch (_) {
         failures.add(staff.name);
       }
     }
@@ -1427,7 +1427,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         context.appTheme.success,
       );
       await _loadStaffFromBackend();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       _showStaffMessage(error.toString(), context.appTheme.error);
     }
@@ -2108,7 +2108,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       );
       if (!mounted) return;
       Navigator.of(context).pop();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -2202,7 +2202,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
           ),
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Full Name'),
+        const _FieldLabel('Full Name'),
         _TextInput(
           controller: _nameCtrl,
           hint: 'Enter full name',
@@ -2425,7 +2425,7 @@ class _StaffProfileFormPageState extends State<_StaffProfileFormPage> {
       title: 'Teaching Assignment',
       children: [
         if (widget.sections.isEmpty)
-          _InlineNotice(
+          const _InlineNotice(
             icon: Icons.info_outline_rounded,
             text:
                 'Create classes and sections first to assign this staff member to a section.',

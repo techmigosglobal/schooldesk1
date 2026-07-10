@@ -84,7 +84,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         _unreadNotifications = results[3] as int? ?? 0;
         _loading = false;
       });
-    } catch (_) {
+    } on Object catch (_) {
       if (!mounted) return;
       setState(() {
         _roleScopeLoaded = true;
@@ -99,7 +99,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   ) async {
     try {
       return await api.getMyStaffAttendanceToday();
-    } catch (_) {
+    } on Object catch (_) {
       return null;
     }
   }
@@ -108,7 +108,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     try {
       final service = await NotificationService.getInstance();
       return service.getUnreadCountForRole('teacher');
-    } catch (_) {
+    } on Object catch (_) {
       return 0;
     }
   }
@@ -121,6 +121,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       subtitle: '$shortName · classroom flow',
       selectedIndex: TeacherNav.dashboard,
       actions: [
+        IconButton(
+          tooltip: 'How to use the application',
+          icon: const Icon(Icons.help_outline_rounded),
+          onPressed: () => Navigator.pushNamed(context, AppRoutes.help),
+        ),
         Stack(
           clipBehavior: Clip.none,
           children: [
@@ -445,49 +450,49 @@ class _TeacherQuickActionGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      _QuickAction(
+      const _QuickAction(
         'My Classes',
         'Assigned sections',
         SchoolDeskUiIllustrations.classRoutine,
         AppRoutes.teacherClasses,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Timetable',
         'Today and week',
         SchoolDeskUiIllustrations.calendar,
         AppRoutes.teacherTimetable,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Student Attendance',
         'Mark your class',
         SchoolDeskUiIllustrations.attendance,
         AppRoutes.teacherAttendance,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Lesson Planner',
         'Weekly plans',
         SchoolDeskUiIllustrations.lessonPlanner,
         AppRoutes.teacherLessonPlanner,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Homework',
         'Assignments & review',
         SchoolDeskUiIllustrations.homework,
         AppRoutes.teacherHomework,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Leaves',
         'Apply and track',
         SchoolDeskUiIllustrations.calendar,
         AppRoutes.teacherLeave,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Event Posts',
         'School updates',
         SchoolDeskUiIllustrations.notices,
         AppRoutes.teacherEventPosts,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Gallery',
         'School photos',
         SchoolDeskUiIllustrations.resources,

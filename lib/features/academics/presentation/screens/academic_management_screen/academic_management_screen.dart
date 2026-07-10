@@ -100,7 +100,7 @@ class _AcademicManagementScreenState extends State<AcademicManagementScreen>
       _notificationService = service;
       service.addListener(_onNotificationsChanged);
       _onNotificationsChanged();
-    } catch (_) {
+    } on Object catch (_) {
       // Notification dots should never block academic records from loading.
     }
   }
@@ -438,10 +438,10 @@ class _AcademicTabStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 22,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -853,7 +853,7 @@ class _AcademicYearsTab extends StatelessWidget {
         context,
         '${year['name']} activated - visible to all modules',
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showAcademicSnack(context, _academicError(error), isError: true);
     }
   }
@@ -873,7 +873,7 @@ class _AcademicYearsTab extends StatelessWidget {
       await storage.deleteAcademicYearRecord('${year['id'] ?? ''}');
       onRefresh();
       _showAcademicSnack(context, 'Academic year deleted');
-    } catch (error) {
+    } on Object catch (error) {
       _showAcademicSnack(context, _academicError(error), isError: true);
     }
   }
@@ -938,10 +938,10 @@ class _AcademicYearCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -949,10 +949,10 @@ class _AcademicYearCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              _AcademicSoftIcon(
+              const _AcademicSoftIcon(
                 icon: Icons.calendar_month_outlined,
                 color: _academicBlue,
-                background: const Color(0xFFEAF3FF),
+                background: Color(0xFFEAF3FF),
                 size: 60,
               ),
               const SizedBox(width: 14),
@@ -1122,10 +1122,10 @@ class _AcademicTipCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -1239,10 +1239,10 @@ class _AcademicBooksIllustration extends StatelessWidget {
             bottom: 13,
             child: Transform.rotate(
               angle: -0.28,
-              child: _BookBlock(
+              child: const _BookBlock(
                 width: 58,
-                color: const Color(0xFFFFB15B),
-                stripe: const Color(0xFF4979E9),
+                color: Color(0xFFFFB15B),
+                stripe: Color(0xFF4979E9),
               ),
             ),
           ),
@@ -1251,10 +1251,10 @@ class _AcademicBooksIllustration extends StatelessWidget {
             bottom: 0,
             child: Transform.rotate(
               angle: -0.05,
-              child: _BookBlock(
+              child: const _BookBlock(
                 width: 68,
-                color: const Color(0xFF7DC6FF),
-                stripe: const Color(0xFFEB6A7C),
+                color: Color(0xFF7DC6FF),
+                stripe: Color(0xFFEB6A7C),
               ),
             ),
           ),
@@ -1462,7 +1462,7 @@ class _SubjectsTabState extends State<_SubjectsTab> {
         );
         widget.onRefresh();
         _showAcademicSnack(context, 'Subject removed');
-      } catch (error) {
+      } on Object catch (error) {
         _showAcademicSnack(context, _academicError(error), isError: true);
       }
     }
@@ -1599,7 +1599,7 @@ class _ClassesTab extends StatelessWidget {
       await storage.deleteAcademicClassRecord(classData);
       onRefresh();
       _showAcademicSnack(context, 'Class deleted');
-    } catch (error) {
+    } on Object catch (error) {
       _showAcademicSnack(context, _academicError(error), isError: true);
     }
   }
@@ -1764,7 +1764,7 @@ class _CurriculumTabState extends State<_CurriculumTab> {
             : 'Curriculum published - visible to Teachers & Parents',
         isWarning: isPublished,
       );
-    } catch (error) {
+    } on Object catch (error) {
       _showAcademicSnack(context, _academicError(error), isError: true);
     }
   }
@@ -1804,7 +1804,7 @@ class _CurriculumTabState extends State<_CurriculumTab> {
       );
       widget.onRefresh();
       _showAcademicSnack(context, 'Curriculum entry deleted');
-    } catch (error) {
+    } on Object catch (error) {
       _showAcademicSnack(context, _academicError(error), isError: true);
     }
   }
@@ -2248,10 +2248,10 @@ class _AcademicSubjectCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _academicBorder),
             boxShadow: [
-              BoxShadow(
+              const BoxShadow(
                 color: _academicPanelShadow,
                 blurRadius: 18,
-                offset: const Offset(0, 8),
+                offset: Offset(0, 8),
               ),
             ],
           ),
@@ -2438,10 +2438,10 @@ class _AcademicClassCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 18,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -2763,10 +2763,10 @@ class _AcademicYearSelector extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 18,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -2882,30 +2882,30 @@ class _CurriculumBookIllustration extends StatelessWidget {
               color: _academicBlue.withAlpha(120),
             ),
           ),
-          Positioned(
+          const Positioned(
             left: 18,
             top: 40,
             child: _FloatingAcademicGlyph(
               icon: Icons.school_outlined,
               color: _academicPurple,
-              bg: const Color(0xFFF2ECFF),
+              bg: Color(0xFFF2ECFF),
             ),
           ),
-          Positioned(
+          const Positioned(
             right: 16,
             top: 44,
             child: _FloatingAcademicGlyph(
               icon: Icons.assignment_turned_in_outlined,
-              color: const Color(0xFF27B7E5),
-              bg: const Color(0xFFEAF9FF),
+              color: Color(0xFF27B7E5),
+              bg: Color(0xFFEAF9FF),
             ),
           ),
-          Positioned(
+          const Positioned(
             top: 12,
             child: _FloatingAcademicGlyph(
               icon: Icons.account_balance_outlined,
               color: _academicBlue,
-              bg: const Color(0xFFEAF3FF),
+              bg: Color(0xFFEAF3FF),
             ),
           ),
           Positioned(
@@ -2984,10 +2984,10 @@ class _AcademicEmptyCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: _academicBorder),
         boxShadow: [
-          BoxShadow(
+          const BoxShadow(
             color: _academicPanelShadow,
             blurRadius: 18,
-            offset: const Offset(0, 8),
+            offset: Offset(0, 8),
           ),
         ],
       ),
@@ -3044,10 +3044,10 @@ class _AcademicEmptyCard extends StatelessWidget {
   final palettes = [
     (background: const Color(0xFFEAF3FF), foreground: _academicBlue),
     (background: const Color(0xFFEAF9EE), foreground: _academicGreen),
-    (background: const Color(0xFFFFF3E5), foreground: Color(0xFFFF8B18)),
+    (background: const Color(0xFFFFF3E5), foreground: const Color(0xFFFF8B18)),
     (background: const Color(0xFFF2ECFF), foreground: _academicPurple),
-    (background: const Color(0xFFFFECF4), foreground: Color(0xFFE95692)),
-    (background: const Color(0xFFE8FAFC), foreground: Color(0xFF19BAC6)),
+    (background: const Color(0xFFFFECF4), foreground: const Color(0xFFE95692)),
+    (background: const Color(0xFFE8FAFC), foreground: const Color(0xFF19BAC6)),
   ];
   final index = name.isEmpty
       ? 0

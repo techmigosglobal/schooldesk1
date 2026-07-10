@@ -47,7 +47,7 @@ class CustomErrorWidget extends StatelessWidget {
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () {
-                    bool canBeBack = Navigator.canPop(context);
+                    final bool canBeBack = Navigator.canPop(context);
                     if (canBeBack) {
                       Navigator.of(context).pop();
                     } else {

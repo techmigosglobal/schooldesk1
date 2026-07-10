@@ -29,7 +29,8 @@ extension MonitoringApi on BackendApiClient {
       final data = _asMap(response.data);
       if (data['success'] == true) return data;
       throw ServerException(
-        message: data['message'] ?? data['error'] ?? 'Failed to load error events',
+        message:
+            data['message'] ?? data['error'] ?? 'Failed to load error events',
       );
     } on DioException catch (e) {
       throw _handleError(e);

@@ -165,7 +165,9 @@ extension BackendLeaveApi on BackendApiClient {
             ? (respData['error'] ?? respData['message'] ?? '')
             : respData?.toString() ?? '';
         if (msg.toString().toLowerCase().contains('half_day') ||
-            msg.toString().toLowerCase().contains("could not find the 'half_day'")) {
+            msg.toString().toLowerCase().contains(
+              "could not find the 'half_day'",
+            )) {
           final payload = Map<String, dynamic>.from(request.toJson());
           payload.remove('half_day');
           final retryResp = await _dio.post(
@@ -178,7 +180,7 @@ extension BackendLeaveApi on BackendApiClient {
             message: retryData['error'] ?? 'Failed to submit leave application',
           );
         }
-      } catch (_) {
+      } on Object catch (_) {
         // fall-through to throw original handled error
       }
       throw _handleError(e);

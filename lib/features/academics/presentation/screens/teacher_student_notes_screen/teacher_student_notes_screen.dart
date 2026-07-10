@@ -75,7 +75,7 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
               );
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -134,7 +134,7 @@ class _TeacherStudentNotesScreenState extends State<TeacherStudentNotesScreen> {
       );
       setState(() => _saving = false);
       await _loadNotes();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(

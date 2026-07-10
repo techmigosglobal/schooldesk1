@@ -192,6 +192,7 @@ async function resolveGrade(
   const gradeName = text(body.grade_name);
   const gradeNumber = deriveGradeNumber(gradeName, body.grade_number);
 
+  // If an explicit grade_id is provided, update that grade directly.
   if (gradeId) {
     const { data, error } = await svc.from("grades").update({
       grade_name: gradeName || undefined,
@@ -202,6 +203,12 @@ async function resolveGrade(
     return data;
   }
 
+  // --- No explicit grade_id: try to find or create ---
+
+  // 1) Match by grade_name (case-insensitive) — this is the primary
+  //    lookup.  If the user typed "Daycare" we find the existing
+  //    "Daycare" grade and reuse it (correct behaviour for multiple
+  //    sections under the same grade).
   let grade = null;
   if (gradeName) {
     grade = await firstRow(
@@ -211,14 +218,26 @@ async function resolveGrade(
       ).order("created_at", { ascending: true }).limit(1),
     );
   }
-  if (!grade) {
-    grade = await firstRow(
+
+  // 2) Only if the name lookup found nothing AND the caller did NOT
+  //    provide an explicit grade_number, fall back to grade_number.
+  //    We still only reuse when the existing grade has an EMPTY name
+  //    (e.g. a placeholder row) — this prevents silently renaming an
+  //    unrelated grade that happens to share the same number.
+  if (!grade && integer(body.grade_number) === null) {
+    const byNumber = await firstRow(
       svc.from("grades").select("*").eq("school_id", school).eq(
         "grade_number",
         gradeNumber,
       ).order("created_at", { ascending: true }).limit(1),
     );
+    // Only adopt a grade-by-number when its name is blank — otherwise
+    // it belongs to a different user-intended grade.
+    if (byNumber && !text(byNumber["grade_name"])) {
+      grade = byNumber;
+    }
   }
+
   if (grade) {
     const { data, error } = await svc.from("grades").update({
       grade_name: gradeName || grade["grade_name"],
@@ -229,6 +248,7 @@ async function resolveGrade(
     return data;
   }
 
+  // No match — create a brand-new grade.
   const { data, error } = await svc.from("grades").insert({
     school_id: school,
     grade_name: gradeName || `Class ${gradeNumber}`,
@@ -614,11 +634,27 @@ function serializeClassRow(
   room: Record<string, any> | null,
   studentCount = 0,
   feeDues: { amount: number; students: number } = { amount: 0, students: 0 },
+  todayAttendancePct = 100.0,
 ) {
   const sectionName = text(section["section_name"]);
   const gradeName = text(grade?.["grade_name"]);
   const classTeacher = section["class_teacher"] as Record<string, any> | null;
   const coTeacher = section["co_teacher"] as Record<string, any> | null;
+
+  let pendingIssues = 0;
+  if (!section["class_teacher_id"]) {
+    pendingIssues++;
+  }
+  if (studentCount === 0) {
+    pendingIssues++;
+  }
+  if (section["capacity"] && studentCount > Number(section["capacity"])) {
+    pendingIssues++;
+  }
+  if (feeDues.amount > 0) {
+    pendingIssues++;
+  }
+
   return {
     ...section,
     section_id: text(section["id"]),
@@ -636,6 +672,8 @@ function serializeClassRow(
     total_students: studentCount,
     fees_due_amount: feeDues.amount,
     fees_due_students: feeDues.students,
+    today_attendance_pct: todayAttendancePct,
+    pending_issues: pendingIssues,
   };
 }
 
@@ -686,6 +724,29 @@ async function feeDuesBySection(
     });
   }
   return result;
+}
+
+async function attendanceBySection(
+  svc: SupabaseClient,
+  school: string,
+) {
+  const today = new Date().toISOString().split("T")[0];
+  const { data, error } = await svc.from("attendance_sessions").select(
+    "id, section_id, student_attendances(status)",
+  ).eq("school_id", school).eq("date", today);
+  if (error) throw new Error(error.message);
+
+  const pctMap = new Map<string, number>();
+  for (const session of data ?? []) {
+    const sectionId = text(session.section_id);
+    if (!sectionId) continue;
+    const attendances = session.student_attendances as Array<{ status: string }> ?? [];
+    if (attendances.length === 0) continue;
+    const present = attendances.filter((a: any) => a.status === "present" || a.status === "late").length;
+    const pct = (present / attendances.length) * 100;
+    pctMap.set(sectionId, pct);
+  }
+  return pctMap;
 }
 
 function staffDisplayName(staff: Record<string, any> | null) {
@@ -1180,6 +1241,7 @@ export async function handlePrincipal(
       if (error) return fail(error.message);
       const counts = await studentCountsBySection(svc, school);
       const dues = await feeDuesBySection(svc, school);
+      const attendancePct = await attendanceBySection(svc, school);
       const classes = (data ?? []).map((row: any) =>
         serializeClassRow(
           row as Record<string, any>,
@@ -1187,19 +1249,32 @@ export async function handlePrincipal(
           (row["room"] ?? null) as Record<string, any> | null,
           counts.get(text(row["id"])) ?? 0,
           dues.get(text(row["id"])),
+          attendancePct.get(text(row["id"])) ?? 100.0,
         )
       );
       const totalStudents = classes.reduce(
         (sum: number, item: any) => sum + Number(item.student_count ?? 0),
         0,
       );
+      let totalAttendancePct = 0;
+      let attendanceCount = 0;
+      for (const c of classes) {
+        const sid = text(c.section_id);
+        if (attendancePct.has(sid)) {
+          totalAttendancePct += attendancePct.get(sid)!;
+          attendanceCount++;
+        }
+      }
+      const avgAttendance = attendanceCount > 0 ? (totalAttendancePct / attendanceCount) : 100.0;
+      const classesWithIssues = classes.filter((c: any) => c.pending_issues > 0).length;
+
       return ok({
         classes,
         summary: {
           total_classes: classes.length,
           total_students: totalStudents,
-          average_attendance: 0,
-          classes_with_issues: 0,
+          average_attendance: Math.round(avgAttendance),
+          classes_with_issues: classesWithIssues,
         },
       });
     } catch (error) {
@@ -1225,11 +1300,31 @@ export async function handlePrincipal(
           "academic_year_id or year_label must match an academic year",
         );
       }
+      const gradeId = text(grade["id"]);
+      const sectionName = text(body.section_name);
+
+      // Guard against duplicate sections: check whether a section with
+      // the same grade + section_name + academic_year already exists.
+      const existingSection = await firstRow(
+        svc.from("sections").select("*").eq("school_id", school).eq(
+          "grade_id",
+          gradeId,
+        ).eq("academic_year_id", academicYearId).ilike(
+          "section_name",
+          sectionName,
+        ).limit(1),
+      );
+      if (existingSection) {
+        return fail(
+          `A section named "${sectionName}" already exists for this grade and academic year. Use the edit flow to update it.`,
+        );
+      }
+
       const sectionPayload = {
         school_id: school,
-        grade_id: text(grade["id"]),
+        grade_id: gradeId,
         academic_year_id: academicYearId,
-        section_name: text(body.section_name),
+        section_name: sectionName,
         capacity: integer(body.capacity),
         class_teacher_id: classTeacherId || null,
         co_teacher_id: coTeacherId || null,

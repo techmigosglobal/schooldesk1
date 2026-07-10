@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 
 class LandingPageScreen extends StatefulWidget {
@@ -248,7 +249,7 @@ class _LandingHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Arish Ville Preschool',
+                  AppConstants.schoolName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -301,7 +302,7 @@ class _SignInButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Sign in to Arish Ville',
+      label: 'Sign in to ${AppConstants.appName}',
       child: Material(
         color: const Color(0xFF1565C0),
         borderRadius: BorderRadius.circular(12),

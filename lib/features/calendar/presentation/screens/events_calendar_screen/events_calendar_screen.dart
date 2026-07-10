@@ -121,7 +121,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         _selectedWeekStart = _startOfWeek(effectiveSelectedDate);
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -550,7 +550,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
       );
       return true;
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -577,7 +577,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
         ),
       );
       return true;
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -807,6 +807,7 @@ class _EventsCalendarScreenState extends State<EventsCalendarScreen> {
               padding: const EdgeInsets.only(bottom: 10),
               child: _SelectedDayEventCard(
                 event: event,
+                showDate: true,
                 onTap: () => _openDetails(event),
               ),
             ),
@@ -1150,7 +1151,7 @@ class _CalendarPanel extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(
+                          const Icon(
                             Icons.chevron_right_rounded,
                             size: 18,
                             color: principalDirectoryMuted,
@@ -1388,8 +1389,13 @@ class _EventCountBadge extends StatelessWidget {
 class _SelectedDayEventCard extends StatelessWidget {
   final _PrincipalEvent event;
   final VoidCallback onTap;
+  final bool showDate;
 
-  const _SelectedDayEventCard({required this.event, required this.onTap});
+  const _SelectedDayEventCard({
+    required this.event,
+    required this.onTap,
+    this.showDate = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1432,7 +1438,9 @@ class _SelectedDayEventCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${event.typeLabel} · ${event.timeLabel}',
+                      showDate
+                          ? '${DateFormat('EEE, d MMM').format(event.start)} · ${event.typeLabel} · ${event.timeLabel}'
+                          : '${event.typeLabel} · ${event.timeLabel}',
                       style: GoogleFonts.dmSans(
                         color: principalDirectoryMuted,
                         fontWeight: FontWeight.w700,
@@ -1462,7 +1470,10 @@ class _SelectedDayEventCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded, color: principalDirectoryMuted),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: principalDirectoryMuted,
+              ),
             ],
           ),
         ),
@@ -1795,7 +1806,7 @@ class _EventFormPageState extends State<_EventFormPage> {
           ),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;

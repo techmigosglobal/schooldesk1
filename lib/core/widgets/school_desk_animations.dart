@@ -31,10 +31,7 @@ class _FadeInCardState extends State<FadeInCard>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _slide = Tween<Offset>(
       begin: Offset(0, widget.slideOffset / 100),
@@ -105,10 +102,7 @@ class _TapScaleState extends State<TapScale>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _scaleAnim = Tween<double>(
       begin: 1.0,
       end: widget.scaleDown,

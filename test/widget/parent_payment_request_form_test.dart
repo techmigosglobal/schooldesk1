@@ -29,8 +29,8 @@ void main() {
 
   tearDown(() async {
     BackendApiClient.instance.clearAuthToken();
-    final messenger = TestDefaultBinaryMessengerBinding.instance
-        .defaultBinaryMessenger;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(filePickerChannel, null);
   });
 
@@ -84,7 +84,10 @@ void main() {
     );
     expect(find.textContaining('Reference: FPR-1001'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
-    expect(find.widgetWithText(FilledButton, 'Reference Ready'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Reference Ready'),
+      findsOneWidget,
+    );
     expect(
       find.text(
         'Scan the QR or use the copied UPI ID, then enter the UTR and upload the success screenshot below.',
@@ -179,39 +182,40 @@ void main() {
     },
   );
 
-  testWidgets('parent payment form blocks Pay Now when UPI QR is not configured', (
-    tester,
-  ) async {
-    _setLargeSurface(tester);
-    final args = _sampleArgs();
-    final navigatorKey = GlobalKey<NavigatorState>();
-    adapter.routes['GET /fees/payment-config'] = <String, dynamic>{
-      'success': true,
-      'data': <String, dynamic>{
-        'upi_id': '',
-        'payee_name': '',
-        'upi_enabled': false,
-        'qr_note': '',
-        'qr_image_url': '',
-      },
-    };
+  testWidgets(
+    'parent payment form blocks Pay Now when UPI QR is not configured',
+    (tester) async {
+      _setLargeSurface(tester);
+      final args = _sampleArgs();
+      final navigatorKey = GlobalKey<NavigatorState>();
+      adapter.routes['GET /fees/payment-config'] = <String, dynamic>{
+        'success': true,
+        'data': <String, dynamic>{
+          'upi_id': '',
+          'payee_name': '',
+          'upi_enabled': false,
+          'qr_note': '',
+          'qr_image_url': '',
+        },
+      };
 
-    await _pumpHost(tester, navigatorKey);
-    await _pushParentForm(tester, navigatorKey, args);
+      await _pumpHost(tester, navigatorKey);
+      await _pushParentForm(tester, navigatorKey, args);
 
-    expect(find.text('UPI payment is not configured'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
-    expect(
-      find.widgetWithText(FilledButton, 'Create Payment Reference'),
-      findsNothing,
-    );
-    expect(
-      adapter.seenRequests.where(
-        (request) => request.path == '/fees/payments/intent',
-      ),
-      isEmpty,
-    );
-  });
+      expect(find.text('UPI payment is not configured'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Pay Now'), findsNothing);
+      expect(
+        find.widgetWithText(FilledButton, 'Create Payment Reference'),
+        findsNothing,
+      );
+      expect(
+        adapter.seenRequests.where(
+          (request) => request.path == '/fees/payments/intent',
+        ),
+        isEmpty,
+      );
+    },
+  );
 
   test('fee payment proof API sends multipart request', () async {
     final proofFile = await createTestProofImage();
@@ -265,8 +269,8 @@ void main() {
     final proofFile = await createTestProofImage();
 
     _seedPaymentConfig(adapter);
-    final messenger = TestDefaultBinaryMessengerBinding.instance
-        .defaultBinaryMessenger;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(filePickerChannel, (call) async {
       if (call.method != 'custom') return null;
       return <Map<String, dynamic>>[
@@ -294,7 +298,10 @@ void main() {
 
     expect(find.text('Clarification Required'), findsOneWidget);
     expect(find.text('Please upload a clearer screenshot.'), findsOneWidget);
-    expect(find.textContaining('Resubmit Payment for Verification'), findsOneWidget);
+    expect(
+      find.textContaining('Resubmit Payment for Verification'),
+      findsOneWidget,
+    );
 
     final uploadScreenshotButton = find.widgetWithText(
       OutlinedButton,
@@ -318,36 +325,39 @@ void main() {
     );
   });
 
-  test('fee payment proof API resubmits clarification multipart request', () async {
-    final proofFile = await createTestProofImage();
-    Map<String, String>? resubmitFields;
+  test(
+    'fee payment proof API resubmits clarification multipart request',
+    () async {
+      final proofFile = await createTestProofImage();
+      Map<String, String>? resubmitFields;
 
-    adapter.handlers['PATCH /fees/payments/req-1/resubmit'] = (options) {
-      final formData = expectFormData(options.data);
-      resubmitFields = formDataFields(formData);
-      return <String, dynamic>{
-        'success': true,
-        'data': <String, dynamic>{
-          'id': 'req-1',
-          'request_reference': 'FPR-3003',
-          'proof_url': 'https://example.com/reproof.png',
-          'status': 'pending_verification',
-        },
+      adapter.handlers['PATCH /fees/payments/req-1/resubmit'] = (options) {
+        final formData = expectFormData(options.data);
+        resubmitFields = formDataFields(formData);
+        return <String, dynamic>{
+          'success': true,
+          'data': <String, dynamic>{
+            'id': 'req-1',
+            'request_reference': 'FPR-3003',
+            'proof_url': 'https://example.com/reproof.png',
+            'status': 'pending_verification',
+          },
+        };
       };
-    };
 
-    final response = await BackendApiClient.instance.resubmitFeePaymentProof(
-      id: 'req-1',
-      transactionRef: 'NEW-UTR-9',
-      screenshotPath: proofFile.path,
-      screenshotName: proofFile.uri.pathSegments.last,
-      remarks: 'Updated proof',
-    );
+      final response = await BackendApiClient.instance.resubmitFeePaymentProof(
+        id: 'req-1',
+        transactionRef: 'NEW-UTR-9',
+        screenshotPath: proofFile.path,
+        screenshotName: proofFile.uri.pathSegments.last,
+        remarks: 'Updated proof',
+      );
 
-    expect(response['status'], 'pending_verification');
-    expect(resubmitFields?['transaction_ref'], 'NEW-UTR-9');
-    expect(resubmitFields?['remarks'], 'Updated proof');
-  });
+      expect(response['status'], 'pending_verification');
+      expect(resubmitFields?['transaction_ref'], 'NEW-UTR-9');
+      expect(resubmitFields?['remarks'], 'Updated proof');
+    },
+  );
 }
 
 Future<void> _pumpHost(

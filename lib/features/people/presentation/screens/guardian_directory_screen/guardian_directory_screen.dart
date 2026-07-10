@@ -102,7 +102,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         _applyFilters(resetState: false);
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -148,7 +148,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
         '/guardians',
         queryParameters: const {'page_size': 500},
       );
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }
@@ -160,7 +160,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       return await api.BackendApiClient.instance.getParentStudents(
         parentUserId: parentUserId,
       );
-    } catch (_) {
+    } on Object catch (_) {
       return const [];
     }
   }
@@ -407,7 +407,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       try {
         await _deleteGuardianRecord(guardian);
         removed++;
-      } catch (_) {
+      } on Object catch (_) {
         failures.add(guardian.name);
       }
     }
@@ -893,7 +893,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
             isPrimary: isPrimary,
             canPickup: input.canPickup,
           );
-        } catch (_) {
+        } on Object catch (_) {
           // Tolerate link failure — the parent-student link is already
           // established via assignParentStudents above; the guardian profile
           // row has been saved successfully.
@@ -987,7 +987,7 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
           backgroundColor: context.appTheme.success,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       _showError(error.toString());
     }
@@ -1026,11 +1026,11 @@ class _GuardianDirectoryScreenState extends State<GuardianDirectoryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Guardian permanently removed'),
+          content: const Text('Guardian permanently removed'),
           backgroundColor: context.appTheme.success,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       _showError(error.toString());
     }
@@ -1515,7 +1515,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       );
       if (!mounted) return;
       Navigator.of(context).pop();
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -1599,7 +1599,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
                     const SizedBox(height: 14),
                     _studentCard(),
                     const SizedBox(height: 14),
-                    _InlineNotice(
+                    const _InlineNotice(
                       icon: Icons.verified_rounded,
                       text:
                           'Guardian profile, parent login, and linked students will sync with the central academic server on submission.',
@@ -1662,7 +1662,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
           ),
         ),
         const SizedBox(height: 14),
-        _FieldLabel('Full Name'),
+        const _FieldLabel('Full Name'),
         _TextInput(
           controller: _nameCtrl,
           hint: 'Enter full name',
@@ -1698,7 +1698,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
           ],
         ),
         const SizedBox(height: 12),
-        _FieldLabel('Email'),
+        const _FieldLabel('Email'),
         _TextInput(
           controller: _emailCtrl,
           hint: 'guardian@example.com',
@@ -1848,7 +1848,7 @@ class _GuardianProfileFormPageState extends State<_GuardianProfileFormPage> {
       title: 'Linked Students',
       children: [
         if (widget.students.isEmpty)
-          _InlineNotice(
+          const _InlineNotice(
             icon: Icons.info_outline_rounded,
             text: 'Create students first before linking parent accounts.',
           )

@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_hive_store/dio_cache_interceptor_hive_store.dart';
@@ -37,6 +39,7 @@ part 'api_modules/tables_raw_api.dart';
 part 'api_modules/approval_requests_api.dart';
 part 'api_modules/monitoring_api.dart';
 part 'api_modules/notifications_api.dart';
+part 'api_modules/help_api.dart';
 
 typedef ApiErrorReporter = void Function(DioException error);
 
@@ -54,8 +57,8 @@ class BackendApiClient {
     _dio = Dio(
       BaseOptions(
         baseUrl: EnvConfig.apiBaseUrl,
-        connectTimeout: Duration(seconds: EnvConfig.apiTimeoutSeconds),
-        receiveTimeout: Duration(seconds: EnvConfig.apiTimeoutSeconds),
+        connectTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
+        receiveTimeout: const Duration(seconds: EnvConfig.apiTimeoutSeconds),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -86,6 +89,7 @@ class BackendApiClient {
     if (access != null && access.isNotEmpty) {
       client.setAuthToken(access);
       client.setCurrentRole(await TokenStorageService.getRoleName());
+      client.setCurrentUserId(await TokenStorageService.getUserId());
     }
   }
 
@@ -93,8 +97,10 @@ class BackendApiClient {
 
   String? _authToken;
   String? _currentRoleName;
+  String? _currentUserId;
 
   String? get currentRoleName => _currentRoleName;
+  String? get currentUserId => _currentUserId;
 
   void setAuthToken(String token) {
     _authToken = token;
@@ -107,9 +113,17 @@ class BackendApiClient {
         : normalized;
   }
 
+  void setCurrentUserId(String? userId) {
+    final normalized = userId?.trim();
+    _currentUserId = normalized == null || normalized.isEmpty
+        ? null
+        : normalized;
+  }
+
   void clearAuthToken() {
     _authToken = null;
     _currentRoleName = null;
+    _currentUserId = null;
   }
 
   bool get isAuthenticated => _authToken != null;
@@ -121,14 +135,17 @@ class BackendApiClient {
       final store = HiveCacheStore(p.join(dir.path, 'schooldesk_http_cache'));
       _cacheOptions = CacheOptions(
         store: store,
-        policy: CachePolicy.forceCache,
+        // request: always try the network; serve cached response only on error.
+        // Per-request interceptors override this with forceCache for
+        // long-lived structural data (academic years, grades, etc.).
+        policy: CachePolicy.request,
         hitCacheOnErrorExcept: const [401, 403],
         maxStale: const Duration(minutes: 5),
         allowPostMethod: false,
       );
       _dio.interceptors.add(DioCacheInterceptor(options: _cacheOptions!));
       _cacheInstalled = true;
-    } catch (error) {
+    } on Object catch (error) {
       if (EnvConfig.enableLogging) {
         developer.log(
           '[API CACHE] Persistent cache disabled: $error',

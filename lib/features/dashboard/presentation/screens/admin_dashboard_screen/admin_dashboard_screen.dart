@@ -103,7 +103,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _pendingInvoices = pendingInvoices;
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load admin dashboard from backend.';
@@ -801,37 +801,37 @@ class _QuickActionsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final actions = [
-      _QuickAction(
+      const _QuickAction(
         'Prepare student request',
         'Draft for Principal approval',
         Icons.person_add_rounded,
         AppRoutes.studentOversight,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Prepare staff request',
         'Submit staff changes for review',
         Icons.person_add_alt_1_rounded,
         AppRoutes.staffManagement,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Submit fee request',
         'Prepare fee changes',
         Icons.payment_rounded,
         AppRoutes.feeMonitoring,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Submit timetable request',
         'Prepare periods for approval',
         Icons.calendar_view_week_rounded,
         AppRoutes.academicManagement,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Prepare access request',
         'Accounts and roles review',
         Icons.manage_accounts_rounded,
         AppRoutes.principalUserManagement,
       ),
-      _QuickAction(
+      const _QuickAction(
         'Reports',
         'Exports and compliance',
         Icons.bar_chart_rounded,

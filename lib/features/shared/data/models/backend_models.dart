@@ -640,7 +640,8 @@ class StudentModel {
     return StudentModel(
       id: json['id'] as String,
       schoolId: json['school_id'] as String? ?? '',
-      studentCode: (json['student_id_number'] ?? json['student_code']) as String? ?? '',
+      studentCode:
+          (json['student_id_number'] ?? json['student_code']) as String? ?? '',
       admissionNumber: json['admission_number'] as String? ?? '',
       firstName: json['first_name'] as String? ?? '',
       lastName: json['last_name'] as String? ?? '',

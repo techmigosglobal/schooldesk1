@@ -38,7 +38,7 @@ class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
         _planners = planners;
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -70,7 +70,7 @@ class _ParentLessonPlannerScreenState extends State<ParentLessonPlannerScreen> {
               onAction: _load,
             )
           : _planners.isEmpty
-          ? SchoolDeskStatusPanel.empty(
+          ? const SchoolDeskStatusPanel.empty(
               title: 'No lesson planners yet',
               message:
                   'Your child\'s teacher has not uploaded any lesson plans yet.',
@@ -134,9 +134,7 @@ class _PlannerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: accentColor.withAlpha(50),
-        ),
+        border: Border.all(color: accentColor.withAlpha(50)),
         boxShadow: [
           BoxShadow(
             color: accentColor.withAlpha(20),
@@ -249,10 +247,7 @@ class _PlannerCard extends StatelessWidget {
                             _text(attachment['url']),
                             name: _text(attachment['name']),
                           ),
-                          icon: const Icon(
-                            Icons.attach_file_rounded,
-                            size: 16,
-                          ),
+                          icon: const Icon(Icons.attach_file_rounded, size: 16),
                           label: Text(
                             _text(
                               attachment['name'],
@@ -282,11 +277,7 @@ class _PlannerCard extends StatelessWidget {
   }) {
     final item = EventPostMediaItem.fromUrl(attachmentUrl);
     final namedItem = name.isNotEmpty && item.displayName.isEmpty
-        ? EventPostMediaItem(
-            url: item.url,
-            name: name,
-            kind: item.kind,
-          )
+        ? EventPostMediaItem(url: item.url, name: name, kind: item.kind)
         : item;
     openEventPostMediaPreview(context, namedItem);
   }
@@ -301,7 +292,7 @@ class _PlannerCard extends StatelessWidget {
     try {
       final dt = DateTime.parse(raw.toString());
       return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
+    } on Object catch (_) {
       return raw.toString();
     }
   }

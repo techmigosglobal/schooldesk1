@@ -145,6 +145,10 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   final Set<String> _actionLoadingIds = {};
   final TextEditingController _searchController = TextEditingController();
   String _statusFilter = 'pending';
+  // Stored reference so we can reliably removeListener on dispose without
+  // relying on a second async getInstance() call that may complete after
+  // the widget is already unmounted.
+  NotificationService? _notificationService;
 
   final List<String> _tabLabels = [
     'All',
@@ -167,20 +171,23 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
     super.initState();
     _tabController = TabController(length: _tabLabels.length, vsync: this);
     _loadData();
+    // Store the service reference synchronously so dispose() can always
+    // call removeListener without a second async gap.
     NotificationService.getInstance().then((s) {
-      if (mounted) s.addListener(_onNotificationChanged);
+      if (!mounted) return;
+      _notificationService = s;
+      s.addListener(_onNotificationChanged);
     });
   }
 
   void _onNotificationChanged() {
-    _loadData();
+    if (mounted) _loadData();
   }
 
   @override
   void dispose() {
-    NotificationService.getInstance().then((s) {
-      s.removeListener(_onNotificationChanged);
-    });
+    _notificationService?.removeListener(_onNotificationChanged);
+    _notificationService = null;
     _searchController.dispose();
     _tabController.dispose();
     super.dispose();
@@ -230,7 +237,34 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         ),
         _loadApprovalSource(
           'Events',
-          () => _loadGenericApprovals(path: '/events/approvals', type: 'event'),
+          // The dedicated approval endpoint for event posts is /event-posts/pending
+          // (principal-only). We transform each post into the generic approval map
+          // format so it slots into the shared list and type-filter correctly.
+          () async {
+            final posts = await BackendApiClient.instance
+                .getPendingEventPosts();
+            return posts.map((post) {
+              final creatorName =
+                  '${post['creator_name'] ?? post['created_by_name'] ?? post['requester_name'] ?? 'Teacher'}';
+              final creatorRole =
+                  '${post['creator_role'] ?? post['created_by_role'] ?? 'teacher'}';
+              return {
+                'id': '${post['id'] ?? ''}',
+                'type': 'event',
+                'requesterName': creatorName,
+                'requesterRole': creatorRole,
+                'requesterClass':
+                    '${post['section_name'] ?? post['class_label'] ?? ''}',
+                'submittedDate': '${post['created_at'] ?? ''}'.split('T').first,
+                'summary': '${post['title'] ?? 'Event Post'}',
+                'details': '${post['body'] ?? post['description'] ?? ''}',
+                'status': _approvalStatus(post['status']),
+                'remarks': post['rejection_reason'],
+                'actionDate': post['approved_at'] ?? post['updated_at'],
+                'decisionPath': '/event-posts/${post['id']}',
+              };
+            }).toList();
+          },
         ),
         _loadApprovalSource(
           'Timetable',
@@ -252,7 +286,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
         _loading = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -313,7 +347,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   ) async {
     try {
       return _ApprovalSourceResult(label: label, rows: await loader());
-    } catch (error) {
+    } on Object catch (error) {
       return _ApprovalSourceResult(
         label: label,
         rows: const [],
@@ -437,8 +471,13 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
   }
 
   List<ApprovalModel> _getTypeFilteredApprovals(int tabIndex) {
+    // Tab labels (indices):
+    //  0=All  1=Accounts  2=Leave  3=Admission  4=Fee(Concession)  5=TC
+    //  6=Classes  7=Students  8=Fees  9=Timetable  10=Documents
+    //  11=Communication  12=Event Posts
     if (tabIndex == 0) return _allApprovals;
     if (tabIndex == 2) {
+      // Leave tab shows both staff leave and student leave.
       return _allApprovals
           .where(
             (a) =>
@@ -447,20 +486,22 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           )
           .toList();
     }
-    final typeMap = {
+    const typeMap = {
       1: ApprovalType.account,
       3: ApprovalType.admission,
-      4: ApprovalType.feeConcession,
+      4: ApprovalType.feeConcession, // "Fee" tab = fee concessions
       5: ApprovalType.tc,
       6: ApprovalType.classApproval,
       7: ApprovalType.student,
-      8: ApprovalType.fee,
+      8: ApprovalType.fee, // "Fees" tab = fee approvals / payments
       9: ApprovalType.timetable,
       10: ApprovalType.document,
       11: ApprovalType.communication,
       12: ApprovalType.event,
     };
-    return _allApprovals.where((a) => a.type == typeMap[tabIndex]).toList();
+    final type = typeMap[tabIndex];
+    if (type == null) return _allApprovals; // safety: unknown tab shows all
+    return _allApprovals.where((a) => a.type == type).toList();
   }
 
   List<ApprovalModel> _getVisibleApprovals(int tabIndex) {
@@ -507,7 +548,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.actionDate = today;
           approval.remarks = 'Approved';
         });
-      } catch (_) {
+      } on Object catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -545,7 +586,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             role: 'teacher',
           );
         });
-      } catch (_) {
+      } on Object catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -569,7 +610,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.actionDate = today;
           approval.remarks = 'Approved';
         });
-      } catch (e) {
+      } on Object catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -611,7 +652,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.actionDate = today;
           approval.remarks = remarks;
         });
-      } catch (_) {
+      } on Object catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -649,7 +690,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
             role: 'teacher',
           );
         });
-      } catch (_) {
+      } on Object catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -673,7 +714,7 @@ class _ApprovalCenterScreenState extends State<ApprovalCenterScreen>
           approval.actionDate = today;
           approval.remarks = remarks;
         });
-      } catch (e) {
+      } on Object catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(

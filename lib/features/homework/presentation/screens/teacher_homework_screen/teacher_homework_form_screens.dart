@@ -196,7 +196,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
         _attachmentName = file.name;
         _uploadingAttachment = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _uploadingAttachment = false;
@@ -257,7 +257,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           ),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -460,7 +460,7 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
                     ),
                   ),
                 if (_error != null) ...[
-                  SizedBox(height: 12),
+                  const SizedBox(height: 12),
                   Text(
                     _error!,
                     style: TextStyle(color: context.appTheme.error),
@@ -577,13 +577,16 @@ class _TeacherHomeworkFormScreenState extends State<TeacherHomeworkFormScreen> {
           teacherFlowText(widget.args.homework?['student_id']),
           ['', ..._students.map((row) => teacherFlowText(row['id']))],
         );
-        if (_selectedSubjects.isEmpty || _selectedSubjects.contains('General')) {
+        if (_selectedSubjects.isEmpty ||
+            _selectedSubjects.contains('General')) {
           _selectedSubjects.clear();
-          if (_defaultSubject.isNotEmpty) _selectedSubjects.add(_defaultSubject);
+          if (_defaultSubject.isNotEmpty) {
+            _selectedSubjects.add(_defaultSubject);
+          }
         }
         _loadingContext = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loadingContext = false;
@@ -661,7 +664,7 @@ class _TeacherHomeworkSubmissionsScreenState
         );
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -713,7 +716,7 @@ class _TeacherHomeworkSubmissionsScreenState
           ),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -896,7 +899,11 @@ class _TeacherHomeworkSubmissionsScreenState
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    const Icon(Icons.access_time_rounded, size: 13, color: Colors.grey),
+                    const Icon(
+                      Icons.access_time_rounded,
+                      size: 13,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Submitted: $submittedDate',

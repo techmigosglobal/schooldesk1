@@ -46,12 +46,18 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     final themeProvider = context.watch<ThemeProvider>();
     _settingsProvider = context.watch<AppSettingsProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
+    final bgColor = isDark
+        ? const Color(0xFF151C26)
+        : context.appTheme.background;
+    final surfaceColor = isDark
+        ? const Color(0xFF1E2530)
+        : context.appTheme.surface;
     final onSurfaceColor = isDark
         ? const Color(0xFFE8EDF2)
         : context.appTheme.onSurface;
-    final mutedColor = isDark ? const Color(0xFF90A4AE) : context.appTheme.muted;
+    final mutedColor = isDark
+        ? const Color(0xFF90A4AE)
+        : context.appTheme.muted;
     final outlineColor = isDark
         ? const Color(0xFF2D3748)
         : context.appTheme.outlineVariant;
@@ -456,7 +462,10 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       trailing: DropdownButton<String>(
         value: value,
         underline: const SizedBox(),
-        style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.primary),
+        style: GoogleFonts.dmSans(
+          fontSize: 13,
+          color: context.appTheme.primary,
+        ),
         items: options
             .map(
               (o) => DropdownMenuItem(
@@ -565,7 +574,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           ),
         );
       }
-    } catch (e) {
+    } on Object {
       if (mounted) {
         setState(() => _backupInProgress = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -629,7 +638,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                       ),
                     );
                   }
-                } catch (e) {
+                } on Object {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -644,7 +653,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                   }
                 }
               },
-              style: FilledButton.styleFrom(backgroundColor: context.appTheme.primary),
+              style: FilledButton.styleFrom(
+                backgroundColor: context.appTheme.primary,
+              ),
               child: Text('Restore', style: GoogleFonts.dmSans()),
             ),
         ],
@@ -694,7 +705,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     (r) => false,
                   );
                 }
-              } catch (e) {
+              } on Object {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -709,7 +720,9 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 }
               }
             },
-            style: FilledButton.styleFrom(backgroundColor: context.appTheme.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: context.appTheme.error,
+            ),
             child: Text('Clear', style: GoogleFonts.dmSans()),
           ),
         ],
@@ -727,7 +740,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
     if (iso == null || iso.isEmpty) return 'Unknown';
     try {
       return DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(iso));
-    } catch (_) {
+    } on Object catch (_) {
       return 'Unknown';
     }
   }
@@ -790,7 +803,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
         AppRoutes.landingPage,
         (route) => false,
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -802,8 +815,12 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF151C26) : context.appTheme.background;
-    final surfaceColor = isDark ? const Color(0xFF1E2530) : context.appTheme.surface;
+    final bgColor = isDark
+        ? const Color(0xFF151C26)
+        : context.appTheme.background;
+    final surfaceColor = isDark
+        ? const Color(0xFF1E2530)
+        : context.appTheme.surface;
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -821,7 +838,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _BackendGapBanner(
+              const _BackendGapBanner(
                 icon: Icons.verified_user_outlined,
                 message:
                     'Password changes are verified against the VPS backend for the current signed-in account.',

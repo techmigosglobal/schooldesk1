@@ -106,7 +106,9 @@ class _PaymentHistoryTile extends StatelessWidget {
     final reference = _text(
       payment['reference_number'] ?? payment['transaction_ref'],
     );
-    final selectedMonths = _selectedMonthsLabel(payment['selected_month_names']);
+    final selectedMonths = _selectedMonthsLabel(
+      payment['selected_month_names'],
+    );
     final normalizedStatus = status.toLowerCase();
     final isSuccess =
         normalizedStatus == 'success' ||

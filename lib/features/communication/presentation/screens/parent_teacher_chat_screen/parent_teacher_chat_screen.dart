@@ -159,7 +159,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
           api.markUnifiedChatConversationRead(selected!.conversationId),
         );
       }
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -306,6 +306,7 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width >= 760;
     return SchoolDeskModuleScaffold(
       title: 'Communication',
       subtitle: 'Parent-teacher messages for your selected child',
@@ -313,9 +314,9 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         selectedIndex: ParentNav.chat,
         onDestinationSelected: (_) {},
       ),
-      floatingActionButton: const DashboardFabWidget(
-        role: DashboardRole.parent,
-      ),
+      floatingActionButton: (!isWide && _selectedThread != null)
+          ? null
+          : const DashboardFabWidget(role: DashboardRole.parent),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: _body(),
     );
@@ -395,7 +396,14 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
         final selected = thread.threadKey == _selectedThread?.threadKey;
         return ListTile(
           selected: selected,
-          leading: CircleAvatar(child: Text(_initials(thread.teacherName))),
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFFDCFCE7),
+            foregroundColor: const Color(0xFF16A34A),
+            child: Text(
+              _initials(thread.teacherName),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           title: Text(
             thread.teacherName,
             maxLines: 1,
@@ -460,7 +468,17 @@ class _ParentTeacherChatScreenState extends State<ParentTeacherChatScreen> {
                     _clearMessages();
                   }),
                 )
-              : CircleAvatar(child: Text(_initials(thread.teacherName))),
+              : CircleAvatar(
+                  backgroundColor: const Color(0xFFDCFCE7),
+                  foregroundColor: const Color(0xFF16A34A),
+                  child: Text(
+                    _initials(thread.teacherName),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
           title: Text(thread.teacherName),
           subtitle: Text(
             thread.studentName.isEmpty

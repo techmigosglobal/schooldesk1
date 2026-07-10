@@ -26,7 +26,7 @@ class NotificationTopicManager {
         'Subscribed to role topic: $topicName',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error subscribing to role topics: $e',
         name: 'NotificationTopicManager',
@@ -44,7 +44,7 @@ class NotificationTopicManager {
         'Unsubscribed from role topic: $topicName',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error unsubscribing from role topics: $e',
         name: 'NotificationTopicManager',
@@ -63,7 +63,7 @@ class NotificationTopicManager {
         'Subscribed to event topic: $topicName',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error subscribing to event topic: $e',
         name: 'NotificationTopicManager',
@@ -81,7 +81,7 @@ class NotificationTopicManager {
         'Unsubscribed from event topic: $topicName',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error unsubscribing from event topic: $e',
         name: 'NotificationTopicManager',
@@ -104,10 +104,10 @@ class NotificationTopicManager {
         await subscribeToEventTopic('audit_events');
 
         developer.log(
-          'Subscribed to admin topics for role: $role.name',
+          'Subscribed to admin topics for role: ${role.name}',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error subscribing to admin topics: $e',
           name: 'NotificationTopicManager',
@@ -126,10 +126,10 @@ class NotificationTopicManager {
         await unsubscribeFromEventTopic('audit_events');
 
         developer.log(
-          'Unsubscribed from admin topics for role: $role.name',
+          'Unsubscribed from admin topics for role: ${role.name}',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error unsubscribing from admin topics: $e',
           name: 'NotificationTopicManager',
@@ -152,7 +152,7 @@ class NotificationTopicManager {
           'Subscribed to parent topics',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error subscribing to parent topics: $e',
           name: 'NotificationTopicManager',
@@ -174,7 +174,7 @@ class NotificationTopicManager {
           'Unsubscribed from parent topics',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error unsubscribing from parent topics: $e',
           name: 'NotificationTopicManager',
@@ -196,7 +196,7 @@ class NotificationTopicManager {
           'Subscribed to teacher topics',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error subscribing to teacher topics: $e',
           name: 'NotificationTopicManager',
@@ -218,7 +218,7 @@ class NotificationTopicManager {
           'Unsubscribed from teacher topics',
           name: 'NotificationTopicManager',
         );
-      } catch (e) {
+      } on Object catch (e) {
         developer.log(
           'Error unsubscribing from teacher topics: $e',
           name: 'NotificationTopicManager',
@@ -253,10 +253,10 @@ class NotificationTopicManager {
       }
 
       developer.log(
-        'Setup notification topics for role: $role.name',
+        'Setup notification topics for role: ${role.name}',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error setting up topics for role: $e',
         name: 'NotificationTopicManager',
@@ -289,10 +289,10 @@ class NotificationTopicManager {
       }
 
       developer.log(
-        'Cleaned up notification topics for role: $role.name',
+        'Cleaned up notification topics for role: ${role.name}',
         name: 'NotificationTopicManager',
       );
-    } catch (e) {
+    } on Object catch (e) {
       developer.log(
         'Error cleaning up topics for role: $e',
         name: 'NotificationTopicManager',

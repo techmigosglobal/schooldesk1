@@ -7,7 +7,9 @@ void main() {
   String read(String path) => File(path).readAsStringSync();
 
   test('parent child selection persistence helper is wired to parent screens', () {
-    final helper = read('lib/core/services/parent_child_selection_service.dart');
+    final helper = read(
+      'lib/core/services/parent_child_selection_service.dart',
+    );
     expect(helper, contains('StorageKeys.parentSelectedChild'));
     expect(helper, contains('SharedPreferences.getInstance'));
     expect(helper, contains('Future<int> indexFor'));
@@ -38,13 +40,16 @@ void main() {
     }
   });
 
-  test('RoleAccessService.childAt fails loudly for invalid parent child index', () {
-    RoleAccessService.clear();
+  test(
+    'RoleAccessService.childAt fails loudly for invalid parent child index',
+    () {
+      RoleAccessService.clear();
 
-    expect(() => RoleAccessService.childAt(0), returnsNormally);
+      expect(() => RoleAccessService.childAt(0), returnsNormally);
 
-    final source = read('lib/core/services/role_access_service.dart');
-    expect(source, contains('RangeError.index'));
-    expect(source, isNot(contains('return _parentChildren.first;')));
-  });
+      final source = read('lib/core/services/role_access_service.dart');
+      expect(source, contains('RangeError.index'));
+      expect(source, isNot(contains('return _parentChildren.first;')));
+    },
+  );
 }

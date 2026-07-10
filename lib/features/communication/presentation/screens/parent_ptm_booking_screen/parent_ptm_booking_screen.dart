@@ -52,7 +52,7 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
         _activeChildIndex = selectedIndex;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       setState(() => _loading = false);
       _showErrorSnackBar('Failed to load PTM slots: $e');
     }
@@ -342,7 +342,10 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     final teacher = slot['teacher'] ?? {};
     final teacherName = _teacherNameForSlot(slot);
     final subject =
-        slot['subject'] ?? teacher['designation'] ?? slot['teacher_role'] ?? 'Teacher';
+        slot['subject'] ??
+        teacher['designation'] ??
+        slot['teacher_role'] ??
+        'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
     final duration = slot['duration_min'] ?? slot['duration'] ?? 15;
@@ -488,7 +491,10 @@ class _ParentPTMBookingScreenState extends State<ParentPTMBookingScreen> {
     final teacher = slot['teacher'] ?? {};
     final teacherName = _teacherNameForSlot(slot);
     final subject =
-        slot['subject'] ?? teacher['designation'] ?? slot['teacher_role'] ?? 'Teacher';
+        slot['subject'] ??
+        teacher['designation'] ??
+        slot['teacher_role'] ??
+        'Teacher';
     final date = _formatDateString((slot['slot_date'] ?? '').toString());
     final time = (slot['slot_time'] ?? '').toString();
     final reason = _reasonForSlot(slot);

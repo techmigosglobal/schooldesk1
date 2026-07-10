@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -15,7 +17,8 @@ class PrincipalFeeDashboard extends StatefulWidget {
   State<PrincipalFeeDashboard> createState() => _PrincipalFeeDashboardState();
 }
 
-class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
+class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard>
+    with SingleTickerProviderStateMixin {
   bool _loading = true;
   String? _error;
 
@@ -23,15 +26,32 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
   List<Map<String, dynamic>> _invoices = const [];
   List<Map<String, dynamic>> _recentPayments = const [];
   List<Map<String, dynamic>> _concessions = const [];
-  
+
   double _outstandingTotal = 0.0;
   double _collectedTotal = 0.0;
   int _pendingRequestsCount = 0;
 
+  late AnimationController _animCtrl;
+  late Animation<double> _pieAnimation;
+
   @override
   void initState() {
     super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _pieAnimation = CurvedAnimation(
+      parent: _animCtrl,
+      curve: Curves.easeOutCubic,
+    );
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -41,7 +61,7 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
     });
     try {
       final api = BackendApiClient.instance;
-      
+
       final results = await Future.wait<Object>([
         api.getFeeStructures(),
         api.getInvoices(pageSize: 1000),
@@ -62,7 +82,11 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
 
       final requests = (results[2] as List)
           .cast<Map<String, dynamic>>()
-          .where((r) => '${r['status']}'.toLowerCase() == 'pending' || '${r['status']}'.toLowerCase() == 'pending_verification')
+          .where(
+            (r) =>
+                '${r['status']}'.toLowerCase() == 'pending' ||
+                '${r['status']}'.toLowerCase() == 'pending_verification',
+          )
           .toList();
 
       final concessions = (results[3] as List).cast<Map<String, dynamic>>();
@@ -88,7 +112,8 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
         _pendingRequestsCount = requests.length;
         _loading = false;
       });
-    } catch (e) {
+      _animCtrl.forward(from: 0);
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load dashboard data: $e';
@@ -127,7 +152,9 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.ibmPlexSans(color: context.appTheme.onSurface),
+                  style: GoogleFonts.ibmPlexSans(
+                    color: context.appTheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
@@ -148,7 +175,9 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
       title: 'Fee Operations',
       subtitle: 'Dashboard analysis and system actions',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.principal),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.principal,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       actions: [
         IconButton(
@@ -170,21 +199,30 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
             ],
             Text(
               'Quick Actions',
-              style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             _buildQuickActionsGrid(),
             const SizedBox(height: 20),
             Text(
               'Collection Progress',
-              style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
-            _buildProgressCard(progressVal, totalTarget),
+            _buildPieChartCard(progressVal, totalTarget),
             const SizedBox(height: 20),
             Text(
               'Outstanding Aging Analysis',
-              style: GoogleFonts.ibmPlexSans(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.ibmPlexSans(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             _buildAgingBucketsCard(),
@@ -207,30 +245,35 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
         _buildKpiCard(
           title: 'Outstanding Due',
           value: _money(_outstandingTotal),
-          subtitle: '${_invoices.where((i) => (i['balance'] as num?)?.toDouble() != 0).length} invoices',
+          subtitle:
+              '${_invoices.where((i) => (i['balance'] as num?)?.toDouble() != 0).length} invoices',
           icon: Icons.pending_actions_rounded,
-          color: Colors.orange,
+          gradientColors: [const Color(0xFFF97316), const Color(0xFFFB923C)],
+          route: '/principal/collect-fee',
         ),
         _buildKpiCard(
           title: 'Collected',
           value: _money(_collectedTotal),
           subtitle: '${_recentPayments.length} receipts',
           icon: Icons.check_circle_outline_rounded,
-          color: Colors.green,
+          gradientColors: [const Color(0xFF16A34A), const Color(0xFF22C55E)],
+          route: '/principal/fee-reports',
         ),
         _buildKpiCard(
           title: 'Fee Structures',
           value: '${_feeStructures.length}',
           subtitle: 'Active templates',
           icon: Icons.schema_rounded,
-          color: Colors.blue,
+          gradientColors: [const Color(0xFF2563EB), const Color(0xFF3B82F6)],
+          route: '/principal/fee-structures',
         ),
         _buildKpiCard(
           title: 'Concessions',
           value: '${_concessions.length}',
           subtitle: 'Assigned accounts',
           icon: Icons.volunteer_activism_rounded,
-          color: Colors.deepPurple,
+          gradientColors: [const Color(0xFF7C3AED), const Color(0xFF8B5CF6)],
+          route: null, // No dedicated route yet — show info
         ),
       ],
     );
@@ -241,39 +284,96 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
     required String value,
     required String subtitle,
     required IconData icon,
-    required Color color,
+    required List<Color> gradientColors,
+    String? route,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted, fontWeight: FontWeight.w600),
+    return Material(
+      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: route != null
+            ? () => Navigator.pushNamed(context, route)
+            : () => ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$title: $value $subtitle'),
+                  behavior: SnackBarBehavior.floating,
+                ),
               ),
-              Icon(icon, color: color, size: 18),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: gradientColors,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: gradientColors.first.withOpacity(0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
             ],
           ),
-          const Spacer(),
-          Text(
-            value,
-            style: GoogleFonts.ibmPlexSans(fontSize: 18, fontWeight: FontWeight.bold, color: context.appTheme.onSurface),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 11,
+                        color: Colors.white.withOpacity(0.85),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 16),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  value,
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 10,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (route != null)
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 10,
+                        color: Colors.white60,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            style: GoogleFonts.ibmPlexSans(fontSize: 10, color: context.appTheme.muted),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -288,7 +388,11 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: context.appTheme.error, size: 24),
+          Icon(
+            Icons.warning_amber_rounded,
+            color: context.appTheme.error,
+            size: 24,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -296,27 +400,38 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
               children: [
                 Text(
                   '$_pendingRequestsCount Payment Requests Pending',
-                  style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, color: context.appTheme.error, fontSize: 14),
+                  style: GoogleFonts.ibmPlexSans(
+                    fontWeight: FontWeight.bold,
+                    color: context.appTheme.error,
+                    fontSize: 14,
+                  ),
                 ),
                 Text(
                   'Parents have submitted manual payment proofs. Review them to record.',
-                  style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.onSurface),
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 11,
+                    color: context.appTheme.onSurface,
+                  ),
                 ),
               ],
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pushNamed(context, '/principal/payment-requests');
-            },
+            onPressed: () =>
+                Navigator.pushNamed(context, '/principal/payment-requests'),
             style: ElevatedButton.styleFrom(
               backgroundColor: context.appTheme.error,
               foregroundColor: Colors.white,
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
-            child: const Text('Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Review',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -324,6 +439,33 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
   }
 
   Widget _buildQuickActionsGrid() {
+    const actions = [
+      (
+        label: 'Fee Structures',
+        icon: Icons.list_alt_rounded,
+        route: '/principal/fee-structures',
+        color: Color(0xFF2563EB),
+      ),
+      (
+        label: 'Generate Invoices',
+        icon: Icons.receipt_long_rounded,
+        route: '/principal/invoice-generate',
+        color: Color(0xFF7C3AED),
+      ),
+      (
+        label: 'Collect Fee',
+        icon: Icons.add_circle_outline_rounded,
+        route: '/principal/collect-fee',
+        color: Color(0xFF16A34A),
+      ),
+      (
+        label: 'Reports',
+        icon: Icons.analytics_outlined,
+        route: '/principal/fee-reports',
+        color: Color(0xFFF97316),
+      ),
+    ];
+
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -331,77 +473,161 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       childAspectRatio: 2.2,
-      children: [
-        _actionButton('Fee Structures', Icons.list_alt_rounded, '/principal/fee-structures'),
-        _actionButton('Generate Invoices', Icons.receipt_long_rounded, '/principal/invoice-generate'),
-        _actionButton('Collect Fee', Icons.add_circle_outline_rounded, '/principal/collect-fee'),
-        _actionButton('Reports', Icons.analytics_outlined, '/principal/fee-reports'),
-      ],
+      children: actions
+          .map((a) => _actionButton(a.label, a.icon, a.route, a.color))
+          .toList(),
     );
   }
 
-  Widget _actionButton(String label, IconData icon, String route) {
+  Widget _actionButton(String label, IconData icon, String route, Color color) {
     return InkWell(
-      onTap: () {
-        Navigator.pushNamed(context, route);
-      },
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
+      onTap: () => Navigator.pushNamed(context, route),
+      borderRadius: BorderRadius.circular(12),
+      child: Ink(
         decoration: BoxDecoration(
-          color: context.appTheme.surfaceVariant.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: context.appTheme.outlineVariant),
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(icon, color: const Color(0xFF1A6B4A), size: 20),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 label,
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 13, color: context.appTheme.onSurface),
+                style: GoogleFonts.ibmPlexSans(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: context.appTheme.onSurface,
+                ),
               ),
             ),
-            Icon(Icons.chevron_right_rounded, size: 16, color: context.appTheme.muted),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: color.withOpacity(0.5),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildProgressCard(double progressVal, double target) {
+  // ── Pie Chart ─────────────────────────────────────────────────────────────
+
+  Widget _buildPieChartCard(double progressVal, double target) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Collection Rate: ${(progressVal * 100).toStringAsFixed(1)}%',
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              Text(
-                '${_money(_collectedTotal)} collected of ${_money(target)}',
-                style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted),
-              ),
-            ],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progressVal,
-              backgroundColor: context.appTheme.surfaceVariant,
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1A6B4A)),
-              minHeight: 8,
+        ],
+      ),
+      child: Row(
+        children: [
+          // Pie chart
+          AnimatedBuilder(
+            animation: _pieAnimation,
+            builder: (context, _) {
+              return SizedBox(
+                width: 120,
+                height: 120,
+                child: CustomPaint(
+                  painter: _PieChartPainter(
+                    collected: _collectedTotal,
+                    outstanding: _outstandingTotal,
+                    progress: _pieAnimation.value,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${(progressVal * 100 * _pieAnimation.value).toStringAsFixed(0)}%',
+                          style: GoogleFonts.ibmPlexSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: const Color(0xFF16A34A),
+                          ),
+                        ),
+                        Text(
+                          'Collected',
+                          style: GoogleFonts.ibmPlexSans(
+                            fontSize: 9,
+                            color: context.appTheme.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: 20),
+          // Legend
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Collection Rate',
+                  style: GoogleFonts.ibmPlexSans(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                _legendRow(
+                  color: const Color(0xFF16A34A),
+                  label: 'Collected',
+                  value: _money(_collectedTotal),
+                ),
+                const SizedBox(height: 10),
+                _legendRow(
+                  color: const Color(0xFFF97316),
+                  label: 'Outstanding',
+                  value: _money(_outstandingTotal),
+                ),
+                if (target > 0) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF16A34A).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      'Target: ${_money(target)}',
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF16A34A),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -409,8 +635,40 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
     );
   }
 
+  Widget _legendRow({
+    required Color color,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.ibmPlexSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.ibmPlexSans(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildAgingBucketsCard() {
-    // Basic mock logic bucketed by date constraints
     final now = DateTime.now();
     int b0to30 = 0;
     int b31to60 = 0;
@@ -439,41 +697,151 @@ class _PrincipalFeeDashboardState extends State<PrincipalFeeDashboard> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.appTheme.outlineVariant),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _agingColumn('0-30 Days', b0to30, Colors.blue),
+          _agingColumn('0–30 Days', b0to30, const Color(0xFF3B82F6)),
           _verticalDivider(),
-          _agingColumn('31-60 Days', b31to60, Colors.orange),
+          _agingColumn('31–60 Days', b31to60, const Color(0xFFF97316)),
           _verticalDivider(),
-          _agingColumn('61+ Days', b61plus, Colors.red),
+          _agingColumn('61+ Days', b61plus, const Color(0xFFEF4444)),
         ],
       ),
     );
   }
 
-  Widget _verticalDivider() {
-    return Container(height: 36, width: 1, color: context.appTheme.outlineVariant);
-  }
+  Widget _verticalDivider() =>
+      Container(height: 36, width: 1, color: context.appTheme.outlineVariant);
 
   Widget _agingColumn(String bucket, int count, Color color) {
     return Column(
       children: [
         Text(
           bucket,
-          style: GoogleFonts.ibmPlexSans(fontSize: 11, color: context.appTheme.muted, fontWeight: FontWeight.w600),
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 11,
+            color: context.appTheme.muted,
+            fontWeight: FontWeight.w600,
+          ),
         ),
         const SizedBox(height: 6),
         Text(
-          '$count invoices',
-          style: GoogleFonts.ibmPlexSans(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+          '$count',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          'invoices',
+          style: GoogleFonts.ibmPlexSans(
+            fontSize: 10,
+            color: context.appTheme.muted,
+          ),
         ),
       ],
     );
   }
 
   String _money(double amount) => '₹${amount.toStringAsFixed(0)}';
+}
+
+// ── Pie Chart Painter ─────────────────────────────────────────────────────────
+
+class _PieChartPainter extends CustomPainter {
+  final double collected;
+  final double outstanding;
+  final double progress;
+
+  const _PieChartPainter({
+    required this.collected,
+    required this.outstanding,
+    required this.progress,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+    const strokeWidth = 14.0;
+    final rect = Rect.fromCircle(
+      center: center,
+      radius: radius - strokeWidth / 2,
+    );
+
+    final total = collected + outstanding;
+    if (total <= 0) {
+      // Draw a grey full circle when no data
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..color = Colors.grey.shade200;
+      canvas.drawCircle(center, radius - strokeWidth / 2, paint);
+      return;
+    }
+
+    // Background ring
+    final bgPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = Colors.grey.shade100;
+    canvas.drawCircle(center, radius - strokeWidth / 2, bgPaint);
+
+    // Outstanding arc (full background, warm orange)
+    final outstandingPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.butt
+      ..color = const Color(0xFFFED7AA);
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      outstandingPaint,
+    );
+
+    // Collected arc (on top, green)
+    final collectedFraction = total > 0 ? (collected / total) : 0.0;
+    final collectedPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFF16A34A);
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      2 * math.pi * collectedFraction * progress,
+      false,
+      collectedPaint,
+    );
+
+    // Dot at the end of collected arc
+    if (collectedFraction > 0.02) {
+      final angle = -math.pi / 2 + 2 * math.pi * collectedFraction * progress;
+      final dotCenter = Offset(
+        center.dx + (radius - strokeWidth / 2) * math.cos(angle),
+        center.dy + (radius - strokeWidth / 2) * math.sin(angle),
+      );
+      canvas.drawCircle(dotCenter, 5, Paint()..color = Colors.white);
+      canvas.drawCircle(
+        dotCenter,
+        5,
+        Paint()
+          ..color = const Color(0xFF16A34A)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PieChartPainter old) =>
+      old.collected != collected ||
+      old.outstanding != outstanding ||
+      old.progress != progress;
 }

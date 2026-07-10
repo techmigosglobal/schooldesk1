@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:schooldesk1/core/app_export.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -23,6 +24,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SemanticsBinding.instance.ensureSemantics();
   GoogleFonts.config.allowRuntimeFetching = false;
+
+  // ── Validate environment FIRST ───────────────────────────────────────────
+  // This must be the first substantive call so that a missing/misconfigured
+  // build-time define fails loudly before any SDK or network code runs.
+  // If this throws in production it means the APK/AAB was built without the
+  // required --dart-define-from-file=env.supabase.json flag.
+  EnvConfig.validate();
 
   await Supabase.initialize(
     url: EnvConfig.supabaseUrl,
@@ -46,7 +54,6 @@ void main() async {
     return false;
   };
   await ServiceLocator.initialize();
-  EnvConfig.validate();
 
   // Initialize theme provider
   final themeProvider = await ThemeProvider.create();
@@ -60,13 +67,13 @@ void main() async {
       hasShownError = true;
 
       // Reset flag after 3 seconds to allow error widget on new screens
-      Future.delayed(Duration(seconds: 5), () {
+      Future.delayed(const Duration(seconds: 5), () {
         hasShownError = false;
       });
 
       return CustomErrorWidget(errorDetails: details);
     }
-    return SizedBox.shrink();
+    return const SizedBox.shrink();
   };
 
   runApp(
@@ -91,23 +98,89 @@ void _deferStartupServices() {
   });
 }
 
+/// Retries [fn] up to [maxAttempts] times with exponential backoff.
+/// Delays: 1 s, 2 s, 4 s, … capped at [maxDelay].
+Future<void> _withRetry(
+  Future<void> Function() fn, {
+  String name = 'op',
+  int maxAttempts = 4,
+  Duration maxDelay = const Duration(seconds: 16),
+}) async {
+  var delay = const Duration(seconds: 1);
+  for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await fn();
+      return;
+    } on Object catch (error) {
+      if (attempt == maxAttempts) {
+        developer.log(
+          '$name failed after $maxAttempts attempts: $error',
+          name: 'startup',
+          level: 1000,
+        );
+        return;
+      }
+      developer.log(
+        '$name attempt $attempt failed ($error). Retrying in ${delay.inSeconds}s…',
+        name: 'startup',
+      );
+      await Future<void>.delayed(delay);
+      delay = delay * 2;
+      if (delay > maxDelay) delay = maxDelay;
+    }
+  }
+}
+
 Future<void> _initializeDeferredStartupServices() async {
+  // Session restore and role init are retried with backoff (network-dependent).
+  await _withRetry(
+    BackendApiClient.instance.restoreStoredSession,
+    name: 'restoreStoredSession',
+  );
+  await _withRetry(
+    RoleAccessService.initialize,
+    name: 'RoleAccessService.initialize',
+  );
+  // Push notification init is best-effort; no retry needed.
   try {
-    await BackendApiClient.instance.restoreStoredSession();
-    await RoleAccessService.initialize();
     await PushNotificationService.instance.initialize();
     await PushNotificationService.instance.registerDeviceTokenIfPossible();
-  } catch (error) {
+  } on Object catch (error) {
     developer.log(
-      'Deferred startup services failed: $error',
+      'Push notification init failed (non-fatal): $error',
       name: 'startup',
-      level: 1000,
     );
   }
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Cancel FCM subscriptions when the app is permanently destroyed.
+    unawaited(PushNotificationService.instance.dispose());
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      unawaited(PushNotificationService.instance.dispose());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +189,7 @@ class MyApp extends StatelessWidget {
     return Sizer(
       builder: (context, orientation, screenType) {
         return MaterialApp(
-          title: 'Arish Ville Preschool',
+          title: AppConstants.schoolName,
           navigatorKey: PushNotificationService.navigatorKey,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

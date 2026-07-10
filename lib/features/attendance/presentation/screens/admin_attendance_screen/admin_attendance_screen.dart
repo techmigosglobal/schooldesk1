@@ -90,7 +90,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
             .toList();
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load attendance live feed from backend. $e';
@@ -416,7 +416,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
                           setState(() => e['status'] = 'Resolved');
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Exception resolved'),
+                              content: const Text('Exception resolved'),
                               backgroundColor: context.appTheme.success,
                             ),
                           );
@@ -488,7 +488,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
       {
         'label': 'Late Arrivals Report',
         'icon': Icons.access_time_rounded,
-        'color': Color(0xFF6C3483),
+        'color': const Color(0xFF6C3483),
       },
     ];
     return ListView.separated(
@@ -586,7 +586,7 @@ class _AdminAttendanceScreenState extends State<AdminAttendanceScreen>
           backgroundColor: context.appTheme.success,
         ),
       );
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

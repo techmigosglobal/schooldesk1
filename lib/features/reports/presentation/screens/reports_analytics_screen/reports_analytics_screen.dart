@@ -133,7 +133,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           const SizedBox(height: 4),
           Text(
             'Public School · Academic Year 2025–26',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           ),
           const SizedBox(height: 16),
           Row(
@@ -285,7 +288,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         if (rows.isEmpty)
           Text(
             'Backend attendance rows will appear here.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           )
         else
           ...rows.map((c) => _buildAttendanceRow(c)),
@@ -330,7 +336,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         const SizedBox(height: 10),
         Text(
           'Backend low-attendance records will appear here.',
-          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            color: context.appTheme.muted,
+          ),
         ),
       ],
     );
@@ -358,7 +367,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     final percent =
         (c['percent'] as num?)?.toDouble() ??
         (total > 0 ? (present / total) * 100 : 0);
-    Color color = percent >= 90
+    final Color color = percent >= 90
         ? context.appTheme.success
         : percent >= 80
         ? context.appTheme.warning
@@ -399,7 +408,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
           const SizedBox(width: 8),
           Text(
             '${c['present']}/${c['total']}',
-            style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              color: context.appTheme.muted,
+            ),
           ),
           const SizedBox(width: 6),
           Text(
@@ -573,7 +585,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
     double collected,
     double percent,
   ) {
-    Color color = percent >= 90
+    final Color color = percent >= 90
         ? context.appTheme.success
         : percent >= 75
         ? context.appTheme.warning
@@ -623,7 +635,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
             children: [
               Text(
                 'Billed: ₹${(billed / 1000).toStringAsFixed(0)}K',
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(width: 12),
               Text(
@@ -722,7 +737,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         if (_staffRows.isEmpty)
           Text(
             'Backend staff records will appear here.',
-            style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+            style: GoogleFonts.dmSans(
+              fontSize: 12,
+              color: context.appTheme.muted,
+            ),
           )
         else
           ..._staffRows.map(
@@ -740,7 +758,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         const SizedBox(height: 10),
         Text(
           'Backend leave summary rows will appear here.',
-          style: GoogleFonts.dmSans(fontSize: 12, color: context.appTheme.muted),
+          style: GoogleFonts.dmSans(
+            fontSize: 12,
+            color: context.appTheme.muted,
+          ),
         ),
       ],
     );
@@ -811,7 +832,10 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
               ),
               Text(
                 title,
-                style: GoogleFonts.dmSans(fontSize: 11, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 11,
+                  color: context.appTheme.muted,
+                ),
               ),
             ],
           ),
@@ -868,7 +892,11 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
                 ],
               ),
             ),
-            Icon(Icons.download_rounded, size: 18, color: context.appTheme.muted),
+            Icon(
+              Icons.download_rounded,
+              size: 18,
+              color: context.appTheme.muted,
+            ),
           ],
         ),
       ),
@@ -917,7 +945,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         );
       }
       return true;
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -948,7 +976,7 @@ class _ReportsAnalyticsScreenState extends State<ReportsAnalyticsScreen>
         onLayout: (_) async => pdfBytes,
         name: '${title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_')}_$period',
       );
-    } catch (e) {
+    } on Object {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

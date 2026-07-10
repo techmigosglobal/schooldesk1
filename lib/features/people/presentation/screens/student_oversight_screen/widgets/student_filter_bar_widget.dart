@@ -60,7 +60,9 @@ class StudentFilterBarWidget extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.white : context.appTheme.onSurface,
+                      color: selected
+                          ? Colors.white
+                          : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -72,7 +74,9 @@ class StudentFilterBarWidget extends StatelessWidget {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? context.appTheme.primary : context.appTheme.outline,
+                    color: selected
+                        ? context.appTheme.primary
+                        : context.appTheme.outline,
                   ),
                   onSelected: (_) => onClassChanged(classOptions[i]),
                 );
@@ -94,7 +98,9 @@ class StudentFilterBarWidget extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.white : context.appTheme.onSurface,
+                      color: selected
+                          ? Colors.white
+                          : context.appTheme.onSurface,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                     ),
                   ),
@@ -106,7 +112,9 @@ class StudentFilterBarWidget extends StatelessWidget {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   backgroundColor: context.appTheme.surfaceVariant,
                   side: BorderSide(
-                    color: selected ? context.appTheme.primary : context.appTheme.outline,
+                    color: selected
+                        ? context.appTheme.primary
+                        : context.appTheme.outline,
                   ),
                   onSelected: (_) => onFeeStatusChanged(feeStatuses[i]),
                 );

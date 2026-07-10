@@ -37,7 +37,9 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
   }
 
   Future<void> _loadData() async {
-    setState(() { _loading = true; });
+    setState(() {
+      _loading = true;
+    });
     try {
       final config = await BackendApiClient.instance.getPaymentConfig();
       if (!mounted) return;
@@ -48,9 +50,11 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
         _noteController.text = textValue(config['qr_note']);
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
-      setState(() { _loading = false; });
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -58,7 +62,9 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
 
   String _absoluteUrl(String value) {
     final trimmed = value.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
     if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
     return '${EnvConfig.apiOrigin}/$trimmed';
   }
@@ -68,7 +74,10 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
     return Scaffold(
       backgroundColor: context.appTheme.surface,
       appBar: AppBar(
-        title: const Text('Payment Config', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Payment Config',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: context.appTheme.onSurface,
@@ -91,7 +100,10 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                       children: [
                         Text(
                           'Payment QR Scanner',
-                          style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: GoogleFonts.ibmPlexSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Container(
@@ -99,19 +111,30 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                           width: double.infinity,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: context.appTheme.surfaceVariant.withOpacity(0.2),
+                            color: context.appTheme.surfaceVariant.withOpacity(
+                              0.2,
+                            ),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: context.appTheme.outlineVariant),
+                            border: Border.all(
+                              color: context.appTheme.outlineVariant,
+                            ),
                           ),
                           child: _qrUrl.isEmpty
                               ? Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.qr_code_scanner, size: 48, color: context.appTheme.muted),
+                                    Icon(
+                                      Icons.qr_code_scanner,
+                                      size: 48,
+                                      color: context.appTheme.muted,
+                                    ),
                                     const SizedBox(height: 8),
                                     Text(
                                       'No QR code uploaded',
-                                      style: TextStyle(color: context.appTheme.muted, fontSize: 13),
+                                      style: TextStyle(
+                                        color: context.appTheme.muted,
+                                        fontSize: 13,
+                                      ),
                                     ),
                                   ],
                                 )
@@ -121,7 +144,10 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                                     _absoluteUrl(_qrUrl),
                                     height: 180,
                                     fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: context.appTheme.error),
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.broken_image_outlined,
+                                      color: context.appTheme.error,
+                                    ),
                                   ),
                                 ),
                         ),
@@ -131,14 +157,25 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                           child: OutlinedButton.icon(
                             onPressed: _uploading ? null : _pickQr,
                             icon: _uploading
-                                ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                ? const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
                                 : const Icon(Icons.upload_file),
-                            label: Text(_uploading ? 'Uploading...' : 'Upload New QR Code'),
+                            label: Text(
+                              _uploading
+                                  ? 'Uploading...'
+                                  : 'Upload New QR Code',
+                            ),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: const Color(0xFF1A6B4A),
                               side: const BorderSide(color: Color(0xFF1A6B4A)),
                               padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
@@ -160,15 +197,22 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                       children: [
                         Text(
                           'Payment Details',
-                          style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: GoogleFonts.ibmPlexSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _upiController,
                           decoration: InputDecoration(
                             labelText: 'UPI ID',
-                            prefixIcon: const Icon(Icons.account_balance_wallet_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            prefixIcon: const Icon(
+                              Icons.account_balance_wallet_outlined,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -177,7 +221,9 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                           decoration: InputDecoration(
                             labelText: 'Payee Name',
                             prefixIcon: const Icon(Icons.badge_outlined),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -187,21 +233,31 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                           maxLines: 4,
                           decoration: InputDecoration(
                             labelText: 'Instructions for Parents',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
                         ElevatedButton.icon(
                           onPressed: _saving ? null : _saveConfig,
                           icon: _saving
-                              ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              ? const SizedBox.square(
+                                  dimension: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
                               : const Icon(Icons.save),
                           label: const Text('Save Configuration'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1A6B4A),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             elevation: 0,
                           ),
                         ),
@@ -224,7 +280,10 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
                       Expanded(
                         child: Text(
                           'These details are displayed directly to parents in the Fee Hub payment scanner screens.',
-                          style: TextStyle(fontSize: 12, color: context.appTheme.onSurface.withOpacity(0.8)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.appTheme.onSurface.withOpacity(0.8),
+                          ),
                         ),
                       ),
                     ],
@@ -245,34 +304,54 @@ class _PrincipalPaymentConfigState extends State<PrincipalPaymentConfig> {
         qrImageUrl: _qrUrl,
       );
       if (!mounted) return;
-      setState(() { _config = config; _saving = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment configuration saved.')));
-    } catch (e) {
+      setState(() {
+        _config = config;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment configuration saved.')),
+      );
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: context.appTheme.error));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
     }
   }
 
   Future<void> _pickQr() async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp']);
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+    );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
     final path = file.path;
     if (path == null || path.isEmpty) return;
     setState(() => _uploading = true);
     try {
-      final config = await BackendApiClient.instance.uploadPaymentQr(path: path, fileName: file.name);
+      final config = await BackendApiClient.instance.uploadPaymentQr(
+        path: path,
+        fileName: file.name,
+      );
       if (!mounted) return;
       setState(() {
         _config = config;
         _uploading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('QR code uploaded successfully.')));
-    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('QR code uploaded successfully.')),
+      );
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 }

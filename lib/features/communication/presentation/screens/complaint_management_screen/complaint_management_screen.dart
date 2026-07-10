@@ -42,7 +42,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
         _loading = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -80,7 +80,7 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
         setState(() => _complaints[localIndex] = saved);
       }
       return true;
-    } catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -285,7 +285,9 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
                       style: GoogleFonts.dmSans(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        color: selected ? Colors.white : context.appTheme.onSurface,
+                        color: selected
+                            ? Colors.white
+                            : context.appTheme.onSurface,
                       ),
                     ),
                   ),
@@ -310,7 +312,8 @@ class _ComplaintManagementScreenState extends State<ComplaintManagementScreen>
       'low': context.appTheme.success,
     };
     final statusColor = statusColors[c['status']] ?? context.appTheme.muted;
-    final priorityColor = priorityColors[c['priority']] ?? context.appTheme.muted;
+    final priorityColor =
+        priorityColors[c['priority']] ?? context.appTheme.muted;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -626,7 +629,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ticket resolved'),
+          content: const Text('Ticket resolved'),
           backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -653,7 +656,10 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
             children: [
               Text(
                 title,
-                style: GoogleFonts.dmSans(fontSize: 13, color: context.appTheme.muted),
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: context.appTheme.muted,
+                ),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -668,7 +674,7 @@ class _ResolveComplaintPageState extends State<_ResolveComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
@@ -744,7 +750,7 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ticket updated'),
+          content: const Text('Ticket updated'),
           backgroundColor: context.appTheme.info,
           behavior: SnackBarBehavior.floating,
         ),
@@ -793,7 +799,7 @@ class _UpdateComplaintPageState extends State<_UpdateComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),
@@ -887,7 +893,7 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
     if (saved) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Ticket created'),
+          content: const Text('Ticket created'),
           backgroundColor: context.appTheme.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -965,7 +971,7 @@ class _NewComplaintPageState extends State<_NewComplaintPage> {
                     : null,
               ),
               if (_error != null) ...[
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(_error!, style: TextStyle(color: context.appTheme.error)),
               ],
               const SizedBox(height: 24),

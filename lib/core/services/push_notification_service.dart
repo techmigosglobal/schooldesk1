@@ -11,6 +11,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/constants/app_constants.dart';
 import 'package:schooldesk1/firebase_runtime_options.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -36,8 +37,9 @@ class PushNotificationService {
   static const _deviceRegistrationTimeout = Duration(seconds: 5);
   static const _androidChannel = AndroidNotificationChannel(
     'schooldesk_updates',
-    'Arish Ville updates',
-    description: 'Important Arish Ville alerts, messages, and reminders.',
+    '${AppConstants.appName} updates',
+    description:
+        'Important ${AppConstants.appName} alerts, messages, and reminders.',
     importance: Importance.high,
   );
 
@@ -89,7 +91,7 @@ class PushNotificationService {
       await messaging
           .subscribeToTopic(topic)
           .timeout(_firebaseOperationTimeout);
-    } catch (error) {
+    } on Object catch (error) {
       developer.log(
         'Failed to subscribe to topic $topic: $error',
         name: 'PushNotificationService',
@@ -105,7 +107,7 @@ class PushNotificationService {
       await messaging
           .unsubscribeFromTopic(topic)
           .timeout(_firebaseOperationTimeout);
-    } catch (error) {
+    } on Object catch (error) {
       developer.log(
         'Failed to unsubscribe from topic $topic: $error',
         name: 'PushNotificationService',
@@ -123,7 +125,7 @@ class PushNotificationService {
         await Firebase.initializeApp(options: options);
       }
       return true;
-    } catch (_) {
+    } on Object catch (_) {
       return false;
     }
   }
@@ -193,7 +195,7 @@ class PushNotificationService {
           .timeout(_deviceRegistrationTimeout);
       _deviceRegistrationSucceeded = true;
       _lastRegistrationError = null;
-    } catch (error) {
+    } on Object catch (error) {
       _deviceRegistrationSucceeded = false;
       _lastRegistrationError = error.toString();
       // Push registration is best-effort and should never block app startup/login.
@@ -245,7 +247,7 @@ class PushNotificationService {
             )
             .timeout(_firebaseOperationTimeout);
       }
-    } catch (error) {
+    } on Object catch (error) {
       _permissionStatus = 'unavailable';
       _lastRegistrationError = error.toString();
       // Keep the app usable if the platform cannot show a permission prompt.
@@ -284,7 +286,7 @@ class PushNotificationService {
       final androidNotificationsAllowed =
           await _requestAndroidNotificationPermission(androidPlugin);
       _localNotificationsReady = androidNotificationsAllowed != false;
-    } catch (_) {
+    } on Object catch (_) {
       _localNotificationsReady = false;
     }
   }
@@ -330,7 +332,7 @@ class PushNotificationService {
       if ((_currentToken ?? '').isNotEmpty) {
         _lastRegistrationError = null;
       }
-    } catch (error) {
+    } on Object catch (error) {
       _currentToken = null;
       _lastRegistrationError = error.toString();
     }
@@ -339,7 +341,8 @@ class PushNotificationService {
   Future<void> _handleForeground(RemoteMessage message) async {
     if (!_localNotificationsReady) return;
     final notification = message.notification;
-    final title = notification?.title ?? message.data['title'] ?? 'Arish Ville';
+    final title =
+        notification?.title ?? message.data['title'] ?? AppConstants.appName;
     final body = notification?.body ?? message.data['body'] ?? '';
     await _localNotifications.show(
       id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
@@ -386,7 +389,7 @@ class PushNotificationService {
     try {
       final service = await NotificationService.getInstance();
       await service.refresh();
-    } catch (_) {
+    } on Object catch (_) {
       // Navigation should still proceed if notification refresh fails.
     }
     final navigator = navigatorKey.currentState;

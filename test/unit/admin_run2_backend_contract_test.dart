@@ -90,7 +90,10 @@ void main() {
       requestsScreen,
       contains('AppRoutes.principalPaymentRequestDecision'),
     );
-    expect(requestsScreen, contains('pushReplacementNamed(AppRoutes.feeMonitoring)'));
+    expect(
+      requestsScreen,
+      contains('pushReplacementNamed(AppRoutes.feeMonitoring)'),
+    );
     expect(decisionScreen, contains('decideParentPaymentRequest('));
     expect(
       api,

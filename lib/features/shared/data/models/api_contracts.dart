@@ -1,8 +1,8 @@
-/// API contract definitions for the live Arish Ville REST backend.
+/// API contract definitions for the school-desk REST backend.
 ///
-/// These DTOs intentionally mirror the payloads currently used by
-/// BackendApiClient. They are the safe target model layer for the incremental
-/// API-module split; they must not drift back to old compat/demo field names.
+/// These DTOs mirror the request/response payloads used by BackendApiClient.
+/// LoginResponse and UserResponse are defined in backend_models.dart (the
+/// single source of truth); do not redeclare them here.
 library;
 
 // Authentication -------------------------------------------------------------
@@ -23,15 +23,11 @@ class LoginRequest {
     };
   }
 
+  // If the caller typed an email address as their username, include it in the
+  // 'email' field too so backends that accept either field work correctly.
+  // No shorthand credential remapping — that logic belongs in dev/test tooling.
   static String _fallbackEmail(String value) {
     final identity = value.trim();
-    final lower = identity.toLowerCase();
-    if (lower == 'princ' || lower == 'principal') {
-      return 'principal@schooldesk.local';
-    }
-    if (lower == 'principal@schooldesk.com') {
-      return 'principal@schooldesk.local';
-    }
     if (_looksLikeEmail(identity)) return identity;
     return '';
   }
@@ -41,74 +37,9 @@ class LoginRequest {
   }
 }
 
-class LoginResponse {
-  final String token;
-  final String refreshToken;
-  final int expiresAt;
-  final UserResponse user;
-
-  const LoginResponse({
-    required this.token,
-    required this.refreshToken,
-    required this.expiresAt,
-    required this.user,
-  });
-
-  factory LoginResponse.fromJson(Map<String, dynamic> json) => LoginResponse(
-    token: _text(json['token']),
-    refreshToken: _text(json['refresh_token']),
-    expiresAt: _int(json['expires_at']),
-    user: UserResponse.fromJson(_map(json['user'])),
-  );
-}
-
-class UserResponse {
-  final String id;
-  final String username;
-  final String name;
-  final String email;
-  final String phone;
-  final String avatar;
-  final String schoolId;
-  final String roleId;
-  final String roleName;
-  final String linkedType;
-  final String linkedId;
-  final bool isActive;
-  final bool isVerified;
-
-  const UserResponse({
-    required this.id,
-    required this.username,
-    required this.name,
-    required this.email,
-    required this.phone,
-    required this.avatar,
-    required this.schoolId,
-    required this.roleId,
-    required this.roleName,
-    required this.linkedType,
-    required this.linkedId,
-    required this.isActive,
-    required this.isVerified,
-  });
-
-  factory UserResponse.fromJson(Map<String, dynamic> json) => UserResponse(
-    id: _text(json['id']),
-    username: _text(json['username']),
-    name: _text(json['name']),
-    email: _text(json['email']),
-    phone: _text(json['phone']),
-    avatar: _text(json['avatar']),
-    schoolId: _text(json['school_id']),
-    roleId: _text(json['role_id']),
-    roleName: _text(json['role_name']),
-    linkedType: _text(json['linked_type']),
-    linkedId: _text(json['linked_id']),
-    isActive: json['is_active'] as bool? ?? true,
-    isVerified: json['is_verified'] as bool? ?? false,
-  );
-}
+// LoginResponse and UserResponse are defined in backend_models.dart.
+// Import that file (via BackendApiClient or directly) instead of declaring
+// them here to avoid diverging fromJson implementations.
 
 // Pagination -----------------------------------------------------------------
 
@@ -324,12 +255,6 @@ int _int(Object? value) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   return int.tryParse(_text(value)) ?? 0;
-}
-
-Map<String, dynamic> _map(Object? value) {
-  if (value is Map<String, dynamic>) return value;
-  if (value is Map) return Map<String, dynamic>.from(value);
-  return const {};
 }
 
 List<Map<String, dynamic>> _listMap(Object? value) {

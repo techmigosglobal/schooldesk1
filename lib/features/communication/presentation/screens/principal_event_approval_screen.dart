@@ -131,7 +131,7 @@ class _PrincipalEventApprovalScreenState
       if (targetPostId.isNotEmpty) {
         try {
           target = await BackendApiClient.instance.getEventPost(targetPostId);
-        } catch (_) {
+        } on Object catch (_) {
           target = keepPost;
         }
       }
@@ -159,7 +159,7 @@ class _PrincipalEventApprovalScreenState
         _refreshing = false;
         _error = null;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -172,13 +172,13 @@ class _PrincipalEventApprovalScreenState
   Future<void> _notifyAndReload({Map<String, dynamic>? keepPost}) async {
     try {
       await BackendApiClient.instance.invalidateCachedReads();
-    } catch (_) {
+    } on Object catch (_) {
       // The write already succeeded; do not let cache cleanup blank the screen.
     }
     try {
       final service = await NotificationService.getInstance();
       await service.refresh();
-    } catch (_) {
+    } on Object catch (_) {
       // Approval state reload below is the source of truth for this screen.
     }
     await _loadPosts(showSpinner: false, keepPost: keepPost);
@@ -188,7 +188,7 @@ class _PrincipalEventApprovalScreenState
     try {
       await BackendApiClient.instance.approveEventPost(id);
       await _notifyAndReload();
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -264,7 +264,7 @@ class _PrincipalEventApprovalScreenState
           reason: reasonController.text.trim(),
         );
         await _notifyAndReload();
-      } catch (e) {
+      } on Object catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(
           context,
@@ -333,7 +333,7 @@ class _PrincipalEventApprovalScreenState
               sectionId: post['section_id']?.toString(),
             );
             if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
-          } catch (e) {
+          } on Object catch (e) {
             if (!dialogContext.mounted) return;
             setDialogState(() {
               saving = false;
@@ -373,7 +373,7 @@ class _PrincipalEventApprovalScreenState
             await BackendApiClient.instance.deleteEventPost(id);
             deleted = true;
             if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
-          } catch (e) {
+          } on Object catch (e) {
             if (!dialogContext.mounted) return;
             setDialogState(() {
               deleting = false;

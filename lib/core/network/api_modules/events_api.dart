@@ -70,7 +70,7 @@ extension BackendEventsApi on BackendApiClient {
           'page': page,
         });
         if (response.success != true) {
-          throw ServerException(message: 'Failed to get events');
+          throw const ServerException(message: 'Failed to get events');
         }
         rows.addAll(
           _asListMap(response.data).map((event) {
@@ -148,7 +148,7 @@ extension BackendEventsApi on BackendApiClient {
   Future<Map<String, dynamic>> getEventPost(String id) async {
     final safeId = id.trim();
     if (safeId.isEmpty) {
-      throw ServerException(message: 'Event post id is required');
+      throw const ServerException(message: 'Event post id is required');
     }
     return getRawMap('/event-posts/$safeId');
   }

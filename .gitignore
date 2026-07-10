@@ -106,3 +106,7 @@ android/.kotlin/
 
 # Internal tooling
 .kimchi/
+
+# Developer convenience dumps — never commit these
+all_files.txt
+flutter_*.log

@@ -162,7 +162,7 @@ class _ReceiptBody extends StatelessWidget {
                   _ReceiptDivider(),
                   _ReceiptRow(label: 'Payment Mode', value: mode.toUpperCase()),
                   _ReceiptDivider(),
-                  _ReceiptRow(
+                  const _ReceiptRow(
                     label: 'Status',
                     value: 'Successful',
                     isStatus: true,

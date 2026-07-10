@@ -17,7 +17,8 @@ class ParentFeeHub extends StatefulWidget {
   State<ParentFeeHub> createState() => _ParentFeeHubState();
 }
 
-class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver {
+class _ParentFeeHubState extends State<ParentFeeHub>
+    with WidgetsBindingObserver {
   static const Duration _autoRefreshInterval = Duration(seconds: 120);
   DateTime? _lastRefreshAt;
   static const _refreshDebounce = Duration(seconds: 10);
@@ -33,9 +34,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
   String? _error;
 
   double get _pendingAmount => _feeStructure.fold(
-        0.0,
-        (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0.0),
-      );
+    0.0,
+    (sum, f) => sum + ((f['amount'] as num?)?.toDouble() ?? 0.0),
+  );
 
   Map<String, dynamic>? get _nextPendingFee {
     final pending = _feeStructure
@@ -94,7 +95,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
       });
     }
     try {
-      final refreshNonce = forceRefresh ? DateTime.now().millisecondsSinceEpoch : null;
+      final refreshNonce = forceRefresh
+          ? DateTime.now().millisecondsSinceEpoch
+          : null;
       final children = await BackendApiClient.instance.getMyStudents(
         refreshNonce: refreshNonce,
       );
@@ -104,12 +107,12 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
       );
       _activeChildIndex = selectedIndex;
       var feeList = <Map<String, dynamic>>[];
-      var historyList = <Map<String, dynamic>>[];
+      final historyList = <Map<String, dynamic>>[];
 
       if (children.isNotEmpty) {
         final child = children[_activeChildIndex];
         final studentId = (child['id'] ?? child['student_id'] ?? '').toString();
-        
+
         final feeRows = studentId.isEmpty
             ? <Map<String, dynamic>>[]
             : await BackendApiClient.instance.getParentStudentFees(
@@ -128,44 +131,48 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                 studentId: studentId,
               );
 
-        feeList = feeRows.map((inv) {
-          final balance = (inv['balance_amount'] as num?)?.toDouble() ??
-              (inv['balance'] as num?)?.toDouble() ??
-              0.0;
-          final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
-          final total = (inv['total_amount'] as num?)?.toDouble() ?? balance + paid;
-          final feeType = _text(inv['fee_type']);
-          return {
-            'id': inv['id'],
-            'invoiceNumber': inv['invoice_number'] ?? '',
-            'component': _text(
-              inv['fee_item_name'],
-              fallback: feeType == 'book_kit' ? 'Book & Kit Fee' : 'Tuition Fee',
-            ),
-            'fee_type': feeType,
-            'billing_mode': inv['billing_mode'],
-            'priority': inv['priority'],
-            'frequency': feeType == 'book_kit' ? 'One Time' : 'Tuition',
-            'amount': balance,
-            'paidAmount': paid,
-            'totalAmount': total,
-            'dueDate': (inv['due_date'] ?? '').toString(),
-            'status': _statusFromFeeRow(inv),
-            'monthly_amount': inv['monthly_amount'],
-            'term_amount': inv['term_amount'],
-            'term_count': inv['term_count'],
-            'allowed_month_names': inv['allowed_month_names'],
-            'paid_month_names': inv['paid_month_names'],
-            'unpaid_month_names': inv['unpaid_month_names'],
-            'rejection_reason': inv['rejection_reason'],
-            'items': _invoiceItems(inv),
-          };
-        }).toList()
-          ..sort((a, b) {
-            final left = (a['priority'] as num?)?.toInt() ?? 99;
-            final right = (b['priority'] as num?)?.toInt() ?? 99;
-            return left.compareTo(right);
-          });
+        feeList =
+            feeRows.map((inv) {
+              final balance =
+                  (inv['balance_amount'] as num?)?.toDouble() ??
+                  (inv['balance'] as num?)?.toDouble() ??
+                  0.0;
+              final paid = (inv['paid_amount'] as num?)?.toDouble() ?? 0.0;
+              final total =
+                  (inv['total_amount'] as num?)?.toDouble() ?? balance + paid;
+              final feeType = _text(inv['fee_type']);
+              return {
+                'id': inv['id'],
+                'invoiceNumber': inv['invoice_number'] ?? '',
+                'component': _text(
+                  inv['fee_item_name'],
+                  fallback: feeType == 'book_kit'
+                      ? 'Book & Kit Fee'
+                      : 'Tuition Fee',
+                ),
+                'fee_type': feeType,
+                'billing_mode': inv['billing_mode'],
+                'priority': inv['priority'],
+                'frequency': feeType == 'book_kit' ? 'One Time' : 'Tuition',
+                'amount': balance,
+                'paidAmount': paid,
+                'totalAmount': total,
+                'dueDate': (inv['due_date'] ?? '').toString(),
+                'status': _statusFromFeeRow(inv),
+                'monthly_amount': inv['monthly_amount'],
+                'term_amount': inv['term_amount'],
+                'term_count': inv['term_count'],
+                'allowed_month_names': inv['allowed_month_names'],
+                'paid_month_names': inv['paid_month_names'],
+                'unpaid_month_names': inv['unpaid_month_names'],
+                'rejection_reason': inv['rejection_reason'],
+                'items': _invoiceItems(inv),
+              };
+            }).toList()..sort((a, b) {
+              final left = (a['priority'] as num?)?.toInt() ?? 99;
+              final right = (b['priority'] as num?)?.toInt() ?? 99;
+              return left.compareTo(right);
+            });
 
         for (final inv in invoices) {
           final payments = inv['payments'];
@@ -189,7 +196,7 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
             }
           }
         }
-        
+
         for (final request in paymentRequests) {
           final invoice = request['invoice'] is Map
               ? Map<String, dynamic>.from(request['invoice'] as Map)
@@ -200,9 +207,11 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
           historyList.add({
             'id': request['id'] ?? '',
             'invoiceId': request['invoice_id'] ?? '',
-            'component': 'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
+            'component':
+                'Invoice ${invoice['invoice_number'] ?? request['invoice_id'] ?? ''}',
             'amount': (request['amount'] as num?)?.toDouble() ?? 0.0,
-            'date': (request['payment_date'] ?? request['created_at'] ?? '').toString(),
+            'date': (request['payment_date'] ?? request['created_at'] ?? '')
+                .toString(),
             'method': (request['payment_mode'] ?? '').toString(),
             'receiptNo': (request['request_reference'] ?? '').toString(),
             'student': _studentName(child),
@@ -216,8 +225,8 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
         }
         historyList.sort(
           (a, b) => (b['date'] ?? '').toString().compareTo(
-                (a['date'] ?? '').toString(),
-              ),
+            (a['date'] ?? '').toString(),
+          ),
         );
       }
 
@@ -228,7 +237,7 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
         _paymentHistory = historyList;
         _loading = false;
       });
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
@@ -269,7 +278,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                       ? 'No linked students. Ask the school admin to link students to this parent account.'
                       : 'Unable to load fee data: $_error',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.ibmPlexSans(color: context.appTheme.onSurface),
+                  style: GoogleFonts.ibmPlexSans(
+                    color: context.appTheme.onSurface,
+                  ),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
@@ -291,7 +302,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
       title: 'My Fees',
       subtitle: 'Fee overview, installments, and payment history',
       drawer: drawer,
-      floatingActionButton: const DashboardFabWidget(role: DashboardRole.parent),
+      floatingActionButton: const DashboardFabWidget(
+        role: DashboardRole.parent,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
       body: RefreshIndicator(
         onRefresh: () => _loadData(forceRefresh: true, showSpinner: false),
@@ -328,7 +341,11 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.receipt_long_rounded, color: context.appTheme.muted, size: 24),
+                      Icon(
+                        Icons.receipt_long_rounded,
+                        color: context.appTheme.muted,
+                        size: 24,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -385,9 +402,13 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isActive ? _headerColor : context.appTheme.surfaceVariant,
+                color: isActive
+                    ? _headerColor
+                    : context.appTheme.surfaceVariant,
                 borderRadius: BorderRadius.circular(20),
-                border: isActive ? null : Border.all(color: context.appTheme.outlineVariant),
+                border: isActive
+                    ? null
+                    : Border.all(color: context.appTheme.outlineVariant),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -407,7 +428,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                     style: GoogleFonts.ibmPlexSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isActive ? Colors.white : context.appTheme.onSurface,
+                      color: isActive
+                          ? Colors.white
+                          : context.appTheme.onSurface,
                     ),
                   ),
                 ],
@@ -430,7 +453,10 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
         gradient: LinearGradient(
           colors: pending > 0
               ? [_headerColor, _headerColor.withRed(30).withGreen(120)]
-              : [context.appTheme.primary.withAlpha(200), context.appTheme.primary],
+              : [
+                  context.appTheme.primary.withAlpha(200),
+                  context.appTheme.primary,
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -531,7 +557,11 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: context.appTheme.error, size: 20),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: context.appTheme.error,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -549,7 +579,8 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
           Text(
             _text(
               clarification['paymentRequest']?['admin_remarks'],
-              fallback: 'Principal asked for clearer proof on this transaction.',
+              fallback:
+                  'Principal asked for clearer proof on this transaction.',
             ),
             style: GoogleFonts.ibmPlexSans(
               fontSize: 12,
@@ -564,11 +595,17 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: Text(
                 'Resubmit Proof',
-                style: GoogleFonts.ibmPlexSans(fontWeight: FontWeight.w700, fontSize: 12),
+                style: GoogleFonts.ibmPlexSans(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
               ),
               style: TextButton.styleFrom(
                 foregroundColor: context.appTheme.error,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
               ),
             ),
           ),
@@ -647,7 +684,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                 'Due Date: ${fee['dueDate']}',
                 style: GoogleFonts.ibmPlexSans(
                   fontSize: 12,
-                  color: balance > 0 ? context.appTheme.error : context.appTheme.muted,
+                  color: balance > 0
+                      ? context.appTheme.error
+                      : context.appTheme.muted,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -668,7 +707,7 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
               child: LinearProgressIndicator(
                 value: total > 0 ? (paid / total) : 0,
                 backgroundColor: context.appTheme.surfaceVariant,
-                valueColor: AlwaysStoppedAnimation<Color>(_headerColor),
+                valueColor: const AlwaysStoppedAnimation<Color>(_headerColor),
                 minHeight: 6,
               ),
             ),
@@ -704,8 +743,13 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _headerColor,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
                 child: Row(
@@ -713,7 +757,10 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                   children: [
                     Text(
                       'Pay Now',
-                      style: GoogleFonts.ibmPlexSans(fontSize: 12, fontWeight: FontWeight.w700),
+                      style: GoogleFonts.ibmPlexSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(width: 4),
                     const Icon(Icons.arrow_forward_rounded, size: 14),
@@ -728,7 +775,9 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
               child: OutlinedButton.icon(
                 onPressed: () {
                   final paidRequest = _paymentHistory.firstWhere(
-                    (p) => p['invoiceId'] == fee['id'] && p['rawStatus'] == 'completed',
+                    (p) =>
+                        p['invoiceId'] == fee['id'] &&
+                        p['rawStatus'] == 'completed',
                     orElse: () => const <String, dynamic>{},
                   );
                   if (paidRequest.isNotEmpty) {
@@ -746,13 +795,21 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
                 icon: const Icon(Icons.receipt_long, size: 14),
                 label: Text(
                   'Receipt',
-                  style: GoogleFonts.ibmPlexSans(fontSize: 12, fontWeight: FontWeight.w700),
+                  style: GoogleFonts.ibmPlexSans(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _headerColor,
                   side: const BorderSide(color: _headerColor),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
               ),
             ),
@@ -768,10 +825,7 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
         Expanded(
           child: InkWell(
             onTap: () {
-              Navigator.pushNamed(
-                context,
-                '/parent/payment-history',
-              );
+              Navigator.pushNamed(context, '/parent/payment-history');
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
@@ -783,7 +837,11 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
               ),
               child: Column(
                 children: [
-                  Icon(Icons.history_rounded, color: _headerColor, size: 24),
+                  const Icon(
+                    Icons.history_rounded,
+                    color: _headerColor,
+                    size: 24,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     'Payment History',
@@ -809,14 +867,13 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
   }
 
   Future<void> _openPaymentFlow(Map<String, dynamic> fee) async {
-    final student = _childrenData.isEmpty ? null : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
+    final student = _childrenData.isEmpty
+        ? null
+        : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
     final result = await Navigator.pushNamed(
       context,
       '/parent/payment-flow',
-      arguments: ParentPaymentSelectionArgs(
-        fees: [fee],
-        student: student,
-      ),
+      arguments: ParentPaymentSelectionArgs(fees: [fee], student: student),
     );
     if (result != null && mounted) {
       await _loadData(forceRefresh: true);
@@ -836,8 +893,10 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
     final request = payment['paymentRequest'] is Map
         ? Map<String, dynamic>.from(payment['paymentRequest'] as Map)
         : <String, dynamic>{};
-    
-    final student = _childrenData.isEmpty ? null : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
+
+    final student = _childrenData.isEmpty
+        ? null
+        : Map<String, dynamic>.from(_childrenData[_activeChildIndex]);
     final result = await Navigator.pushNamed(
       context,
       '/parent/payment-flow',
@@ -860,7 +919,8 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
 
   String _statusFromFeeRow(Map<String, dynamic> row) {
     final raw = _text(row['status']).toLowerCase();
-    final balance = (row['balance_amount'] as num?)?.toDouble() ??
+    final balance =
+        (row['balance_amount'] as num?)?.toDouble() ??
         (row['balance'] as num?)?.toDouble() ??
         0.0;
     switch (raw) {
@@ -931,6 +991,7 @@ class _ParentFeeHubState extends State<ParentFeeHub> with WidgetsBindingObserver
   String _studentName(Map<String, dynamic> student) {
     final name = '${student['name'] ?? ''}'.trim();
     if (name.isNotEmpty) return name;
-    return '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'.trim();
+    return '${student['first_name'] ?? ''} ${student['last_name'] ?? ''}'
+        .trim();
   }
 }

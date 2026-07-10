@@ -1,14 +1,131 @@
 workflows:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Android Release APK  (Supabase production backend)
+  # ─────────────────────────────────────────────────────────────────────────────
+  # SETUP REQUIRED — Before this workflow can build successfully you must add
+  # all secrets as encrypted Environment Variables in Codemagic:
+  #   Dashboard → your app → Environment variables → Add group "schooldesk_prod"
+  #   Docs: https://docs.codemagic.io/variables/environment-variable-groups/
+  #
+  # Required secret keys (add each with "Secret" toggle ON):
+  #   SUPABASE_URL                  e.g. https://xxxx.supabase.co
+  #   SUPABASE_ANON_KEY             your Supabase publishable anon key
+  #   API_BASE_URL                  e.g. https://xxxx.supabase.co/functions/v1/api
+  #   FIREBASE_API_KEY
+  #   FIREBASE_PROJECT_ID
+  #   FIREBASE_MESSAGING_SENDER_ID
+  #   FIREBASE_ANDROID_APP_ID
+  #   FIREBASE_IOS_APP_ID
+  #   FIREBASE_AUTH_DOMAIN
+  #   FIREBASE_STORAGE_BUCKET
+  # ─────────────────────────────────────────────────────────────────────────────
+  android-release-apk:
+    name: Android Release APK
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+      # Reference the Codemagic encrypted environment group.
+      # Never put real secret values as plaintext in this file.
+      groups:
+        - schooldesk_prod
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: "main"
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Show tool versions
+        script: |
+          flutter --version
+          java -version
+      - name: Install Flutter dependencies
+        script: flutter pub get
+      - name: Build release APK
+        script: >
+          flutter build apk --release
+          --dart-define=API_BASE_URL=$API_BASE_URL
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY
+          --dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID
+          --dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID
+          --dart-define=FIREBASE_IOS_APP_ID=$FIREBASE_IOS_APP_ID
+          --dart-define=FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
+          --dart-define=FIREBASE_STORAGE_BUCKET=$FIREBASE_STORAGE_BUCKET
+          --dart-define=APP_ENV=production
+          --dart-define=ENABLE_LOGGING=false
+    artifacts:
+      - build/app/outputs/flutter-apk/app-release.apk
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Android Release AAB  (Play Store upload)
+  # ─────────────────────────────────────────────────────────────────────────────
+  android-release-aab:
+    name: Android Release AAB
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+      groups:
+        - schooldesk_prod
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+        - $HOME/.gradle/wrapper
+        - $HOME/.pub-cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: "v*"
+          include: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Show tool versions
+        script: |
+          flutter --version
+          java -version
+      - name: Install Flutter dependencies
+        script: flutter pub get
+      - name: Build release AAB
+        script: >
+          flutter build appbundle --release
+          --dart-define=API_BASE_URL=$API_BASE_URL
+          --dart-define=SUPABASE_URL=$SUPABASE_URL
+          --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY
+          --dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID
+          --dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID
+          --dart-define=FIREBASE_IOS_APP_ID=$FIREBASE_IOS_APP_ID
+          --dart-define=FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
+          --dart-define=FIREBASE_STORAGE_BUCKET=$FIREBASE_STORAGE_BUCKET
+          --dart-define=APP_ENV=production
+          --dart-define=ENABLE_LOGGING=false
+    artifacts:
+      - build/app/outputs/bundle/release/app-release.aab
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Android Debug APK  (QA / branch testing — does NOT need Firebase secrets)
+  # ─────────────────────────────────────────────────────────────────────────────
   android-debug-apk:
     name: Android Debug APK
     max_build_duration: 60
     environment:
       flutter: stable
       java: 17
-      vars:
-        API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api
-        SUPABASE_URL: https://ouvwogguttybmpgfgctc.supabase.co
-        SUPABASE_ANON_KEY: sb_publishable_qCKMNCupGkjnNwK77gWdbg_Yxe83REn
+      groups:
+        - schooldesk_prod
     cache:
       cache_paths:
         - $HOME/.gradle/caches
@@ -35,12 +152,22 @@ workflows:
           --dart-define=API_BASE_URL=$API_BASE_URL
           --dart-define=SUPABASE_URL=$SUPABASE_URL
           --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY
+          --dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID
+          --dart-define=FIREBASE_ANDROID_APP_ID=$FIREBASE_ANDROID_APP_ID
+          --dart-define=FIREBASE_IOS_APP_ID=$FIREBASE_IOS_APP_ID
+          --dart-define=FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
+          --dart-define=FIREBASE_STORAGE_BUCKET=$FIREBASE_STORAGE_BUCKET
           --dart-define=APP_ENV=production
           --dart-define=ENABLE_LOGGING=false
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
       - build/app/outputs/apk/debug/*.apk
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # iOS Simulator Build  (CI verification — no signing required)
+  # ─────────────────────────────────────────────────────────────────────────────
   ios-simulator-build:
     name: iOS Simulator Build
     max_build_duration: 60
@@ -48,10 +175,8 @@ workflows:
       flutter: stable
       xcode: latest
       cocoapods: default
-      vars:
-        API_BASE_URL: https://ouvwogguttybmpgfgctc.supabase.co/functions/v1/api
-        SUPABASE_URL: https://ouvwogguttybmpgfgctc.supabase.co
-        SUPABASE_ANON_KEY: sb_publishable_qCKMNCupGkjnNwK77gWdbg_Yxe83REn
+      groups:
+        - schooldesk_prod
     cache:
       cache_paths:
         - $HOME/Library/Caches/CocoaPods
@@ -77,6 +202,12 @@ workflows:
           --dart-define=API_BASE_URL=$API_BASE_URL
           --dart-define=SUPABASE_URL=$SUPABASE_URL
           --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+          --dart-define=FIREBASE_API_KEY=$FIREBASE_API_KEY
+          --dart-define=FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID
+          --dart-define=FIREBASE_MESSAGING_SENDER_ID=$FIREBASE_MESSAGING_SENDER_ID
+          --dart-define=FIREBASE_IOS_APP_ID=$FIREBASE_IOS_APP_ID
+          --dart-define=FIREBASE_AUTH_DOMAIN=$FIREBASE_AUTH_DOMAIN
+          --dart-define=FIREBASE_STORAGE_BUCKET=$FIREBASE_STORAGE_BUCKET
           --dart-define=APP_ENV=production
           --dart-define=ENABLE_LOGGING=false
     artifacts:

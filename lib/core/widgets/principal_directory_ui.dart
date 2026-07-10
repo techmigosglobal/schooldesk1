@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
@@ -103,7 +102,7 @@ class PrincipalDirectoryScaffold extends StatelessWidget {
                   child: Center(
                     child:
                         emptyState ??
-                        EmptyStateWidget(
+                        const EmptyStateWidget(
                           icon: Icons.folder_open_rounded,
                           title: 'Nothing to show yet',
                           description:
@@ -665,7 +664,11 @@ class PrincipalDirectoryCard extends StatelessWidget {
                               ),
                               if (chips.isNotEmpty) ...[
                                 const SizedBox(height: 10),
-                                Wrap(spacing: 8, runSpacing: 8, children: chips),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: chips,
+                                ),
                               ],
                               if (body != null) ...[
                                 const SizedBox(height: 12),
@@ -1106,10 +1109,7 @@ class PrincipalInputPage extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
-            PrincipalDetailCard(
-              title: title,
-              children: [child],
-            ),
+            PrincipalDetailCard(title: title, children: [child]),
           ],
         ),
       ),

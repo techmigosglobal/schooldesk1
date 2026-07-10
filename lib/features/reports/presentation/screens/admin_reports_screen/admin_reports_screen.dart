@@ -85,7 +85,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
     {
       'category': 'Government Compliance',
       'icon': Icons.account_balance_rounded,
-      'color': Color(0xFF6C3483),
+      'color': const Color(0xFF6C3483),
       'reports': [
         {
           'name': 'DISE Data Export',
@@ -488,7 +488,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen>
           behavior: SnackBarBehavior.floating,
         ),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

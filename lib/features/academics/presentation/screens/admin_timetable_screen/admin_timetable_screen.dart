@@ -99,7 +99,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         }
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _error = 'Unable to load timetable setup. $error';
@@ -214,9 +214,9 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                   subtitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _ink.withOpacity(0.6),
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: _ink.withOpacity(0.6)),
                 ),
               ],
             ),
@@ -830,7 +830,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Text(
                   allSelected ? 'Clear' : 'Select All',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                     color: _accent,
@@ -1571,7 +1571,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         _stage = _ManualTimetableStage.selectClass;
       });
       _showSnack('Whole timetable deleted.');
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Unable to delete timetable. $error');
@@ -1614,7 +1614,7 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
         _draftCells = [];
       });
       _showSnack('Timetable saved and published.');
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       _showSnack('Unable to save timetable. $error');

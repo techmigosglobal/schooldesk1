@@ -53,7 +53,7 @@ class _TeacherAttendanceHistoryScreenState
         _sessions = sessions;
         _loading = false;
       });
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;

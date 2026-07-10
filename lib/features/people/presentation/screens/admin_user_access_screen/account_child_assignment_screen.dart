@@ -261,7 +261,7 @@ class _AccountChildAssignmentScreenState
       );
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (e) {
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;

@@ -40,7 +40,9 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
   }
 
   Future<void> _loadData() async {
-    setState(() { _loading = true; });
+    setState(() {
+      _loading = true;
+    });
     try {
       final config = await BackendApiClient.instance.getPaymentConfig();
       if (!mounted) return;
@@ -51,9 +53,11 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
         _noteController.text = textValue(config['qr_note']);
         _loading = false;
       });
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
-      setState(() { _loading = false; });
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
@@ -61,7 +65,9 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
 
   String _absoluteUrl(String value) {
     final trimmed = value.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
     if (trimmed.startsWith('/')) return '${EnvConfig.apiOrigin}$trimmed';
     return '${EnvConfig.apiOrigin}/$trimmed';
   }
@@ -71,7 +77,10 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF7FAFF),
       appBar: AppBar(
-        title: const Text('Payment Config', style: TextStyle(fontWeight: FontWeight.w900)),
+        title: const Text(
+          'Payment Config',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         backgroundColor: const Color(0xFFF7FAFF),
         elevation: 0,
       ),
@@ -92,28 +101,60 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
                         width: double.infinity,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: context.appTheme.surfaceVariant.withOpacity(0.3),
+                          color: context.appTheme.surfaceVariant.withOpacity(
+                            0.3,
+                          ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.appTheme.outlineVariant),
+                          border: Border.all(
+                            color: context.appTheme.outlineVariant,
+                          ),
                         ),
                         child: _qrUrl.isEmpty
-                            ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(Icons.qr_code_2_rounded, size: 56, color: context.appTheme.muted),
-                                const SizedBox(height: 8),
-                                Text('No QR uploaded yet', style: TextStyle(color: context.appTheme.muted, fontWeight: FontWeight.w700)),
-                              ])
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.qr_code_2_rounded,
+                                    size: 56,
+                                    color: context.appTheme.muted,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'No QR uploaded yet',
+                                    style: TextStyle(
+                                      color: context.appTheme.muted,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              )
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(10),
-                                child: Image.network(_absoluteUrl(_qrUrl), height: 164, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Icon(Icons.broken_image_outlined, color: context.appTheme.error)),
+                                child: Image.network(
+                                  _absoluteUrl(_qrUrl),
+                                  height: 164,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => Icon(
+                                    Icons.broken_image_outlined,
+                                    color: context.appTheme.error,
+                                  ),
+                                ),
                               ),
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
                         onPressed: _uploading ? null : _pickQr,
                         icon: _uploading
-                            ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
                             : const Icon(Icons.upload_file_outlined),
-                        label: Text(_uploading ? 'Uploading...' : 'Upload QR Image'),
+                        label: Text(
+                          _uploading ? 'Uploading...' : 'Upload QR Image',
+                        ),
                       ),
                     ],
                   ),
@@ -129,27 +170,46 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: _upiController,
-                        decoration: const InputDecoration(labelText: 'UPI ID', prefixIcon: Icon(Icons.account_balance_wallet_outlined, size: 20)),
+                        decoration: const InputDecoration(
+                          labelText: 'UPI ID',
+                          prefixIcon: Icon(
+                            Icons.account_balance_wallet_outlined,
+                            size: 20,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _payeeController,
-                        decoration: const InputDecoration(labelText: 'Payee Name', prefixIcon: Icon(Icons.badge_outlined, size: 20)),
+                        decoration: const InputDecoration(
+                          labelText: 'Payee Name',
+                          prefixIcon: Icon(Icons.badge_outlined, size: 20),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
                         controller: _noteController,
                         minLines: 2,
                         maxLines: 3,
-                        decoration: const InputDecoration(labelText: 'Payment Note for Parents'),
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Note for Parents',
+                        ),
                       ),
                       const SizedBox(height: 16),
                       FilledButton.icon(
                         onPressed: _saving ? null : _saveConfig,
                         icon: _saving
-                            ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            ? const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
                             : const Icon(Icons.save_outlined),
-                        label: Text(_saving ? 'Saving...' : 'Save Payment Details'),
+                        label: Text(
+                          _saving ? 'Saving...' : 'Save Payment Details',
+                        ),
                       ),
                     ],
                   ),
@@ -157,8 +217,9 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
                 const SizedBox(height: 14),
 
                 // Status
-                FeeInfoBanner(
-                  text: 'These settings are shown to parents when they submit UPI payment proofs. Make sure the QR image and UPI ID are correct.',
+                const FeeInfoBanner(
+                  text:
+                      'These settings are shown to parents when they submit UPI payment proofs. Make sure the QR image and UPI ID are correct.',
                 ),
               ],
             ),
@@ -175,34 +236,54 @@ class _FeePaymentConfigScreenState extends State<FeePaymentConfigScreen> {
         qrImageUrl: _qrUrl,
       );
       if (!mounted) return;
-      setState(() { _config = config; _saving = false; });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment details saved.')));
-    } catch (e) {
+      setState(() {
+        _config = config;
+        _saving = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Payment details saved.')));
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save failed: $e'), backgroundColor: context.appTheme.error));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: context.appTheme.error,
+        ),
+      );
     }
   }
 
   Future<void> _pickQr() async {
-    final result = await FilePicker.pickFiles(type: FileType.custom, allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp']);
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+    );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.single;
     final path = file.path;
     if (path == null || path.isEmpty) return;
     setState(() => _uploading = true);
     try {
-      final config = await BackendApiClient.instance.uploadPaymentQr(path: path, fileName: file.name);
+      final config = await BackendApiClient.instance.uploadPaymentQr(
+        path: path,
+        fileName: file.name,
+      );
       if (!mounted) return;
       setState(() {
         _config = config;
         _uploading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('QR uploaded for parents.')));
-    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('QR uploaded for parents.')));
+    } on Object catch (e) {
       if (!mounted) return;
       setState(() => _uploading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     }
   }
 }

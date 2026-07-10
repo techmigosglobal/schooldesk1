@@ -158,8 +158,8 @@ class FeeInfoTile extends StatelessWidget {
     final valueColor = danger
         ? context.appTheme.error
         : highlighted
-            ? context.appTheme.success
-            : context.appTheme.onSurface;
+        ? context.appTheme.success
+        : context.appTheme.onSurface;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -221,7 +221,9 @@ class FeeAmountRow extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w900,
-              color: danger ? context.appTheme.error : context.appTheme.onSurface,
+              color: danger
+                  ? context.appTheme.error
+                  : context.appTheme.onSurface,
             ),
           ),
         ],
@@ -389,8 +391,14 @@ class FeeActionRow extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!
-          else Icon(Icons.chevron_right_rounded, color: context.appTheme.muted, size: 20),
+          if (trailing != null)
+            trailing!
+          else
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.appTheme.muted,
+              size: 20,
+            ),
         ],
       ),
     );
@@ -421,7 +429,10 @@ class FeeSearchBox extends StatelessWidget {
         prefixIcon: const Icon(Icons.search_rounded, size: 20),
         border: const OutlineInputBorder(),
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
@@ -507,7 +518,11 @@ class FeeInfoBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline_rounded, size: 16, color: context.appTheme.primary),
+          Icon(
+            Icons.info_outline_rounded,
+            size: 16,
+            color: context.appTheme.primary,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

@@ -51,18 +51,16 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
 
       // Phase 2: Navigate to the correct dashboard.
       final role =
-          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ??
-          '';
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
       final route =
           RouteAccessGuard.dashboardForRole(role) ?? '/landing-page-screen';
       Navigator.of(context).pushReplacementNamed(route);
-    } catch (e) {
+    } on Object {
       if (!mounted) return;
       // Even if RoleAccessService fails, still navigate – the dashboard
       // will show its own error state.
       final role =
-          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ??
-          '';
+          BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
       final route =
           RouteAccessGuard.dashboardForRole(role) ?? '/landing-page-screen';
       _navigated = true;
@@ -118,10 +116,7 @@ class _LoginLoadingScreenState extends State<LoginLoadingScreen>
               AnimatedBuilder(
                 animation: _pulseOpacity,
                 builder: (context, child) {
-                  return Opacity(
-                    opacity: _pulseOpacity.value,
-                    child: child,
-                  );
+                  return Opacity(opacity: _pulseOpacity.value, child: child);
                 },
                 child: Text(
                   _statusMessage,

@@ -122,13 +122,13 @@ class RouteAccessGuard {
     AppRoutes.parentReceipt: {'parent'},
     AppRoutes.parentHealth: {'parent'},
     AppRoutes.principalFees: {'principal'},
-    '/parent/fees': {'parent'},
-    '/principal/payment-requests': {'principal'},
-    '/principal/fee-structures': {'principal'},
-    '/principal/invoice-generate': {'principal'},
-    '/principal/collect-fee': {'principal'},
-    '/principal/fee-reports': {'principal'},
-    '/principal/payment-config': {'principal'},
+    AppRoutes.legacyParentFees: {'parent'},
+    AppRoutes.legacyPrincipalPaymentRequests: {'principal'},
+    AppRoutes.legacyPrincipalFeeStructures: {'principal'},
+    AppRoutes.legacyPrincipalInvoiceGenerate: {'principal'},
+    AppRoutes.legacyPrincipalCollectFee: {'principal'},
+    AppRoutes.legacyPrincipalFeeReports: {'principal'},
+    AppRoutes.legacyPrincipalPaymentConfig: {'principal'},
   };
 
   static String? redirectFor({
@@ -149,6 +149,9 @@ class RouteAccessGuard {
     }
 
     final normalizedRole = _normalizeRole(currentRole);
+    if (normalizedRole == 'super_admin') {
+      return null;
+    }
     final allowedRoles = _routeRoles[routeName];
     if (allowedRoles == null || allowedRoles.isEmpty) {
       return null;
@@ -187,6 +190,9 @@ class RouteAccessGuard {
     if (normalizedRole.isEmpty) {
       return false;
     }
+    if (normalizedRole == 'super_admin') {
+      return true;
+    }
 
     return allowedRolesFor(routeName).contains(normalizedRole);
   }
@@ -204,9 +210,8 @@ class RouteAccessGuard {
   static String? dashboardForRole(String? role) {
     switch (_normalizeRole(role)) {
       case 'principal':
-        return AppRoutes.principalDashboard;
       case 'super_admin':
-        return AppRoutes.superAdminDashboard;
+        return AppRoutes.principalDashboard;
       case 'teacher':
         return AppRoutes.teacherDashboard;
       case 'parent':
@@ -220,7 +225,11 @@ class RouteAccessGuard {
 
   static String _normalizeRole(String? role) {
     final normalized = (role ?? '').trim().toLowerCase();
-    if (normalized == 'ad${'min'}') return 'principal';
+    // Legacy: the 'admin' role was historically equivalent to 'principal' in this
+    // app. Any backend user assigned role='admin' receives principal-level access.
+    // If 'admin' should have its own restricted scope, remove this mapping and
+    // add an explicit 'admin' case to _routeRoles and dashboardForRole.
+    if (normalized == 'admin') return 'principal';
     return normalized;
   }
 }

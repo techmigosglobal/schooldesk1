@@ -706,12 +706,12 @@ class AppTheme {
       labelStyle: GoogleFonts.ibmPlexSans(
         fontSize: 13,
         fontWeight: FontWeight.w500,
-        color: Color(0xFF94A3B8),
+        color: const Color(0xFF94A3B8),
       ),
       hintStyle: GoogleFonts.ibmPlexSans(
         fontSize: 15,
         fontWeight: FontWeight.w400,
-        color: Color(0xFF94A3B8),
+        color: const Color(0xFF94A3B8),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(

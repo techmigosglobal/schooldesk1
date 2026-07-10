@@ -4,7 +4,6 @@
 /// focused, single-responsibility screens to share the same data layer.
 library;
 
-
 // ── Data Models ──────────────────────────────────────────────────────────────
 
 class FeeStructureBundle {
@@ -57,8 +56,13 @@ class FeeComponent {
 
   factory FeeComponent.fromRow(Map<String, dynamic> row) {
     return FeeComponent(
-      name: _textValue(row['fee_item_name'] ?? row['category_name'] ?? row['name']),
-      frequency: _textValue(row['frequency'] ?? row['billing_mode'], fallback: 'monthly'),
+      name: _textValue(
+        row['fee_item_name'] ?? row['category_name'] ?? row['name'],
+      ),
+      frequency: _textValue(
+        row['frequency'] ?? row['billing_mode'],
+        fallback: 'monthly',
+      ),
       amount: _numValue(row['amount']),
       status: _textValue(row['status']),
       source: _textValue(row['source']),
@@ -154,9 +158,16 @@ Map<String, dynamic> normalizeFeeStructure(Map<String, dynamic> row) {
   final category = _mapValue(row['fee_category'] ?? row['category']);
   final grade = _mapValue(row['grade']);
   final section = _mapValue(row['section']);
-  final gradeName = _textValue(grade['grade_name'], fallback: _textValue(row['grade_id']));
-  final sectionName = _textValue(section['section_name'],
-      fallback: _textValue(row['section_id']).isEmpty ? 'All sections' : _textValue(row['section_id']));
+  final gradeName = _textValue(
+    grade['grade_name'],
+    fallback: _textValue(row['grade_id']),
+  );
+  final sectionName = _textValue(
+    section['section_name'],
+    fallback: _textValue(row['section_id']).isEmpty
+        ? 'All sections'
+        : _textValue(row['section_id']),
+  );
   final categoryName = _textValue(
     category['category_name'] ?? category['name'],
     fallback: 'Fee',
@@ -197,7 +208,9 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'id': _textValue(row['id']),
     'student_id': _textValue(row['student_id']),
     'name': _studentName(student, fallback: _textValue(row['student_name'])),
-    'class': classLabel.isEmpty ? _textValue(row['class'], fallback: 'Class pending') : classLabel,
+    'class': classLabel.isEmpty
+        ? _textValue(row['class'], fallback: 'Class pending')
+        : classLabel,
     'total': _numValue(row['total_amount'] ?? row['net_amount']),
     'paid': _numValue(row['paid_amount']),
     'balance': _numValue(row['balance']),
@@ -224,7 +237,9 @@ List<Map<String, dynamic>> normalizePayments(Map<String, dynamic> invoice) {
       'student_id': normalized['student_id'],
       'invoice_id': normalized['id'],
       'amount': _numValue(row['amount_paid'] ?? row['amount']),
-      'mode': _textValue(row['payment_method'] ?? row['payment_mode'] ?? row['mode']),
+      'mode': _textValue(
+        row['payment_method'] ?? row['payment_mode'] ?? row['mode'],
+      ),
       'date': row['payment_date'] ?? row['paid_at'] ?? row['created_at'],
       'receipt': row['receipt_number'] ?? row['receipt'],
       'status': _textValue(row['status'], fallback: 'completed'),
@@ -275,7 +290,8 @@ String _studentName(Map<String, dynamic> student, {String fallback = ''}) {
   final direct = _textValue(student['name']);
   if (direct.isNotEmpty) return direct;
   final fullName =
-      '${_textValue(student['first_name'])} ${_textValue(student['last_name'])}'.trim();
+      '${_textValue(student['first_name'])} ${_textValue(student['last_name'])}'
+          .trim();
   return fullName.isEmpty ? fallback : fullName;
 }
 
@@ -292,4 +308,5 @@ String displayDate(Object? value) {
   return date == null ? '-' : date.toIso8601String().split('T').first;
 }
 
-String studentFullName(Map<String, dynamic> student) => _studentName(student, fallback: 'Student');
+String studentFullName(Map<String, dynamic> student) =>
+    _studentName(student, fallback: 'Student');
