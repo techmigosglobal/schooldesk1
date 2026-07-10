@@ -332,6 +332,28 @@ export async function handleDashboard(
       });
     }
 
+    if (dashRole === "super_admin") {
+      // Super admin dashboard: system-level metrics + base school data.
+      const [errorEvents, auditLogs] = await Promise.all([
+        svc.from("error_events").select("id", { count: "exact", head: true })
+          .eq("school_id", school).eq("status", "open"),
+        svc.from("audit_logs").select("id", { count: "exact", head: true })
+          .eq("school_id", school),
+      ]);
+      return ok({
+        ...base,
+        system_metrics: {
+          open_errors: errorEvents.count ?? 0,
+          total_audit_entries: auditLogs.count ?? 0,
+          total_students: base.total_students,
+          total_staff: base.total_staff,
+          total_classes: base.total_sections,
+          pending_fee_balance: base.pending_fee_balance,
+          attendance_today: base.metrics.attendance_today,
+        },
+      });
+    }
+
     return ok(base);
   }
 

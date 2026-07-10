@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
+import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/theme/design_tokens.dart';
@@ -36,6 +37,18 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    // Defensive guard: redirect super_admin to their own dashboard.
+    final role =
+        BackendApiClient.instance.currentRoleName?.trim().toLowerCase() ?? '';
+    if (role == 'super_admin') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final redirect = RouteAccessGuard.dashboardForRole(role);
+          Navigator.of(context).pushReplacementNamed(redirect ?? AppRoutes.landingPage);
+        }
+      });
+      return;
+    }
     _loadDashboard();
   }
 
@@ -351,7 +364,7 @@ class _PrincipalDashboardScreenState extends State<PrincipalDashboardScreen> {
                     cardColor: Color(0xFFF3ECFF),
                   ),
                   const _AcademicModuleItem(
-                    label: 'Guardians',
+                    label: 'Parents',
                     route: AppRoutes.guardianDirectory,
                     illustration: SchoolDeskUiIllustrations.principalGuardians,
                     fallbackIcon: Icons.family_restroom_rounded,

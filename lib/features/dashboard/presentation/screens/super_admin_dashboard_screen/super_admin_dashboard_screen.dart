@@ -24,6 +24,11 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
   String _systemStatus = 'Online';
   int _errorEventsCount = 0;
 
+  // School stats from dashboard API
+  int _totalStudents = 0;
+  int _totalStaff = 0;
+  int _totalClasses = 0;
+
   @override
   void initState() {
     super.initState();
@@ -35,22 +40,27 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       _loading = true;
     });
     try {
+      // Use the dedicated super_admin dashboard endpoint.
       final results = await Future.wait([
         _api.getProfile(),
         _api.getCurrentSchool(),
-        _api.getErrorEvents(status: 'open', pageSize: 1),
+        _api.getDashboard('super_admin', forceRefresh: true),
       ]);
 
       final profile = results[0] as UserResponse;
       final school = results[1] as Map<String, dynamic>;
-      final errorEvents = results[2] as Map<String, dynamic>;
+      final dashboard = results[2] as Map<String, dynamic>;
+      final sysMetrics = dashboard['system_metrics'] as Map? ?? {};
 
       setState(() {
         _adminName = profile.name.trim().isEmpty
             ? 'Super Admin'
             : profile.name.trim();
         _schoolName = school['name']?.toString() ?? 'School System';
-        _errorEventsCount = errorEvents['total'] as int? ?? 0;
+        _errorEventsCount = sysMetrics['open_errors'] as int? ?? 0;
+        _totalStudents = sysMetrics['total_students'] as int? ?? 0;
+        _totalStaff = sysMetrics['total_staff'] as int? ?? 0;
+        _totalClasses = sysMetrics['total_classes'] as int? ?? 0;
         _systemStatus = 'Healthy';
         _loading = false;
       });
@@ -126,6 +136,8 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                           _buildHeader(context),
                           const SizedBox(height: 18),
                           _buildStatusCard(context),
+                          const SizedBox(height: 18),
+                          _buildStatsRow(context),
                           const SizedBox(height: 22),
                           _buildSectionTitle('System Management'),
                           const SizedBox(height: 12),
@@ -193,6 +205,25 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
                               icon: Icons.school_rounded,
                               accent: Color(0xFF0E9384),
                               cardColor: Color(0xFFE7FAF6),
+                            ),
+                          ]),
+                          const SizedBox(height: 22),
+                          _buildSectionTitle('Quick Actions'),
+                          const SizedBox(height: 12),
+                          _buildGrid([
+                            const _ModuleCard(
+                              label: 'Help & Docs',
+                              route: AppRoutes.help,
+                              icon: Icons.help_outline_rounded,
+                              accent: Color(0xFF6366F1),
+                              cardColor: Color(0xFFEEF2FF),
+                            ),
+                            const _ModuleCard(
+                              label: 'ID Cards',
+                              route: AppRoutes.idCardGeneration,
+                              icon: Icons.badge_rounded,
+                              accent: Color(0xFF0891B2),
+                              cardColor: Color(0xFFECFEFF),
                             ),
                           ]),
                         ],
@@ -346,6 +377,39 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
     );
   }
 
+  Widget _buildStatsRow(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatMiniCard(
+            icon: Icons.school_rounded,
+            label: 'Students',
+            value: '$_totalStudents',
+            color: const Color(0xFF3B82F6),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatMiniCard(
+            icon: Icons.co_present_rounded,
+            label: 'Staff',
+            value: '$_totalStaff',
+            color: const Color(0xFF7C3AED),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _StatMiniCard(
+            icon: Icons.grid_view_rounded,
+            label: 'Classes',
+            value: '$_totalClasses',
+            color: const Color(0xFF059669),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
@@ -366,6 +430,57 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
       mainAxisSpacing: 12,
       childAspectRatio: 1.35,
       children: children,
+    );
+  }
+}
+
+class _StatMiniCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatMiniCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: GoogleFonts.dmSans(
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+              color: color,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -602,6 +602,18 @@ class _SuperAdminDrawerState extends State<SuperAdminDrawer> {
             ),
           ],
         ),
+        SchoolDeskNavigationSection(
+          label: 'Support',
+          items: [
+            SchoolDeskNavigationItem(
+              index: SuperAdminNav.gallery,
+              icon: Icons.help_outline_rounded,
+              activeIcon: Icons.help_rounded,
+              label: 'Help & Documentation',
+              route: AppRoutes.help,
+            ),
+          ],
+        ),
       ],
       footerActions: [
         const SchoolDeskNavigationFooterAction(
@@ -660,7 +672,7 @@ class SuperAdminShellBottomBar extends StatelessWidget {
         label: 'Home',
         icon: Icons.home_outlined,
         activeIcon: Icons.home_rounded,
-        route: AppRoutes.principalDashboard,
+        route: AppRoutes.superAdminDashboard,
       ),
       _SuperAdminShellDestination(
         label: SchoolDeskGlossary.search,
@@ -706,7 +718,7 @@ class SuperAdminShellBottomBar extends StatelessWidget {
     final navigator = Navigator.of(context);
     final currentRoute = ModalRoute.of(context)?.settings.name;
     if (currentRoute == destination.route) return;
-    if (destination.route == AppRoutes.principalDashboard) {
+    if (destination.route == AppRoutes.superAdminDashboard) {
       navigator.pushNamedAndRemoveUntil(destination.route, (_) => false);
       return;
     }

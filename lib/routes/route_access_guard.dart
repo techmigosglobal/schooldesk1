@@ -27,15 +27,16 @@ class RouteAccessGuard {
     AppRoutes.profileScreen,
     AppRoutes.globalSearch,
     AppRoutes.homeworkMessaging,
+    AppRoutes.help,
   };
 
   static const Map<String, Set<String>> _routeRoles = {
-    AppRoutes.idCardGeneration: {'principal', 'super_admin'},
+    AppRoutes.idCardGeneration: {'principal'},
     // Principal routes
     AppRoutes.principalDashboard: {'principal'},
-    AppRoutes.staffManagement: {'principal', 'super_admin'},
-    AppRoutes.staffForm: {'principal', 'super_admin'},
-    AppRoutes.studentOversight: {'principal', 'super_admin'},
+    AppRoutes.staffManagement: {'principal'},
+    AppRoutes.staffForm: {'principal'},
+    AppRoutes.studentOversight: {'principal'},
     AppRoutes.approvalCenter: {'principal'},
     AppRoutes.feeMonitoring: {'principal'},
     AppRoutes.principalPaymentRequests: {'principal'},
@@ -59,7 +60,7 @@ class RouteAccessGuard {
     AppRoutes.academicCurriculumForm: {'principal'},
     AppRoutes.principalAcademicInfo: {'principal'},
     AppRoutes.principalAnalytics: {'principal'},
-    AppRoutes.principalUserManagement: {'principal', 'super_admin'},
+    AppRoutes.principalUserManagement: {'principal'},
     AppRoutes.principalClasses: {'principal'},
     AppRoutes.principalAttendance: {'principal'},
     AppRoutes.principalSubjects: {'principal'},
@@ -69,10 +70,10 @@ class RouteAccessGuard {
     AppRoutes.principalDocuments: {'principal'},
     AppRoutes.principalAuditLogs: {'principal'},
     AppRoutes.guardianDirectory: {'principal'},
-    AppRoutes.principalAccountCreate: {'principal', 'super_admin'},
-    AppRoutes.principalAccountEdit: {'principal', 'super_admin'},
-    AppRoutes.principalParentChildAssignment: {'principal', 'super_admin'},
-    AppRoutes.principalSchoolProfile: {'principal', 'super_admin'},
+    AppRoutes.principalAccountCreate: {'principal'},
+    AppRoutes.principalAccountEdit: {'principal'},
+    AppRoutes.principalParentChildAssignment: {'principal'},
+    AppRoutes.principalSchoolProfile: {'principal'},
     AppRoutes.systemMonitor: {'principal'},
     // Super Admin routes
     AppRoutes.superAdminDashboard: {'super_admin'},
@@ -210,8 +211,9 @@ class RouteAccessGuard {
   static String? dashboardForRole(String? role) {
     switch (_normalizeRole(role)) {
       case 'principal':
-      case 'super_admin':
         return AppRoutes.principalDashboard;
+      case 'super_admin':
+        return AppRoutes.superAdminDashboard;
       case 'teacher':
         return AppRoutes.teacherDashboard;
       case 'parent':

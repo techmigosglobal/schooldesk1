@@ -211,6 +211,12 @@ Map<String, dynamic> normalizeInvoice(Map<String, dynamic> row) {
     'class': classLabel.isEmpty
         ? _textValue(row['class'], fallback: 'Class pending')
         : classLabel,
+    'grade_id': _textValue(grade['id'] ?? row['grade_id']),
+    'section_id': _textValue(
+      section['id'] ??
+          student['current_section_id'] ??
+          row['section_id'],
+    ),
     'total': _numValue(row['total_amount'] ?? row['net_amount']),
     'paid': _numValue(row['paid_amount']),
     'balance': _numValue(row['balance']),
