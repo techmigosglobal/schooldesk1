@@ -58,6 +58,9 @@ def main():
     encoded_str = ",".join(encoded_entries)
     new_content = f"DART_DEFINES=$(inherited),{encoded_str}\n"
     
+    # Patch the generated Swift Package Manager manifest to target iOS 15.0+ to resolve dependencies.
+    patch_spm_package_manifest(project_root)
+
     # Avoid unnecessary rewrites when the output is unchanged
     existing_content = None
     if os.path.exists(output_file_path):
@@ -82,5 +85,20 @@ def main():
         sys.stderr.write(f"Error writing output file: {e}\n")
         sys.exit(1)
 
+def patch_spm_package_manifest(project_root):
+    package_swift_path = os.path.join(project_root, "ios", "Flutter", "ephemeral", "Packages", "FlutterGeneratedPluginSwiftPackage", "Package.swift")
+    if os.path.exists(package_swift_path):
+        try:
+            with open(package_swift_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            if '.iOS("13.0")' in content:
+                new_content = content.replace('.iOS("13.0")', '.iOS("15.0")')
+                with open(package_swift_path, 'w', encoding='utf-8') as f:
+                    f.write(new_content)
+                print("Successfully patched FlutterGeneratedPluginSwiftPackage/Package.swift deployment target to iOS 15.0.")
+        except Exception as e:
+            sys.stderr.write(f"Warning: Failed to patch Package.swift: {e}\n")
+
 if __name__ == "__main__":
     main()
+
