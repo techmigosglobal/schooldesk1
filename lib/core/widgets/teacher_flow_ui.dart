@@ -548,12 +548,9 @@ class TeacherInfoPill extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: teacherFlowMuted),
           const SizedBox(width: 5),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 180),
+          Flexible(
             child: Text(
               label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.dmSans(
                 color: teacherFlowMuted,
                 fontSize: 11,
@@ -604,7 +601,13 @@ class TeacherFlowActionWrap extends StatelessWidget {
                     ),
                   ),
                   icon: Icon(filledActions[i].icon, size: 18),
-                  label: Text(filledActions[i].label),
+                  label: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      filledActions[i].label,
+                      maxLines: 1,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -642,10 +645,12 @@ class TeacherFlowActionWrap extends StatelessWidget {
                           ),
                         ),
                         icon: Icon(outlinedActions[i].icon, size: 16),
-                        label: Text(
-                          outlinedActions[i].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        label: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            outlinedActions[i].label,
+                            maxLines: 1,
+                          ),
                         ),
                       ),
                     ),

@@ -401,6 +401,13 @@ Deno.serve(async (req: Request) => {
   if (path.startsWith("/events") || path.startsWith("/holidays")) {
     return handleCalendar(req, path, method, url, client, svc, user);
   }
+  if (
+    path.startsWith("/documents") ||
+    path.startsWith("/student-documents") ||
+    path.startsWith("/staff-documents")
+  ) {
+    return handleDocuments(req, path, method, url, client, svc, user);
+  }
   if (path.startsWith("/principal")) {
     return handlePrincipal(req, path, method, url, client, svc, user);
   }
@@ -471,13 +478,6 @@ Deno.serve(async (req: Request) => {
   }
   if (path.startsWith("/event-posts")) {
     return handleEvents(req, path, method, url, client, svc, user);
-  }
-  if (
-    path.startsWith("/documents") ||
-    path.startsWith("/student-documents") ||
-    path.startsWith("/staff-documents")
-  ) {
-    return handleDocuments(req, path, method, url, client, svc, user);
   }
   if (path.startsWith("/me/students") || path.startsWith("/parents")) {
     return handleParent(req, path, method, url, client, svc, user);

@@ -204,7 +204,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                 ),
                 TeacherFlowAction(
-                  label: 'Student Attendance',
+                  label: 'Attendance',
                   icon: Icons.how_to_reg_rounded,
                   onTap: () =>
                       Navigator.pushNamed(context, AppRoutes.teacherAttendance),

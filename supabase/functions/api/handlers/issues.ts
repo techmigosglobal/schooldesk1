@@ -10,6 +10,8 @@ const allowedMimeTypes = new Set([
   "video/mp4",
   "video/webm",
   "video/quicktime",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
 const maxAttachmentBytes = 50 * 1024 * 1024;
 
@@ -166,7 +168,7 @@ export async function handleIssues(
       file.size > maxAttachmentBytes
     ) {
       return fail(
-        "Allowed file types are images, PDF, MP4, WebM, and MOV; total issue attachments must not exceed 50 MB",
+        "Allowed file types are images, PDF, Word Docs (DOC/DOCX), MP4, WebM, and MOV; total issue attachments must not exceed 50 MB",
         420,
       );
     }

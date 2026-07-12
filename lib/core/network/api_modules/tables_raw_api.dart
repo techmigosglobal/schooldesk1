@@ -46,6 +46,8 @@ const Set<String> _tablesMDRoots = {
   'approval-requests',
   'communications',
   'principal-reports',
+  'student-documents',
+  'staff-documents',
 };
 
 extension BackendTablesRawApi on BackendApiClient {

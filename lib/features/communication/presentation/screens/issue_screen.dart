@@ -436,16 +436,18 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
   Future<void> _pick() async {
     final result = await FilePicker.pickFiles(
       allowMultiple: true,
-      type: FileType.image,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
       withData: true,
     );
     if (result == null) return;
-    final files = result.files;
-    final bytes = files.fold<int>(0, (sum, file) => sum + file.size);
+    
     setState(() {
-      _files = files.take(5).toList();
-      _error = files.length > 5 || bytes > 50 * 1024 * 1024
-          ? 'Choose up to five images totaling 50 MB.'
+      final combined = [..._files, ...result.files];
+      _files = combined.take(5).toList();
+      final bytes = _files.fold<int>(0, (sum, file) => sum + file.size);
+      _error = _files.length > 5 || bytes > 50 * 1024 * 1024
+          ? 'Choose up to five files totaling 50 MB.'
           : null;
     });
   }
@@ -497,8 +499,8 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
             ),
             OutlinedButton.icon(
               onPressed: _pick,
-              icon: const Icon(Icons.add_photo_alternate_outlined),
-              label: Text('Add images (${_files.length}/5)'),
+              icon: const Icon(Icons.attachment_rounded),
+              label: Text('Attachments (${_files.length}/5)'),
             ),
             if (_files.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -524,8 +526,10 @@ class _RaiseIssueDialogState extends State<_RaiseIssueDialog> {
                           ),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: file.bytes == null
-                            ? const Icon(Icons.image_outlined)
+                        child: (file.bytes == null ||
+                                !['jpg', 'jpeg', 'png', 'webp', 'gif']
+                                    .contains(file.extension?.toLowerCase()))
+                            ? const Icon(Icons.insert_drive_file_outlined)
                             : Image.memory(file.bytes!, fit: BoxFit.cover),
                       ),
                       Positioned(

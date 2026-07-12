@@ -698,26 +698,28 @@ export async function handleEvents(
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).order("created_at", {
+    ).in("status", ["approved", "published"])
+     .contains("destinations", ["SCHOOL_GALLERY"])
+     .order("created_at", {
       ascending: false,
     }).limit(50);
     if (error) return fail(error.message);
     return ok(
       (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
-        .filter((row) => row.destinations.includes("SCHOOL_GALLERY")),
     );
   }
   if (path === "/event-posts/home-feed" && method === "GET") {
     const { data, error } = await svc.from("event_posts").select("*").eq(
       "school_id",
       school,
-    ).in("status", ["approved", "published"]).order("created_at", {
+    ).in("status", ["approved", "published"])
+     .contains("destinations", ["PARENTS_HOME"])
+     .order("created_at", {
       ascending: false,
     }).limit(20);
     if (error) return fail(error.message);
     return ok(
       (data ?? []).map((row) => eventPostRow(row as Record<string, unknown>))
-        .filter((row) => row.destinations.includes("PARENTS_HOME")),
     );
   }
   if (path === "/event-posts/teacher" && method === "GET") {
@@ -1362,14 +1364,14 @@ export async function handleLandingFeed(
     )
     .eq("school_id", schoolId)
     .in("status", ["approved", "published"])
+    .contains("destinations", ["SCHOOL_LANDING"])
     .order("created_at", { ascending: false })
     .limit(10);
 
   if (error) return fail(error.message);
 
   const rows = (data ?? [])
-    .map((row) => eventPostRow(row as Record<string, unknown>))
-    .filter((row) => row.destinations.includes("SCHOOL_LANDING"));
+    .map((row) => eventPostRow(row as Record<string, unknown>));
 
   return ok(rows);
 }

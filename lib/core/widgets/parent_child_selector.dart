@@ -42,12 +42,11 @@ class ParentChildSelector extends StatelessWidget {
           final child = children[index];
           final selected = index == selectedIndex;
           final name = _name(child);
-          final classLabel = _classLabel(child);
           return Semantics(
             button: true,
             selected: selected,
             label:
-                '$name${classLabel.isEmpty ? '' : ', $classLabel'}${selected ? ', selected' : ''}',
+                '$name${selected ? ', selected' : ''}',
             child: Material(
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(18),
@@ -99,21 +98,6 @@ class ParentChildSelector extends StatelessWidget {
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
-                            if (classLabel.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              SchoolDeskAdaptiveText(
-                                classLabel,
-                                maxLines: 1,
-                                minFontSize: 9,
-                                style: Theme.of(context).textTheme.labelSmall
-                                    ?.copyWith(
-                                      color: selected
-                                          ? Colors.white.withAlpha(220)
-                                          : tokens.textMuted,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
                           ],
                         ),
                       ),
