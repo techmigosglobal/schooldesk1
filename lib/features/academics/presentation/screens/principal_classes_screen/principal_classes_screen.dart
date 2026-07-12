@@ -6,6 +6,8 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/bulk_csv_import_service.dart';
 import 'package:schooldesk1/core/widgets/principal_directory_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_master_detail_layout.dart';
 
 class PrincipalClassesScreen extends StatefulWidget {
   const PrincipalClassesScreen({super.key});
@@ -202,6 +204,10 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
     assert(
       _legacyNavigationContract.isNotEmpty && _legacyScreenLabels.length == 5,
     );
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+    if (isDesktop) {
+      return _buildDesktopLayout();
+    }
     return _buildBody();
   }
 
@@ -949,6 +955,386 @@ class _PrincipalClassesScreenState extends State<PrincipalClassesScreen> {
   static String _text(Object? value, {String fallback = ''}) {
     final text = '${value ?? ''}'.trim();
     return text.isEmpty || text == 'null' ? fallback : text;
+  }
+
+  Widget _buildDesktopLayout() {
+    final rows = _filteredClasses;
+    final showAddFab = !_loading && _error == null && rows.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F8FF),
+      floatingActionButton: showAddFab
+          ? FloatingActionButton(
+              heroTag: 'classes-directory-add-class-desktop',
+              onPressed: _openClassForm,
+              tooltip: 'Add class',
+              backgroundColor: const Color(0xFF1478F2),
+              foregroundColor: Colors.white,
+              elevation: 10,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add_rounded, size: 30),
+            )
+          : null,
+      body: SafeArea(
+        child: DesktopMasterDetailLayout(
+          master: Container(
+            color: Colors.white,
+            child: Column(
+              children: [
+                _ClassesDirectoryHeader(
+                  unreadNotifications: _unreadNotifications,
+                  onMenu: _showDirectoryMenu,
+                  onUpload: _importClassesCsv,
+                  onNotifications: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.notificationCenter,
+                    arguments: 'principal',
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: _ClassesDirectorySearchField(
+                    onChanged: (value) => setState(() => _search = value),
+                    onFilter: _showClassFilterSheet,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: _ClassesDirectoryMetricStrip(
+                    classes: _int(
+                      _summary['total_classes'],
+                      fallback: _classes.length,
+                    ),
+                    students: _int(_summary['total_students']),
+                    attendance: _num(_summary['average_attendance']),
+                    issues: _int(_summary['classes_with_issues']),
+                    onClassesTap: () => setState(() => _capacityFilter = 'All'),
+                    onIssuesTap: () => setState(() => _capacityFilter = 'Issues'),
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error != null
+                          ? _ClassesDirectoryErrorCard(
+                              message: _error!,
+                              onRetry: _load,
+                            )
+                          : rows.isEmpty
+                              ? _ClassesDirectoryEmptyCard(onAdd: _openClassForm)
+                              : RefreshIndicator(
+                                  onRefresh: _load,
+                                  color: const Color(0xFF1478F2),
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: rows.length,
+                                    itemBuilder: (context, index) {
+                                      final row = rows[index];
+                                      final isSelected = _selectedSectionId == _text(row['section_id']);
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedSectionId = _text(row['section_id']);
+                                            });
+                                          },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              border: isSelected
+                                                  ? Border.all(color: const Color(0xFF1478F2), width: 2)
+                                                  : Border.all(color: Colors.transparent),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: _ClassesDirectoryClassCard(
+                                              row: row,
+                                              subjects: _subjectsForClass(row),
+                                              healthLabel: _healthLabel(row),
+                                              healthColor: _healthColor(row),
+                                              onTap: () {
+                                                setState(() {
+                                                  _selectedSectionId = _text(row['section_id']);
+                                                });
+                                              },
+                                              onAction: (action) =>
+                                                  _handleClassAction(action, row),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                ),
+              ],
+            ),
+          ),
+          detail: _buildDesktopDetailPane(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopDetailPane() {
+    final row = _selectedClassRow;
+    if (row == null) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.class_outlined, size: 48, color: Color(0xFF94A3B8)),
+            SizedBox(height: 12),
+            Text(
+              'Select a class to view details',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final subjects = _subjectsForClass(row);
+    final healthLabel = _healthLabel(row);
+    final healthColor = _healthColor(row);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF8FD),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEFF8FD),
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        title: Text(
+          _text(row['class_name'], fallback: 'Class Detail'),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit Class',
+            onPressed: () => _openEditClassForm(row),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Remove Class',
+            onPressed: () => _deleteClass(row),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          // Basic Info
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: healthColor.withAlpha(24),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          healthLabel,
+                          style: TextStyle(color: healthColor, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Room: ${_text(row['room_number'], fallback: 'N/A')}',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DetailRow(
+                          label: 'Students / Capacity',
+                          value: '${_int(row['student_count'])} / ${_int(row['capacity'])}',
+                        ),
+                      ),
+                      Expanded(
+                        child: _DetailRow(
+                          label: 'Academic Year',
+                          value: _text(row['academic_year_name']),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _DetailRow(
+                          label: 'Class Teacher',
+                          value: _text(row['class_teacher_name'], fallback: 'Not assigned'),
+                        ),
+                      ),
+                      Expanded(
+                        child: _DetailRow(
+                          label: 'Co-Teacher',
+                          value: _text(row['co_teacher_name'], fallback: 'Not assigned'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Class Subjects
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Subjects & Tutors',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => _openSubjectSetup(row),
+                        icon: const Icon(Icons.add_rounded, size: 16),
+                        label: const Text('Add/Assign'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (subjects.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 12.0),
+                      child: Text(
+                        'No subjects assigned to this class yet.',
+                        style: TextStyle(color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                      ),
+                    )
+                  else
+                    ...subjects.map((sub) {
+                      final subName = _text(sub['subject_name']);
+                      final teacherName = _teacherForSubject(row, sub);
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.menu_book_rounded, color: Colors.blue),
+                        title: Text(subName),
+                        subtitle: Text(teacherName.isEmpty ? 'No teacher assigned' : teacherName),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Observation Action Card
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Classroom Action Menu',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => _openRoute(AppRoutes.studentOversight, row),
+                        icon: const Icon(Icons.groups_rounded, size: 16),
+                        label: const Text('Students List'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _openRoute(AppRoutes.principalAttendance, row),
+                        icon: const Icon(Icons.fact_check_rounded, size: 16),
+                        label: const Text('Attendance'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _openFeesModule(row),
+                        icon: const Icon(Icons.account_balance_wallet_rounded, size: 16),
+                        label: const Text('Fees Monitoring'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _openInstructionSheet(row),
+                        icon: const Icon(Icons.rate_review_rounded, size: 16),
+                        label: const Text('Add Observation'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, dynamic>? get _selectedClassRow {
+    if (_selectedSectionId.isEmpty) return null;
+    return _classes.firstWhere(
+      (row) => _text(row['section_id']) == _selectedSectionId,
+      orElse: () => _classes.first,
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF1E293B),
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

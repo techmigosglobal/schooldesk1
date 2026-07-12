@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:schooldesk1/core/navigation/role_nav_indices.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 
 enum _ManualTimetableStage { selectClass, settings, editor, preview }
 
@@ -181,22 +182,23 @@ class _AdminTimetableScreenState extends State<AdminTimetableScreen> {
       padding: const EdgeInsets.fromLTRB(8, 10, 12, 8),
       child: Row(
         children: [
-          IconButton(
-            tooltip: _stage == _ManualTimetableStage.selectClass
-                ? 'Menu'
-                : 'Back',
-            onPressed: _saving
-                ? null
-                : _stage == _ManualTimetableStage.selectClass
-                ? () => _scaffoldKey.currentState?.openDrawer()
-                : _goBack,
-            icon: Icon(
-              _stage == _ManualTimetableStage.selectClass
-                  ? Icons.menu_rounded
-                  : Icons.arrow_back_ios_new_rounded,
-              size: 21,
+          if (!DesktopPlatform.isDesktopLayout(context) || _stage != _ManualTimetableStage.selectClass)
+            IconButton(
+              tooltip: _stage == _ManualTimetableStage.selectClass
+                  ? 'Menu'
+                  : 'Back',
+              onPressed: _saving
+                  ? null
+                  : _stage == _ManualTimetableStage.selectClass
+                  ? () => _scaffoldKey.currentState?.openDrawer()
+                  : _goBack,
+              icon: Icon(
+                _stage == _ManualTimetableStage.selectClass
+                    ? Icons.menu_rounded
+                    : Icons.arrow_back_ios_new_rounded,
+                size: 21,
+              ),
             ),
-          ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

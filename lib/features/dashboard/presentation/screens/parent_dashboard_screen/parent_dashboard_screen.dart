@@ -19,6 +19,8 @@ import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
 import 'package:schooldesk1/core/utils/event_post_media_parser.dart';
 import 'package:schooldesk1/routes/app_routes.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/parent_dashboard_desktop_shell.dart';
 
 class ParentDashboardScreen extends StatefulWidget {
   const ParentDashboardScreen({super.key});
@@ -162,6 +164,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(width);
+
     return SchoolDeskModuleScaffold(
       title: 'School Feed',
       subtitle: 'Child summary, actions, and school updates',
@@ -178,8 +183,38 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen>
           onPressed: () => _loadDashboardData(forceRefresh: true),
         ),
       ],
-      bodyIsScrollable: true,
-      body: _buildBody(),
+      bodyIsScrollable: !isDesktop,
+      body: isDesktop ? _buildDesktopBody() : _buildBody(),
+    );
+  }
+
+  Widget _buildDesktopBody() {
+    if (_loading) {
+      return const SchoolDeskStatusPanel.loading(
+        message: 'Loading parent dashboard…',
+      );
+    }
+    if (_error != null) {
+      return SchoolDeskStatusPanel.error(
+        title: 'Dashboard unavailable',
+        message: _error!,
+        onAction: () => _loadDashboardData(forceRefresh: true),
+      );
+    }
+    if (_children.isEmpty) {
+      return const SchoolDeskStatusPanel.empty(
+        title: 'No linked students',
+        message:
+            'Ask the school admin to link students to this parent account.',
+      );
+    }
+
+    return ParentDashboardDesktopBody(
+      children: _children,
+      dashboard: _dashboard,
+      activeChildIndex: _activeChildIndex,
+      eventPosts: _eventPosts,
+      onChildSelected: _selectChild,
     );
   }
 

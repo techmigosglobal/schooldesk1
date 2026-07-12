@@ -7,6 +7,7 @@ import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/erp_module_scaffold.dart';
 import 'package:schooldesk1/features/people/presentation/screens/staff_management_screen/staff_management_screen.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/widgets/desktop_form_wrapper.dart';
 
 @immutable
 class StaffFormArgs {
@@ -144,31 +145,27 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
                     _buildFeedback(_feedback!),
                     const SizedBox(height: 16),
                   ],
-                  _buildPanel(
-                    children: [
-                      _buildResponsivePair(
-                        first: _buildNameField(),
-                        second: _buildEmployeeField(),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildResponsivePair(
-                        first: _buildDesignationField(),
-                        second: _buildPhoneField(),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildResponsivePair(
-                        first: _buildEmailField(),
-                        second: _buildUsernameField(),
-                      ),
-                      const SizedBox(height: 16),
-                      _isEdit
-                          ? _buildReadOnlyRoleField()
-                          : _buildLoginRoleField(),
-                      if (!_isEdit) ...[
-                        const SizedBox(height: 16),
-                        _buildPasswordField(),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: context.appTheme.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: context.appTheme.outlineVariant),
+                    ),
+                    child: DesktopFormWrapper(
+                      padding: const EdgeInsets.all(16),
+                      fields: [
+                        _buildNameField(),
+                        _buildEmployeeField(),
+                        _buildDesignationField(),
+                        _buildPhoneField(),
+                        _buildEmailField(),
+                        _buildUsernameField(),
+                        _isEdit
+                            ? _buildReadOnlyRoleField()
+                            : _buildLoginRoleField(),
+                        if (!_isEdit) _buildPasswordField(),
                       ],
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _buildActionBar(),
@@ -213,35 +210,6 @@ class _StaffFormScreenState extends State<StaffFormScreen> {
     );
   }
 
-  Widget _buildPanel({required List<Widget> children}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.appTheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: context.appTheme.outlineVariant),
-      ),
-      child: Column(children: children),
-    );
-  }
-
-  Widget _buildResponsivePair({required Widget first, required Widget second}) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 620) {
-          return Column(children: [first, const SizedBox(height: 16), second]);
-        }
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: first),
-            const SizedBox(width: 16),
-            Expanded(child: second),
-          ],
-        );
-      },
-    );
-  }
 
   Widget _buildNameField() {
     return TextFormField(

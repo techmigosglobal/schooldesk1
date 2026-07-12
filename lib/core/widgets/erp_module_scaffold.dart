@@ -10,6 +10,7 @@ import 'package:schooldesk1/core/theme/design_tokens.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 
 class SchoolDeskModuleScaffold extends StatefulWidget {
   static const String openNavigationAction = '__schooldesk_open_navigation__';
@@ -106,7 +107,7 @@ class _SchoolDeskModuleScaffoldState extends State<SchoolDeskModuleScaffold> {
   Widget build(BuildContext context) {
     final showRail =
         widget.navigationDrawerEnabled &&
-        MediaQuery.sizeOf(context).width >= widget.railBreakpoint;
+        DesktopPlatform.shouldUsePersistentSidebar(context);
     final showCompactMenuButton = !showRail && widget.navigationDrawerEnabled;
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;

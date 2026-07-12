@@ -1,0 +1,23 @@
+END-USER LICENSE AGREEMENT (EULA)
+FOR ARISH VILLE PRESCHOOL APP
+
+IMPORTANT - READ CAREFULLY: This End-User License Agreement ("Agreement") is a legal agreement between you (either an individual or a single entity) and Techmigos, the developer of Arish Ville PreSchool App ("Software"). By installing, copying, or otherwise using the Software, you agree to be bound by the terms of this Agreement. If you do not agree to the terms of this Agreement, do not install or use the Software.
+
+1. LICENSE GRANT
+Techmigos grants you a non-exclusive, non-transferable license to install and use the Software on device(s) owned or controlled by you, solely for educational, administrative, and preschool operational purposes.
+
+2. DESCRIPTION OF OTHER RIGHTS AND LIMITATIONS
+- You may not reverse engineer, decompile, or disassemble the Software.
+- The Software is licensed as a single product. Its component parts may not be separated for use on more than one computer.
+- You must comply with all applicable local, national, and international laws regarding the use of the Software.
+
+3. COPYRIGHT AND OWNERSHIP
+All title, ownership rights, and intellectual property rights in and to the Software (including but not limited to any images, animations, video, audio, music, text, and "applets" incorporated into the Software) are owned by Techmigos. The Software is protected by copyright laws and international treaty provisions.
+
+4. NO WARRANTIES
+Techmigos expressly disclaims any warranty for the Software. The Software is provided "As Is" without any express or implied warranty of any kind, including but not limited to any warranties of merchantability, non-infringement, or fitness of a particular purpose.
+
+5. LIMITATION OF LIABILITY
+In no event shall Techmigos be liable for any damages (including, without limitation, lost profits, business interruption, or lost information) arising out of "Authorized Users" use of or inability to use the Software, even if Techmigos has been advised of the possibility of such damages.
+
+Copyright (C) 2026 Techmigos. All rights reserved.

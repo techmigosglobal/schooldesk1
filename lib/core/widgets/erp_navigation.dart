@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:schooldesk1/core/desktop/desktop_navigation_rail.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 
 import 'package:schooldesk1/routes/schooldesk_screen_registry.dart';
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
@@ -102,6 +104,25 @@ class SchoolDeskNavigationDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopPlatform.isDesktopLayout(context)) {
+      return DesktopNavigationRail(
+        role: role,
+        portalLabel: portalLabel,
+        organizationName: organizationName,
+        organizationSubtitle: organizationSubtitle,
+        userName: userName,
+        userSubtitle: userSubtitle,
+        initials: initials,
+        portalIcon: portalIcon,
+        organizationLogo: organizationLogo,
+        userAvatar: userAvatar,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: onDestinationSelected,
+        sections: sections,
+        footerActions: footerActions,
+      );
+    }
+
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
 

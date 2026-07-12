@@ -10,6 +10,8 @@ import 'package:provider/provider.dart';
 import 'package:schooldesk1/core/app_export.dart';
 import 'package:schooldesk1/core/config/env_config.dart';
 import 'package:schooldesk1/core/constants/app_constants.dart';
+import 'package:schooldesk1/core/desktop/desktop_window_manager.dart';
+import 'package:schooldesk1/core/desktop/desktop_layout_wrapper.dart';
 import 'package:schooldesk1/core/di/service_locator.dart';
 import 'package:schooldesk1/routes/route_access_guard.dart';
 import 'package:schooldesk1/core/network/backend_api_client.dart';
@@ -55,6 +57,8 @@ void main() async {
     return false;
   };
   await ServiceLocator.initialize();
+
+  await DesktopWindowManager.init();
 
   // Initialize theme provider
   final themeProvider = await ThemeProvider.create();
@@ -206,8 +210,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                   maxScaleFactor: SchoolDeskResponsive.maxSupportedTextScale,
                 ),
               ),
-              child: AppPermissionLifecycleGate(
-                child: AnimatedStartupSplash(child: child!),
+              child: DesktopLayoutWrapper(
+                child: AppPermissionLifecycleGate(
+                  child: AnimatedStartupSplash(child: child!),
+                ),
               ),
             );
           },

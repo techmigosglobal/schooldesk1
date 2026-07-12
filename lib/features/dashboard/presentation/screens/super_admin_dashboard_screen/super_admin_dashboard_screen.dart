@@ -9,6 +9,7 @@ import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/widgets/app_background.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/school_desk_animations.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 
 class SuperAdminDashboardScreen extends StatefulWidget {
   const SuperAdminDashboardScreen({super.key});
@@ -273,12 +274,13 @@ class _SuperAdminDashboardScreenState extends State<SuperAdminDashboardScreen> {
         children: [
           Row(
             children: [
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu_rounded, color: Colors.white),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
+              if (!DesktopPlatform.isDesktopLayout(context))
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu_rounded, color: Colors.white),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
                 ),
-              ),
               const Spacer(),
               IconButton(
                 tooltip: 'How to use the application',

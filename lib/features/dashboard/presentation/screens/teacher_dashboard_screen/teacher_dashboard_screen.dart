@@ -9,6 +9,8 @@ import 'package:schooldesk1/core/widgets/erp_components.dart';
 import 'package:schooldesk1/core/widgets/teacher_flow_ui.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
 import 'package:schooldesk1/features/dashboard/presentation/widgets/todays_highlights_card.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/features/dashboard/presentation/widgets/teacher_dashboard_desktop_shell.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   final bool loadData;
@@ -115,7 +117,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(width);
     final shortName = _teacherName.split(' ').take(2).join(' ');
+
     return TeacherFlowScaffold(
       title: 'Teacher',
       subtitle: '$shortName · classroom flow',
@@ -170,8 +175,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       loading: _loading,
       error: _error,
       onRefresh: _loadDashboardData,
-      child: TeacherFlowScrollView(
-        children: [
+      child: isDesktop
+          ? TeacherDashboardDesktopBody(
+              teacherName: _teacherName,
+              assignedClass: _assignedClass,
+              assignedSubject: _assignedSubject,
+              timetable: _timetable,
+              announcements: _announcements,
+              attendancePending: _attendancePending,
+              roleScopeLoaded: _roleScopeLoaded,
+              hasStaffLink: RoleAccessService.hasTeacherStaffLink,
+              hasAssignedClasses: RoleAccessService.hasAssignedClasses,
+              myAttendance: _myAttendance,
+              onRefresh: _loadDashboardData,
+            )
+          : TeacherFlowScrollView(
+              children: [
           if (_roleScopeLoaded && !RoleAccessService.hasTeacherStaffLink)
             const TeacherFlowCard(
               icon: Icons.badge_outlined,

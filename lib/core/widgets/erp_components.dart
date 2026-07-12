@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:schooldesk1/core/desktop/desktop_platform.dart';
 
 import 'package:schooldesk1/core/network/backend_api_client.dart';
 import 'package:schooldesk1/core/services/feature_availability_service.dart';
@@ -756,9 +757,22 @@ class SchoolDeskAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.schoolDesk;
+
+    Widget? leadingWidget = leading;
+    if (leadingWidget == null) {
+      final ModalRoute<dynamic>? parentRoute = ModalRoute.of(context);
+      final bool canPop = parentRoute?.canPop ?? false;
+      if (canPop) {
+        leadingWidget = const BackButton();
+      } else if (DesktopPlatform.isDesktopLayout(context)) {
+        leadingWidget = const SizedBox.shrink();
+      }
+    }
+
     return AppBar(
       toolbarHeight: tokens.sizing.appBarHeight,
-      leading: leading,
+      automaticallyImplyLeading: leadingWidget == null,
+      leading: leadingWidget,
       titleSpacing: tokens.spacing.md,
       actions: actions,
       title: Column(

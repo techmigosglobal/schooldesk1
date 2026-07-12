@@ -18,6 +18,8 @@ import 'package:schooldesk1/core/services/share_export_service.dart';
 import 'package:schooldesk1/core/widgets/app_navigation.dart';
 import 'package:schooldesk1/core/widgets/empty_state_widget.dart';
 import 'package:schooldesk1/core/utils/extensions.dart';
+import 'package:schooldesk1/core/desktop/desktop_responsive_breakpoints.dart';
+import 'package:schooldesk1/core/widgets/desktop_master_detail_layout.dart';
 
 class StudentModel {
   final String id;
@@ -128,6 +130,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
   final List<StudentModel> _filteredStudents = [];
   final ScrollController _scrollController = ScrollController();
   final Set<String> _selectedStudentIds = <String>{};
+
+  StudentModel? _selectedStudent;
+  bool _loadingDetail = false;
+  StudentModel? _loadedDetailStudent;
 
   List<StudentModel> _displayedStudents = [];
   List<String> _classOptions = const ['All'];
@@ -286,6 +292,10 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         }
         _applyFilters(resetState: false);
         _loading = false;
+        final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+        if (isDesktop && _selectedStudent == null && _displayedStudents.isNotEmpty) {
+          _selectStudentForDesktop(_displayedStudents.first);
+        }
       });
     } on Object catch (error) {
       if (!mounted) return;
@@ -473,6 +483,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
         ..clear()
         ..addAll(next);
       _resetPagination();
+      final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+      if (isDesktop && _displayedStudents.isNotEmpty) {
+        if (!_displayedStudents.any((s) => s.id == _selectedStudent?.id)) {
+          _selectStudentForDesktop(_displayedStudents.first);
+        }
+      }
     }
 
     if (resetState) {
@@ -595,6 +611,12 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = DesktopBreakpoints.isDesktopWidth(MediaQuery.sizeOf(context).width);
+
+    if (isDesktop) {
+      return _buildDesktopLayout();
+    }
+
     return Scaffold(
       backgroundColor: _background,
       floatingActionButton: _selectionMode
@@ -1336,6 +1358,324 @@ class _StudentOversightScreenState extends State<StudentOversightScreen> {
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '${date.year}-$month-$day';
+  }
+
+  Future<void> _selectStudentForDesktop(StudentModel student) async {
+    setState(() {
+      _selectedStudent = student;
+      _loadingDetail = true;
+      _loadedDetailStudent = null;
+    });
+    try {
+      final sectionMap = {for (final s in _sections) s.id: s};
+      final gradeMap = {for (final g in _grades) g.id: g};
+      final latest = await api.BackendApiClient.instance.getStudent(student.id);
+      final detailed = _mapApiStudentToUi(latest, sectionMap, gradeMap);
+      if (!mounted) return;
+      if (_selectedStudent?.id == student.id) {
+        setState(() {
+          _loadedDetailStudent = detailed;
+          _loadingDetail = false;
+        });
+      }
+    } on Object catch (_) {
+      if (!mounted) return;
+      if (_selectedStudent?.id == student.id) {
+        setState(() {
+          _loadedDetailStudent = student;
+          _loadingDetail = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _editSelectedStudentDesktop(StudentModel student) async {
+    final updated = await _openEditStudentForm(context, student);
+    if (updated) {
+      await _loadData();
+      if (_selectedStudent?.id == student.id) {
+        _selectStudentForDesktop(student);
+      }
+    }
+  }
+
+  Future<void> _removeSelectedStudentDesktop(StudentModel student) async {
+    final removed = await _confirmAndRemoveStudent(context, student);
+    if (removed) {
+      setState(() {
+        _selectedStudent = null;
+        _loadedDetailStudent = null;
+      });
+      await _loadData();
+    }
+  }
+
+  Widget _buildDesktopLayout() {
+    return Scaffold(
+      backgroundColor: _background,
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton(
+              heroTag: 'add-student-desktop',
+              onPressed: _openAddStudentForm,
+              backgroundColor: const Color(0xFF0887F2),
+              foregroundColor: Colors.white,
+              elevation: 8,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add_rounded, size: 30),
+            ),
+      body: SafeArea(
+        child: DesktopMasterDetailLayout(
+          master: Container(
+            color: Colors.white,
+            child: Column(
+              children: [
+                _buildHeader(context),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: _buildSearchAndFilters(),
+                ),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _loadError != null
+                          ? Center(
+                              child: EmptyStateWidget(
+                                icon: Icons.cloud_off_rounded,
+                                title: 'Unable to load students',
+                                description: _loadError!,
+                                actionLabel: 'Retry',
+                                onAction: _loadData,
+                              ),
+                            )
+                          : _filteredStudents.isEmpty
+                              ? const Center(
+                                  child: EmptyStateWidget(
+                                    icon: Icons.school_outlined,
+                                    title: 'No students found',
+                                    description: 'Adjust search or filters.',
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: _loadData,
+                                  color: const Color(0xFF0887F2),
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.all(16),
+                                    itemCount: _displayedStudents.length + (_hasMore ? 1 : 0),
+                                    itemBuilder: (context, index) {
+                                      if (index == _displayedStudents.length) {
+                                        return _buildLoadMoreButton();
+                                      }
+                                      final student = _displayedStudents[index];
+                                      final isSelected = _selectedStudent?.id == student.id;
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 12),
+                                        child: _StudentDirectoryCard(
+                                          student: student,
+                                          imageUrl: _absoluteImageUrl(student.photoUrl),
+                                          selected: _selectionMode
+                                              ? _selectedStudentIds.contains(student.id)
+                                              : isSelected,
+                                          onTap: () {
+                                            if (_selectionMode) {
+                                              _toggleStudentSelection(student);
+                                            } else {
+                                              _selectStudentForDesktop(student);
+                                            }
+                                          },
+                                          onLongPress: () => _toggleStudentSelection(student),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                ),
+              ],
+            ),
+          ),
+          detail: _buildDesktopDetailPane(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopDetailPane() {
+    if (_selectedStudent == null) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.school_outlined, size: 48, color: Color(0xFF94A3B8)),
+            SizedBox(height: 12),
+            Text(
+              'Select a student to view details',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_loadingDetail) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final student = _loadedDetailStudent ?? _selectedStudent!;
+    final imageUrl = _absoluteImageUrl(student.photoUrl);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFEFF8FD),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFEFF8FD),
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        title: Text(
+          student.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit Student',
+            onPressed: () => _editSelectedStudentDesktop(student),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded),
+            tooltip: 'Remove Student',
+            onPressed: () => _removeSelectedStudentDesktop(student),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          _FormCard(
+            title: 'General Information',
+            children: [
+              Center(
+                child: _StudentAvatar(
+                  imageUrl: imageUrl,
+                  initials: student.avatarInitials,
+                  size: 96,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _DetailRow(
+                label: 'Class / Section',
+                value: student.classSection,
+              ),
+              if (student.rollNumber.isNotEmpty)
+                _DetailRow(
+                  label: 'Admission / Roll',
+                  value: student.rollNumber,
+                ),
+              _DetailRow(
+                label: 'Student ID',
+                value: student.systemId.isEmpty
+                    ? 'Not available'
+                    : student.systemId,
+              ),
+              _DetailRow(
+                label: 'Status',
+                value: student.status.trim().isNotEmpty
+                    ? student.status.trim()[0].toUpperCase() +
+                          student.status.trim().substring(1)
+                    : 'Active',
+              ),
+              _DetailRow(
+                label: 'Date of Birth',
+                value: student.dateOfBirth.isEmpty
+                    ? 'Not available'
+                    : _formatStudentDate(student.dateOfBirth),
+              ),
+              _DetailRow(
+                label: 'Gender',
+                value: student.gender.isEmpty
+                    ? 'Not available'
+                    : _formatStudentGender(student.gender),
+              ),
+              _DetailRow(
+                label: 'Admission Date',
+                value: student.admissionDate.isEmpty
+                    ? 'Not available'
+                    : _formatStudentDate(student.admissionDate),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _FormCard(
+            title: 'Parent / Guardian Details',
+            children: [
+              _DetailRow(label: 'Guardian', value: student.guardianName),
+              _DetailRow(label: 'Phone', value: student.guardianPhone),
+              _DetailRow(
+                label: 'Parent Logins',
+                value: student.parentAccounts.isEmpty
+                    ? 'Not linked'
+                    : student.parentAccounts
+                          .map(
+                            (parent) =>
+                                '${parent['name'] ?? parent['username'] ?? 'Parent'}',
+                          )
+                          .join(', '),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _FormCard(
+            title: 'Fee Position Summary',
+            children: [
+              _DetailRow(
+                label: 'Actual Fee',
+                value: _formatMoney(student.feeTotal),
+              ),
+              _DetailRow(
+                label: 'Discount',
+                value: _formatMoney(student.feeDiscount),
+              ),
+              _DetailRow(label: 'Paid', value: _formatMoney(student.feePaid)),
+              _DetailRow(
+                label: 'Balance',
+                value: _formatMoney(student.feeBalance),
+              ),
+              _DetailRow(
+                label: 'Pending Invoices',
+                value:
+                    '${student.pendingInvoices} pending, ${student.overdueInvoices} overdue',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _FormCard(
+            title: 'Attached Documents',
+            children: [
+              if (student.documents.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(
+                    'No documents uploaded.',
+                    style: TextStyle(color: Color(0xFF64748B), fontStyle: FontStyle.italic),
+                  ),
+                )
+              else
+                ...student.documents.map((doc) {
+                  final docName = '${doc['document_type_name'] ?? doc['name'] ?? 'Document'}';
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.description_outlined, color: Colors.blue),
+                    title: Text(docName),
+                    subtitle: doc['verified'] == true
+                        ? const Text('Verified', style: TextStyle(color: Colors.green))
+                        : const Text('Verification Pending', style: TextStyle(color: Colors.orange)),
+                  );
+                }),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 
